@@ -366,7 +366,7 @@ var newTabTools = {
 			return;
 		case 'options-donate':
 		case 'newtab-update-donate':
-			window.open('https://darktrojan.github.io/donate.html?newtabtools');
+			window.alert('Currently, no donations are accepted. Thank you for your support!');
 			Prefs.versionLastAck = new Date();
 			break;
 		case 'newtab-update-changelog':

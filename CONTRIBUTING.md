@@ -1,17 +1,75 @@
-This document will help you to create a useful bug report (GitHub calls them *issues*), that will improve the chances of your problem being resolved quickly.
+# Contributing to New Tab Tools
 
-Please remember that the developer of New Tab Tools is a human, with limited time and bills to pay.
+**Note on Project Status & Fork Intention:** This repository is a fork of the original New Tab Tools project, which is currently unmaintained. Our intention is to take over the development and maintenance of this extension. Under the terms of the original Mozilla Public License 2.0 (MPL-2.0), we are currently focusing our initial efforts on building out a robust test automation infrastructure before introducing new features or refactoring legacy code.
 
-What to put in your bug report
-------------------------------
-* Did the problem start happening recently (e.g. after updating to a new version of New Tab Tools/Firefox) or was this always a problem?
-* Which version of New Tab Tools are you using? You can get the exact version from the Firefox Add-On Manager.
-* What's the name and version of the operating system you're using? What version of Firefox are you using? You can find this information by visiting `about:support` or clicking on Troubleshooting Information on the Help menu.
-* Can you reliably reproduce the issue? If not, provide details about how often the problem happens and under which conditions it normally happens.
-* Do you have another extension or theme installed that might cause the issue? (Because of the way New Tab Tools works, this can happen. *Classic Theme Restorer* and some themes are known to have caused problems.) Try disabling these other add-ons and see if the issue goes away.
+---
 
-What to expect
---------------
-You might be asked a number of questions to help track down bugs. The developer might add a number of labels or other comments to your issue. If a solution is found and your bug gets fixed, you may have to wait a while before the fix is released. Releases *usually* happen about every two weeks. If a release contains a fix for your bug, the issue will be closed automatically or by the developer.
+## ~~Filing Bug Reports~~ (currently disabled)
 
-If you find a solution that doesn't require anything to be fixed, make a comment in your issue saying what you learned, and if you're confident that nothing else needs to happen, close the issue.
+~~Help us help you! This guide shows you how to create a clear, actionable bug report (or "issue") so we can identify the problem and release a fix as quickly as possible. Please remember that the developers of New Tab Tools are human, with limited time and bills to pay.~~
+
+### ~~What to put in your bug report~~
+* ~~Did the problem start happening recently (e.g. after updating to a new version of New Tab Tools/Firefox) or was this always a problem?~~
+* ~~Which version of New Tab Tools are you using? You can get the exact version from the Firefox Add-On Manager.~~
+* ~~What's the name and version of the operating system you're using? What version of Firefox are you using? You can find this information by visiting `about:support` or clicking on Troubleshooting Information on the Help menu.~~
+* ~~Can you reliably reproduce the issue? If not, provide details about how often the problem happens and under which conditions it normally happens.~~
+* ~~Do you have another extension or theme installed that might cause the issue? (Because of the way New Tab Tools works, this can happen. *Classic Theme Restorer* and some themes are known to have caused problems.) Try disabling these other add-ons and see if the issue goes away.~~
+
+---
+
+## Developer Guide - refactor in progress to add test infrastructure
+
+### Build
+
+Currently, there is no build step for the Firefox-only MV2 extension. You can run the extension locally using Mozilla's `web-ext` tool.
+
+```bash
+# Run the extension for local development
+npm run dev
+```
+
+### Test
+
+Testing is divided into two primary phases: the **Fast TDD Loop** and the **E2E Validation Suite**. See `TESTING.md` for the full canonical testing guide. *(Note: The project is currently in a bootstrapping phase. See `BOOTSTRAP.md` for initial test infrastructure setup instructions).*
+
+```bash
+# Run the fast TDD loop (Vitest + JSDOM for unit & integration tests)
+npm run test:fast
+
+# Run the E2E Validation suite (Playwright against Firefox ESR)
+npm run test:e2e
+
+# Run all code quality checks (ESLint and web-ext lint)
+npm run lint && npm run lint:webext
+```
+
+### Deploy
+
+The extension is deployed to Mozilla Add-ons (AMO).
+
+```bash
+# Build the .xpi artifact for upload
+web-ext build --source-dir webextension/
+```
+
+### Architecture
+
+- **Target:** Firefox-first, Firefox-only (Manifest V2). Chrome support and MV3 migration are currently deferred (see `ROADMAP.md`).
+- **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab`.
+- **Background Scripts:** Persistent scripts split across multiple files (`common.js`, `tiles.js`, `prefs.js`, `background.js`) using a mix of `chrome.*` callbacks and `browser.*` promises.
+
+### Patterns & Conventions
+
+- **Red/Green TDD is mandatory:** Write failing tests first. Tests and production code stay in vanilla JavaScript (no TypeScript).
+- **Two Flow Modes:**
+  - *Mode A (New Code):* Extraction-first. Write pure logic unit tests (`tests/unit/`), then wire it to the UI and WebExtension APIs via integration tests.
+  - *Mode B (Legacy Code):* Characterize-first. Write API Contract tests (`tests/integration/`) with `jest-webextension-mock` to characterize existing behavior *before* refactoring legacy files.
+
+### Key Files
+
+- `webextension/manifest.json`: The core extension manifest (MV2).
+- `webextension/newTab.xhtml`: The markup for the new tab page UI.
+- `webextension/newTab.js`: The primary controller script for the UI.
+- `TESTING.md`: The canonical guide for testing and workflow rules.
+- `ROADMAP.md`: A log of deferred architectural decisions.
+- `BOOTSTRAP.md`: A temporary guide for establishing the missing test infrastructure.
