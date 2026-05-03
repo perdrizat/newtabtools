@@ -18,8 +18,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 ## What's in this repo
 
 - `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR. Functionally unchanged from the upstream's last release.
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Two-phase TDD (Vitest + jsdom for the fast loop; Playwright for end-to-end validation), `jest-webextension-mock` for the API contract layer, and Mode A / Mode B flow rules for new vs. legacy code. Required reading before touching the code.
-- [`BOOTSTRAP.md`](BOOTSTRAP.md) — temporary, one-time setup guide. Prerequisites (Node LTS, Firefox ESR, `web-ext`), npm scripts, first tests to write, definition of done. Will be deleted once bootstrap is complete.
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Fast feedback loop (Vitest + jsdom) and end-to-end validation (Puppeteer + WebDriver BiDi), `jest-webextension-mock` for the API contract layer, and Mode A / Mode B flow rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — log of deferred decisions with enough context to pick them up later. First entry: Chrome support and MV3 migration are deferred until Firefox-only stabilization is finished.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — bug-report guidance carried over from the original maintainer; will be updated once the continuation's intake process is in place.
@@ -27,17 +26,18 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 ## Where the takeover stands
 
 Done:
-- License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
-- Testing strategy, bootstrap plan, and deferred-work roadmap documented.
+1. License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
+2. Testing strategy, bootstrap plan, and deferred-work roadmap documented.
+3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
+4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
 
 Outstanding (in rough order):
-1. Fork the repository under the continuation maintainer's GitHub account; re-point local remotes.
-2. Complete bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
-3. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
-4. First republished release on AMO, functionally identical to the upstream's last release. This proves the publish pipeline before any code changes ship.
-5. Open the issue tracker for new bug reports.
+5. Work on a few features to get comfortable with the codebase and the TDD workflow.
+6. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
+7. First republished release on AMO, functionally identical to the upstream's last release. This proves the publish pipeline before any code changes ship.
+8. Open the issue tracker for new bug reports.
 
-Until at least step 4 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
+Until at least step 7 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
 
 ## For developers
 

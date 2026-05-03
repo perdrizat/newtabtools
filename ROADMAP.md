@@ -1,6 +1,6 @@
 # Roadmap
 
-This file logs decisions about future direction that have been considered and deferred, with enough context for a future maintainer (or returning agent) to pick them up later without having to re-derive the reasoning.
+This file logs decisions about future direction that have been considered and deferred, with enough context for a future maintainer to pick them up later without having to re-derive the reasoning.
 
 It is not a task list and not a release plan. Entries are dated; outdated ones should be removed or updated, not left to rot.
 
@@ -20,7 +20,6 @@ The takeover is in progress, the codebase has zero tests, and an MV3 migration i
 
 Do **not** revisit this until all of the following are true:
 
-- `BOOTSTRAP.md` is deleted (i.e. bootstrap is complete; see its definition-of-done checklist).
 - The full Layer 1 + Layer 2 test suite is green in CI on a clean clone.
 - The minimum E2E suite passes against Firefox ESR in CI.
 - At least one real bug fix has shipped under the Mode A / Mode B TDD flow, so the workflow is proven.

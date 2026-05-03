@@ -1,6 +1,6 @@
 # Contributing to New Tab Tools
 
-**Note on Project Status & Fork Intention:** This repository is a fork of the original New Tab Tools project, which is currently unmaintained. Our intention is to take over the development and maintenance of this extension. Under the terms of the original Mozilla Public License 2.0 (MPL-2.0), we are currently focusing our initial efforts on building out a robust test automation infrastructure before introducing new features or refactoring legacy code.
+**Note on Project Status & Fork Intention:** This repository is a fork of the original New Tab Tools project, which is currently unmaintained. Our intention is to take over the development and maintenance of this extension. Under the terms of the original Mozilla Public License 2.0 (MPL-2.0), we have established a robust test automation infrastructure and are now moving into active development and refactoring.
 
 ---
 
@@ -17,7 +17,7 @@
 
 ---
 
-## Developer Guide - refactor in progress to add test infrastructure
+## Developer Guide - test infrastructure established
 
 ### Build
 
@@ -30,7 +30,7 @@ npm run dev
 
 ### Test
 
-Testing is divided into two primary phases: the **Fast TDD Loop** and the **E2E Validation Suite**. See `TESTING.md` for the full canonical testing guide. *(Note: The project is currently in a bootstrapping phase. See `BOOTSTRAP.md` for initial test infrastructure setup instructions).*
+Testing is divided into two primary phases: the **Fast TDD Loop** and the **E2E Validation Suite**. See `TESTING.md` for the full canonical testing guide.
 
 ```bash
 # Run the fast TDD loop (Vitest + JSDOM for unit & integration tests)
@@ -65,6 +65,13 @@ web-ext build --source-dir webextension/
   - *Mode A (New Code):* Extraction-first. Write pure logic unit tests (`tests/unit/`), then wire it to the UI and WebExtension APIs via integration tests.
   - *Mode B (Legacy Code):* Characterize-first. Write API Contract tests (`tests/integration/`) with `jest-webextension-mock` to characterize existing behavior *before* refactoring legacy files.
 
+### AI Coding Assistants
+
+Contributions generated with the help of AI are welcome but must follow the standard development process. The test harness with unit tests and E2E tests MUST be used extensively to validate AI generated code. These are the important guardrails to ensure agentic compliance with the project's code quality standards.
+
+- **Human Accountability:** The human submitter is responsible for reviewing all AI-generated code, ensuring license compliance, and taking full responsibility for the contribution. AI agents MUST NOT add `Signed-off-by` tags.
+- **Attribution:** Mentioning AI assistance in commit messages is optional.
+
 ### Key Files
 
 - `webextension/manifest.json`: The core extension manifest (MV2).
@@ -72,4 +79,3 @@ web-ext build --source-dir webextension/
 - `webextension/newTab.js`: The primary controller script for the UI.
 - `TESTING.md`: The canonical guide for testing and workflow rules.
 - `ROADMAP.md`: A log of deferred architectural decisions.
-- `BOOTSTRAP.md`: A temporary guide for establishing the missing test infrastructure.

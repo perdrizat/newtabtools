@@ -6,3 +6,12 @@ webextension/_locales/xyz
 CLAUDE.md
 AGENTS.md
 GEMINI.md
+node_modules/
+test-results/
+playwright-report/
+.playwright/
+tests/e2e/test-profile/
+tests/e2e/_artifacts/
+.vitest-cache/
+*.Zone.Identifier
+.DS_Store

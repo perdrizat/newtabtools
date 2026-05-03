@@ -1,0 +1,89 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+import js from '@eslint/js';
+import globals from 'globals';
+
+const webExtGlobals = {
+	...globals.browser,
+	...globals.webextensions,
+	browser: 'readonly',
+	chrome: 'readonly',
+};
+
+const projectRules = {
+	'comma-dangle': [2, 'only-multiline'],
+	'complexity': 0,
+	'curly': 2,
+	'indent': [2, 'tab', { SwitchCase: 0 }],
+	'func-names': [2, 'never'],
+	'no-case-declarations': 0,
+	'no-inner-declarations': 0,
+	'no-tabs': 0,
+	'no-unused-vars': [2, { caughtErrors: 'none' }],
+	'object-curly-newline': 2,
+	'padded-blocks': [2, 'never'],
+	'quotes': [2, 'single'],
+	'semi': 2,
+};
+
+export default [
+	{
+		// Vendored zip.js library — third-party code, not subject to project style.
+		// Firefox-generated test-profile and ephemeral artifact directories — not our code.
+		ignores: [
+			'webextension/lib/deflate.js',
+			'webextension/lib/inflate.js',
+			'webextension/lib/z-worker.js',
+			'webextension/lib/zip.js',
+			'tests/e2e/test-profile/**',
+			'tests/e2e/_artifacts/**',
+		],
+	},
+	js.configs.recommended,
+	{
+		// Legacy script-tag files in webextension/, loaded via <script> in
+		// newTab.xhtml and the MV2 background array.
+		files: ['webextension/**/*.js'],
+		languageOptions: {
+			ecmaVersion: 2018,
+			sourceType: 'script',
+			globals: webExtGlobals,
+		},
+		rules: projectRules,
+	},
+	{
+		// Extracted ES modules under webextension/lib/. Our own code (not the
+		// vendored zip.js library, which is ignored above). These are written
+		// as ES modules and consumed both by tests (via Vitest) and, in time,
+		// by refactored portions of the legacy script-tag code.
+		files: ['webextension/lib/**/*.js'],
+		languageOptions: {
+			ecmaVersion: 2020,
+			sourceType: 'module',
+			globals: webExtGlobals,
+		},
+		rules: projectRules,
+	},
+	{
+		// E2E tests and helpers. These run in Node but often contain
+		// evaluate() blocks that run in the browser, plus Puppeteer's
+		// own browser-like API.
+		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs'],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: 'module',
+			globals: {
+				...globals.node,
+				...globals.browser,
+				...globals.vitest,
+				chrome: 'readonly',
+			},
+		},
+		rules: {
+			...projectRules,
+			'no-console': 0, // Logging is expected in E2E tests
+		},
+	},
+];
