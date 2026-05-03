@@ -40,10 +40,10 @@ jobs:
       - name: Web-ext Lint
         run: npm run lint:webext
 
-      - name: Fast Loop (Unit & Integration)
+      - name: Unit & Integration tests
         run: npm run test:fast
 
-      - name: E2E Suite (Puppeteer + BiDi)
+      - name: E2E tests (Puppeteer + BiDi)
         run: npm run test:e2e
         env:
           E2E_VERBOSE: 1

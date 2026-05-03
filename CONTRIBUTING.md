@@ -30,13 +30,13 @@ npm run dev
 
 ### Test
 
-Testing is divided into two primary phases: the **Fast TDD Loop** and the **E2E Validation Suite**. See `TESTING.md` for the full canonical testing guide.
+Testing has three tiers: **Unit**, **Integration**, and **E2E**. Unit and Integration run on every save during TDD; E2E runs at feature completion and pre-commit. See [`TESTING.md`](TESTING.md) for the full canonical testing guide. Writing tests is mandatory for every change and every feature, to help ensure code quality and backward compatibility, especially when using AI coding assistants. Every change should be caught at the lowest possible tier, preferably Unit or Integration. User-facing features must always also have an E2E test.
 
 ```bash
-# Run the fast TDD loop (Vitest + JSDOM for unit & integration tests)
+# Unit + Integration (Vitest + jsdom + jest-webextension-mock) — run during TDD
 npm run test:fast
 
-# Run the E2E Validation suite (Playwright against Firefox ESR)
+# E2E (Puppeteer over WebDriver BiDi against Firefox ESR) — run at feature completion
 npm run test:e2e
 
 # Run all code quality checks (ESLint and web-ext lint)
@@ -54,16 +54,16 @@ web-ext build --source-dir webextension/
 
 ### Architecture
 
-- **Target:** Firefox-first, Firefox-only (Manifest V2). Chrome support and MV3 migration are currently deferred (see `ROADMAP.md`).
+- **Target:** Firefox-first, Firefox-only (Manifest V2). Chrome support and MV3 migration are currently deferred (see [`ROADMAP.md`](ROADMAP.md)).
 - **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab`.
 - **Background Scripts:** Persistent scripts split across multiple files (`common.js`, `tiles.js`, `prefs.js`, `background.js`) using a mix of `chrome.*` callbacks and `browser.*` promises.
 
 ### Patterns & Conventions
 
 - **Red/Green TDD is mandatory:** Write failing tests first. Tests and production code stay in vanilla JavaScript (no TypeScript).
-- **Two Flow Modes:**
-  - *Mode A (New Code):* Extraction-first. Write pure logic unit tests (`tests/unit/`), then wire it to the UI and WebExtension APIs via integration tests.
-  - *Mode B (Legacy Code):* Characterize-first. Write API Contract tests (`tests/integration/`) with `jest-webextension-mock` to characterize existing behavior *before* refactoring legacy files.
+- **Where to start the TDD cycle depends on the code's state:**
+  - *For new code:* start with a Unit test (`tests/unit/`) on the smallest pure function, then add an Integration test (`tests/integration/`) when you wire it to a `browser.*` API.
+  - *For legacy code:* start with an Integration test that mocks `browser.*` via `jest-webextension-mock` to pin down current behaviour (a *characterization test*) before refactoring. Backfill Unit tests for any logic extracted along the way.
 
 ### AI Coding Assistants
 
@@ -74,8 +74,8 @@ Contributions generated with the help of AI are welcome but must follow the stan
 
 ### Key Files
 
-- `webextension/manifest.json`: The core extension manifest (MV2).
-- `webextension/newTab.xhtml`: The markup for the new tab page UI.
-- `webextension/newTab.js`: The primary controller script for the UI.
-- `TESTING.md`: The canonical guide for testing and workflow rules.
-- `ROADMAP.md`: A log of deferred architectural decisions.
+- [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV2).
+- [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
+- [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
+- [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
+- [`ROADMAP.md`](ROADMAP.md): A log of deferred architectural decisions.

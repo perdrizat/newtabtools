@@ -107,13 +107,13 @@ NTT users who want these stay with the native page. NTT's pitch is layout precis
 
 ## Test scope implications
 
-This matrix maps directly onto `TESTING.md`'s E2E coverage. The categories drive how much E2E investment each feature gets:
+This matrix maps directly onto [`TESTING.md`](TESTING.md)'s E2E coverage. The categories drive how much E2E investment each feature gets:
 
 - **Killer features:** every one gets dedicated E2E tests — the auto-thumbnail pipeline, opacity slider, lock-grid, per-domain cap, recently-closed restore, autocomplete-on-add, backup roundtrip. These are the features regressions must catch.
 - **Parity features:** smoke-level E2E only. Verify the feature works at all; don't try to match Firefox behavior bug-for-bug.
 - **Drop features:** no E2E. As they're removed from the codebase, remove the related tests.
 
-Concrete starting set, mapping to the E2E categories already in `TESTING.md`:
+Concrete starting set, mapping to the E2E categories already in [`TESTING.md`](TESTING.md):
 
 | E2E test | Category in scope matrix |
 |---|---|
@@ -141,4 +141,4 @@ Killer features get test depth — multiple cases per feature, edge cases, error
 
 ## Open question for the maintainer
 
-The codebase choice (modernize / cherry-pick / lean rewrite) is the next decision blocking real code work. It depends partly on personal preference and partly on how aggressive the de-duplication of native-Firefox functionality should be. Recording it in `ROADMAP.md` once chosen.
+The codebase choice (modernize / cherry-pick / lean rewrite) is the next decision blocking real code work. It depends partly on personal preference and partly on how aggressive the de-duplication of native-Firefox functionality should be. Recording it in [`ROADMAP.md`](ROADMAP.md) once chosen.

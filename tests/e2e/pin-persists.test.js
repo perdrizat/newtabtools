@@ -18,7 +18,7 @@ const TEST_URL = 'https://example.com/';
 // `chrome.history.search` is undefined and the click handler errors silently
 // (it ends `.catch(console.error)` instead of throwing).
 //
-// We therefore split the user-acceptance shape across two `it` blocks:
+// We therefore split the end-to-end coverage across two `it` blocks:
 //   1. "persists across reload" — uses the Tiles.pinTile message to set the
 //      state, then asserts the UI renders the tile as pinned and that state
 //      survives a reload. Storage + render + persistence covered.

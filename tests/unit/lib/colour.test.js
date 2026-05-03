@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseColour } from '../../../webextension/lib/colour.js';
 
-// Mode B characterization tests for parseColour, extracted from
+// Characterization tests for parseColour, extracted from
 // webextension/newTab.js. These capture the function's *current* behaviour
 // bug-for-bug; any deliberate change must update the matching test.
 

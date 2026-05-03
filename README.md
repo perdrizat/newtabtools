@@ -18,7 +18,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 ## What's in this repo
 
 - `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR. Functionally unchanged from the upstream's last release.
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Fast feedback loop (Vitest + jsdom) and end-to-end validation (Puppeteer + WebDriver BiDi), `jest-webextension-mock` for the API contract layer, and Mode A / Mode B flow rules for new vs. legacy code. Required reading before touching the code.
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — log of deferred decisions with enough context to pick them up later. First entry: Chrome support and MV3 migration are deferred until Firefox-only stabilization is finished.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — bug-report guidance carried over from the original maintainer; will be updated once the continuation's intake process is in place.
@@ -41,10 +41,10 @@ Until at least step 7 is done, this repository is not ready for general use and 
 
 ## For developers
 
-- **Workflow:** red/green TDD per [`TESTING.md`](TESTING.md). Mode A for new code (extract pure logic first), Mode B for legacy code (characterize at the API seam, then refactor under green).
+- **Workflow:** red/green TDD per [`TESTING.md`](TESTING.md). For new code, start with a Unit test on the smallest pure function. For legacy code, start with an Integration test that characterizes current behaviour at the API seam, then refactor under green.
 - **Manual dev:** `web-ext run --source-dir webextension/` after bootstrap.
 - **Lint:** `eslint webextension/` and `web-ext lint --source-dir webextension/`.
-- **Tests:** `npm run test:fast` is the inner TDD loop; `npm run test:e2e` runs at feature completion and on prepare-for-commit, never inside the inner loop.
+- **Tests:** `npm run test:fast` runs Unit + Integration on every save during TDD; `npm run test:e2e` runs at feature completion and on prepare-for-commit, never on every save.
 - **Scope:** Firefox-only, MV2-only. Cross-browser support and MV3 migration are explicitly deferred — see [`ROADMAP.md`](ROADMAP.md). Do not introduce Chrome targets, MV3 manifest constructs, or cross-browser test matrices without an explicit decision recorded there.
 
 ## License

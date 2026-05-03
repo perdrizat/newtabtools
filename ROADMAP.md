@@ -20,9 +20,9 @@ The takeover is in progress, the codebase has zero tests, and an MV3 migration i
 
 Do **not** revisit this until all of the following are true:
 
-- The full Layer 1 + Layer 2 test suite is green in CI on a clean clone.
+- The full Unit + Integration suite is green in CI on a clean clone.
 - The minimum E2E suite passes against Firefox ESR in CI.
-- At least one real bug fix has shipped under the Mode A / Mode B TDD flow, so the workflow is proven.
+- At least one real bug fix has shipped under the documented TDD flow (Unit-first for new code, Integration-characterization-first for legacy code), so the workflow is proven.
 - The maintainer has spent enough time in `newTab.js`, `tiles.js`, and the background scripts to feel comfortable navigating them.
 
 Below this bar, picking up Chrome multiplies risk without buying confidence. Above it, the test suite becomes the migration's safety net.
@@ -62,12 +62,12 @@ These are the specific things that won't port unchanged. Listing them so the cos
 - The background uses `lib/zip.js` for export functionality. Under Chrome's service-worker model, anything that holds in-memory state across events needs to move to storage; verify the zip code's behavior in a non-persistent context.
 - `chrome.*` callback style is used heavily in `newTab.js` (e.g. `chrome.tabs.query({}, tabs => {...})` ~line 89). MV3 promises this is fine on both browsers, but mixing styles within a single function gets confusing and is worth normalizing during the port.
 
-### Effect on the testing pyramid when revived
+### Effect on the testing tiers when revived
 
-- **Layer 1 (pure logic):** unchanged. Pure functions don't care about the host browser. This is the strongest argument for the Mode A / Layer 1 discipline — it pays off doubly when going multi-target.
-- **Layer 2 (API-mocked):** add seam tests where Chrome and Firefox diverge (`browser.theme.*`, `browser.menus.getTargetElement`, `browser.runtime.getBrowserInfo`, `chrome.sessions.*` differences). `jest-webextension-mock` already supports both `chrome.*` and `browser.*` namespaces, so most existing tests stay valid.
-- **Layer 3 (E2E):** add a second Playwright project for Chromium. Playwright supports both browsers natively, so this is configuration, not new infrastructure. CI matrix doubles in length.
-- **MV2-only rule in `TESTING.md`:** retires the moment this work begins. Picking up Chrome *is* the explicit migration decision the rule was gating.
+- **Unit tests:** unchanged. Pure functions don't care about the host browser. This is the strongest argument for the "extract pure logic first" discipline — it pays off doubly when going multi-target.
+- **Integration tests:** add seam tests where Chrome and Firefox diverge (`browser.theme.*`, `browser.menus.getTargetElement`, `browser.runtime.getBrowserInfo`, `chrome.sessions.*` differences). `jest-webextension-mock` already supports both `chrome.*` and `browser.*` namespaces, so most existing tests stay valid.
+- **E2E tests:** add a second Playwright project for Chromium. Playwright supports both browsers natively, so this is configuration, not new infrastructure. CI matrix doubles in length.
+- **MV2-only rule in [`TESTING.md`](TESTING.md):** retires the moment this work begins. Picking up Chrome *is* the explicit migration decision the rule was gating.
 
 ### Suggested order of work (when picked up)
 
@@ -75,7 +75,7 @@ These are the specific things that won't port unchanged. Listing them so the cos
 2. Read the previous maintainer's `chrome` branch as **historical reference**, not a starting foundation. By the time this is picked up the branch will likely be 2+ years stale; treat its value as "what conditional code paths existed and why," not "what to merge."
 3. Plan the MV3 port as a Firefox-first project: convert background, split permissions, replace removed APIs, retest the full Firefox suite under MV3, ship a Firefox MV3 release and let it bake.
 4. Then add Chrome as a second target via single-source / dual-build. Run the full test pyramid against both. Decide what to do about Firefox-only features (auto-theme, the menus integration) — feature-flag, polyfill, or accept divergence.
-5. Update `TESTING.md` to repeal the MV2-only rule and document the cross-browser test matrix.
+5. Update [`TESTING.md`](TESTING.md) to repeal the MV2-only rule and document the cross-browser test matrix.
 
 ### Reference: previous maintainer's `chrome` branch
 
