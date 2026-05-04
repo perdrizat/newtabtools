@@ -38,6 +38,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency audit
+        # Per audit/2026-05-04-security-review.md §2.7. Establishes a
+        # baseline before more deps land in Phase 0/1. Fails on high or
+        # critical advisories so a new vulnerable dep can't be merged
+        # silently. `--omit=dev` would narrow to runtime deps if needed,
+        # but we currently have no runtime deps (the extension itself
+        # has no node deps), so all advisories are dev-stack.
+        run: npm audit --audit-level=high
+
       - name: Lint
         run: npm run lint
 

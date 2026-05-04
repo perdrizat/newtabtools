@@ -53,5 +53,6 @@
 		"history"
 	],
 	"default_locale": "en",
-	"manifest_version": 2
+	"manifest_version": 2,
+	"content_security_policy": "default-src 'self'; object-src 'none'; base-uri 'none'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'"
 }

@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Codebase strategy decided**: cherry-pick + reference rewrite. Recorded in `ROADMAP.md`.
 - Created `MIGRATION.md` — **per-feature migration ledger** with current state, strategy, implementation refs, and test status; plus the phasing from foundation through MV3 unblock.
 - **Language policy decided**: JavaScript with JSDoc on production, TypeScript on tests, no build step. Recorded in `ROADMAP.md`.
+- **Phase 0 security hardening** — the three cheap-win fixes from `audit/2026-05-04-security-review.md`:
+  - **CSP** (§2.3) — added `content_security_policy` to `webextension/manifest.json` with `default-src 'self'; object-src 'none'; base-uri 'none'`, plus the `img-src` and `style-src` allow-listings the existing thumbnail and inline-style code requires. Regression test at `tests/unit/manifest.test.js` asserts the key directives stay in place and that `'unsafe-eval'` / `'unsafe-inline'`-in-script-src don't sneak in.
+  - **Sender validation on `runtime.onMessage`** (§2.4) — extracted `isAuthorizedSender` to `webextension/lib/messaging.js` with red/green TDD Unit tests (`tests/unit/lib/messaging.test.js`); inline check added at the top of the `background.js` listener so messages from anything other than the extension's own pages are dropped. Behavioural test of the wiring deferred to Phase 1 slot 1 (`runtime.onMessage` boundary characterization).
+  - **`npm audit` in CI** (§2.7) — added a `Dependency audit` step to `.github/workflows/ci.yml` running `npm audit --audit-level=high`. 3 pre-existing moderate-severity advisories in dev-stack transitive deps remain visible but below the gate.
+  - All checks pass locally: `npm run lint`, `npm run lint:webext`, `npm run test:fast` (29 tests), `npm run test:e2e` (7 tests against Firefox ESR).
 
 ## [2026-05-03]
 
