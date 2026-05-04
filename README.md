@@ -45,12 +45,13 @@ Outstanding (in rough order):
 Until at least step 8 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
 
 ## For developers
+ 
+If you want to contribute to the New Tab PowerTools, please read the **[Contributing Guide](CONTRIBUTING.md)** first. 
 
-- **Workflow:** red/green TDD per [`TESTING.md`](TESTING.md). For new code, start with a Unit test on the smallest pure function. For legacy code, start with an Integration test that characterizes current behaviour at the API seam, then refactor under green.
-- **Manual dev:** `web-ext run --source-dir webextension/` after bootstrap.
-- **Lint:** `eslint webextension/` and `web-ext lint --source-dir webextension/`.
-- **Tests:** `npm run test:fast` runs Unit + Integration on every save during TDD; `npm run test:e2e` runs at feature completion and on prepare-for-commit, never on every save.
-- **Scope:** Firefox-only, MV2-only. Cross-browser support and MV3 migration are explicitly deferred — see [`ROADMAP.md`](ROADMAP.md). Do not introduce Chrome targets, MV3 manifest constructs, or cross-browser test matrices without an explicit decision recorded there.
+Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:
+- **[Environment Setup](TESTING.md#environment-setup):** Installing Node.js and Firefox ESR.
+- **[CLI Reference](TESTING.md#cli-reference):** Commands for dev, linting, and testing.
+- **[Testing Strategy](TESTING.md#the-testing-strategy):** Our tier-by-tier TDD workflow.
 
 ## License
 

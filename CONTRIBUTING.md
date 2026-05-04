@@ -17,35 +17,28 @@
 
 ---
 
-## Developer Guide - test infrastructure established
+## Developer Guide
+
+All development on this project is test-driven. Before writing any code, please ensure your environment is set up according to the **[Environment Setup](TESTING.md#environment-setup)** in the testing guide.
+
+### Development Workflow
+
+1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js and Firefox ESR.
+2.  **TDD:** We follow a strict red/green TDD workflow. Unit and Integration tests run on every save; E2E tests run at feature completion.
+3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`npm run dev`, `npm run test:fast`, etc.).
 
 ### Build
 
 Currently, there is no build step for the Firefox-only MV2 extension. You can run the extension locally using Mozilla's `web-ext` tool.
 
 ```bash
-# Run the extension for local development
+# Run the extension locally
 npm run dev
-```
-
-### Test
-
-Testing has three tiers: **Unit**, **Integration**, and **E2E**. Unit and Integration run on every save during TDD; E2E runs at feature completion and pre-commit. See [`TESTING.md`](TESTING.md) for the full canonical testing guide. Writing tests is mandatory for every change and every feature, to help ensure code quality and backward compatibility, especially when using AI coding assistants. Every change should be caught at the lowest possible tier, preferably Unit or Integration. User-facing features must always also have an E2E test.
-
-```bash
-# Unit + Integration (Vitest + jsdom + jest-webextension-mock) — run during TDD
-npm run test:fast
-
-# E2E (Puppeteer over WebDriver BiDi against Firefox ESR) — run at feature completion
-npm run test:e2e
-
-# Run all code quality checks (ESLint and web-ext lint)
-npm run lint && npm run lint:webext
 ```
 
 ### Deploy
 
-The extension is deployed to Mozilla Add-ons (AMO).
+The extension will eventually be deployed to Mozilla Add-ons (AMO).
 
 ```bash
 # Build the .xpi artifact for upload
@@ -60,11 +53,8 @@ web-ext build --source-dir webextension/
 
 ### Patterns & Conventions
 
-- **Red/Green TDD is mandatory:** Write failing tests first.
-- **Language:** production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. Both are checked by `tsc --noEmit`. No build step for the extension itself. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the rules.
-- **Where to start the TDD cycle depends on the code's state:**
-  - *For new code:* start with a Unit test (`tests/unit/`) on the smallest pure function, then add an Integration test (`tests/integration/`) when you wire it to a `browser.*` API.
-  - *For legacy code:* start with an Integration test that mocks `browser.*` via `jest-webextension-mock` to pin down current behaviour (a *characterization test*) before refactoring. Backfill Unit tests for any logic extracted along the way.
+- **Red/Green TDD is mandatory:** Write failing tests first. See [`TESTING.md`](TESTING.md) for the tier-by-tier strategy.
+- **Language:** Production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the full rules.
 
 ### AI Coding Assistants
 

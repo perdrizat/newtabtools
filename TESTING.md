@@ -18,9 +18,25 @@ These tools must be present on your host machine to develop and test this extens
 |---|---|---|---|
 | **Node.js** | 20 LTS or 22 LTS | Runs Vitest, Puppeteer, web-ext | `node --version` |
 | **npm** | bundled with Node | Package manager | `npm --version` |
-| **Git** | any recent | Source control | `git --version` |
 | **Firefox ESR** | latest | Canonical testing target | `firefox --version` |
 | **`web-ext` CLI** | latest | Mozilla's dev tool | `web-ext --version` |
+
+### Installing Node.js and dependencies
+
+We recommend using a version manager like [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm) to manage Node.js versions.
+
+```bash
+# 1. Install Node.js 20 LTS (using nvm as an example)
+nvm install 20
+nvm use 20
+
+# 2. Verify installation
+node --version # should be v20.x.x
+npm --version  # should be v10.x.x
+
+# 3. Install project dependencies
+npm install
+```
 
 ### Installing Firefox ESR (Ubuntu/WSL)
 
@@ -88,14 +104,21 @@ Once your environment is set up:
    5. The extension will appear in the list. Click **Inspect** to open the background page's console/debugger.
    6. To see changes, click **Reload** in the `about:debugging` entry.
 
-4. **Smoke-test the toolchain:**
-   ```bash
-   npm run lint         # ESLint flat config — should report zero errors
-   npm run lint:webext  # Mozilla AMO policy check
-   npm run test:fast    # Unit + Integration (Vitest + jsdom + jest-webextension-mock)
-   npm run test:e2e     # E2E (launches Firefox ESR, runs Puppeteer over WebDriver BiDi, tears down)
-   ```
-   All four should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
+## CLI Reference
+
+These commands are the primary interface for development. Run them from the project root.
+
+| Command | Action | Tier |
+|---|---|---|
+| `npm run dev` | Launch extension in a temporary Firefox profile | Interactive Dev |
+| `npm run lint` | Run ESLint (checks both production JS and test TS) | Quality |
+| `npm run lint:webext` | Run `web-ext lint` (Mozilla policy check) | Quality |
+| `npm run typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
+| `npm run test:fast` | Run Unit + Integration tests | TDD Loop |
+| `npm run test:e2e` | Run full E2E suite against Firefox ESR | Validation |
+| `npm test` | Run all tests (Fast + E2E) | Pre-commit |
+
+All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 
 ## Project Context & Gotchas
 
