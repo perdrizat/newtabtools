@@ -1,0 +1,34 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+
+		"allowJs": true,
+		"checkJs": true,
+		"noEmit": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"resolveJsonModule": true,
+		"esModuleInterop": true,
+		"isolatedModules": true,
+
+		"types": ["firefox-webext-browser", "node"],
+		"lib": ["ES2020", "DOM", "DOM.Iterable"]
+	},
+	"include": [
+		"webextension/lib/**/*.js",
+		"tests/unit/**/*.js",
+		"tests/integration/**/*.js",
+		"tests/**/*.ts"
+	],
+	"exclude": [
+		"node_modules",
+		"webextension/lib/deflate.js",
+		"webextension/lib/inflate.js",
+		"webextension/lib/z-worker.js",
+		"webextension/lib/zip.js",
+		"tests/e2e/test-profile",
+		"tests/e2e/_artifacts"
+	]
+}

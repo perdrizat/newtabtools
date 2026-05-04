@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 0 tooling prep for type checking.** Type-checking pipeline in place ahead of Phase 1's test-first sweep:
+  - `tsconfig.json` with `allowJs + checkJs + strict`, types from `firefox-webext-browser` and `node`.
+  - Pinned dev deps: `typescript@6.0.3`, `@types/firefox-webext-browser@143.0.0`, `@types/node@20.19.39`, `@typescript-eslint/parser@8.59.1`, `@typescript-eslint/eslint-plugin@8.59.1`.
+  - Vitest include globs now accept `.test.ts`; ESLint flat-config has a TS block for `tests/**/*.ts`; `npm run typecheck` runs `tsc --noEmit` and is wired into CI between Lint and Web-ext Lint.
+  - **Pragmatic divergence:** tsconfig `include` is `webextension/lib/**/*.js + tests/unit/**/*.js + tests/integration/**/*.js + tests/**/*.ts` rather than the full `webextension/**/*.js`. Legacy script-mode files have zero JSDoc and are scheduled for replacement during the strangler-fig migration; annotating them now is wasted work. Coverage grows automatically as features migrate into `lib/`. Documented in `MIGRATION.md` Phase 0.
+  - Added JSDoc to `webextension/lib/colour.js` (`parseColour`, `hue2rgb`) and corrected the namespace in `webextension/lib/messaging.js` (`chrome.runtime.MessageSender` → `browser.runtime.MessageSender`) so the lib/ files typecheck cleanly.
+
 ## [2026-05-04]
 
 ### Added

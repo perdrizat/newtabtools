@@ -14,7 +14,7 @@
  * carry `sender.id === browser.runtime.id`. Anything else — including a
  * content script under `<all_urls>` — must be rejected.
  *
- * @param {chrome.runtime.MessageSender | null | undefined} sender
+ * @param {browser.runtime.MessageSender | null | undefined} sender
  * @param {string | undefined} expectedId  the value of `browser.runtime.id`.
  * @returns {boolean}
  */

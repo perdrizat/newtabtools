@@ -9,8 +9,8 @@ export default defineConfig({
           environment: 'jsdom',
           setupFiles: ['./tests/setup.js'],
           include: [
-            'tests/unit/**/*.test.js',
-            'tests/integration/**/*.test.js',
+            'tests/unit/**/*.test.{js,ts}',
+            'tests/integration/**/*.test.{js,ts}',
           ],
         },
       },
@@ -18,7 +18,7 @@ export default defineConfig({
         test: {
           name: 'e2e',
           environment: 'node',
-          include: ['tests/e2e/**/*.test.js'],
+          include: ['tests/e2e/**/*.test.{js,ts}'],
           fileParallelism: false,
           testTimeout: 60_000,
           hookTimeout: 30_000,

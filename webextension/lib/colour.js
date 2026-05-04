@@ -5,6 +5,12 @@
 // Extracted from webextension/newTab.js (parseColour, ~line 540).
 // Behaviour is preserved bug-for-bug; see tests/unit/lib/colour.test.js.
 
+/**
+ * @param {number} p
+ * @param {number} q
+ * @param {number} t
+ * @returns {number}
+ */
 function hue2rgb(p, q, t) {
 	if (t < 0) {
 		t += 1;
@@ -24,6 +30,14 @@ function hue2rgb(p, q, t) {
 	return p;
 }
 
+/**
+ * Parse a CSS colour string (rgb/rgba/hsl/hsla/#rrggbb/#rgb/#rgba) into
+ * 8-bit RGB components. Returns null when the input doesn't match a
+ * recognised form. Alpha is parsed but not returned.
+ *
+ * @param {string} str
+ * @returns {{ r: number, g: number, b: number } | null}
+ */
 export function parseColour(str) {
 	let parts = /^(hsl|rgb)a?\((\d+),\s*([\d.]+%?),\s*([\d.]+%?)/.exec(str);
 	if (parts && parts[1] == 'rgb') {

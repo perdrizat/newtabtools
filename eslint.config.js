@@ -4,6 +4,8 @@
 
 import js from '@eslint/js';
 import globals from 'globals';
+import tseslint from '@typescript-eslint/eslint-plugin';
+import tsparser from '@typescript-eslint/parser';
 
 const webExtGlobals = {
 	...globals.browser,
@@ -84,6 +86,37 @@ export default [
 		rules: {
 			...projectRules,
 			'no-console': 0, // Logging is expected in E2E tests
+		},
+	},
+	{
+		// TypeScript test files. New tests under tests/ are written in TS;
+		// existing .test.js files keep working — convert opportunistically.
+		// Production code in webextension/ stays JS (with JSDoc); see
+		// MIGRATION.md "Language and type safety" for the rules.
+		files: ['tests/**/*.ts'],
+		languageOptions: {
+			parser: tsparser,
+			ecmaVersion: 2022,
+			sourceType: 'module',
+			globals: {
+				...globals.node,
+				...globals.browser,
+				...globals.vitest,
+				chrome: 'readonly',
+				browser: 'readonly',
+			},
+		},
+		plugins: {
+			'@typescript-eslint': tseslint,
+		},
+		rules: {
+			...projectRules,
+			// no-unused-vars is handled by the TS parser; the base rule
+			// double-reports against TS-only constructs (interfaces,
+			// type-only imports), so prefer the TS-aware version.
+			'no-unused-vars': 0,
+			'@typescript-eslint/no-unused-vars': [2, { caughtErrors: 'none', argsIgnorePattern: '^_' }],
+			'no-console': 0,
 		},
 	},
 ];
