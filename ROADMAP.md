@@ -1,8 +1,87 @@
 # Roadmap
 
-This file logs decisions about future direction that have been considered and deferred, with enough context for a future maintainer to pick them up later without having to re-derive the reasoning.
+This file logs decisions about future direction — both decisions taken and decisions deliberately deferred — with enough context for a future maintainer to pick them up later without having to re-derive the reasoning. Each entry carries a **Status** field: **Chosen**, **Deferred**, or **Superseded**.
 
 It is not a task list and not a release plan. Entries are dated; outdated ones should be removed or updated, not left to rot.
+
+---
+
+## Codebase strategy: cherry-pick + reference rewrite
+
+**Status:** Chosen. Decided 2026-05-03.
+
+**Decision:** Take option 2 from [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md). Use Mozilla's Activity Stream as a *visual and behavioural reference* (license-compatible — both MPL-2.0). Reimplement the parity features cleanly in WebExtension scope, port the salvageable parts of NTT for the gap features, drop the rest.
+
+### Why this option
+
+The two alternatives have specific failure modes that this one avoids:
+
+- **Modernize as-is** would lock NTT into maintaining ~600 lines of code that now duplicate native Firefox (per-tile image upload, drag-reorder, custom title, custom URL — all native since Firefox 134). Forever-maintenance on dead-equivalent functionality.
+- **Lean rewrite** would push the first user-visible release months further out and risks losing edge-case behaviour the original NTT got right. Too long without a shipping artefact.
+
+Cherry-pick + reference rewrite preserves the parts of NTT that solve real problems (the auto-thumbnail pipeline, the per-domain filter, the export format), discards the parts Firefox now handles, and keeps the codebase small enough for a single maintainer.
+
+### What it means in practice
+
+- **Strangler-fig migration**, not a big-bang rewrite. The existing extension keeps running. Features get replaced one at a time. Each replacement ships incrementally — no long-lived rewrite branch.
+- **New code lives under `webextension/lib/`** as ES modules, with Unit tests in `tests/unit/`. The legacy `webextension/*.js` files shrink as features move out.
+- **The migration ledger lives in [`MIGRATION.md`](MIGRATION.md).** Every feature in [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md) has a row with current state, strategy, and test status. That doc is the working document; this one is the why.
+
+### Sequencing relative to Chrome / MV3
+
+The cherry-pick + reference rewrite is **stage 1**. Once it's substantially complete and shipped, stage 2 is the Firefox MV3 port; stage 3 is adding Chrome as a second build target. See "Chrome support / MV3 migration" below for the gate that triggers stages 2 and 3.
+
+During stage 1, write code that won't fight MV3 later: promise-based `browser.*` only (no callback mixing), no DOM dependencies in background-scope code, Firefox-only APIs isolated behind a thin capability layer (e.g. `webextension/lib/platform.js`), avoid `<all_urls>` if a narrower permission set works.
+
+---
+
+## Language: JavaScript with JSDoc on production, TypeScript on tests
+
+**Status:** Chosen. Decided 2026-05-04.
+
+**Decision:** Production code stays JavaScript with JSDoc-based type annotations, checked by `tsc --noEmit`. Test code uses TypeScript. There is no build step for the extension itself.
+
+### Why this option
+
+Three options were on the table:
+
+1. **Plain JavaScript everywhere** (status quo). Forfeits the type-safety win. Particularly painful during the test-first Phase 1 of the cherry-pick rewrite — a lot of test code is being written, and it's the area where AI-assisted contributions benefit most from type checking.
+2. **JSDoc + `checkJs` on production, TypeScript on tests.** ← chosen.
+3. **Full TypeScript everywhere.** Highest type-safety ceiling but introduces a build step (TS-to-JS compilation, plus `web-ext run` and the E2E lifecycle script consuming `dist/` instead of `webextension/`), which a single maintainer absorbs forever. The build pipeline becomes a category of "extension won't load" bugs that don't exist today.
+
+Option 2 captures the bulk of TypeScript's safety benefit without putting a build step between source and runtime. Tests in TS get type checking on assertion shapes and mock setup; production `.js` with JSDoc gets contract checking and IDE support; cross-file type information flows because TS reads JSDoc when `allowJs` and `checkJs` are enabled. Vitest handles `.ts` test files natively (esbuild under the hood), so no test-runner change is needed beyond the include glob.
+
+The decision can be re-escalated to option 3 later — any JSDoc-annotated `.js` file is a rename + light cleanup away from being a `.ts` file. Keeping that escape hatch open is a real virtue.
+
+### Concrete tooling tasks
+
+Tracked in [`MIGRATION.md`](MIGRATION.md) Phase 0 as a foundation step that must land before Phase 1's test-writing sweep begins.
+
+### Rules for new code
+
+See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the full rules and the "what not to do" list.
+
+---
+
+## Security review absorbed (2026-05-04)
+
+**Status:** Chosen (integration plan). Logged 2026-05-04.
+
+**Decision:** Absorb the findings of the [pre-takeover security review](audit/2026-05-04-security-review.md) into the existing roadmap rather than treating security as a separate workstream. Verdict from the review was a cautious go: nothing blocks continuation, but specific findings gate AMO republish.
+
+### How findings map onto the existing phases
+
+- **Cheap wins** — §2.3 (CSP), §2.4 (sender validation), §2.7 (`npm audit` in CI) are added to [`MIGRATION.md`](MIGRATION.md) Phase 0 as a security-hardening checklist item, peer to the tooling-prep checklist. Single-PR changes; lower the blast radius for everything that follows.
+- **High-severity findings as Phase 1.5 / Phase 4 work under the safety net** — §2.1 (stored XSS via the zip-restore path) and §2.2 (replace the 2013 vendored `zip.js`) are gated behind Phase 1 characterization tests on the restore path. Fixing them before the tests exist would change behaviour without a safety net — exactly the anti-pattern the strangler-fig discipline is designed to avoid.
+- **Phase 1 sequencing reordered** — the four security boundaries (`runtime.onMessage`, tile-URL render, zip restore, optional-permission flows) become slots 1–4 of the Phase 1 sweep. They were originally scattered through the order; the audit elevated them to first-priority characterization targets, and they double as the migration safety net the roadmap already calls for.
+- **Permission scope-down** — §2.6 (`<all_urls>` + dynamic content-script injection) stays bundled with the auto-thumbnail rewrite at [`MIGRATION.md`](MIGRATION.md) Phase 4, because the scope-down depends on switching from the `drawWindow` content-script to `tabs.captureTab`.
+- **AMO republish gate codified** — finding §2.1 fixed, §2.2 dependency replaced, threat-model doc landed. Recorded in [`README.md`](README.md) step 8.
+
+### Strategic notes raised by the audit
+
+- **MV2-sunset risk on the Chrome / MV3 deferral.** See the time-box note added to that entry below — the gate now has a calendar revisit date in addition to the substantive pre-requisites.
+- **AMO publication path has a security dimension.** ID-transfer inherits every existing user's IndexedDB and prefs (potentially long-stale, possibly tampered). New-ID is clean state. Whichever way the maintainer decides on [`README.md`](README.md) step 7, this factor should be weighed alongside user-base preservation.
+- **AI-contribution supply-chain** — explicit guardrails added to [`CONTRIBUTING.md`](CONTRIBUTING.md) "AI Coding Assistants" (pinned versions, lockfile review, `postinstall` scrutiny, typo-squat checks).
 
 ---
 
@@ -26,6 +105,8 @@ Do **not** revisit this until all of the following are true:
 - The maintainer has spent enough time in `newTab.js`, `tiles.js`, and the background scripts to feel comfortable navigating them.
 
 Below this bar, picking up Chrome multiplies risk without buying confidence. Above it, the test suite becomes the migration's safety net.
+
+**Calendar time-box:** revisit this gate by **2027-Q2** regardless of whether the substantive pre-requisites have been met. Mozilla has signalled a multi-year MV2 wind-down on Firefox; indefinite deferral is a strategic risk. The time-box doesn't commit to action — it commits to *re-deciding* on a date. Added 2026-05-04 in response to the pre-takeover security review.
 
 ### What "doing it" actually entails
 

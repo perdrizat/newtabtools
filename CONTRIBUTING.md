@@ -60,7 +60,8 @@ web-ext build --source-dir webextension/
 
 ### Patterns & Conventions
 
-- **Red/Green TDD is mandatory:** Write failing tests first. Tests and production code stay in vanilla JavaScript (no TypeScript).
+- **Red/Green TDD is mandatory:** Write failing tests first.
+- **Language:** production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. Both are checked by `tsc --noEmit`. No build step for the extension itself. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the rules.
 - **Where to start the TDD cycle depends on the code's state:**
   - *For new code:* start with a Unit test (`tests/unit/`) on the smallest pure function, then add an Integration test (`tests/integration/`) when you wire it to a `browser.*` API.
   - *For legacy code:* start with an Integration test that mocks `browser.*` via `jest-webextension-mock` to pin down current behaviour (a *characterization test*) before refactoring. Backfill Unit tests for any logic extracted along the way.
@@ -71,6 +72,7 @@ Contributions generated with the help of AI are welcome but must follow the stan
 
 - **Human Accountability:** The human submitter is responsible for reviewing all AI-generated code, ensuring license compliance, and taking full responsibility for the contribution. AI agents MUST NOT add `Signed-off-by` tags.
 - **Attribution:** Mentioning AI assistance in commit messages is optional.
+- **Supply-chain guardrails:** When AI-assisted contributions touch `package.json`, `package-lock.json`, or build/test scripts, the human submitter is specifically responsible for: pinned versions on new deps (no `^` / `~`); diffing the lockfile to spot unexpected new transitive deps and source-URL changes on existing ones; reading any `postinstall` scripts before installing; cross-checking new dep names against npm registry stats (download volume, last publish date, listed maintainers) to catch typo-squats. The `min-release-age=7` setting in `.npmrc` is the floor, not a substitute for review.
 
 ### Key Files
 
@@ -78,4 +80,6 @@ Contributions generated with the help of AI are welcome but must follow the stan
 - [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
 - [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
 - [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
-- [`ROADMAP.md`](ROADMAP.md): A log of deferred architectural decisions.
+- [`ROADMAP.md`](ROADMAP.md): Architectural decisions, both taken and deferred.
+- [`MIGRATION.md`](MIGRATION.md): The per-feature migration ledger for the cherry-pick + reference rewrite.
+- [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md): Gap analysis vs. native Firefox.

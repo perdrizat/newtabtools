@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-04]
+
+### Added
+
+- **Security review** landed at `audit/2026-05-04-security-review.md`. Result: cautious go for the takeover. Audit findings absorbed into the roadmap.
+- **Codebase strategy decided**: cherry-pick + reference rewrite. Recorded in `ROADMAP.md`.
+- Created `MIGRATION.md` — **per-feature migration ledger** with current state, strategy, implementation refs, and test status; plus the phasing from foundation through MV3 unblock.
+- **Language policy decided**: JavaScript with JSDoc on production, TypeScript on tests, no build step. Recorded in `ROADMAP.md`.
+
 ## [2026-05-03]
 
 ### Added

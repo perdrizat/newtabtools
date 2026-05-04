@@ -10,7 +10,7 @@ This means: **any feature a typical Firefox user expects from the default page m
 
 Three feature categories follow:
 
-- **Killer (Gap)** — things Firefox can't do. Full investment, full E2E coverage, active development.
+- **Differentiating** — things Firefox can't do. Full investment, full E2E coverage, active development.
 - **Parity (Match)** — things Firefox does that NTT must also do so users don't feel they've lost ground. Maintained, basic E2E coverage, no innovation beyond what native does.
 - **Drop** — legacy elements that no longer fit the fork (the previous maintainer's donate link, manual update notices that AMO now handles).
 
@@ -53,13 +53,13 @@ This decision is open and should be made before serious code work begins. Option
 
 ## Feature scope (the keep/match/drop matrix)
 
-### Killer (Gap) — full investment, full E2E coverage
+### Differentiating — full investment, full E2E coverage
 
 These are the reasons New Tab Tools exists in 2026.
 
 | Feature | Native status | Notes |
 |---|---|---|
-| **Auto-thumbnail of recently visited pages** | **missing** | NTT had this via `CanvasRenderingContext2D.drawWindow()`, a Firefox-only Canvas API that **Mozilla removed**. That's why it stopped working ~6 months ago. Revivable using `browser.tabs.captureTab()` triggered by `browser.webNavigation.onCompleted`, with results cached by URL in `browser.storage.local`. **This is the flagship gap feature** — Firefox's per-tile custom image takes a static upload, never auto-captures what the page actually looks like when visited. |
+| **Auto-thumbnail of recently visited pages** | **missing** | NTT does this via `CanvasRenderingContext2D.drawWindow()` running in a content script — a non-standard, Firefox-only Canvas API with restricted access in modern Firefox. It still works on simple pages but captures only ~50% in practice; CSP, cross-origin restrictions, sites blocking content-script execution, and timing issues all defeat it. Modernization target: replace with `browser.tabs.captureTab()` triggered by `browser.webNavigation.onCompleted`, with results cached by URL in `browser.storage.local`. **This is the flagship gap feature** — Firefox's per-tile custom image takes a static upload, never auto-captures what the page actually looks like when visited. |
 | **Arbitrarily large tiles** | **missing** | Native Firefox tiles are capped at a small thumbnail size, and reducing rows from 4 to 1 doesn't make individual tiles bigger — the layout reserves the unused space rather than reflowing. NTT's grid scales tile size to fill the viewport: a 2×2 grid in a wide browser window produces tiles that are genuinely large. This is one of the most visceral "I can finally *see* my pinned sites" benefits when switching from native. Note: this is an emergent property of an unconstrained grid, not a separate "tile size" slider — it follows directly from "Configurable columns" + the grid being free to use available space. |
 | **Configurable columns and unconstrained grid** | **missing** | Native does rows (1-4) but column count scales responsively to window width with no user override, and tile size stays small regardless of how few tiles are shown. NTT lets users pick exact rows × columns and the grid fills the available viewport, which is what makes large tiles possible. |
 | **Layout micro-tuning** | **missing** | Foreground opacity slider, tile title size (Small/Medium/Large), per-side margin (Small/Medium/Large), grid spacing. None exposed in native Firefox; never will be (Mozilla optimizes for one default). |
@@ -109,7 +109,7 @@ NTT users who want these stay with the native page. NTT's pitch is layout precis
 
 This matrix maps directly onto [`TESTING.md`](TESTING.md)'s E2E coverage. The categories drive how much E2E investment each feature gets:
 
-- **Killer features:** every one gets dedicated E2E tests — the auto-thumbnail pipeline, opacity slider, lock-grid, per-domain cap, recently-closed restore, autocomplete-on-add, backup roundtrip. These are the features regressions must catch.
+- **Differentiating features:** every one gets dedicated E2E tests — the auto-thumbnail pipeline, opacity slider, lock-grid, per-domain cap, recently-closed restore, autocomplete-on-add, backup roundtrip. These are the features regressions must catch.
 - **Parity features:** smoke-level E2E only. Verify the feature works at all; don't try to match Firefox behavior bug-for-bug.
 - **Drop features:** no E2E. As they're removed from the codebase, remove the related tests.
 
@@ -121,24 +121,24 @@ Concrete starting set, mapping to the E2E categories already in [`TESTING.md`](T
 | Pin a tile and reload — pin persists | Parity |
 | Per-tile custom image upload appears and persists | Parity |
 | Per-tile custom title persists | Parity |
-| Per-tile background color set/reset persists | **Killer** |
+| Per-tile background color set/reset persists | **Differentiating** |
 | Page background image upload + removal | Parity |
 | Theme light / dark / auto round-trips | Parity |
-| Rows × columns reflows the grid as expected | **Killer** (columns specifically) |
-| Reducing row/column count enlarges tile size; tiles fill available viewport | **Killer** (the "large tiles" benefit) |
-| Opacity / spacing / margin round-trip via settings | **Killer** |
-| Tile title size round-trips | **Killer** |
-| Lock-grid prevents drag-reorder | **Killer** |
+| Rows × columns reflows the grid as expected | **Differentiating** (columns specifically) |
+| Reducing row/column count enlarges tile size; tiles fill available viewport | **Differentiating** (the "large tiles" benefit) |
+| Opacity / spacing / margin round-trip via settings | **Differentiating** |
+| Tile title size round-trips | **Differentiating** |
+| Lock-grid prevents drag-reorder | **Differentiating** |
 | Hide history-derived tiles toggle | Parity |
-| Per-domain filter cap with `.example.com` wildcard | **Killer** |
-| Recently-closed-tabs row appears, restore works | **Killer** |
-| Add-shortcut autocomplete pulls from tabs / bookmarks / history (with permissions granted) | **Killer** |
-| Backup zip is non-empty; restore round-trips a backup | **Killer** |
-| **Auto-thumbnail captures a recently-loaded page** | **Killer (flagship)** |
+| Per-domain filter cap with `.example.com` wildcard | **Differentiating** |
+| Recently-closed-tabs row appears, restore works | **Differentiating** |
+| Add-shortcut autocomplete pulls from tabs / bookmarks / history (with permissions granted) | **Differentiating** |
+| Backup zip is non-empty; restore round-trips a backup | **Differentiating** |
+| **Auto-thumbnail captures a recently-loaded page** | **Differentiating (flagship)** |
 | Context menu pin / unpin / block / edit acts on the right tile | Parity |
 
-Killer features get test depth — multiple cases per feature, edge cases, error states. Parity features get a happy-path smoke. Drop features get no E2E and are deleted from the suite when they leave the codebase.
+Differentiating features get test depth — multiple cases per feature, edge cases, error states. Parity features get a happy-path smoke. Drop features get no E2E and are deleted from the suite when they leave the codebase.
 
-## Open question for the maintainer
+## Codebase strategy decision
 
-The codebase choice (modernize / cherry-pick / lean rewrite) is the next decision blocking real code work. It depends partly on personal preference and partly on how aggressive the de-duplication of native-Firefox functionality should be. Recording it in [`ROADMAP.md`](ROADMAP.md) once chosen.
+**Decided 2026-05-03: option 2 (cherry-pick + reference rewrite).** See [`ROADMAP.md`](ROADMAP.md) for the rationale. The per-feature migration plan and test-status ledger live in [`MIGRATION.md`](MIGRATION.md).

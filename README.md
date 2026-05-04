@@ -19,7 +19,9 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 - `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR. Functionally unchanged from the upstream's last release.
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
-- [`ROADMAP.md`](ROADMAP.md) — log of deferred decisions with enough context to pick them up later. First entry: Chrome support and MV3 migration are deferred until Firefox-only stabilization is finished.
+- [`ROADMAP.md`](ROADMAP.md) — log of architectural decisions, both taken and deferred. Records the chosen codebase strategy (cherry-pick + reference rewrite) and the deferral of Chrome support / MV3 migration until Firefox-only stabilization is finished.
+- [`MIGRATION.md`](MIGRATION.md) — the working migration ledger for the cherry-pick + reference rewrite. Per-feature table with current state, strategy, implementation refs, and test status; plus the suggested phasing.
+- [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md) — gap analysis vs. native Firefox; drives which features get full E2E coverage and which get parity smokes.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — bug-report guidance carried over from the original maintainer; will be updated once the continuation's intake process is in place.
 
@@ -27,17 +29,20 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 Done:
 1. License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
-2. Testing strategy, bootstrap plan, and deferred-work roadmap documented.
+2. Testing strategy, bootstrap plan, and roadmap documented.
 3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
 4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
+5. Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md) for the rationale, [`MIGRATION.md`](MIGRATION.md) for the per-feature plan).
 
 Outstanding (in rough order):
-5. Work on a few features to get comfortable with the codebase and the TDD workflow.
-6. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
-7. First republished release on AMO, functionally identical to the upstream's last release. This proves the publish pipeline before any code changes ship.
-8. Open the issue tracker for new bug reports.
+6. Security & tooling: hardening (cheap wins) & tooling prep for type checking
+7. Test-first characterization sweep: build a comprehensive safety net before any code is rewritten.
+8. Walk the first migration slice end-to-end to establish the pattern (see [`MIGRATION.md`](MIGRATION.md) phase 1).
+9. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
+10. First republished release on AMO, functionally identical to the upstream's last release. **Security preconditions** (per the [pre-takeover review](audit/2026-05-04-security-review.md)): finding §2.1 (stored XSS via tile URL → `javascript:` href on the zip-restore path) fixed; finding §2.2 (vendored `lib/zip.js` from 2013) replaced with a maintained zip library; threat-model and data-classification doc landed. These gate the republish — proving the publish pipeline doesn't waive them.
+11. Open the issue tracker for new bug reports.
 
-Until at least step 7 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
+Until at least step 8 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
 
 ## For developers
 

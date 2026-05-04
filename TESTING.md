@@ -5,7 +5,7 @@ This is the testing guide for this repository. Any contributor working on this c
 ## Scope and Ground Rules
 
 - **Firefox-first, Firefox-only:** This extension targets Firefox via `applications.gecko` in `manifest.json`, runs on **Manifest V2**, and has a minimum version pinned to the **latest ESR**. Do not introduce Chromium-only assumptions or MV3 constructs (`background.service_worker`, `action` replacing `browser_action`, `host_permissions` split out from `permissions`, `declarativeNetRequest`). MV3 migration is a project-shaped decision tracked in [`ROADMAP.md`](ROADMAP.md), not a side effect of bug fixes.
-- **Vanilla JavaScript, not TypeScript:** Tests stay in vanilla JS to match production code. Adopting TS is a separate decision, deferred for now.
+- **JavaScript on production, TypeScript on tests, no build step.** Production `.js` files under `webextension/` carry types via JSDoc; test files under `tests/` use full TypeScript. Both are checked by `tsc --noEmit` (`allowJs: true`, `checkJs: true`). `web-ext run` consumes `webextension/` directly — no compilation between source and runtime. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the rules.
 - **Red/green TDD is mandatory:** Write a failing test first, watch it fail for the right reason, and write the minimum code to make it pass.
 - **Never skip or weaken tests:** Fix them or delete them with justification in the commit message. Never use `--no-verify`.
 - **TDD applies to Unit and Integration tests only:** End-to-end (E2E) testing sits outside the tight TDD loop — it runs at feature completion and pre-commit, not on every save.
@@ -186,7 +186,7 @@ The single most valuable E2E test is: install the extension, open `about:newtab`
 **2. Feature acceptance — happy-path workflows.**
 Every user-facing feature should have at least one E2E test exercising the primary workflow: perform an action → observe the result → reload → confirm persistence. The *depth* of E2E coverage depends on the feature's importance:
 
-- **Killer (gap) features** — the reasons NTT exists over native Firefox — get multiple E2E cases per feature, including edge cases and error states. These are the features where regressions hurt most.
+- **Differentiating features** — the reasons NTT exists over native Firefox — get multiple E2E cases per feature, including edge cases and error states. These are the features where regressions hurt most.
 - **Parity (match) features** — things native Firefox also does, which NTT must maintain — get a single happy-path smoke each. Don't try to match Firefox behaviour bug-for-bug; just prove the feature works.
 - **Drop features** — legacy elements being removed — get no E2E. Delete tests when the feature leaves the codebase.
 
