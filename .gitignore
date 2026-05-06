@@ -14,3 +14,4 @@ tests/e2e/_artifacts/
 .vitest-cache/
 *.Zone.Identifier
 .DS_Store
+.vscode/
