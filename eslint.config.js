@@ -49,12 +49,9 @@ const projectRules = {
 
 export default [
 	{
-		// Vendored zip.js library — third-party code, not subject to project style.
+		// Vendored zip.js library (minified dist from @zip.js/zip.js) — not subject to project style.
 		// Firefox-generated test-profile and ephemeral artifact directories — not our code.
 		ignores: [
-			'webextension/lib/deflate.js',
-			'webextension/lib/inflate.js',
-			'webextension/lib/z-worker.js',
 			'webextension/lib/zip.js',
 			'tests/e2e/test-profile/**',
 			'tests/e2e/_artifacts/**',
