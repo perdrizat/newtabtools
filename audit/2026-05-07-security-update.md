@@ -10,15 +10,15 @@
 
 | Finding | Severity | Status | Notes |
 |---|---|---|---|
-| **§2.1** Stored XSS via zip restore | high | **Characterized, not yet fixed** | Integration tests (`backup-restore.test.ts`) explicitly pin the `javascript:` and `data:` URL injection paths, plus unsanitized HTML titles and unfiltered pref keys. E2E round-trip test (`backup-restore.test.js`) exercises the restore path end-to-end. The fix is safe to apply now — the safety net is in place. Still gates AMO republish. |
-| **§2.2** Vendored `zip.js` from 2013 | high | **Open** | No change. Still gates AMO republish. |
+| **§2.1** Stored XSS via zip restore | high | **Fixed** | URL scheme allow-list (`http:`, `https:`, `ftp:`) at two boundaries: `readZip` in `export.js` drops malicious tiles before storage (primary fix); `addTitle` in `fx-newTab.js` renders `#` for non-safe protocols (defense-in-depth). Characterization tests flipped to assert the fix. |
+| **§2.2** Vendored `zip.js` from 2013 | high | **Fixed** | Replaced with `@zip.js/zip.js` v2.8.26 (`zip-core.min.js`, 62KB). Pinned devDependency for `npm audit` coverage. `export.js` rewritten to modern Promise-based API. Old worker files (`deflate.js`, `inflate.js`, `z-worker.js`) deleted. |
 | **§2.3** No CSP in manifest | medium | **Fixed** | `content_security_policy` added to `manifest.json`. Regression test at `tests/unit/manifest.test.js` asserts key directives and blocks `unsafe-eval`/`unsafe-inline` in script-src. Verified by `web-ext lint` and full E2E. |
 | **§2.4** No sender validation | medium | **Fixed** | Inline guard in `background.js:113` (`sender.id !== browser.runtime.id`). Pure-logic helper in `lib/messaging.js` with unit tests. Wiring verified by 5 sender-validation cases in `background-messages.test.ts`. |
-| **§2.5** Prefs restored verbatim | medium | **Characterized, not yet fixed** | Integration test pins the current (vulnerable) behaviour: arbitrary keys pass through to `storage.local`. Still open. |
+| **§2.5** Prefs restored verbatim | medium | **Fixed** | `readZip` now filters restored prefs through an allow-list of known keys before `chrome.storage.local.set`. Unknown/malicious keys silently dropped. Characterization test flipped to assert the fix. |
 | **§2.6** `<all_urls>` + `executeScript` | medium | **Characterized** | `auto-thumbnail.test.ts` (integration) covers the `webNavigation.onCompleted` trigger, protocol filter, cache-check, staleness check, incognito guard, and script injection. Behavioural documentation of known capture failures added. Fix bundled with Phase 4 auto-thumbnail rewrite per plan. |
 | **§2.7** No SCA in CI | low | **Fixed** | `npm audit --audit-level=high` step in `ci.yml`. One new transitive `high` advisory (`basic-ftp` via `puppeteer-core` → `proxy-agent`) appeared since the audit and is resolved by `npm audit fix` (updated lockfile). |
 
-**Summary:** 3 of 7 findings fixed, 3 characterized with safety-net tests ready for fix, 1 (§2.2 vendored zip.js) still open and untouched.
+**Summary:** 6 of 7 findings fixed. The remaining finding (§2.6 `<all_urls>` + `executeScript`) is characterized and scheduled for Phase 4 (auto-thumbnail rewrite). Both AMO republish gate conditions (§2.1 fixed, §2.2 replaced) are now met.
 
 ## 2. New security issues introduced
 
