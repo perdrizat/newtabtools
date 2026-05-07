@@ -1,0 +1,217 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import {
+	connectToFirefox,
+	openNewTab,
+	getNewTabURL,
+	captureFailure,
+	waitForCondition,
+	waitForGridReady,
+	resetTestState,
+} from './_helpers.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TEST_URL_TITLE = 'https://title-test.example.com/';
+const TEST_URL_THUMB = 'https://thumb-test.example.com/';
+
+describe('E2E: Per-tile custom title and image (slot 28)', () => {
+	let browser;
+	let testImagePath;
+
+	beforeAll(async () => {
+		browser = await connectToFirefox();
+		await resetTestState(browser);
+
+		// Create a minimal 1x1 red PNG for thumbnail upload.
+		const pngBuffer = Buffer.from(
+			'89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de' +
+			'0000000c4944415408d763f86f0000000200018d5f51b70000000049454e44ae426082',
+			'hex'
+		);
+		testImagePath = path.join(__dirname, '_artifacts', 'test-thumb.png');
+		fs.mkdirSync(path.dirname(testImagePath), { recursive: true });
+		fs.writeFileSync(testImagePath, pngBuffer);
+	}, 60_000);
+
+	afterAll(async () => {
+		if (browser) {
+			await browser.disconnect();
+		}
+		try { fs.unlinkSync(testImagePath); } catch { /* ignore */ }
+	});
+
+	it('setting a custom title on a pinned tile renders it', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		const url = await getNewTabURL();
+
+		try {
+			// Pin a tile.
+			await page.evaluate(async (u) => {
+				return new Promise(resolve => {
+					chrome.runtime.sendMessage({
+						name: 'Tiles.pinTile',
+						title: 'Original Title',
+						url: u,
+					}, resolve);
+				});
+			}, TEST_URL_TITLE);
+
+			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+
+			// Wait for tile in grid.
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					return g && g.sites && g.sites.some(s => s && s.url === u);
+				},
+				[TEST_URL_TITLE],
+				{ timeout: 10_000, message: 'Tile not in grid' }
+			);
+
+			// Open settings and select our tile.
+			await page.evaluate((u) => {
+				document.getElementById('options-toggle').click();
+				const idx = window.Grid.sites.findIndex(s => s && s.url === u);
+				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
+			}, TEST_URL_TITLE);
+			await new Promise(r => setTimeout(r, 500));
+
+			// Set a custom title.
+			await page.evaluate(() => {
+				document.getElementById('options-title-input').value = 'My Custom Title';
+				document.getElementById('options-title-set').click();
+			});
+			await new Promise(r => setTimeout(r, 500));
+
+			// Verify the title renders on the tile.
+			const tileTitle = await page.evaluate((u) => {
+				const site = window.Grid.sites.find(s => s && s.url === u);
+				if (!site) {return null;}
+				const titleSpan = site.node.querySelector('.newtab-title');
+				return titleSpan ? titleSpan.textContent : null;
+			}, TEST_URL_TITLE);
+			expect(tileTitle).toBe('My Custom Title');
+
+			// Verify persistence across reload.
+			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+
+			const titleAfterReload = await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) {return false;}
+					const site = g.sites.find(s => s && s.url === u);
+					if (!site) {return false;}
+					const titleSpan = site.node.querySelector('.newtab-title');
+					return titleSpan && titleSpan.textContent === 'My Custom Title' ? titleSpan.textContent : false;
+				},
+				[TEST_URL_TITLE],
+				{ timeout: 10_000, message: 'Custom title not found after reload' }
+			);
+			expect(titleAfterReload).toBe('My Custom Title');
+
+			// Cleanup.
+			await page.evaluate(async (u) => {
+				return new Promise(resolve => {
+					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
+				});
+			}, TEST_URL_TITLE);
+		} catch (e) {
+			await captureFailure(page, 'tile-custom-title');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+
+	it('uploading a custom thumbnail image displays it on the tile', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		const url = await getNewTabURL();
+
+		try {
+			// Pin a tile.
+			await page.evaluate(async (u) => {
+				return new Promise(resolve => {
+					chrome.runtime.sendMessage({
+						name: 'Tiles.pinTile',
+						title: 'Thumb Test',
+						url: u,
+					}, resolve);
+				});
+			}, TEST_URL_THUMB);
+
+			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					return g && g.sites && g.sites.some(s => s && s.url === u);
+				},
+				[TEST_URL_THUMB],
+				{ timeout: 10_000, message: 'Tile not in grid' }
+			);
+
+			// Open settings and select our tile.
+			await page.evaluate((u) => {
+				document.getElementById('options-toggle').click();
+				const idx = window.Grid.sites.findIndex(s => s && s.url === u);
+				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
+			}, TEST_URL_THUMB);
+			await new Promise(r => setTimeout(r, 500));
+
+			// Upload a custom thumbnail.
+			const fileInput = await page.$('#options-savedthumb-input');
+			await fileInput.uploadFile(testImagePath);
+			await new Promise(r => setTimeout(r, 500));
+
+			// Click set.
+			await page.evaluate(() => {
+				document.getElementById('options-savedthumb-set').click();
+			});
+			await new Promise(r => setTimeout(r, 1000));
+
+			// Verify the tile thumbnail has a backgroundImage.
+			const hasThumbnail = await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) {return false;}
+					const site = g.sites.find(s => s && s.url === u);
+					if (!site) {return false;}
+					const bg = site.thumbnail.style.backgroundImage;
+					return bg && bg.startsWith('url(');
+				},
+				[TEST_URL_THUMB],
+				{ timeout: 10_000, message: 'Custom thumbnail not applied to tile' }
+			);
+			expect(hasThumbnail).toBeTruthy();
+
+			// Remove the thumbnail.
+			await page.evaluate(() => {
+				document.getElementById('options-savedthumb-remove').click();
+			});
+			await new Promise(r => setTimeout(r, 500));
+
+			// Cleanup.
+			await page.evaluate(async (u) => {
+				return new Promise(resolve => {
+					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
+				});
+			}, TEST_URL_THUMB);
+		} catch (e) {
+			await captureFailure(page, 'tile-custom-thumb');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+});

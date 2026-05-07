@@ -14,6 +14,23 @@ const webExtGlobals = {
 	chrome: 'readonly',
 };
 
+// Extension-specific globals exposed on the new tab page and background page.
+// Used inside page.evaluate() callbacks in E2E tests and in integration tests
+// that load/mock the extension scripts.
+const nttGlobals = {
+	Background: 'readonly',
+	Blocked: 'readonly',
+	Drag: 'readonly',
+	DropTargetShim: 'readonly',
+	Filters: 'readonly',
+	Grid: 'readonly',
+	newTabTools: 'readonly',
+	Page: 'readonly',
+	Prefs: 'readonly',
+	Tiles: 'readonly',
+	Updater: 'readonly',
+};
+
 const projectRules = {
 	'comma-dangle': [2, 'only-multiline'],
 	'complexity': 0,
@@ -71,7 +88,8 @@ export default [
 	{
 		// E2E tests and helpers. These run in Node but often contain
 		// evaluate() blocks that run in the browser, plus Puppeteer's
-		// own browser-like API.
+		// own browser-like API. nttGlobals covers extension-specific
+		// objects (Prefs, Grid, Tiles, etc.) referenced in page.evaluate().
 		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs'],
 		languageOptions: {
 			ecmaVersion: 2022,
@@ -80,6 +98,7 @@ export default [
 				...globals.node,
 				...globals.browser,
 				...globals.vitest,
+				...nttGlobals,
 				chrome: 'readonly',
 			},
 		},
@@ -102,6 +121,7 @@ export default [
 				...globals.node,
 				...globals.browser,
 				...globals.vitest,
+				...nttGlobals,
 				chrome: 'readonly',
 				browser: 'readonly',
 			},
