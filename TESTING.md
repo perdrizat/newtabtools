@@ -192,6 +192,7 @@ E2E tests exercise the extension from the user's perspective in a real Firefox E
 - **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox ESR launched by `web-ext run`. (Playwright was tried and rejected — its patched-Firefox design cannot drive system ESR. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
 - **Location:** `tests/e2e/*.test.js` (matching the Unit/Integration naming).
 - **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) launches Firefox ESR with `--remote-debugging-port=9222`, waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
+- **How to run:** Always use `npm run test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox ESR with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `npm run test:e2e -- tests/e2e/my-test.test.js`.
 - **When to run:**
   1. Once at the end of every completed feature.
   2. Always as part of the "prepare for commit" workflow.
@@ -227,6 +228,46 @@ Use **screenshot comparison** (`page.screenshot()` + pixel-diff or Vitest snapsh
 
 **4. Settings round-trip.**
 Every preference the user can change via the settings panel must survive a full round-trip: set it → reload `about:newtab` → assert the value is restored. This catches storage bugs, serialization mismatches, and migration regressions that mocks cannot surface.
+
+#### Hermetic E2E Fixtures
+
+E2E test files **must not depend on state left behind by other test files**. Vitest orders tests by performance history locally but falls back to alphabetical order on CI (where history is absent). A test that passes only because a prior file pinned a tile or set a pref will fail when execution order changes.
+
+**The rule:** every `describe` block must establish the state it needs in `beforeAll` and must not assume anything about existing tiles, prefs, or grid contents.
+
+**Required pattern** — call `resetTestState` in `beforeAll`, after connecting:
+
+```js
+import {
+  connectToFirefox,
+  resetTestState,
+  // ...other helpers
+} from './_helpers.js';
+
+beforeAll(async () => {
+  browser = await connectToFirefox();
+  await resetTestState(browser);   // wipe tiles + reset prefs in one page cycle
+}, 60_000);
+```
+
+`resetTestState(browser)` opens a single temporary new tab page, clears all pinned tiles (`Tiles.getAllTiles()` → `Tiles.removeTile()` for each), resets every layout/feature pref to defaults (`rows: 3`, `columns: 3`, `locked: false`, `theme: 'light'`, etc.), and closes the page. Using one page for both operations avoids the rapid open/close/open cycle that can destabilise the BiDi connection.
+
+The individual `clearPinnedTiles(browser)` and `resetPrefs(browser)` helpers still exist for cases where you only need one, but `resetTestState` is the recommended default.
+
+All helpers live in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
+
+**Selector hygiene:** never target tiles by grid position alone (e.g. "first `.newtab-cell`"). Use URL-specific lookups via `Grid.sites`:
+
+```js
+// Good — targets the exact tile this test created
+const site = window.Grid.sites.find(s => s && s.url === myTestURL);
+const pinBtn = site.node.querySelector('.newtab-control-pin');
+
+// Bad — breaks when another test file's tile occupies position 0
+document.querySelector('.newtab-site .newtab-control-pin');
+```
+
+**Cleanup is optional but encouraged.** If a test pins tiles with unique URLs (e.g. `https://my-feature-test.example.com/`), unpin them in the test's `finally` block. This is a courtesy to other test files, not a substitute for `clearPinnedTiles` — every file must still call `clearPinnedTiles` in its own `beforeAll`.
 
 ## TDD Workflow per Task
 

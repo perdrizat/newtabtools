@@ -6,6 +6,7 @@ import {
 	captureFailure,
 	waitForCondition,
 	waitForGridReady,
+	resetTestState,
 } from './_helpers.js';
 
 const TEST_URL = 'https://example.com/';
@@ -34,6 +35,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
+		await resetTestState(browser);
 	}, 60_000);
 
 	afterAll(async () => {
@@ -62,26 +64,41 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			// and the UI renders [pinned].
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
-			await page.waitForSelector('.newtab-control-pin[pinned]', { timeout: 20_000 });
+
+			// Target the specific tile by finding its site node via Grid.sites.
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) {return false;}
+					const site = g.sites.find(s => s && s.url === u);
+					return site && site.isPinned;
+				},
+				[TEST_URL],
+				{ timeout: 20_000, message: 'Tile not pinned after first reload' }
+			);
 
 			// Second reload — same expectation. Catches cases where the pin
 			// state is cached in memory but not durably written.
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
-			await page.waitForSelector('.newtab-control-pin[pinned]', { timeout: 20_000 });
 
-			const state = await page.evaluate((u) => {
-				const g = window.Grid;
-				if (!g || !g.sites) {
-					return { hasGrid: false };
-				}
-				const match = g.sites.find(s => s && s.url === u);
-				return {
-					hasGrid: true,
-					found: !!match,
-					isPinned: match ? !!match.isPinned : false,
-				};
-			}, TEST_URL);
+			const state = await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) {return false;}
+					const match = g.sites.find(s => s && s.url === u);
+					if (!match) {return false;}
+					return {
+						hasGrid: true,
+						found: true,
+						isPinned: !!match.isPinned,
+					};
+				},
+				[TEST_URL],
+				{ timeout: 20_000, message: 'Tile not found after second reload' }
+			);
 
 			expect(state).toEqual({ hasGrid: true, found: true, isPinned: true });
 		} catch (e) {
@@ -93,29 +110,38 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 	}, 90_000);
 
 	it('clicking the in-grid pin button unpins the tile and the change persists', async () => {
-		// State from the previous test: TEST_URL is pinned. Use that as the
-		// starting condition rather than re-pinning here — exercises the
-		// natural cross-test flow.
+		// State from the previous test: TEST_URL is pinned.
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 		const url = await getNewTabURL();
 
 		try {
-			// Confirm precondition: a pinned tile is rendered.
-			await page.waitForSelector('.newtab-control-pin[pinned]', { timeout: 15_000 });
+			// Confirm precondition: our specific tile is pinned.
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) {return false;}
+					return g.sites.some(s => s && s.url === u && s.isPinned);
+				},
+				[TEST_URL],
+				{ timeout: 15_000, message: 'Precondition failed: TEST_URL not pinned' }
+			);
 
-			// Click the pin button. Use a real DOM click so the extension's
-			// click handler fires the way it would for a user.
-			await page.click('.newtab-control-pin[pinned]');
+			// Click the pin button for our specific tile. Find it by URL,
+			// then dispatch a click on its pin control.
+			await page.evaluate((u) => {
+				const site = window.Grid.sites.find(s => s && s.url === u);
+				const pinBtn = site.node.querySelector('.newtab-control-pin');
+				pinBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+			}, TEST_URL);
 
 			// The site object's pinned state should flip in-memory.
 			await waitForCondition(
 				page,
 				(u) => {
 					const g = window.Grid;
-					if (!g || !g.sites) {
-						return false;
-					}
+					if (!g || !g.sites) {return false;}
 					const match = g.sites.find(s => s && s.url === u);
 					// Either the site is no longer in the grid, or it's no longer pinned.
 					return !match || !match.isPinned;

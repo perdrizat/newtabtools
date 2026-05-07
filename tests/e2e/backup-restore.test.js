@@ -8,6 +8,7 @@ import {
 	waitForGridReady,
 	waitForCondition,
 	captureFailure,
+	resetTestState,
 } from './_helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -137,6 +138,7 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
+		await resetTestState(browser);
 
 		// Build a ZIP fixture on disk for uploadFile
 		const zipBuf = buildStoredZip([

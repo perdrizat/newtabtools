@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectToFirefox, openNewTab, waitForGridReady } from './_helpers.js';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.js';
 
 describe('E2E Smoke: Settings panel opens and closes', () => {
 	let browser;
@@ -7,6 +7,7 @@ describe('E2E Smoke: Settings panel opens and closes', () => {
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
+		await resetTestState(browser);
 		page = await openNewTab(browser);
 		await waitForGridReady(page);
 	}, 60_000);

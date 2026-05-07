@@ -141,6 +141,9 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	case 'Tiles.removeTile':
 		Tiles.removeTile(message.tile).then(sendResponse, console.error);
 		return true;
+	case 'Tiles.clear':
+		waitForDB().then(() => Tiles.clear()).then(sendResponse);
+		return true;
 	case 'Tiles.pinTile':
 		Tiles.pinTile(message.title, message.url).then(function(id) {
 			for (let view of chrome.extension.getViews()) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectToFirefox, openNewTab, waitForGridReady } from './_helpers.js';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.js';
 
 describe('E2E Smoke: Extension loads cleanly', () => {
 	let browser;
@@ -8,6 +8,7 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
+		await resetTestState(browser);
 		// Hook the console listener BEFORE goto() so we observe errors that
 		// fire during the page's initial load. Attaching after openNewTab
 		// returns would race the navigation and miss early errors; attaching

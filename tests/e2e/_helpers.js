@@ -165,7 +165,7 @@ export async function openNewTab(browser, opts = {}) {
 	// waitForGridReady) to confirm the page is usable.
 	await page.goto(url, {
 		waitUntil: 'domcontentloaded',
-		timeout: 10_000,
+		timeout: 3_000, // Always times out on moz-extension:// (BiDi issue); caught below.
 	}).catch(e => {
 		verbose(`[Navigation] Initial goto warning (ignoring): ${e.message}`);
 	});
@@ -174,13 +174,123 @@ export async function openNewTab(browser, opts = {}) {
 }
 
 /**
- * Wait for the grid UI to be ready (elements rendered, data loaded).
+ * Clear all pinned tiles AND reset prefs to defaults in a single page
+ * open/close cycle. This avoids the rapid open/close/open pattern that
+ * destabilises the BiDi connection. Call in `beforeAll` after
+ * `connectToFirefox()`.
+ */
+export async function clearPinnedTiles(browser) {
+	const page = await openNewTab(browser);
+	await waitForGridReady(page);
+	try {
+		await page.evaluate(async () => {
+			const tiles = await Tiles.getAllTiles();
+			for (const tile of tiles) {
+				if (tile && tile.url) {
+					await Tiles.removeTile(tile);
+				}
+			}
+		});
+	} finally {
+		await page.close();
+	}
+}
+
+/**
+ * Reset extension prefs to defaults so no test inherits surprising state from
+ * a prior test file. Call in `beforeAll` after `connectToFirefox()`.
+ *
+ * Prefer `resetTestState(browser)` instead — it combines tile clearing and
+ * pref reset in a single page open/close cycle.
+ */
+export async function resetPrefs(browser) {
+	const page = await openNewTab(browser);
+	await waitForGridReady(page);
+	try {
+		await page.evaluate(() => {
+			Prefs.rows = 3;
+			Prefs.columns = 3;
+			Prefs.locked = false;
+			Prefs.theme = 'light';
+			Prefs.themeAuto = false;
+			Prefs.opacity = 80;
+			Prefs.titleSize = 'small';
+			Prefs.spacing = 'small';
+			Prefs.margin = ['small', 'small', 'small', 'small'];
+			Prefs.history = true;
+			Prefs.recent = true;
+		});
+	} finally {
+		await page.close();
+	}
+}
+
+/**
+ * Combined hermetic state reset: clear all tiles AND reset prefs to defaults
+ * using a single temporary page. This is the recommended helper for E2E test
+ * `beforeAll` blocks.
+ *
+ * Performance: uses `Tiles.clear` (single IDB clear) instead of
+ * `getAllTiles()` + per-tile `removeTile()`, writes all prefs in one
+ * `chrome.storage.local.set` call with a read-back fence, and skips
+ * `waitForGridReady` (only needs the extension runtime, not the full Grid).
+ */
+export async function resetTestState(browser) {
+	const url = await getNewTabURL();
+	const page = await browser.newPage();
+	await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 3_000 }).catch(() => {});
+
+	// Wait for extension runtime (scripts loaded), not full Grid init.
+	await waitForCondition(
+		page,
+		() => typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.sendMessage === 'function',
+		[],
+		{ timeout: 15_000, message: 'Extension runtime not available' }
+	);
+
+	try {
+		// Clear all tiles via single IDB objectStore.clear().
+		await page.evaluate(() => new Promise(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, resolve);
+		}));
+
+		// Reset all prefs in one write + read-back fence.
+		await page.evaluate(() => new Promise(resolve => {
+			chrome.storage.local.set({
+				rows: 3, columns: 3, locked: false,
+				theme: 'light', themeAuto: false, opacity: 80,
+				titleSize: 'small', spacing: 'small',
+				margin: ['small', 'small', 'small', 'small'],
+				history: true, recent: true,
+			}, () => {
+				// Fence: chrome.storage serialises operations, so this
+				// get callback fires after all pending sets complete.
+				chrome.storage.local.get(() => resolve());
+			});
+		}));
+	} finally {
+		await page.close();
+	}
+}
+
+/**
+ * Wait for the grid UI to be ready (Grid.init() has run).
+ *
+ * Polls `Grid.ready` (which checks `!!Grid._node`) instead of looking for
+ * `#newtab-scrollbox`, which is in the static XHTML and exists before any
+ * JavaScript executes. Uses `waitForCondition` because the extension's CSP
+ * blocks `page.waitForFunction` (it relies on `Function()` constructor).
  */
 export async function waitForGridReady(page, timeout = 15_000) {
-	verbose('[Navigation] Waiting for #newtab-scrollbox...');
+	verbose('[Navigation] Waiting for Grid.ready...');
 	try {
-		await page.waitForSelector('#newtab-scrollbox', { timeout });
-		verbose('[Navigation] Success!');
+		await waitForCondition(
+			page,
+			() => typeof Grid !== 'undefined' && Grid.ready,
+			[],
+			{ timeout, message: 'Grid not ready (Grid.init has not run)' }
+		);
+		verbose('[Navigation] Grid ready!');
 	} catch (e) {
 		console.error(`[Navigation] Readiness check failed: ${e.message}`);
 		await captureFailure(page, 'grid-not-ready');
