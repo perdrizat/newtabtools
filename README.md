@@ -27,20 +27,20 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 ## Where the takeover stands
 
-Done:
-1. License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
-2. Testing strategy, bootstrap plan, and roadmap documented.
-3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
-4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
-5. Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md) for the rationale, [`MIGRATION.md`](MIGRATION.md) for the per-feature plan).
+**Done:**
+- [x] 1. License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
+- [x] 2. Testing strategy, bootstrap plan, and roadmap documented.
+- [x] 3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
+- [x] 4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
+- [x] 5. Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md) for the rationale, [`MIGRATION.md`](MIGRATION.md) for the per-feature plan).
+- [x] 6. Security & tooling: hardening (cheap wins) & tooling prep for type checking.
+- [x] 7. Test-first characterization sweep: built a comprehensive safety net before any code is rewritten.
 
-Outstanding (in rough order):
-6. Security & tooling: hardening (cheap wins) & tooling prep for type checking
-7. Test-first characterization sweep: build a comprehensive safety net before any code is rewritten.
-8. Walk the first migration slice end-to-end to establish the pattern (see [`MIGRATION.md`](MIGRATION.md) phase 1).
-9. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
-10. First republished release on AMO, functionally identical to the upstream's last release. **Security preconditions** (per the [pre-takeover review](audit/2026-05-04-security-review.md)): finding §2.1 (stored XSS via tile URL → `javascript:` href on the zip-restore path) fixed; finding §2.2 (vendored `lib/zip.js` from 2013) replaced with a maintained zip library; threat-model and data-classification doc landed. These gate the republish — proving the publish pipeline doesn't waive them.
-11. Open the issue tracker for new bug reports.
+**Outstanding (in rough order):**
+- [ ] 8. Walk the first migration slice end-to-end to establish the pattern (see [`MIGRATION.md`](MIGRATION.md) phase 2).
+- [ ] 9. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
+- [ ] 10. First republished release on AMO, functionally identical to the upstream's last release. **Security preconditions** (per the [pre-takeover review](audit/2026-05-04-security-review.md)): threat-model and data-classification doc landed (findings §2.1 and §2.2 are already fixed). These gate the republish — proving the publish pipeline doesn't waive them.
+- [ ] 11. Open the issue tracker for new bug reports.
 
 Until at least step 8 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
 
