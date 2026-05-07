@@ -141,6 +141,9 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	case 'Tiles.removeTile':
 		Tiles.removeTile(message.tile).then(sendResponse, console.error);
 		return true;
+	// Exposes the existing Tiles.clear() (single IDB objectStore.clear) over
+	// the message protocol. Added to support hermetic E2E test cleanup, but
+	// also useful for any future "reset all tiles" UI action.
 	case 'Tiles.clear':
 		waitForDB().then(() => Tiles.clear()).then(sendResponse);
 		return true;

@@ -56,6 +56,10 @@ web-ext build --source-dir webextension/
 - **Red/Green TDD is mandatory:** Write failing tests first. See [`TESTING.md`](TESTING.md) for the tier-by-tier strategy.
 - **Language:** Production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the full rules.
 
+### Before Committing
+
+After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
+
 ### AI Coding Assistants
 
 Contributions generated with the help of AI are welcome but must follow the standard development process. The test harness with unit tests and E2E tests MUST be used extensively to validate AI generated code. These are the important guardrails to ensure agentic compliance with the project's code quality standards.

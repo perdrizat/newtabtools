@@ -101,6 +101,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			getTile: vi.fn().mockResolvedValue({ url: 'https://example.com', title: 'Example' }),
 			putTile: vi.fn().mockResolvedValue(undefined),
 			removeTile: vi.fn().mockResolvedValue(undefined),
+			clear: vi.fn().mockResolvedValue(undefined),
 			pinTile: vi.fn().mockResolvedValue(42),
 			_list: ['https://pinned.example.com'],
 			_cache: [],
@@ -304,6 +305,16 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			const result = listener({ name: 'Tiles.removeTile', tile: { url: 'https://d.com' } }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+		});
+
+		it('Tiles.clear — calls Tiles.clear() and sends response', async () => {
+			(mockTiles.clear as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = listener({ name: 'Tiles.clear' }, validSender, sendResponse);
+			expect(result).toBe(true);
+			await vi.waitFor(() => {
+				expect(mockTiles.clear).toHaveBeenCalled();
+				expect(sendResponse).toHaveBeenCalled();
+			});
 		});
 
 		it('Tiles.pinTile — sends the new tile id and queries views', async () => {
