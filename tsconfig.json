@@ -24,9 +24,6 @@
 	],
 	"exclude": [
 		"node_modules",
-		"webextension/lib/deflate.js",
-		"webextension/lib/inflate.js",
-		"webextension/lib/z-worker.js",
 		"webextension/lib/zip.js",
 		"tests/e2e/test-profile",
 		"tests/e2e/_artifacts"

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2026-05-07]
 
+### Fixed
+
+- CI typecheck — added `globals.d.ts` for integration test globals, minor type annotations in 5 test files
+- Suppressed expected error noise in test output (console spy on error-handling tests)
+
 - Security review update — `audit/2026-05-07-security-update.md` (6 of 7 findings now fixed)
 - `CONTRIBUTING.md` — run `npm audit` after changing dependencies
 

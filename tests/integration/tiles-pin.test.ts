@@ -52,7 +52,7 @@ function createMockDB() {
 	function makeOp<T>(resultFn: () => T) {
 		const op = {
 			result: undefined as T | undefined,
-			onsuccess: null as ((this: typeof op) => void) | null,
+			onsuccess: null as ((this: any) => void) | null,
 			onerror: null as ((e: unknown) => void) | null,
 		};
 		// Simulate async IDB — fire onsuccess on next microtask

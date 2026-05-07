@@ -279,10 +279,12 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('Tiles.getAllTiles — sends null on error', async () => {
+			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 			(mockTiles.getAllTiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('DB error'));
 			const result = listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+			spy.mockRestore();
 		});
 
 		it('Tiles.getTile — delegates with message.url', async () => {
@@ -356,10 +358,12 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('Background.getBackground — sends null on error', async () => {
+			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
 			mockBackground.getBackground.mockRejectedValueOnce(new Error('nope'));
 			const result = listener({ name: 'Background.getBackground' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+			spy.mockRestore();
 		});
 
 		it('Background.setBackground — delegates with message.file', async () => {

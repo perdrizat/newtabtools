@@ -34,7 +34,7 @@ const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
 
 function mockNode() {
 	return {
-		style: {},
+		style: {} as Record<string, string>,
 		parentNode: {
 			setAttribute: vi.fn(),
 			querySelectorAll: vi.fn(() => []),
@@ -220,10 +220,10 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		const event = { clientX: 10, clientY: 10, dataTransfer: dt };
 		Drag.start(site, event);
 		const htmlCall = dt.setData.mock.calls.find((c: any) => c[0] === 'text/html');
-		expect(htmlCall[1]).not.toContain('"1"');
-		expect(htmlCall[1]).toContain('&quot;');
-		expect(htmlCall[1]).toContain('&lt;');
-		expect(htmlCall[1]).toContain('&gt;');
+		expect(htmlCall![1]).not.toContain('"1"');
+		expect(htmlCall![1]).toContain('&quot;');
+		expect(htmlCall![1]).toContain('&lt;');
+		expect(htmlCall![1]).toContain('&gt;');
 	});
 
 	// ==================== Drag.end ====================

@@ -275,7 +275,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 		// Mock IDB
 		const stores: Record<string, any[]> = { tiles: [], background: [], thumbnails: [] };
 		function makeOp<T>(resultFn: () => T) {
-			const op = { result: undefined as T | undefined, onsuccess: null as ((this: typeof op) => void) | null, onerror: null as ((e: unknown) => void) | null };
+			const op = { result: undefined as T | undefined, onsuccess: null as ((this: any) => void) | null, onerror: null as ((e: unknown) => void) | null };
 			Promise.resolve().then(() => { op.result = resultFn(); if (op.onsuccess) {op.onsuccess.call(op);} });
 			return op;
 		}

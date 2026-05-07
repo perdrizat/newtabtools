@@ -94,7 +94,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 			value: '',
 			style: {},
 		}));
-		document.querySelectorAll = vi.fn(() => []);
+		document.querySelectorAll = vi.fn(() => []) as any;
 	});
 
 	// ==================== optionsOnChange — theme pref writes ====================
@@ -203,11 +203,13 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 	// ==================== updateThemeColours — error handling ====================
 
 	it('updateThemeColours handles getCurrent rejection gracefully', async () => {
+		const spy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 		Prefs.themeAuto = true;
 		(globalThis as any).browser.theme.getCurrent.mockRejectedValue(new Error('no theme'));
 		await expect(harness.updateThemeColours()).resolves.not.toThrow();
 		// Properties should still be cleared (null values)
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
+		spy.mockRestore();
 	});
 
 	it('updateThemeColours handles theme with no parseable colors', async () => {
