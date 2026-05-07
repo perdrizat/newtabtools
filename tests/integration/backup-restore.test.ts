@@ -42,8 +42,8 @@ type WrittenEntry = { filename: string; content: string | Blob };
 function mockZipEntry(filename: string, textContent?: string, blobContent?: Blob) {
 	return {
 		filename,
-		getData: vi.fn((_writer: unknown, cb: Function) => {
-			cb(textContent !== undefined ? textContent : blobContent);
+		getData: vi.fn(async () => {
+			return textContent !== undefined ? textContent : blobContent;
 		}),
 	};
 }
@@ -66,31 +66,27 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 	let mockDownloads: Record<string, ReturnType<typeof vi.fn>>;
 
 	beforeAll(() => {
-		// --- Mock zip library ---
+		// --- Mock zip library (modern v2.x Promise-based API) ---
 		writtenEntries = [];
 		(globalThis as any).zip = {
-			workerScriptsPath: '',
+			configure: vi.fn(),
 			BlobReader: class { blob: unknown; constructor(b: unknown) { this.blob = b; } },
 			BlobWriter: class {},
 			TextReader: class { text: string; constructor(t: string) { this.text = t; } },
 			TextWriter: class {},
 
-			createWriter: vi.fn((_bw: unknown, resolve: Function) => {
-				writtenEntries.length = 0;
-				resolve({
-					add: vi.fn((filename: string, reader: any, cb: Function) => {
-						const content = 'text' in reader ? reader.text : reader.blob;
-						writtenEntries.push({ filename, content });
-						cb();
-					}),
-					close: vi.fn((cb: Function) => cb(new Blob(['mock-zip']))),
+			ZipWriter: class {
+				add = vi.fn(async (filename: string, reader: any) => {
+					const content = 'text' in reader ? reader.text : reader.blob;
+					writtenEntries.push({ filename, content });
 				});
-			}),
+				close = vi.fn(async () => new Blob(['mock-zip']));
+				constructor() { writtenEntries.length = 0; }
+			},
 
-			createReader: vi.fn((_br: unknown, resolve: Function) => {
-				// Default: empty zip. Override per test via mockImplementationOnce.
-				resolve({ getEntries: vi.fn((cb: Function) => cb([])) });
-			}),
+			ZipReader: class {
+				getEntries = vi.fn(async () => [] as ReturnType<typeof mockZipEntry>[]);
+			},
 		};
 
 		// --- Mock Background ---
@@ -111,7 +107,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		// --- Mock chrome.storage.local ---
 		mockStorageLocal = {
 			get: vi.fn((cb: Function) => cb({})),
-			set: vi.fn((_prefs: unknown, cb?: Function) => cb?.()),
+			set: vi.fn().mockResolvedValue(undefined),
 		};
 		(globalThis as any).chrome.storage = { local: mockStorageLocal };
 
@@ -132,6 +128,9 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 		}
 
+		// Save the default ZipReader for restoration in beforeEach.
+		DefaultZipReader = (globalThis as any).zip.ZipReader;
+
 		// --- Load export.js ---
 		const code = fs.readFileSync(EXPORT_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'export.js' });
@@ -145,6 +144,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 	beforeEach(() => {
 		writtenEntries.length = 0;
+		(globalThis as any).zip.ZipReader = DefaultZipReader;
 		mockBackground.getBackground.mockClear();
 		mockBackground.setBackground.mockClear();
 		(mockTiles.getAll as ReturnType<typeof vi.fn>).mockClear();
@@ -310,7 +310,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 	// ======================== readZip — malicious inputs (§2.1, §2.5) ========================
 
 	describe('readZip — malicious inputs', () => {
-		it('stores tiles with javascript: URLs without validation (§2.1 XSS vector)', async () => {
+		it('skips tiles with javascript: URLs at restore time (§2.1 fix)', async () => {
 			const tiles = [
 				{ id: 1, url: 'javascript:alert(document.cookie)', title: 'XSS', position: 0 },
 			];
@@ -320,13 +320,13 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await readZip(new Blob());
 
-			// Characterization: the malicious URL is stored as-is
-			expect(mockTiles.putTile).toHaveBeenCalledWith(
+			// The malicious tile must be silently dropped — never stored.
+			expect(mockTiles.putTile).not.toHaveBeenCalledWith(
 				expect.objectContaining({ url: 'javascript:alert(document.cookie)' }),
 			);
 		});
 
-		it('stores tiles with data: URLs without validation (§2.1 phishing vector)', async () => {
+		it('skips tiles with data: URLs at restore time (§2.1 fix)', async () => {
 			const tiles = [
 				{ id: 2, url: 'data:text/html,<h1>phish</h1>', title: 'Phish', position: 0 },
 			];
@@ -336,12 +336,12 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await readZip(new Blob());
 
-			expect(mockTiles.putTile).toHaveBeenCalledWith(
+			expect(mockTiles.putTile).not.toHaveBeenCalledWith(
 				expect.objectContaining({ url: 'data:text/html,<h1>phish</h1>' }),
 			);
 		});
 
-		it('applies unexpected pref keys without filtering (§2.5)', async () => {
+		it('strips unexpected pref keys at restore time (§2.5 fix)', async () => {
 			const prefs = {
 				theme: 'dark',
 				evilKey: 'malicious-payload',
@@ -353,9 +353,11 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await readZip(new Blob());
 
-			// Characterization: all keys are passed through to storage
+			// Only known pref keys pass through — unknown keys are stripped.
 			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
-			expect(storedPrefs.evilKey).toBe('malicious-payload');
+			expect(storedPrefs.theme).toBe('dark');
+			expect(storedPrefs).not.toHaveProperty('evilKey');
+			expect(storedPrefs).not.toHaveProperty('__proto__');
 		});
 
 		it('stores tiles with HTML in titles without sanitization', async () => {
@@ -425,14 +427,13 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 	// ======================== Helper ========================
 
+	// Store the default ZipReader class for restoration.
+	let DefaultZipReader: any;
+
 	/** Configure the mock zip reader to return the given entries. */
 	function setupReader(entries: ReturnType<typeof mockZipEntry>[]) {
-		(globalThis as any).zip.createReader.mockImplementationOnce(
-			(_br: unknown, resolve: Function) => {
-				resolve({
-					getEntries: vi.fn((cb: Function) => cb(entries)),
-				});
-			},
-		);
+		(globalThis as any).zip.ZipReader = class {
+			getEntries = vi.fn(async () => entries);
+		};
 	}
 });

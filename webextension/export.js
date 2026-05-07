@@ -5,23 +5,14 @@
 /* exported makeZip, readZip */
 /* globals Background, Tiles, zip */
 
-zip.workerScriptsPath = '/lib/';
+zip.configure({ useWebWorkers: false });
 
 async function makeZip() {
-	async function addEntry(filename, content) {
-		let reader = content instanceof Blob ? new zip.BlobReader(content) : new zip.TextReader(content);
-		return new Promise(function(resolve) {
-			writer.add(filename, reader, resolve);
-		});
-	}
-
-	let writer = await new Promise(function(resolve, reject) {
-		zip.createWriter(new zip.BlobWriter(), resolve, reject);
-	});
+	let writer = new zip.ZipWriter(new zip.BlobWriter());
 
 	let background = await Background.getBackground();
 	if (background) {
-		await addEntry('background', background);
+		await writer.add('background', new zip.BlobReader(background));
 	}
 
 	let prefs = await new Promise(function(resolve) {
@@ -30,56 +21,46 @@ async function makeZip() {
 	for (let k of ['thumbnailSize', 'version', 'versionLastUpdate', 'versionLastAck']) {
 		delete prefs[k];
 	}
-	await addEntry('prefs.json', JSON.stringify(prefs, null, '\t'));
+	await writer.add('prefs.json', new zip.TextReader(JSON.stringify(prefs, null, '\t')));
 
 	let tiles = await Tiles.getAll();
 	for (let t of tiles) {
 		if ('image' in t && t.image instanceof Blob) {
-			await addEntry('tileImages/' + t.id + '.png', t.image);
+			await writer.add('tileImages/' + t.id + '.png', new zip.BlobReader(t.image));
 			delete t.image;
 		}
 	}
-	await addEntry('tiles.json', JSON.stringify(tiles, null, '\t'));
+	await writer.add('tiles.json', new zip.TextReader(JSON.stringify(tiles, null, '\t')));
 
+	let blob = await writer.close();
 	return new Promise(function(resolve) {
-		writer.close(function(blob) {
-			chrome.downloads.download({
-				url: URL.createObjectURL(blob),
-				filename: 'newtabtools.zip',
-				saveAs: true
-			}, resolve);
-		});
+		chrome.downloads.download({
+			url: URL.createObjectURL(blob),
+			filename: 'newtabtools.zip',
+			saveAs: true
+		}, resolve);
 	});
 }
 
 async function readZip(file) {
+	let views = chrome.extension.getViews().filter(v => v.location.pathname == '/newTab.xhtml');
+
+	let reader = new zip.ZipReader(new zip.BlobReader(file));
+	let entries = await reader.getEntries();
+
 	async function getAsJSON(filename) {
-		let file = entries.find(e => e.filename == filename);
-		if (!file) {
+		let entry = entries.find(e => e.filename == filename);
+		if (!entry) {
 			return null;
 		}
 
-		let data = await new Promise(function(resolve) {
-			file.getData(new zip.TextWriter(), resolve);
-		});
+		let data = await entry.getData(new zip.TextWriter());
 		return JSON.parse(data);
 	}
 
-	async function getAsBlob(file) {
-		return new Promise(function(resolve) {
-			file.getData(new zip.BlobWriter(), resolve);
-		});
+	async function getAsBlob(entry) {
+		return entry.getData(new zip.BlobWriter());
 	}
-
-	let views = chrome.extension.getViews().filter(v => v.location.pathname == '/newTab.xhtml');
-
-	let reader = await new Promise(function(resolve, reject) {
-		zip.createReader(new zip.BlobReader(file), resolve, reject);
-	});
-
-	let entries = await new Promise(function(resolve) {
-		reader.getEntries(resolve);
-	});
 
 	let backgroundFile = entries.find(e => e.filename == 'background');
 	if (backgroundFile) {
@@ -91,7 +72,16 @@ async function readZip(file) {
 
 	let prefs = await getAsJSON('prefs.json');
 	if (prefs) {
-		await chrome.storage.local.set(prefs);
+		let allowedKeys = ['theme', 'themeAuto', 'opacity', 'rows', 'columns',
+			'margin', 'spacing', 'titleSize', 'locked', 'history', 'recent',
+			'blocked', 'filters'];
+		let filtered = {};
+		for (let k of allowedKeys) {
+			if (k in prefs) {
+				filtered[k] = prefs[k];
+			}
+		}
+		await chrome.storage.local.set(filtered);
 	}
 
 	let tiles = await getAsJSON('tiles.json');
@@ -112,7 +102,15 @@ async function readZip(file) {
 	}
 
 	await Tiles.clear();
+	let safeProtocols = ['http:', 'https:', 'ftp:'];
 	for (let t of tilesMap.values()) {
+		try {
+			if (!safeProtocols.includes(new URL(t.url).protocol)) {
+				continue;
+			}
+		} catch (ex) {
+			continue;
+		}
 		await Tiles.putTile(t);
 	}
 

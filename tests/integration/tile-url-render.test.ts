@@ -96,36 +96,40 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 			expect(renderTile('https://example.com').href).toBe('https://example.com');
 		});
 
-		it('renders moz-extension: URL', () => {
-			expect(renderTile('moz-extension://uuid/page.html').href).toBe('moz-extension://uuid/page.html');
+		it('renders ftp: URL', () => {
+			expect(renderTile('ftp://files.example.com/pub').href).toBe('ftp://files.example.com/pub');
 		});
 	});
 
 	// ======================== DANGEROUS SCHEMES ========================
-	// These characterize the §2.1 XSS vector: addTitle does NOT sanitize.
+	// §2.1 fix: addTitle now blocks non-http/https/ftp schemes.
 
-	describe('dangerous schemes — also pass through unchanged (§2.1)', () => {
-		it('renders javascript: URL unchanged — stored XSS vector', () => {
+	describe('dangerous schemes — blocked by defense-in-depth (§2.1 fix)', () => {
+		it('blocks javascript: URL — renders # instead', () => {
 			const { href } = renderTile('javascript:alert(document.cookie)');
-			expect(href).toBe('javascript:alert(document.cookie)');
+			expect(href).toBe('#');
 		});
 
-		it('renders data:text/html unchanged — potential phishing vector', () => {
+		it('blocks data:text/html — renders # instead', () => {
 			const { href } = renderTile('data:text/html,<h1>phish</h1>');
-			expect(href).toBe('data:text/html,<h1>phish</h1>');
+			expect(href).toBe('#');
 		});
 
-		it('renders an unknown/custom scheme unchanged', () => {
+		it('blocks unknown/custom schemes — renders # instead', () => {
 			const { href } = renderTile('evil-scheme://payload');
-			expect(href).toBe('evil-scheme://payload');
+			expect(href).toBe('#');
+		});
+
+		it('blocks moz-extension: URLs — renders # instead', () => {
+			expect(renderTile('moz-extension://uuid/page.html').href).toBe('#');
 		});
 	});
 
 	// ======================== EDGE CASES ========================
 
 	describe('edge cases', () => {
-		it('renders empty string as href', () => {
-			expect(renderTile('').href).toBe('');
+		it('renders # for empty string', () => {
+			expect(renderTile('').href).toBe('#');
 		});
 
 		it('falls back to URL as title when title is falsy', () => {

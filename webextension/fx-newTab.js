@@ -828,7 +828,15 @@ Site.prototype = {
 
 		let link = this._querySelector('.newtab-link');
 		link.setAttribute('title', tooltip);
-		link.setAttribute('href', url);
+		try {
+			if (['http:', 'https:', 'ftp:'].includes(new URL(url).protocol)) {
+				link.setAttribute('href', url);
+			} else {
+				link.setAttribute('href', '#');
+			}
+		} catch (ex) {
+			link.setAttribute('href', '#');
+		}
 	},
 
 	/**
