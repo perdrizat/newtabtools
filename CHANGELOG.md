@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Audit and update `MIGRATION.md` — 13 of 22 features marked complete, phases collapsed from 6 to 4
+
 ## [2026-05-07]
 
 ### Fixed
