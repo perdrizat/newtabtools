@@ -4,7 +4,7 @@ The migration ledger for the codebase strategy chosen in [`ROADMAP.md`](ROADMAP.
 
 ## Strategy in one paragraph
 
-Strangler-fig migration. The existing extension keeps running. One feature at a time, the legacy code path is replaced: write a characterization Integration test against today's behaviour, extract pure-logic helpers into `webextension/lib/<name>.js` with Unit tests, reimplement using the helpers, swap the wiring, delete the legacy code, confirm E2E green. No long-lived rewrite branch; every replacement ships incrementally on AMO.
+Strangler-fig migration. The existing extension keeps running. Features are characterized with Integration and E2E tests, then rewritten when needed. Pure-logic extraction to `webextension/lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules, so extraction today would require maintaining duplicate copies. Most features (20 of 22) turned out to work as-is and need no rewrite. No long-lived rewrite branch; every replacement ships incrementally on AMO.
 
 Mozilla's Activity Stream (`browser/extensions/newtab/` in mozilla-central) is the **behavioural reference** for parity features — read it to learn what the user-visible behaviour should be, do not copy code. Activity Stream uses chrome-privileged APIs that ordinary WebExtensions cannot touch; the reference work is interpretive.
 
@@ -35,7 +35,7 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 | **Layout micro-tuning** (opacity, title size, margin, spacing) | **complete** — no migration needed | ~~Port from NTT~~ — pref toggles + CSS variables; works as-is | settings panel in `newTab.js` / `newTab.xhtml`; prefs in `prefs.js` | **Integration + E2E** (prefs read/write/validation in `prefs-persistence.test.ts`; UI wiring in `layout.test.ts`; `tests/e2e/layout-tuning.test.js` — 4 E2E tests: opacity/titleSize/spacing/margin via settings) |
 | **Lock-grid toggle** | **complete** — no migration needed | ~~Port from NTT~~ — simple boolean gate on drag events; works as-is | drag-reorder gate in `newTab.js` | **Integration + E2E** (locked pref validation in `prefs-persistence.test.ts`; lock guard in `drag-reorder.test.ts`; updateUI locked attr/icon in `layout.test.ts`; `tests/e2e/lock-grid.test.js` — 2 E2E tests: lock toggle attribute + control visibility) |
 | **Per-domain filter cap** with subdomain wildcards | working | Minor cleanup — extract ~20 LOC matching logic to `lib/filters.js`; works as-is | filter handling in `tiles.js` / `newTab.js` | **Integration + E2E** (Filters set/get/clear in `prefs-persistence.test.ts`; filter matching + UI wiring in `filter-cap.test.ts` — 16 tests; `tests/e2e/filter-cap.test.js` — 2 E2E tests: add filter via UI + plus/minus button adjustment) |
-| **Per-tile background color** | **complete** — no migration needed | ~~Port from NTT~~ — `parseColour` already extracted to `lib/colour.js` and tested; UI wiring is trivial | `webextension/lib/colour.js` (extracted); UI wiring in `newTab.js` | **Unit + Integration + E2E** (`tests/unit/lib/colour.test.js`; bgcolor-set/reset in `tile-editing.test.ts`; `tests/e2e/tile-bgcolor.test.js` — 1 E2E test: set/reset bgcolor via settings) |
+| **Per-tile background color** | **complete** — no migration needed | ~~Port from NTT~~ — `parseColour` inline in `newTab.js`; UI wiring is trivial | `newTab.js` (~line 540); UI wiring in `newTab.js` | **Integration + E2E** (bgcolor-set/reset in `tile-editing.test.ts`; `tests/e2e/tile-bgcolor.test.js` — 1 E2E test: set/reset bgcolor via settings) |
 | **Recently-closed-tabs row** with one-click restore | working | Minor cleanup — pure UI orchestration around `chrome.sessions` API; could extract trim logic | `newTab.js` ~line 796 (`chrome.sessions.getRecentlyClosed`, `restore`, `onChanged`) | **Integration + E2E** (`recent-tabs.test.ts` — 17 tests; `tests/e2e/recent-tabs.test.js` — 2 E2E tests: closed tab appears in row + toggle hide/show via Prefs.recent) |
 | **Add-shortcut autocomplete** from open tabs / bookmarks / history | working (with optional permissions granted) | Minor cleanup — could extract pure matching logic to `lib/`; rethink optional-permission flow during Phase 4 | `newTab.js` ~line 123, ~line 173 (`chrome.history.search`); permission prompt wiring | **Unit + E2E** (partial — `isValidURL` scheme whitelist in `url-validation.test.ts`; `tests/e2e/autocomplete.test.js` — 2 E2E tests: autocomplete suggestions from open tabs + URL validation gate for pin button) |
 | **Local backup/restore** (single-file zip) | **complete** — no migration needed | ~~Port from NTT~~ — `export.js` already well-structured; `lib/zip.js` replaced with modern `@zip.js/zip.js`; security fixes landed | `export.js`, `lib/zip.js` (vendored) | **Integration + E2E** (Export/Import handler dispatch + known bug characterization in `background-messages.test.ts`; full makeZip/readZip pipeline + §2.1/§2.5 malicious-input characterization in `backup-restore.test.ts`; E2E restore round-trip with `uploadFile` + persistence verification in `tests/e2e/backup-restore.test.js`) |
@@ -44,13 +44,13 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 
 | Feature | Current state | Strategy | Implementation refs (legacy) | Test status |
 |---|---|---|---|---|
-| Pin arbitrary URL | working | Minor cleanup — ~5 LOC slot-finding logic could move to `lib/`; already well-isolated | `tiles.js#pinTile` (line 159), `background.js` 'Tiles.pinTile' handler (line 130) | **Integration + E2E** (`background-messages.test.ts` Tiles.pinTile handler; `tiles-pin.test.ts` — 21 tests: pinTile/putTile/removeTile/getTile/isPinned/ensureReady/getAllTiles/clear + Background get/set; `tests/e2e/pin-persists.test.js`) |
+| Pin arbitrary URL | **complete** — no migration needed | Logic is small and inline in `tiles.js#pinTile`; extract to module during MV3 migration | `tiles.js#pinTile`, `background.js` handler | **Integration + E2E** (`tiles-pin.test.ts` — 21 tests; `tests/e2e/pin-persists.test.js`) |
 | Per-tile custom uploaded image | **complete** — no migration needed | ~~Reimplement (AS reference)~~ — DOM-dependent (canvas/blob); no extractable logic | tile image handling in `newTab.js` / `tiles.js` | **Integration + E2E** (`tile-editing.test.ts` — savedthumb-set/remove, savethumb message + image store; `tests/e2e/tile-custom.test.js` — 1 E2E test: upload custom thumbnail via settings) |
 | Per-tile custom title | **complete** — no migration needed | ~~Reimplement (AS reference)~~ — trivial key-value store + DOM binding | title editing in `newTab.js` | **Integration + E2E** (`tile-editing.test.ts` — title-set writes link.title + putTile; `tests/e2e/tile-custom.test.js` — 1 E2E test: set custom title via settings + persistence) |
-| Drag-reorder tiles | working | Rewrite — ~200 LOC of rearrangement algorithm (find drop target, reorder, re-pin overflow) should be extracted to `lib/`; DOM handlers stay in place | drag handlers in `newTab.js` | **Integration + E2E** (`drag-reorder.test.ts` — 13 tests; `tests/e2e/drag-reorder.test.js` — 2 E2E tests: synthetic drag swap + persistence, locked grid prevents drag) |
+| Drag-reorder tiles | **complete** — no migration needed | ~~Rewrite~~ — working, stable, covered by tests; extraction deferred to MV3 | drag handlers in `fx-newTab.js` | **Integration + E2E** (`drag-reorder.test.ts` — 13 tests; `tests/e2e/drag-reorder.test.js` — 2 E2E tests: synthetic drag swap + persistence, locked grid prevents drag) |
 | Configurable rows | **complete** — no migration needed | ~~Reimplement (AS reference)~~ — covered by "Configurable columns" above; simple pref + DOM loops | shared with grid layout | **Integration + E2E** (`layout.test.ts`; covered by `tests/e2e/configurable-grid.test.js`) |
 | Page background image | **complete** — no migration needed | ~~Reimplement (AS reference)~~ — IDB CRUD already encapsulated in Background singleton | wallpaper handling in `newTab.js` / `prefs.js` | **Integration + E2E** (Background handler dispatch in `background-messages.test.ts`; IDB in `tiles-pin.test.ts`; `tile-editing.test.ts`; `background-and-history.test.ts`; `tests/e2e/page-background.test.js` — 1 E2E test: upload/remove background image) |
-| Light / dark / auto theme | working | Minor cleanup — `lib/colour.js` already extracted; ~3 LOC brightness-to-contrast calc could move to `lib/`; Firefox-only `browser.theme.*` calls should eventually live behind `lib/platform.js` | `newTab.js` ~line 625, ~line 721 (`browser.theme.getCurrent`, `onUpdated`) | **Integration + E2E** (`theme.test.ts` — 19 tests; `tests/e2e/theme.test.js` — 2 E2E tests: theme radio switch + darkIcons stylesheet, themeAuto toggle) |
+| Light / dark / auto theme | working | Minor cleanup — Firefox-only `browser.theme.*` calls should eventually live behind `lib/platform.js` during MV3 migration | `newTab.js` ~line 625, ~line 721 (`browser.theme.getCurrent`, `onUpdated`) | **Integration + E2E** (`theme.test.ts` — 19 tests; `tests/e2e/theme.test.js` — 2 E2E tests: theme radio switch + darkIcons stylesheet, themeAuto toggle) |
 | Hide history-derived tiles | working | Minor cleanup — ~10 LOC filter matching logic in `tiles.js` could move to `lib/` | filter integration in `tiles.js` / `newTab.js` | **Integration** (`background-and-history.test.ts` — Prefs.history toggle skips/enables topSites; `layout.test.ts` — updateUI history checkbox + filter disabled) |
 | Localization (multi-language UI) | **complete** — no migration needed | ~~Port from NTT~~ — `_locales/` already in place, working, 22 locales | `webextension/_locales/` | **Unit** (`tests/unit/localization.test.ts` — 10 tests: en structure, code-reference integrity, non-en locale validation) |
 
@@ -75,7 +75,7 @@ A suggested order. Adjust as you learn the codebase, but the *spirit* — compre
   - [x] **§2.1 — Stored XSS via zip restore (HIGH).** Fixed 2026-05-06. URL scheme allow-list (`http:`, `https:`, `ftp:`) at two boundaries: `readZip` in `export.js` (primary — malicious URLs never reach storage) and `addTitle` in `fx-newTab.js` (defense-in-depth — renders `#` for non-safe protocols).
   - [x] **§2.2 — Vendored zip.js from 2013 (HIGH).** Fixed 2026-05-07. Replaced with `@zip.js/zip.js` v2.8.26. `export.js` rewritten to modern Promise API. Old worker files deleted.
   - [x] **§2.3 — Content Security Policy (MEDIUM).** Fixed 2026-05-04. `content_security_policy` added to `manifest.json`. Regression test at `tests/unit/manifest.test.js`.
-  - [x] **§2.4 — Sender validation (MEDIUM).** Fixed 2026-05-04. `isAuthorizedSender` helper in `lib/messaging.js` with Unit tests; inline guard in `background.js`; wiring verified by 5 sender-validation cases in `background-messages.test.ts`.
+  - [x] **§2.4 — Sender validation (MEDIUM).** Fixed 2026-05-04. Inline guard in `background.js`; wiring verified by 5 sender-validation cases in `background-messages.test.ts`.
   - [x] **§2.5 — Unfiltered pref keys on restore (MEDIUM).** Fixed 2026-05-07. Allow-list of known keys before `chrome.storage.local.set`; unknown keys silently dropped.
   - [x] **§2.7 — Dependency audit in CI (LOW).** Fixed 2026-05-04. `npm audit --audit-level=high` step in `ci.yml`.
   - [ ] **§2.6 — `<all_urls>` + `executeScript` (MEDIUM).** Deferred to Phase 4 (auto-thumbnail rewrite). The fix requires replacing the `drawWindow` content-script with `browser.tabs.captureTab`, which enables dropping `<all_urls>` to a narrower permission set. Characterized in `auto-thumbnail.test.ts`; cannot be fixed independently without rewriting the capture mechanism. See [ROADMAP.md](ROADMAP.md) "Chrome support / MV3 migration" §2.6 note and the auto-thumbnail row above.
@@ -144,35 +144,17 @@ Localization and hide-history-derived-tiles are adequately covered by Integratio
 
 This phase is deliberately heavy upfront. The trade-off: weeks-to-months of work before any user-visible rewrite ships, in exchange for a safety net that makes every subsequent rewrite low-risk. If the phase is taking too long, the right adjustment is to *narrow E2E coverage*, not to *skip Integration coverage*.
 
-### Phase 2: Remaining extraction and rewrite work
+### Phase 2: Remaining rewrite work
 
-After the Phase 1 characterization sweep and review of every feature, most features turned out to already work as-is with no extraction or rewrite needed. The remaining work falls into three buckets:
+After the Phase 1 characterization sweep and review of every feature, most features work as-is with no changes needed. Extracting pure logic to standalone `lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules, so extraction today would mean either maintaining dual copies (inline + lib/) or adding throwaway UMD boilerplate. Neither is worth it for small, stable functions that are already covered by integration tests.
 
-**Features that need actual rewrite (2):**
+When MV3 converts the background to a module and pages use `type="module"` scripts, extraction to `lib/` happens naturally via `import`.
 
-1. **Drag-reorder tiles** — ~200 LOC of rearrangement algorithm (find drop target, reorder pinned/unpinned, re-pin overflow) should be extracted to `lib/drag-reorder-logic.js` with Unit tests. DOM event handlers stay in `fx-newTab.js`. Safety net: 13 Integration + 2 E2E tests.
-2. **Auto-thumbnail revival** — flagship feature, highest risk. Replace `drawWindow` content-script with `browser.tabs.captureTab`. This also fixes §2.6 (`<all_urls>` scope-down). Save for last when the pattern is proven.
+**Feature that needs actual rewrite (1):**
 
-**Features that could benefit from minor extraction (5):**
+1. **Auto-thumbnail revival** — flagship feature, highest risk. Replace `drawWindow` content-script with `browser.tabs.captureTab`. This also fixes §2.6 (`<all_urls>` scope-down).
 
-These work as-is but have small amounts of pure logic that could move to `lib/` for testability. Do opportunistically during other work, not as dedicated tasks:
-
-3. **Pin arbitrary URL** — ~5 LOC slot-finding logic.
-4. **Light / dark / auto theme** — ~3 LOC brightness-to-contrast calc; Firefox-only `browser.theme.*` calls should eventually live behind `lib/platform.js`.
-5. **Hide history-derived tiles** — ~10 LOC filter matching logic in `tiles.js`.
-6. **Per-domain filter cap** — ~20 LOC matching logic.
-7. **Recently-closed-tabs row** / **Add-shortcut autocomplete** — pure UI orchestration; could extract matching/trim logic.
-
-**Features already complete — no migration needed (13):**
-
-Localization, per-tile custom title, per-tile custom image, configurable rows/columns, arbitrarily large tiles, layout micro-tuning, lock-grid toggle, per-tile background color, page background image, local backup/restore. See table status columns above.
-
-Per-feature rewrite pattern (when applicable):
-1. Confirm characterization tests still pass against legacy code.
-2. Extract pure-logic helpers to `webextension/lib/<name>.js` with Unit tests.
-3. Reimplement using the extracted helpers + thin orchestration layer.
-4. Wire new path in. Delete legacy code once Integration and E2E stay green.
-5. Update `CHANGELOG.md` and this doc's **Test status** column.
+**Everything else is complete (21 of 22 features).**
 
 ### Phase 3: Drop sweep
 
@@ -198,7 +180,7 @@ Why this combination: full TypeScript would put a compilation step between sourc
 - **Production files in `webextension/`:** stay `.js`. Add JSDoc types to function signatures, exported objects, and any `browser.*` callback parameters. The project-wide `tsconfig.json` `checkJs: true` checks every `.js` file by default; you don't need `// @ts-check` per file.
 - **Test files in `tests/`:** new tests use `.ts`. Existing `.test.js` files keep working — convert opportunistically when you're already editing them. Don't run a one-shot conversion campaign.
 - **WebExtension API types** come from `@types/firefox-webext-browser` (added in Phase 0 tooling prep). When Chrome support arrives in stage 3, `@types/chrome` joins it.
-- **Modules:** new code under `webextension/lib/` is ES modules. The eslint config already enforces this (script-mode for legacy `webextension/*.js`, module-mode for `webextension/lib/**/*.js`).
+- **Modules:** `webextension/lib/` is reserved for ES modules. Currently only `lib/zip.js` (vendored) is used at runtime. Pure-logic extraction to `lib/` is deferred to the MV3 migration when background and page scripts become modules. The eslint config enforces module-mode for `webextension/lib/**/*.js`.
 
 ### What not to do
 

@@ -6,9 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-08]
+
 ### Changed
 
-- Audit and update `MIGRATION.md` — 13 of 22 features marked complete, phases collapsed from 6 to 4
+- Audit and update `MIGRATION.md` — 21 of 22 features complete, phases collapsed from 6 to 4
+
+### Removed
+
+- Delete `lib/colour.js`, `lib/messaging.js` and their unit tests — unused at runtime; extraction deferred to MV3
 
 ## [2026-05-07]
 

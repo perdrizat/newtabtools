@@ -58,7 +58,9 @@ web-ext build --source-dir webextension/
 
 ### Before Committing
 
-After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
+- **Run the full test suite** including E2E tests (`npm test`). Fast tests alone are not sufficient.
+- Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
+- After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 
 ### AI Coding Assistants
 

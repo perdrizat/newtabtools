@@ -105,11 +105,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	// so legitimate senders always carry `sender.id === browser.runtime.id`.
 	// Anything else — including a content script in a hostile page reached
 	// via `<all_urls>` — gets dropped here. See §2.4 of
-	// audit/2026-05-04-security-review.md. The pure-logic helper lives in
-	// webextension/lib/messaging.js (Unit-tested); the check is inlined here
-	// because background.js is loaded as a script-mode <script>, not an ES
-	// module. When the strangler-fig migration reaches the messaging
-	// boundary in Phase 1/2, this inline copy will be replaced by an import.
+	// audit/2026-05-04-security-review.md.
 	if (!sender || sender.id !== browser.runtime.id) {
 		return false;
 	}

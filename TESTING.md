@@ -171,7 +171,7 @@ Testing has three tiers, each with its own directory, runner setup, and cadence:
 For logic that does NOT touch the browser: tile math, serialization, URL validation, color parsing.
 
 - **Rule:** Modules tested here **cannot import `browser.*` or `chrome.*`**. If they do, extract the pure logic into a separate module first.
-- **Layout:** Mirror the source path — e.g. `webextension/lib/colour.js` is tested by `tests/unit/lib/colour.test.js`.
+- **Layout:** Mirror the source path — e.g. `webextension/lib/example.js` is tested by `tests/unit/lib/example.test.js`.
 - **Speed budget:** Tests run in milliseconds. >50 ms per test is a smell (real I/O, real timers, missed mock).
 - **No real I/O:** No network, no filesystem, no real timers. Use `vi.useFakeTimers()` when time matters.
 
