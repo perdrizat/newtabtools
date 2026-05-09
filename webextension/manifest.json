@@ -45,7 +45,8 @@
 		"storage",
 		"tabs",
 		"topSites",
-		"webNavigation"
+		"webNavigation",
+		"webRequest"
 	],
 	"optional_permissions": [
 		"bookmarks",

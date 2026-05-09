@@ -56,4 +56,18 @@ describe('manifest.json — security configuration', () => {
 			// 'unsafe-inline' for scripts — also acceptable.
 		});
 	});
+
+	describe('Permissions (auto-thumbnail rewrite)', () => {
+		it('includes webRequest permission for network idle detection', () => {
+			expect(manifest.permissions).toContain('webRequest');
+		});
+
+		it('keeps <all_urls> for programmatic captureVisibleTab', () => {
+			expect(manifest.permissions).toContain('<all_urls>');
+		});
+
+		it('does not list thumbnail.js in background scripts', () => {
+			expect(manifest.background.scripts).not.toContain('thumbnail.js');
+		});
+	});
 });

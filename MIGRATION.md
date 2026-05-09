@@ -4,7 +4,7 @@ The migration ledger for the codebase strategy chosen in [`ROADMAP.md`](ROADMAP.
 
 ## Strategy in one paragraph
 
-Strangler-fig migration. The existing extension keeps running. Features are characterized with Integration and E2E tests, then rewritten when needed. Pure-logic extraction to `webextension/lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules, so extraction today would require maintaining duplicate copies. Most features (20 of 22) turned out to work as-is and need no rewrite. No long-lived rewrite branch; every replacement ships incrementally on AMO.
+Strangler-fig migration. The existing extension keeps running. Features are characterized with Integration and E2E tests, then rewritten when needed. Pure-logic extraction to `webextension/lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules, so extraction today would require maintaining duplicate copies. 21 of 22 features worked as-is; the remaining one (auto-thumbnail) was rewritten to replace the deprecated `drawWindow` content script with `captureVisibleTab()`. No long-lived rewrite branch; every replacement ships incrementally on AMO.
 
 Mozilla's Activity Stream (`browser/extensions/newtab/` in mozilla-central) is the **behavioural reference** for parity features — read it to learn what the user-visible behaviour should be, do not copy code. Activity Stream uses chrome-privileged APIs that ordinary WebExtensions cannot touch; the reference work is interpretive.
 
@@ -29,7 +29,7 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 
 | Feature | Current state | Strategy | Implementation refs (legacy) | Test status |
 |---|---|---|---|---|
-| **Auto-thumbnail of recently visited pages** | **partially working** — captures simple pages, fails on ~50% of pages (CSP, cross-origin restrictions, sites that block content-script execution, timing issues) | Port + rewrite (capture) — replace the `drawWindow` content-script with `browser.tabs.captureTab` triggered by `browser.webNavigation.onCompleted`; cache by URL in `browser.storage.local`. The non-standard `drawWindow` API is also a long-term liability — modernizing is both a coverage and a portability win. | `thumbnail.js` (line 14: `drawWindow` content-script), thumbnail wiring in `newTab.js` | **Integration + E2E** (Thumbnails.save/get handler dispatch in `background-messages.test.ts`; `auto-thumbnail.test.ts` — 25 tests: content script structure, webNavigation trigger logic, getThumbnails display, save/get handlers, cleanupThumbnails, characterization pins for known working/failing/partial URLs; `tests/e2e/auto-thumbnail.test.js` — 2 E2E tests: capture after navigating to pinned URL + persistence across reload) |
+| **Auto-thumbnail of recently visited pages** | **complete** — rewritten to use `captureVisibleTab()` from background; no content scripts injected | ~~Port + rewrite (capture)~~ — `drawWindow` content-script replaced with `captureVisibleTab()` + two-stage capture (immediate + network-idle). `thumbnail.js` deleted, `executeScript` removed. §2.6 resolved. | `background.js` (`captureAndStore`, `armNetworkIdle`, `resizeThumbnail`), `action.js` (capture button) | **Integration + E2E** (`auto-thumbnail.test.ts` — 59 tests: resizeThumbnail, network idle monitor, captureAndStore, onCompleted trigger, tabs.onActivated/onRemoved, action.js capture button, Thumbnails.capture handler, display, save/get, cleanup; `tests/e2e/auto-thumbnail.test.js` — 2 E2E) |
 | **Arbitrarily large tiles** | **complete** — no migration needed | ~~Port from NTT~~ — emergent property of CSS flexbox layout; works as-is | grid layout in `newTab.js` / `newTab.css` | **E2E** (`tests/e2e/large-tiles.test.js` — 2 E2E tests: flex layout fills grid space with equal-width cells; grid rows × columns structure consistency) |
 | **Configurable columns and unconstrained grid** | **complete** — no migration needed | ~~Port from NTT~~ — simple prefs + DOM loops; works as-is | grid setup in `newTab.js` (rows × columns prefs, layout calculations) | **Integration + E2E** (`layout.test.ts` — optionsOnChange int parse + updateUI input value for rows/columns; `tests/e2e/configurable-grid.test.js` — 2 E2E tests: columns/rows change via settings + persistence) |
 | **Layout micro-tuning** (opacity, title size, margin, spacing) | **complete** — no migration needed | ~~Port from NTT~~ — pref toggles + CSS variables; works as-is | settings panel in `newTab.js` / `newTab.xhtml`; prefs in `prefs.js` | **Integration + E2E** (prefs read/write/validation in `prefs-persistence.test.ts`; UI wiring in `layout.test.ts`; `tests/e2e/layout-tuning.test.js` — 4 E2E tests: opacity/titleSize/spacing/margin via settings) |
@@ -61,7 +61,7 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 | Donation link to previous maintainer | already disabled (alert only) | Ready to delete — ~20 LOC across `newTab.js`/`newTab.xhtml`/CSS + `donate` strings in 20 locale files | settings panel donation row in `newTab.js` / `newTab.xhtml` | None |
 | In-app update notice ("New Tab Tools has been updated…") | working | Delete — but must coordinate removal of version-update flow in `background.js` simultaneously (~30 LOC across 3 files: `newTab.js`, `prefs.js`, `background.js`, `export.js`) | update modal in `newTab.js`; prefs `versionLastUpdate`/`versionLastAck` in `prefs.js`; version check in `background.js` | None |
 | Beta channel link, "What Changed?" link to AMO version-history | beta link already gone; version-history link still present | Ready to delete — ~5 LOC in `newTab.xhtml`/`newTab.js` + `changelog_label` in 20 locale files | links in `newTab.xhtml` | None |
-| Capture-and-save-current-thumbnail button | working (manual UI for the broken auto-capture) | Blocked on auto-thumbnail rewrite (Phase 4) — thumbnail state system (`imageIsThumbnail`, custom vs. auto logic) is entangled with tile management | thumbnail-save action in `newTab.js`; also in `action.html`/`action.js` | None |
+| Capture-and-save-current-thumbnail button | working — `action.js` sends `Thumbnails.capture` message, background calls `captureVisibleTab` | Ready to evaluate — auto-thumbnail rewrite complete; button now uses same capture path as auto-capture | capture button in `action.js`; `Thumbnails.capture` handler in `background.js` | **Integration** (`auto-thumbnail.test.ts` — action.js capture button tests) |
 
 ## Sequencing
 
@@ -71,14 +71,14 @@ A suggested order. Adjust as you learn the codebase, but the *spirit* — compre
 
 - [x] Decision recorded in [`ROADMAP.md`](ROADMAP.md).
 - [x] This migration ledger exists.
-- [x] **Security hardening.** All actionable findings from the [pre-takeover security review](audit/2026-05-04-security-review.md) are fixed. Status confirmed in the [Phase 1 completion update](audit/2026-05-07-security-update.md) (6 of 7 fixed; remaining item deferred by design).
+- [x] **Security hardening.** All findings from the [pre-takeover security review](audit/2026-05-04-security-review.md) are fixed (7 of 7). §2.6 (`<all_urls>` + `executeScript`) resolved 2026-05-08 by the auto-thumbnail rewrite.
   - [x] **§2.1 — Stored XSS via zip restore (HIGH).** Fixed 2026-05-06. URL scheme allow-list (`http:`, `https:`, `ftp:`) at two boundaries: `readZip` in `export.js` (primary — malicious URLs never reach storage) and `addTitle` in `fx-newTab.js` (defense-in-depth — renders `#` for non-safe protocols).
   - [x] **§2.2 — Vendored zip.js from 2013 (HIGH).** Fixed 2026-05-07. Replaced with `@zip.js/zip.js` v2.8.26. `export.js` rewritten to modern Promise API. Old worker files deleted.
   - [x] **§2.3 — Content Security Policy (MEDIUM).** Fixed 2026-05-04. `content_security_policy` added to `manifest.json`. Regression test at `tests/unit/manifest.test.js`.
   - [x] **§2.4 — Sender validation (MEDIUM).** Fixed 2026-05-04. Inline guard in `background.js`; wiring verified by 5 sender-validation cases in `background-messages.test.ts`.
   - [x] **§2.5 — Unfiltered pref keys on restore (MEDIUM).** Fixed 2026-05-07. Allow-list of known keys before `chrome.storage.local.set`; unknown keys silently dropped.
   - [x] **§2.7 — Dependency audit in CI (LOW).** Fixed 2026-05-04. `npm audit --audit-level=high` step in `ci.yml`.
-  - [ ] **§2.6 — `<all_urls>` + `executeScript` (MEDIUM).** Deferred to Phase 4 (auto-thumbnail rewrite). The fix requires replacing the `drawWindow` content-script with `browser.tabs.captureTab`, which enables dropping `<all_urls>` to a narrower permission set. Characterized in `auto-thumbnail.test.ts`; cannot be fixed independently without rewriting the capture mechanism. See [ROADMAP.md](ROADMAP.md) "Chrome support / MV3 migration" §2.6 note and the auto-thumbnail row above.
+  - [x] **§2.6 — `<all_urls>` + `executeScript` (MEDIUM).** Fixed 2026-05-08. `executeScript` removed entirely — `thumbnail.js` content script deleted, replaced with `captureVisibleTab()` called from background. `<all_urls>` stays (required for programmatic `captureVisibleTab`), but the combination of `<all_urls>` + code injection into visited pages is eliminated. `webRequest` permission added for network-idle detection.
 - [x] **Tooling prep for type checking.** Landed 2026-05-04. Phase 1 will write new tests in TypeScript; the toolchain to support that is now in place.
   - [x] Added [`tsconfig.json`](tsconfig.json) with `"allowJs": true, "checkJs": true, "noEmit": true, "strict": true`, types from `firefox-webext-browser` and `node`.
   - [x] Pinned dev deps: `typescript@6.0.3`, `@types/firefox-webext-browser@143.0.0`, `@types/node@20.19.39`, `@typescript-eslint/parser@8.59.1`, `@typescript-eslint/eslint-plugin@8.59.1` (per the supply-chain guardrails in [`CONTRIBUTING.md`](CONTRIBUTING.md)).
@@ -120,7 +120,7 @@ Suggested execution order. The first three slots are the security boundaries ide
 13. Filter cap with subdomain wildcards — ✅ **Done:** `tests/integration/filter-cap.test.ts` — 16 tests in two describe blocks. UI wiring (9): options-filter-set calls Filters.setFilter + Updater.updateGrid + clears inputs + highlights host, plus/minus buttons increment/decrement count + setFilter, minus at zero shows unlimited + disables button, minus returns early when already unlimited, plus from unlimited starts at 0. Filter matching (7): exact host filter at 0 blocks all, filter at 1 allows one, dot-prefix wildcard matches subdomains, dot-prefix matches bare domain, no filter allows all, blocked sites filtered regardless, non-http protocols filtered out.
 14. Recently-closed-tabs row + restore — ✅ **Done:** `tests/integration/recent-tabs.test.ts` — 17 tests extracting `refreshRecent`, `trimRecent`, and `isValidURL` from real `newTab.js`: Prefs.recent guard (2: hides list when false, calls getRecentlyClosed when true), item creation (4: anchor href/class/sessionId, title with URL, title=URL, empty title), skipping (2: incognito tabs, window sessions), favicon (3: valid favIconUrl adds img, falsy skips, javascript: protocol skips), visibility (2: hides when no items, shows when items), onclick (1: calls chrome.sessions.restore), multiple items (1: creates correct count), text fallback (1: uses URL when title empty).
 15. Page background image, hide history-derived tiles — ✅ **Done:** `tests/integration/background-and-history.test.ts` — 9 tests in two describe blocks. Page background rendering (4): applies background URL to document.body + backgroundFake, clears both when no background, disables/enables remove button. Hide history tiles (5): Prefs.history=false skips topSites and returns only pinned, sparse slice characterization, empty array when no pins, history=true calls topSites and fills slots, no duplication of pinned URLs. Page background set/remove already covered by slot 8.
-16. Auto-thumbnail — ✅ most complex. **Done:** `tests/integration/auto-thumbnail.test.ts` — 25 tests across 6 describe blocks. Content script structure (3: thumbnailSize from storage, drawWindow + white bg, canvas scaling). webNavigation.onCompleted trigger (5: frameId guard, protocol filter, browserAction disable, staleness check, incognito guard). getThumbnails display (5: sends Thumbnails.get with correct URLs, applies CSS backgroundImage, skips custom-uploaded images, updates siteThumbnail for selected site, handles null cells). Thumbnails.save/get handlers (4: stores all fields, guards url+image, returns Map, updates used date). cleanupThumbnails (4: two-week expiry, IDB index + upperBound, cursor delete, idle trigger). Known capture behaviour characterization (4: working URLs — insideparadeplatz.ch + finews.ch; not working — heise.de/newsticker empty capture; partially working — qoqa.ch/de incomplete load; all valid https).
+16. Auto-thumbnail — ✅ most complex, **rewritten**. `tests/integration/auto-thumbnail.test.ts` — 59 tests across 12 describe blocks. New code: resizeThumbnail (6 tests), network idle monitor (9 tests), captureAndStore (5 tests), tabs.onActivated handler (5 tests), tabs.onRemoved cleanup (3 tests), action.js capture button (3 tests), Thumbnails.capture handler (3 tests). Rewritten: webNavigation.onCompleted trigger (12 tests: no executeScript, no staleness check, captureAndStore for active tabs, armNetworkIdle, pendingCaptures for background tabs). Unchanged: getThumbnails display (5), Thumbnails.save/get (4+4), cleanupThumbnails (4). Content script tests and drawWindow characterization removed (thumbnail.js deleted).
 
 **E2E characterization (slots 17–28):**
 
@@ -144,26 +144,20 @@ Localization and hide-history-derived-tiles are adequately covered by Integratio
 
 This phase is deliberately heavy upfront. The trade-off: weeks-to-months of work before any user-visible rewrite ships, in exchange for a safety net that makes every subsequent rewrite low-risk. If the phase is taking too long, the right adjustment is to *narrow E2E coverage*, not to *skip Integration coverage*.
 
-### Phase 2: Remaining rewrite work
+### Phase 2: Remaining rewrite work (complete)
 
-After the Phase 1 characterization sweep and review of every feature, most features work as-is with no changes needed. Extracting pure logic to standalone `lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules, so extraction today would mean either maintaining dual copies (inline + lib/) or adding throwaway UMD boilerplate. Neither is worth it for small, stable functions that are already covered by integration tests.
+All 22 features are complete. The only feature that required an actual rewrite was auto-thumbnail (replacing `drawWindow` content-script with `captureVisibleTab()`), which also resolved the last open security finding (§2.6).
 
-When MV3 converts the background to a module and pages use `type="module"` scripts, extraction to `lib/` happens naturally via `import`.
-
-**Feature that needs actual rewrite (1):**
-
-1. **Auto-thumbnail revival** — flagship feature, highest risk. Replace `drawWindow` content-script with `browser.tabs.captureTab`. This also fixes §2.6 (`<all_urls>` scope-down).
-
-**Everything else is complete (21 of 22 features).**
+Extracting pure logic to standalone `lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules.
 
 ### Phase 3: Drop sweep
 
-Two features are ready to delete now, two are blocked:
+Three features are ready to delete, one needs evaluation:
 
 1. **Donation link** — ready to delete (~20 LOC + locale strings).
 2. **"What Changed?" link** — ready to delete (~5 LOC + locale strings).
 3. **In-app update notice** — must coordinate removal with `background.js` version-update flow (~30 LOC across 3 files).
-4. **Capture-and-save-current-thumbnail button** — blocked on auto-thumbnail rewrite; thumbnail state system is entangled with tile management.
+4. **Capture-and-save-current-thumbnail button** — no longer blocked. Evaluate whether to keep (now working via `captureVisibleTab`) or delete.
 
 ### Phase 4: Stabilization → unblock MV3 stage
 

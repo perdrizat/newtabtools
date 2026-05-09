@@ -194,6 +194,14 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 				onStateChanged: { addListener: vi.fn(), removeListener: vi.fn() },
 			};
 		}
+		(globalThis as any).chrome.webRequest = {
+			onBeforeRequest: { addListener: vi.fn() },
+			onCompleted: { addListener: vi.fn() },
+			onErrorOccurred: { addListener: vi.fn() },
+		};
+		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
+		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn();
 		(globalThis as any).chrome.tabs.query = vi.fn((_q: unknown, cb: Function) => cb([]));
 		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
 

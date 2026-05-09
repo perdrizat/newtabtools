@@ -4,42 +4,23 @@
 
 /**
  * Integration test: auto-thumbnail capture, storage, display, and cleanup.
- * Phase 1 slot 16 of the migration plan (MIGRATION.md).
  *
- * The auto-thumbnail system has five pieces:
- *   1. Content script (`thumbnail.js`): uses non-standard `drawWindow` to
- *      capture the visible page, sends `Thumbnails.save` via runtime message.
- *   2. Background trigger (`background.js` `webNavigation.onCompleted`):
- *      checks if URL is in tile cache + thumbnail is stale, injects content
- *      script.
- *   3. Background save (`Thumbnails.save` handler): stores url + image blob +
- *      stored/used dates in IDB `thumbnails` store.
- *   4. New tab display (`newTab.js` `getThumbnails`): requests thumbnails for
- *      grid sites missing background images, applies as CSS background.
- *   5. Cleanup (`background.js` `cleanupThumbnails`): removes thumbnails with
- *      `used` date older than 2 weeks, triggered on idle.
+ * The auto-thumbnail system captures screenshots of pinned sites using
+ * `captureVisibleTab()` from the background page. No content scripts are
+ * injected into visited pages (resolves §2.6 from the security audit).
  *
- * The content script's `drawWindow` is a non-standard Firefox-only API that
- * cannot be tested in jsdom. This test covers the surrounding orchestration.
- *
- * Known capture behaviour (characterization, observed 2026-05-06):
- *   - Working: https://insideparadeplatz.ch/, https://www.finews.ch/
- *   - Not working (empty screenshot): https://www.heise.de/newsticker/
- *   - Partially working (incomplete load): https://www.qoqa.ch/de
- *
- * The failures are consistent with drawWindow capturing before page resources
- * finish loading (CSP blocks, lazy-loaded images, JS-rendered content). The
- * MIGRATION.md strategy is to replace drawWindow with browser.tabs.captureTab
- * triggered by webNavigation.onCompleted during Phase 4.
- *
- * Characterizes:
- *   - Content script: canvas setup, drawWindow call, sendMessage shape
- *   - webNavigation.onCompleted: protocol filter, cache check, staleness
- *     check, incognito guard, script injection
- *   - Thumbnails.save: stores with url/image/stored/used fields
- *   - Thumbnails.get: returns Map of matching URLs, updates used date
- *   - getThumbnails: applies thumbnails to grid sites without images
- *   - cleanupThumbnails: deletes entries older than 2 weeks
+ * Architecture:
+ *   1. Background trigger (`webNavigation.onCompleted`): checks if URL is in
+ *      tile cache, captures immediately for active tabs (Capture A), arms
+ *      network idle for a second capture (Capture B) once page finishes loading.
+ *      Non-active tabs are deferred to `tabs.onActivated`.
+ *   2. `captureAndStore()`: calls `captureVisibleTab()`, resizes via canvas,
+ *      stores blob in IDB `thumbnails` store.
+ *   3. `resizeThumbnail()`: resizes a data URL to target width via canvas.
+ *   4. Network idle monitor: `webRequest` listeners reset a 2s timer per tab.
+ *   5. `Thumbnails.capture` message: used by action.js capture button.
+ *   6. Display (`newTab.js` `getThumbnails`): applies thumbnails to grid sites.
+ *   7. Cleanup (`cleanupThumbnails`): removes entries older than 2 weeks.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -50,7 +31,6 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const THUMBNAIL_PATH = path.resolve(__dirname, '../../webextension/thumbnail.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -66,88 +46,64 @@ function extractMethod(source: string, methodName: string): string {
 	throw new Error('Unbalanced braces');
 }
 
-// ==================== Content script (thumbnail.js) ====================
-
-describe('Content script — thumbnail.js (Phase 1 slot 16)', () => {
-	it('thumbnail.js reads thumbnailSize from storage and sends Thumbnails.save', () => {
-		const source = fs.readFileSync(THUMBNAIL_PATH, 'utf8');
-
-		// Parse the content script to verify its structure
-		expect(source).toContain('chrome.storage.local.get');
-		expect(source).toContain('thumbnailSize');
-		expect(source).toContain('drawWindow');
-		expect(source).toContain('name: \'Thumbnails.save\'');
-		expect(source).toContain('url: location.href');
-		expect(source).toContain('image: blob');
-	});
-
-	it('thumbnail.js uses drawWindow with white background fallback', () => {
-		const source = fs.readFileSync(THUMBNAIL_PATH, 'utf8');
-		// drawWindow(window, 0, 0, width, width, '#fff')
-		expect(source).toContain('drawWindow(window, 0, 0,');
-		expect(source).toContain('\'#fff\'');
-	});
-
-	it('thumbnail.js scales canvas width from scrollWidth', () => {
-		const source = fs.readFileSync(THUMBNAIL_PATH, 'utf8');
-		expect(source).toContain('canvas1.width / document.documentElement.scrollWidth');
-	});
-});
-
 // ==================== webNavigation.onCompleted trigger ====================
 
-describe('webNavigation.onCompleted trigger — background.js (Phase 1 slot 16)', () => {
+describe('webNavigation.onCompleted trigger — background.js', () => {
+	let bgSource: string;
+
 	beforeAll(() => {
-		// Read background.js and extract the onCompleted handler
-		const bgSource = fs.readFileSync(
+		bgSource = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
 		);
-		// The handler is registered inline — we'll test its logic via mocks
-		// by re-extracting the logic patterns from the source
+	});
 
-		// Verify the handler structure exists
+	it('handler is registered', () => {
 		expect(bgSource).toContain('chrome.webNavigation.onCompleted.addListener');
-		expect(bgSource).toContain('details.frameId !== 0');
-		expect(bgSource).toContain('Tiles.ensureReady');
-		expect(bgSource).toContain('cache.includes(details.url)');
-		expect(bgSource).toContain('tab.incognito');
-		expect(bgSource).toContain('chrome.tabs.executeScript(details.tabId, {file: \'thumbnail.js\'})');
 	});
 
 	it('handler filters out non-main-frame navigations (frameId !== 0)', () => {
-		const bgSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
-		);
-		// The guard: if (details.frameId !== 0) { return; }
 		expect(bgSource).toContain('details.frameId !== 0');
 	});
 
 	it('handler filters out non-http protocols', () => {
-		const bgSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
-		);
 		expect(bgSource).toContain('[\'http:\', \'https:\', \'ftp:\'].includes(new URL(details.url).protocol)');
 	});
 
 	it('handler disables browserAction for non-http URLs', () => {
-		const bgSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
-		);
 		expect(bgSource).toContain('chrome.browserAction.disable(details.tabId)');
 	});
 
-	it('handler checks staleness: only captures if stored < today', () => {
-		const bgSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
-		);
-		expect(bgSource).toContain('this.result.stored < today');
+	it('handler checks cache for URL match', () => {
+		expect(bgSource).toContain('cache.includes(details.url)');
 	});
 
 	it('handler skips incognito tabs', () => {
-		const bgSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
-		);
 		expect(bgSource).toContain('tab.incognito');
+	});
+
+	it('does NOT use executeScript (§2.6 resolved)', () => {
+		expect(bgSource).not.toContain('executeScript');
+	});
+
+	it('does NOT check staleness — captures every visit', () => {
+		expect(bgSource).not.toContain('this.result.stored < today');
+	});
+
+	it('calls captureAndStore for active tabs', () => {
+		expect(bgSource).toContain('tab.active');
+		expect(bgSource).toContain('captureAndStore(');
+	});
+
+	it('arms network idle for capture B on active tabs', () => {
+		expect(bgSource).toContain('armNetworkIdle(details.tabId');
+	});
+
+	it('pendingCaptures map exists for background tabs', () => {
+		expect(bgSource).toContain('var pendingCaptures = new Map()');
+	});
+
+	it('adds non-active tabs to pendingCaptures', () => {
+		expect(bgSource).toContain('pendingCaptures.set(');
 	});
 });
 
@@ -253,6 +209,53 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 	});
 });
 
+// ==================== action.js capture button ====================
+
+describe('action.js capture button', () => {
+	let actionSource: string;
+	const ACTION_PATH = path.resolve(__dirname, '../../webextension/action.js');
+
+	beforeAll(() => {
+		actionSource = fs.readFileSync(ACTION_PATH, 'utf8');
+	});
+
+	it('does NOT use executeScript', () => {
+		expect(actionSource).not.toContain('executeScript');
+	});
+
+	it('does NOT reference thumbnail.js', () => {
+		expect(actionSource).not.toContain('thumbnail.js');
+	});
+
+	it('sends Thumbnails.capture message to background', () => {
+		expect(actionSource).toContain('name: \'Thumbnails.capture\'');
+	});
+});
+
+// ==================== Thumbnails.capture handler ====================
+
+describe('Thumbnails.capture handler — background.js', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
+	});
+
+	it('handles Thumbnails.capture message', () => {
+		expect(bgSource).toContain('case \'Thumbnails.capture\':');
+	});
+
+	it('calls captureAndStore with sender tab info', () => {
+		expect(bgSource).toContain('captureAndStore(');
+	});
+
+	it('uses sender.tab for tabId and windowId', () => {
+		expect(bgSource).toContain('sender.tab');
+	});
+});
+
 // ==================== Thumbnails.save handler ====================
 
 describe('Thumbnails.save handler — background.js (Phase 1 slot 16)', () => {
@@ -336,71 +339,183 @@ describe('cleanupThumbnails — background.js (Phase 1 slot 16)', () => {
 	});
 });
 
-// ==================== Known capture behaviour (characterization) ====================
+// ==================== resizeThumbnail helper ====================
 
-describe('Known auto-thumbnail capture behaviour (characterization pins)', () => {
-	/*
-	 * These tests document the observed capture behaviour as of 2026-05-06.
-	 * They serve as regression markers for the Phase 4 rewrite from
-	 * drawWindow → browser.tabs.captureTab.
-	 *
-	 * The drawWindow content script (`thumbnail.js`) captures the visible
-	 * viewport at the moment it runs. Because it's injected by
-	 * webNavigation.onCompleted, it fires after the document's load event
-	 * but potentially before:
-	 *   - Lazy-loaded images finish
-	 *   - JS-rendered content mounts (SPA frameworks)
-	 *   - CSP-blocked resources resolve
-	 *   - Deferred/async scripts complete
-	 *
-	 * This explains the partial/empty captures on complex sites.
-	 */
+describe('resizeThumbnail — background.js', () => {
+	let bgSource: string;
 
-	const KNOWN_WORKING = [
-		'https://insideparadeplatz.ch/',
-		'https://www.finews.ch/',
-	];
-
-	const KNOWN_NOT_WORKING = [
-		// Empty page in screenshot — likely CSP or JS-rendered content
-		'https://www.heise.de/newsticker/',
-	];
-
-	const KNOWN_PARTIALLY_WORKING = [
-		// Page not fully loaded in screenshot — lazy-loaded content
-		'https://www.qoqa.ch/de',
-	];
-
-	it('working URLs are standard server-rendered pages with few CSP restrictions', () => {
-		// Characterization: these sites serve fully-rendered HTML before
-		// the load event fires, so drawWindow captures a complete page.
-		for (const url of KNOWN_WORKING) {
-			const parsed = new URL(url);
-			expect(['http:', 'https:']).toContain(parsed.protocol);
-		}
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
 	});
 
-	it('non-working URL (heise.de) is a known drawWindow failure case', () => {
-		// Characterization: heise.de/newsticker renders an empty or
-		// near-empty page via drawWindow. The Phase 4 rewrite to
-		// captureTab should resolve this since it captures the
-		// compositor output, not the document.
-		expect(KNOWN_NOT_WORKING).toContain('https://www.heise.de/newsticker/');
+	it('resizeThumbnail function exists', () => {
+		expect(bgSource).toContain('function resizeThumbnail(');
 	});
 
-	it('partially-working URL (qoqa.ch) captures incomplete page state', () => {
-		// Characterization: qoqa.ch/de uses lazy loading or deferred
-		// JS that hasn't completed by the time drawWindow runs.
-		// The capture shows the page skeleton but not the full content.
-		expect(KNOWN_PARTIALLY_WORKING).toContain('https://www.qoqa.ch/de');
+	it('accepts dataURL and targetWidth parameters', () => {
+		expect(bgSource).toMatch(/function resizeThumbnail\s*\(\s*dataURL\s*,\s*targetWidth\s*\)/);
 	});
 
-	it('all test URLs are valid https URLs in the tile cache domain', () => {
-		const all = [...KNOWN_WORKING, ...KNOWN_NOT_WORKING, ...KNOWN_PARTIALLY_WORKING];
-		for (const url of all) {
-			const parsed = new URL(url);
-			expect(parsed.protocol).toBe('https:');
-			expect(parsed.host).toBeTruthy();
-		}
+	it('creates an Image and loads the dataURL', () => {
+		expect(bgSource).toContain('new Image()');
+		expect(bgSource).toContain('img.src = dataURL');
+	});
+
+	it('scales canvas dimensions from targetWidth', () => {
+		expect(bgSource).toContain('targetWidth / img.width');
+		expect(bgSource).toContain('canvas.width = targetWidth');
+	});
+
+	it('caps canvas height to targetWidth', () => {
+		expect(bgSource).toContain('Math.min(targetWidth,');
+	});
+
+	it('returns a Promise resolving with a blob via canvas.toBlob', () => {
+		expect(bgSource).toContain('return new Promise');
+		expect(bgSource).toContain('canvas.toBlob(resolve)');
 	});
 });
+
+// ==================== tabs.onActivated handler ====================
+
+describe('tabs.onActivated handler — background.js', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
+	});
+
+	it('registers a tabs.onActivated listener', () => {
+		expect(bgSource).toContain('chrome.tabs.onActivated.addListener');
+	});
+
+	it('checks pendingCaptures for the activated tab', () => {
+		expect(bgSource).toContain('pendingCaptures.get(');
+	});
+
+	it('calls captureAndStore for pending tab', () => {
+		// The handler captures immediately when a pending tab becomes active
+		expect(bgSource).toContain('captureAndStore(');
+	});
+
+	it('arms network idle for the pending tab', () => {
+		expect(bgSource).toContain('armNetworkIdle(');
+	});
+
+	it('removes the tab from pendingCaptures after capture', () => {
+		expect(bgSource).toContain('pendingCaptures.delete(');
+	});
+});
+
+describe('tabs.onRemoved cleanup — background.js', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
+	});
+
+	it('registers a tabs.onRemoved listener', () => {
+		expect(bgSource).toContain('chrome.tabs.onRemoved.addListener');
+	});
+
+	it('cleans up pendingCaptures on tab close', () => {
+		expect(bgSource).toContain('pendingCaptures.delete(');
+	});
+
+	it('disarms network idle on tab close', () => {
+		expect(bgSource).toContain('disarmNetworkIdle(');
+	});
+});
+
+// ==================== captureAndStore helper ====================
+
+describe('captureAndStore — background.js', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
+	});
+
+	it('captureAndStore function exists with tabId, windowId, url, label params', () => {
+		expect(bgSource).toMatch(/function captureAndStore\s*\(\s*tabId\s*,\s*windowId\s*,\s*url\s*,\s*label\s*\)/);
+	});
+
+	it('calls chrome.tabs.captureVisibleTab for the window', () => {
+		expect(bgSource).toContain('chrome.tabs.captureVisibleTab(windowId');
+	});
+
+	it('reads thumbnailSize from storage with 600 default', () => {
+		expect(bgSource).toContain('\'thumbnailSize\': 600');
+	});
+
+	it('calls resizeThumbnail with the dataURL and size', () => {
+		expect(bgSource).toContain('resizeThumbnail(dataURL,');
+	});
+
+	it('stores resized blob in IDB thumbnails store', () => {
+		expect(bgSource).toContain('\'thumbnails\', \'readwrite\'');
+		expect(bgSource).toContain('image: blob');
+	});
+});
+
+// ==================== Network idle monitor ====================
+
+describe('Network idle monitor — background.js', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		bgSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/background.js'), 'utf8'
+		);
+	});
+
+	it('networkIdleWatchers map exists', () => {
+		expect(bgSource).toContain('var networkIdleWatchers = new Map()');
+	});
+
+	it('armNetworkIdle function exists with tabId and callback params', () => {
+		expect(bgSource).toMatch(/function armNetworkIdle\s*\(\s*tabId\s*,\s*callback\s*\)/);
+	});
+
+	it('sets a 2-second idle timer', () => {
+		// 2000ms idle timeout
+		expect(bgSource).toContain('2000');
+		expect(bgSource).toContain('setTimeout');
+	});
+
+	it('stores startTime for elapsed-time calculation', () => {
+		expect(bgSource).toContain('startTime: Date.now()');
+	});
+
+	it('disarmNetworkIdle function removes watcher and clears timer', () => {
+		expect(bgSource).toContain('function disarmNetworkIdle(');
+		expect(bgSource).toContain('clearTimeout');
+		expect(bgSource).toContain('networkIdleWatchers.delete(');
+	});
+
+	it('webRequest.onBeforeRequest listener resets timer for watched tabs', () => {
+		expect(bgSource).toContain('chrome.webRequest.onBeforeRequest.addListener');
+		expect(bgSource).toContain('networkIdleWatchers.get(');
+	});
+
+	it('webRequest.onCompleted listener resets timer for watched tabs', () => {
+		expect(bgSource).toContain('chrome.webRequest.onCompleted.addListener');
+	});
+
+	it('webRequest.onErrorOccurred listener resets timer for watched tabs', () => {
+		expect(bgSource).toContain('chrome.webRequest.onErrorOccurred.addListener');
+	});
+
+	it('passes elapsed time to callback on idle', () => {
+		expect(bgSource).toContain('Date.now() - watcher.startTime');
+	});
+});
+

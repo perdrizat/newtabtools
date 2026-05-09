@@ -197,6 +197,12 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		};
 		return true;
 
+	case 'Thumbnails.capture':
+		if (sender.tab) {
+			captureAndStore(sender.tab.id, sender.tab.windowId, sender.tab.url);
+		}
+		return false;
+
 	case 'Export:backup':
 		makeZip().then(sendResponse());
 		return true;
@@ -207,7 +213,95 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	return false;
 });
 
+var networkIdleWatchers = new Map();
+
+function armNetworkIdle(tabId, callback) {
+	disarmNetworkIdle(tabId);
+	console.log('[thumbnail] armNetworkIdle — tabId:', tabId);
+	let watcher = {
+		startTime: Date.now(),
+		callback: callback,
+		resetCount: 0,
+		timer: setTimeout(function() {
+			let elapsed = Date.now() - watcher.startTime;
+			networkIdleWatchers.delete(tabId);
+			console.log('[thumbnail] networkIdle fired — tabId:', tabId, 'elapsed:', elapsed + 'ms', 'resets:', watcher.resetCount);
+			callback(elapsed);
+		}, 2000),
+	};
+	networkIdleWatchers.set(tabId, watcher);
+}
+
+function disarmNetworkIdle(tabId) {
+	let watcher = networkIdleWatchers.get(tabId);
+	if (watcher) {
+		clearTimeout(watcher.timer);
+		networkIdleWatchers.delete(tabId);
+	}
+}
+
+function resetNetworkIdleTimer(details) {
+	let watcher = networkIdleWatchers.get(details.tabId);
+	if (watcher) {
+		watcher.resetCount++;
+		clearTimeout(watcher.timer);
+		watcher.timer = setTimeout(function() {
+			let elapsed = Date.now() - watcher.startTime;
+			networkIdleWatchers.delete(details.tabId);
+			console.log('[thumbnail] networkIdle fired — tabId:', details.tabId, 'elapsed:', elapsed + 'ms', 'resets:', watcher.resetCount);
+			watcher.callback(elapsed);
+		}, 2000);
+	}
+}
+
+chrome.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+chrome.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+
+function resizeThumbnail(dataURL, targetWidth) {
+	return new Promise(function(resolve) {
+		let img = new Image();
+		img.onload = function() {
+			let scale = targetWidth / img.width;
+			let canvas = document.createElement('canvas');
+			canvas.width = targetWidth;
+			canvas.height = Math.min(targetWidth, scale * img.height);
+			let ctx = canvas.getContext('2d');
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob(resolve);
+		};
+		img.src = dataURL;
+	});
+}
+
+function captureAndStore(tabId, windowId, url, label) {
+	console.log('[thumbnail]', label || 'capture', '— tabId:', tabId, 'url:', url);
+	chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
+		if (!dataURL) {
+			console.warn('[thumbnail]', label || 'capture', '— captureVisibleTab returned empty for', url,
+				chrome.runtime.lastError ? chrome.runtime.lastError.message : '');
+			return;
+		}
+		console.log('[thumbnail]', label || 'capture', '— got dataURL, length:', dataURL.length, 'for', url);
+		chrome.storage.local.get({'thumbnailSize': 600}, function(prefs) {
+			resizeThumbnail(dataURL, prefs.thumbnailSize).then(function(blob) {
+				let today = getTZDateString();
+				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
+					url,
+					image: blob,
+					stored: today,
+					used: today,
+				});
+				console.log('[thumbnail]', label || 'capture', '— stored', blob.size, 'bytes for', url);
+			});
+		});
+	});
+}
+
+var pendingCaptures = new Map();
+
 chrome.webNavigation.onCompleted.addListener(function(details) {
+	console.log('[thumbnail] onCompleted — frameId:', details.frameId, 'url:', details.url);
 	if (details.frameId !== 0) {
 		return;
 	}
@@ -221,20 +315,55 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	// We might not have called getAllTiles yet.
 	Tiles.ensureReady().then(function({cache}) {
+		console.log('[thumbnail] cache check — url:', details.url, 'inCache:', cache.includes(details.url), 'cacheSize:', cache.length);
 		if (cache.includes(details.url)) {
 			chrome.tabs.get(details.tabId, function(tab) {
 				if (tab.incognito) {
+					console.log('[thumbnail] skipped — incognito tab');
 					return;
 				}
-				db.transaction('thumbnails').objectStore('thumbnails').get(details.url).onsuccess = function() {
-					let today = getTZDateString();
-					if (!this.result || this.result.stored < today) {
-						chrome.tabs.executeScript(details.tabId, {file: 'thumbnail.js'});
-					}
-				};
+				console.log('[thumbnail] tab state — active:', tab.active, 'tabId:', details.tabId);
+				if (tab.active) {
+					// Capture A: immediate screenshot (page at top, may be incomplete)
+					captureAndStore(details.tabId, tab.windowId, details.url, 'A');
+					// Arm network idle for Capture B (fully rendered replacement)
+					armNetworkIdle(details.tabId, function(elapsed) {
+						if (elapsed <= 5000) {
+							// Page idle within 5s — user likely hasn't scrolled
+							captureAndStore(details.tabId, tab.windowId, details.url, 'B');
+						} else {
+							console.log('[thumbnail] Capture B skipped — elapsed', elapsed + 'ms > 5000ms cutoff, url:', details.url);
+						}
+					});
+				} else {
+					// Tab not active — captureVisibleTab won't work.
+					// Mark as pending; capture on tabs.onActivated.
+					pendingCaptures.set(details.tabId, {
+						url: details.url,
+						windowId: tab.windowId,
+					});
+				}
 			});
 		}
 	}).catch(console.error);
+});
+
+chrome.tabs.onActivated.addListener(function(activeInfo) {
+	let pending = pendingCaptures.get(activeInfo.tabId);
+	if (pending) {
+		pendingCaptures.delete(activeInfo.tabId);
+		captureAndStore(activeInfo.tabId, pending.windowId, pending.url);
+		armNetworkIdle(activeInfo.tabId, function(elapsed) {
+			if (elapsed <= 5000) {
+				captureAndStore(activeInfo.tabId, pending.windowId, pending.url);
+			}
+		});
+	}
+});
+
+chrome.tabs.onRemoved.addListener(function(tabId) {
+	pendingCaptures.delete(tabId);
+	disarmNetworkIdle(tabId);
 });
 
 chrome.tabs.query({}, function(tabs) {

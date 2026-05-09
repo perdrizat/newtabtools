@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-09]
+
+### Security
+
+- Fixed §2.6 — removed `executeScript` and `thumbnail.js` content script; no JS injected into visited pages
+
+### Changed
+
+- Auto-thumbnail rewrite: `drawWindow` → `captureVisibleTab()` with two-stage capture (immediate + network idle)
+- `action.js` capture button uses `Thumbnails.capture` message instead of `executeScript`
+- Added `webRequest` permission to manifest for network idle detection
+- Updated `MIGRATION.md` — all 22 features complete, all 7 security findings resolved
+
+### Removed
+
+- Deleted `thumbnail.js` content script (replaced by background-only capture)
+
 ## [2026-05-08]
 
 ### Changed
