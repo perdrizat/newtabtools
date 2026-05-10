@@ -326,18 +326,11 @@ var newTabTools = {
 			this.selectedSite.addTitle();
 			Tiles.putTile(this.selectedSite.link);
 			break;
-		case 'options-bg-set':
-			if (this.setBackgroundInput.files.length) {
-				let file = this.setBackgroundInput.files[0];
-				Background.setBackground(file).then(() => {
-					this.refreshBackgroundImage();
-				});
-			}
+		case 'options-wallpaper-btn':
+			this.openWallpaperPicker();
 			break;
 		case 'options-bg-remove':
-			Background.setBackground().then(() => {
-				this.refreshBackgroundImage();
-			});
+			this.resetWallpaper();
 			break;
 		case 'historytiles-filter':
 			this.showOptionsExtra('filter');
@@ -524,6 +517,14 @@ var newTabTools = {
 		Tiles.putTile(link);
 	},
 	refreshBackgroundImage() {
+		// CDN wallpaper takes priority over IDB blob
+		if (Prefs.backgroundUrl) {
+			document.body.style.backgroundImage =
+				this.backgroundFake.style.backgroundImage = 'url("' + Prefs.backgroundUrl + '")';
+			this.removeBackgroundButton.disabled = false;
+			return Promise.resolve();
+		}
+
 		return Background.getBackground().then(background => {
 			if (!background) {
 				document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = null;
@@ -535,6 +536,106 @@ var newTabTools = {
 			document.body.style.backgroundImage =
 				this.backgroundFake.style.backgroundImage = 'url("' + URL.createObjectURL(background) + '")';
 			this.removeBackgroundButton.disabled = false;
+		});
+	},
+	async fetchFirefoxWallpapers() {
+		if (this._wallpaperCache) {
+			return this._wallpaperCache;
+		}
+		let response = await fetch('https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/newtab-wallpapers-v2/records');
+		let json = await response.json();
+		let cdnBase = 'https://firefox-settings-attachments.cdn.mozilla.net/';
+		let wallpapers = json.data
+			.filter(function(item) { return item.category !== 'firefox' && item.attachment && item.attachment.location; })
+			.map(function(item) {
+				return {
+					title: item.title,
+					theme: item.theme,
+					category: item.category,
+					imageUrl: cdnBase + item.attachment.location,
+					attribution: item.attribution,
+				};
+			});
+		this._wallpaperCache = wallpapers;
+		return wallpapers;
+	},
+	openWallpaperPicker() {
+		let picker = document.getElementById('wallpaper-picker');
+		picker.hidden = false;
+		this.fetchFirefoxWallpapers().then(wallpapers => {
+			this.renderWallpaperGrid(wallpapers);
+		}).catch(function() {
+			let grid = document.getElementById('wallpaper-grid');
+			grid.textContent = 'Unable to load curated wallpapers.';
+		});
+	},
+	closeWallpaperPicker() {
+		document.getElementById('wallpaper-picker').hidden = true;
+	},
+	renderWallpaperGrid(wallpapers) {
+		let grid = document.getElementById('wallpaper-grid');
+		grid.textContent = '';
+
+		let categories = {};
+		for (let wp of wallpapers) {
+			if (!categories[wp.category]) {
+				categories[wp.category] = [];
+			}
+			categories[wp.category].push(wp);
+		}
+
+		for (let [category, items] of Object.entries(categories)) {
+			let heading = document.createElement('h3');
+			heading.className = 'wallpaper-category';
+			heading.textContent = category.replace(/-/g, ' ');
+			grid.appendChild(heading);
+
+			let row = document.createElement('div');
+			row.className = 'wallpaper-row';
+			for (let wp of items) {
+				let img = document.createElement('img');
+				img.className = 'wallpaper-thumb';
+				img.src = wp.imageUrl;
+				img.alt = wp.title;
+				img.dataset.url = wp.imageUrl;
+				if (Prefs.backgroundUrl === wp.imageUrl) {
+					img.setAttribute('selected', '');
+				}
+				img.addEventListener('click', () => {
+					this.selectWallpaper(wp.imageUrl);
+				});
+				row.appendChild(img);
+			}
+			grid.appendChild(row);
+		}
+	},
+	selectWallpaper(url) {
+		// Clear any custom uploaded background
+		Background.setBackground().then(() => {
+			Prefs.backgroundUrl = url;
+			document.body.style.backgroundImage =
+				this.backgroundFake.style.backgroundImage = 'url("' + url + '")';
+			this.removeBackgroundButton.disabled = false;
+
+			// Update selected state in grid
+			let thumbs = document.querySelectorAll('.wallpaper-thumb');
+			for (let t of thumbs) {
+				if (t.dataset.url === url) {
+					t.setAttribute('selected', '');
+				} else {
+					t.removeAttribute('selected');
+				}
+			}
+		});
+	},
+	resetWallpaper() {
+		Prefs.backgroundUrl = '';
+		Background.setBackground().then(() => {
+			this.refreshBackgroundImage();
+			let thumbs = document.querySelectorAll('.wallpaper-thumb');
+			for (let t of thumbs) {
+				t.removeAttribute('selected');
+			}
 		});
 	},
 	parseColour(str) {
@@ -668,6 +769,7 @@ var newTabTools = {
 		}
 	},
 	async getThemedImageURL(name, theme = Prefs.theme) {
+		let effectiveTheme = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
 		let fore = document.documentElement.style.getPropertyValue('--fore-opaque');
 		let back = document.documentElement.style.getPropertyValue('--back-opaque');
 
@@ -676,7 +778,7 @@ var newTabTools = {
 		}
 
 		try {
-			let request = await fetch(browser.extension.getURL(`images/${name}-${theme}.svg`));
+			let request = await fetch(browser.extension.getURL(`images/${name}-${effectiveTheme}.svg`));
 			let content = await request.text();
 			content = content.replaceAll('#fff', fore);
 			content = content.replaceAll('#1f364c', back);
@@ -707,9 +809,10 @@ var newTabTools = {
 
 		if (!keys || keys.includes('theme')) {
 			let theme = Prefs.theme;
+			let effectiveTheme = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
 			document.querySelector('[name="theme"][value="' + theme + '"]').checked = true;
-			document.documentElement.setAttribute('theme', theme);
-			this.darkIcons.disabled = theme == 'light';
+			document.documentElement.setAttribute('theme', effectiveTheme);
+			this.darkIcons.disabled = effectiveTheme == 'light';
 			this.updateThemeColours();
 		}
 
@@ -1054,6 +1157,12 @@ var newTabTools = {
 				newTabTools.refreshRecent();
 			});
 
+			window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+				if (Prefs.theme === 'system') {
+					newTabTools.updateUI(['theme']);
+				}
+			});
+
 			// Forget about visiting this page. It shouldn't be in the history.
 			// Maybe if bug 1322304 is ever fixed we could remove this.
 			chrome.permissions.contains({permissions: ['history']}, contains => {
@@ -1129,7 +1238,6 @@ var newTabTools = {
 		'editSiteTitleRow': 'options-edit-title',
 		'setTitleInput': 'options-title-input',
 		'setTitleButton': 'options-title-set',
-		'setBackgroundInput': 'options-bg-input',
 		'removeBackgroundButton': 'options-bg-remove',
 		'recentList': 'newtab-recent',
 		'recentListOuter': 'newtab-recent-outer',
@@ -1198,12 +1306,31 @@ var newTabTools = {
 		newTabTools.optionsFilterSet.disabled = !newTabTools.optionsFilterHost.checkValidity() || !newTabTools.optionsFilterCount.checkValidity();
 	};
 
+	document.getElementById('wallpaper-close').addEventListener('click', function() {
+		newTabTools.closeWallpaperPicker();
+	});
+	document.getElementById('wallpaper-reset').addEventListener('click', function() {
+		newTabTools.resetWallpaper();
+	});
+	document.getElementById('wallpaper-upload').addEventListener('change', function() {
+		if (this.files.length) {
+			let file = this.files[0];
+			Prefs.backgroundUrl = '';
+			Background.setBackground(file).then(() => {
+				newTabTools.refreshBackgroundImage();
+				newTabTools.closeWallpaperPicker();
+			});
+		}
+	});
+
 	browser.menus.onShown.addListener(newTabTools.contextMenuShowing);
 	browser.menus.onClicked.addListener(newTabTools.contextMenuOnClick);
 
 	window.addEventListener('keydown', function(event) {
 		if (event.key == 'Escape') {
-			if (newTabTools.pinURLAutocomplete.hidden) {
+			if (!document.getElementById('wallpaper-picker').hidden) {
+				newTabTools.closeWallpaperPicker();
+			} else if (newTabTools.pinURLAutocomplete.hidden) {
 				newTabTools.hideOptions();
 			} else {
 				newTabTools.pinURLAutocomplete.hidden = true;

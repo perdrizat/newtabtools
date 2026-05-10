@@ -54,6 +54,7 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
 
 		globalThis.Background = { getBackground: vi.fn() };
+		globalThis.Prefs = { backgroundUrl: '' };
 
 		const code = `var newTabTools = { ${refreshBackgroundImage}, backgroundFake: { style: {} }, removeBackgroundButton: { disabled: false, blur: function(){} } };`;
 		vm.runInThisContext(code, { filename: 'background-render-harness.js' });
@@ -62,6 +63,7 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		(globalThis as any).Prefs.backgroundUrl = '';
 		harness.backgroundFake = { style: { backgroundImage: null } };
 		harness.removeBackgroundButton = { disabled: false, blur: vi.fn() };
 		document.body.style.backgroundImage = '';

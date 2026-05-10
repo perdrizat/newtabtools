@@ -55,7 +55,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		const updateUI = extractMethod(source, 'updateUI');
 		const parseColour = extractMethod(source, 'parseColour');
 
-		globalThis.Prefs = { theme: 'light', themeAuto: false, locked: false, rows: 3, columns: 3, opacity: 80, margin: ['small','small','small','small'], spacing: 'small', titleSize: 'small', history: true, recent: true };
+		globalThis.Prefs = { theme: 'system', themeAuto: false, locked: false, rows: 3, columns: 3, opacity: 80, margin: ['small','small','small','small'], spacing: 'small', titleSize: 'small', history: true, recent: true };
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
 
 		// Mock browser.theme
@@ -72,6 +72,10 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 			},
 		};
 
+		// Mock window.matchMedia
+		(globalThis as any).window = {
+			matchMedia: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn() }),
+		};
 		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
@@ -79,7 +83,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		(globalThis as any).Prefs.theme = 'light';
+		(globalThis as any).Prefs.theme = 'system';
 		(globalThis as any).Prefs.themeAuto = false;
 		harness._theme = null;
 		harness.darkIcons = { disabled: false };
@@ -111,7 +115,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 	it('optionsOnChange returns early when target is disabled', () => {
 		harness.optionsOnChange({ target: { disabled: true, name: 'theme', value: 'dark' } });
-		expect(Prefs.theme).toBe('light');
+		expect(Prefs.theme).toBe('system');
 	});
 
 	// ==================== updateThemeColours — themeAuto off ====================
@@ -250,6 +254,30 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
 		harness.updateUI(['theme']);
 		expect(harness.darkIcons.disabled).toBe(false);
+	});
+
+	it('updateUI resolves system theme to dark when prefers-color-scheme is dark', () => {
+		Prefs.theme = 'system';
+		(globalThis as any).window.matchMedia.mockReturnValue({ matches: true });
+		const mockRadio = { checked: false };
+		document.querySelector = vi.fn(() => mockRadio) as any;
+		harness.updateThemeColours = vi.fn();
+		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		harness.updateUI(['theme']);
+		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'dark');
+		expect(harness.darkIcons.disabled).toBe(false);
+	});
+
+	it('updateUI resolves system theme to light when prefers-color-scheme is light', () => {
+		Prefs.theme = 'system';
+		(globalThis as any).window.matchMedia.mockReturnValue({ matches: false });
+		const mockRadio = { checked: false };
+		document.querySelector = vi.fn(() => mockRadio) as any;
+		harness.updateThemeColours = vi.fn();
+		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		harness.updateUI(['theme']);
+		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'light');
+		expect(harness.darkIcons.disabled).toBe(true);
 	});
 
 	// ==================== updateUI — themeAuto branch ====================

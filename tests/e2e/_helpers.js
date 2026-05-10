@@ -1,3 +1,4 @@
+// @ts-nocheck
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
@@ -211,7 +212,7 @@ export async function resetPrefs(browser) {
 			Prefs.rows = 3;
 			Prefs.columns = 3;
 			Prefs.locked = false;
-			Prefs.theme = 'light';
+			Prefs.theme = 'system';
 			Prefs.themeAuto = false;
 			Prefs.opacity = 80;
 			Prefs.titleSize = 'small';
@@ -258,7 +259,7 @@ export async function resetTestState(browser) {
 		await page.evaluate(() => new Promise(resolve => {
 			chrome.storage.local.set({
 				rows: 3, columns: 3, locked: false,
-				theme: 'light', themeAuto: false, opacity: 80,
+				theme: 'system', themeAuto: false, opacity: 80,
 				titleSize: 'small', spacing: 'small',
 				margin: ['small', 'small', 'small', 'small'],
 				history: true, recent: true,

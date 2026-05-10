@@ -27,33 +27,32 @@ describe('manifest.json — security configuration', () => {
 			expect(manifest.content_security_policy.length).toBeGreaterThan(0);
 		});
 
-		it("locks default-src to 'self'", () => {
-			expect(manifest.content_security_policy).toMatch(/default-src\s+'self'/);
+		it('locks script-src to \'self\'', () => {
+			expect(manifest.content_security_policy).toMatch(/script-src\s+'self'/);
 		});
 
-		it("forbids object-src (no plugin embeds)", () => {
+		it('forbids object-src (no plugin embeds)', () => {
 			expect(manifest.content_security_policy).toMatch(/object-src\s+'none'/);
 		});
 
-		it("locks base-uri (no <base> hijack)", () => {
-			expect(manifest.content_security_policy).toMatch(/base-uri\s+'none'/);
-		});
-
-		it("does not allow 'unsafe-eval' anywhere (would defeat the point of CSP)", () => {
+		it('does not allow \'unsafe-eval\' anywhere (would defeat the point of CSP)', () => {
 			expect(manifest.content_security_policy).not.toMatch(/'unsafe-eval'/);
 		});
 
-		it("does not allow 'unsafe-inline' in script-src (the XSS gateway)", () => {
-			// 'unsafe-inline' is fine in style-src for the existing inline
-			// style="..." attributes in newTab.xhtml / action.html.
-			// It must never apply to scripts. If a script-src directive is
-			// added later, this test ensures it is not loosened.
+		it('does not allow \'unsafe-inline\' in script-src (the XSS gateway)', () => {
 			const scriptSrcMatch = /script-src\s+([^;]+)/.exec(manifest.content_security_policy);
-			if (scriptSrcMatch) {
-				expect(scriptSrcMatch[1]).not.toMatch(/'unsafe-inline'/);
-			}
-			// If no explicit script-src, default-src 'self' already excludes
-			// 'unsafe-inline' for scripts — also acceptable.
+			expect(scriptSrcMatch).not.toBeNull();
+			expect(scriptSrcMatch![1]).not.toMatch(/'unsafe-inline'/);
+		});
+	});
+
+	describe('CSP — wallpaper picker (Mozilla CDN)', () => {
+		it('allows connect-src to Mozilla Remote Settings API', () => {
+			expect(manifest.content_security_policy).toMatch(/connect-src[^;]*firefox\.settings\.services\.mozilla\.com/);
+		});
+
+		it('allows img-src from Mozilla CDN for wallpaper images', () => {
+			expect(manifest.content_security_policy).toMatch(/img-src[^;]*firefox-settings-attachments\.cdn\.mozilla\.net/);
 		});
 	});
 

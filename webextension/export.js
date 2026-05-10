@@ -74,7 +74,7 @@ async function readZip(file) {
 	if (prefs) {
 		let allowedKeys = ['theme', 'themeAuto', 'opacity', 'rows', 'columns',
 			'margin', 'spacing', 'titleSize', 'locked', 'history', 'recent',
-			'blocked', 'filters'];
+			'blocked', 'filters', 'backgroundUrl'];
 		let filtered = {};
 		for (let k of allowedKeys) {
 			if (k in prefs) {

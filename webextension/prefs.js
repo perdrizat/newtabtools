@@ -6,7 +6,7 @@
 /* globals Grid, newTabTools, Updater */
 
 var Prefs = {
-	_theme: 'light',
+	_theme: 'system',
 	_themeAuto: false,
 	_opacity: 80,
 	_rows: 3,
@@ -18,6 +18,7 @@ var Prefs = {
 	_history: true,
 	_recent: true,
 	_thumbnailSize: 600,
+	_backgroundUrl: '',
 	_version: -1,
 	_versionLastUpdate: new Date(0),
 	_versionLastAck: new Date(0),
@@ -38,6 +39,7 @@ var Prefs = {
 			'history',
 			'recent',
 			'thumbnailSize',
+			'backgroundUrl',
 			'version'
 		];
 
@@ -59,7 +61,7 @@ var Prefs = {
 		});
 	},
 	parsePrefs(prefs) {
-		if (['light', 'dark'].includes(prefs.theme)) {
+		if (['system', 'light', 'dark'].includes(prefs.theme)) {
 			this._theme = prefs.theme;
 		}
 		if ('themeAuto' in prefs) {
@@ -94,6 +96,9 @@ var Prefs = {
 		}
 		if (Number.isInteger(prefs.thumbnailSize)) {
 			this._thumbnailSize = prefs.thumbnailSize;
+		}
+		if (typeof prefs.backgroundUrl === 'string') {
+			this._backgroundUrl = prefs.backgroundUrl;
 		}
 		if (Array.isArray(prefs.blocked)) {
 			Blocked._list = prefs.blocked;

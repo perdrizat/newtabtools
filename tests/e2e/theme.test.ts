@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -8,7 +9,7 @@ import {
 } from './_helpers.js';
 
 describe('E2E: Light / dark / auto theme (slot 26)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -27,17 +28,24 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 
 		try {
 			// Open settings.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => (document.getElementById('options-toggle') as HTMLElement).click());
 			await new Promise(r => setTimeout(r, 500));
 
-			// Read current theme.
+			// Verify default system radio button is checked.
+			const systemChecked = await page.evaluate(() => {
+				return (document.querySelector('[name="theme"][value="system"]') as HTMLInputElement).checked;
+			});
+			expect(systemChecked).toBe(true);
+
+			// Read current effective theme (should be light or dark based on test profile OS).
 			const initialTheme = await page.evaluate(() => {
 				return document.documentElement.getAttribute('theme');
 			});
+			expect(['light', 'dark']).toContain(initialTheme);
 
 			// Switch to dark.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="dark"]');
+				const radio = document.querySelector('[name="theme"][value="dark"]') as HTMLInputElement;
 				radio.checked = true;
 				radio.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -50,7 +58,7 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 
 			// Switch to light.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="light"]');
+				const radio = document.querySelector('[name="theme"][value="light"]') as HTMLInputElement;
 				radio.checked = true;
 				radio.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -63,33 +71,31 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 
 			// Verify darkIcons stylesheet behavior: disabled when light.
 			const darkIconsDisabled = await page.evaluate(() => {
-				return document.getElementById('dark-icons').disabled;
+				return (document.getElementById('dark-icons') as HTMLLinkElement).disabled;
 			});
 			expect(darkIconsDisabled).toBe(true);
 
 			// Switch to dark — darkIcons should be enabled.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="dark"]');
+				const radio = document.querySelector('[name="theme"][value="dark"]') as HTMLInputElement;
 				radio.checked = true;
 				radio.dispatchEvent(new Event('change', { bubbles: true }));
 			});
 			await new Promise(r => setTimeout(r, 300));
 
 			const darkIconsEnabled = await page.evaluate(() => {
-				return document.getElementById('dark-icons').disabled;
+				return (document.getElementById('dark-icons') as HTMLLinkElement).disabled;
 			});
 			expect(darkIconsEnabled).toBe(false);
 
-			// Restore initial theme.
-			if (initialTheme && initialTheme !== 'dark') {
-				await page.evaluate((t) => {
-					const radio = document.querySelector(`[name="theme"][value="${t}"]`);
-					if (radio) {
-						radio.checked = true;
-						radio.dispatchEvent(new Event('change', { bubbles: true }));
-					}
-				}, initialTheme);
-			}
+			// Restore initial theme (system).
+			await page.evaluate(() => {
+				const radio = document.querySelector('[name="theme"][value="system"]') as HTMLInputElement | null;
+				if (radio) {
+					radio.checked = true;
+					radio.dispatchEvent(new Event('change', { bubbles: true }));
+				}
+			});
 		} catch (e) {
 			await captureFailure(page, 'theme-switch');
 			throw e;
@@ -103,12 +109,12 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => (document.getElementById('options-toggle') as HTMLElement).click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Enable auto theme.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="themeAuto"]');
+				const cb = document.querySelector('[name="themeAuto"]') as HTMLInputElement;
 				cb.checked = true;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -116,20 +122,20 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 
 			// Verify the auto checkbox is reflected.
 			const autoChecked = await page.evaluate(() => {
-				return document.querySelector('[name="themeAuto"]').checked;
+				return (document.querySelector('[name="themeAuto"]') as HTMLInputElement).checked;
 			});
 			expect(autoChecked).toBe(true);
 
 			// Disable auto theme.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="themeAuto"]');
+				const cb = document.querySelector('[name="themeAuto"]') as HTMLInputElement;
 				cb.checked = false;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
 			await new Promise(r => setTimeout(r, 300));
 
 			const autoUnchecked = await page.evaluate(() => {
-				return document.querySelector('[name="themeAuto"]').checked;
+				return (document.querySelector('[name="themeAuto"]') as HTMLInputElement).checked;
 			});
 			expect(autoUnchecked).toBe(false);
 		} catch (e) {

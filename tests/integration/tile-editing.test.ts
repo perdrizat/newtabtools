@@ -190,16 +190,15 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 
 	// ==================== page background ====================
 
-	it('options-bg-set calls Background.setBackground with file', () => {
-		const fakeFile = new Blob(['bg']);
-		harness.setBackgroundInput.files = [fakeFile];
-		harness.setBackgroundInput.files.length = 1;
-		harness.optionsOnClick(makeEvent('options-bg-set'));
-		expect(Background.setBackground).toHaveBeenCalledWith(fakeFile);
+	it('options-wallpaper-btn calls openWallpaperPicker', () => {
+		harness.openWallpaperPicker = vi.fn();
+		harness.optionsOnClick(makeEvent('options-wallpaper-btn'));
+		expect(harness.openWallpaperPicker).toHaveBeenCalled();
 	});
 
-	it('options-bg-remove calls Background.setBackground with no args', () => {
+	it('options-bg-remove calls resetWallpaper', () => {
+		harness.resetWallpaper = vi.fn();
 		harness.optionsOnClick(makeEvent('options-bg-remove'));
-		expect(Background.setBackground).toHaveBeenCalledWith();
+		expect(harness.resetWallpaper).toHaveBeenCalled();
 	});
 });

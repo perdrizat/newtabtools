@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-10]
+
+### Added
+
+- Wallpaper picker: fetch curated wallpapers from Mozilla Remote Settings, display in category-grouped sidebar
+
+### Changed
+
+- Dedicated `System theme` option; default theme changed to `system` (follows OS `prefers-color-scheme`)
+- Refactored `tests/e2e/theme.test.js` and `tests/unit/manifest.test.js` to TypeScript
+
+### Fixed
+
+- Replaced all deprecated CSS vendor prefixes (`-moz-appearance`, `:-moz-any`, `-moz-user-focus`, etc.) with standards
+- Collapsed duplicate `-moz-any`/`-webkit-any` rule pairs into single `:is()` rules
+
 ## [2026-05-09]
 
 ### Security

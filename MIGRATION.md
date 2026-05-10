@@ -158,6 +158,7 @@ Three features are ready to delete, one needs evaluation:
 2. **"What Changed?" link** — ready to delete (~5 LOC + locale strings).
 3. **In-app update notice** — must coordinate removal with `background.js` version-update flow (~30 LOC across 3 files).
 4. **Capture-and-save-current-thumbnail button** — no longer blocked. Evaluate whether to keep (now working via `captureVisibleTab`) or delete.
+5. **Convert E2E tests from JS to TS** — all E2E test files (`tests/e2e/*.test.js`) are plain JavaScript while integration/unit tests use TypeScript. Convert them to `.ts` for consistency and type safety. Update `vitest.config.js` e2e include pattern to `tests/e2e/**/*.test.{js,ts}` and `TESTING.md` references.
 
 ### Phase 4: Stabilization → unblock MV3 stage
 

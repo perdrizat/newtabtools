@@ -50,15 +50,13 @@ describe('E2E: Page background image (slot 25)', () => {
 			await page.evaluate(() => document.getElementById('options-toggle').click());
 			await new Promise(r => setTimeout(r, 500));
 
-			// Upload the test image via the file input.
-			const fileInput = await page.$('#options-bg-input');
-			await fileInput.uploadFile(testImagePath);
+			// Open the wallpaper picker.
+			await page.evaluate(() => document.getElementById('options-wallpaper-btn').click());
 			await new Promise(r => setTimeout(r, 500));
 
-			// Click set.
-			await page.evaluate(() => {
-				document.getElementById('options-bg-set').click();
-			});
+			// Upload the test image via the wallpaper picker's file input.
+			const fileInput = await page.$('#wallpaper-upload');
+			await fileInput.uploadFile(testImagePath);
 
 			// Wait for the background to be applied.
 			const hasBg = await waitForCondition(
@@ -72,7 +70,7 @@ describe('E2E: Page background image (slot 25)', () => {
 			);
 			expect(hasBg).toBeTruthy();
 
-			// Now remove.
+			// Now remove via the options panel remove button.
 			await page.evaluate(() => {
 				document.getElementById('options-bg-remove').click();
 			});

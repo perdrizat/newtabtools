@@ -192,6 +192,9 @@
 	"options_theme_light": {
 		"message": "Light theme"
 	},
+	"options_theme_system": {
+		"message": "System theme"
+	},
 	"options_thumb_titlesize": {
 		"message": "Tile title size"
 	},

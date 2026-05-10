@@ -28,7 +28,7 @@ E2E tests run against **real Firefox ESR** with the unpacked extension installed
 
 Use the helper in [`_helpers.js`](_helpers.js) to keep boilerplate to one line:
 
-```js
+```ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { connectToFirefox } from './_helpers.js';
 
@@ -93,4 +93,4 @@ These scripts live alongside the tests but Vitest's `include: ['tests/e2e/**/*.t
 
 ## File naming
 
-Test files use `.test.js` (matching the Unit and Integration tiers). The shared connection helper lives in `_helpers.js` (the leading underscore signals "not a test").
+New test files **must** use `.test.ts` (TypeScript is the mandated standard for all new E2E tests). Existing `.test.js` files are being migrated incrementally. The shared connection helper lives in `_helpers.js` (the leading underscore signals "not a test").

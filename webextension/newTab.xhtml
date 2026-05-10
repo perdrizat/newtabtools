@@ -11,7 +11,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 </head>
 <body>
 	<div id="background-fake"></div>
-	<div id="newtab-scrollbox">
+	<div id="newtab-scrollbox" tabindex="0">
 		<div id="newtab-vertical-margin">
 			<div id="newtab-margin-top">
 				<div class="newtab-side-margin newtab-margin-left"></div>
@@ -127,8 +127,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				<fieldset id="options-bg-group">
 					<legend data-message="bg_header"></legend>
 					<div class="options-row">
-						<input id="options-bg-input" type="file" accept="image/*" />
-						<button id="options-bg-set" disabled="" data-message="bg_set"></button>
+						<button id="options-wallpaper-btn">Choose Wallpaper</button>
 						<button id="options-bg-remove" disabled="" data-message="bg_remove"></button>
 					</div>
 				</fieldset>
@@ -140,6 +139,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<tr>
 							<th data-message="options_theme"></th>
 							<td>
+								<label><input type="radio" name="theme" value="system" data-label="options_theme_system" /></label>
 								<label><input type="radio" name="theme" value="light" data-label="options_theme_light" /></label>
 								<label><input type="radio" name="theme" value="dark" data-label="options_theme_dark" /></label><br />
 								<label><input type="checkbox" name="themeAuto" data-label="options_theme_auto" /></label>
@@ -323,6 +323,21 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 		<path fill="none" stroke="#f0f" stroke-width="4" />
 	</svg>
 	<script type="text/javascript" src="common.js"></script>
+	<div id="wallpaper-picker" hidden="">
+		<div id="wallpaper-picker-header">
+			<h2>Choose Wallpaper</h2>
+			<button id="wallpaper-close" class="close-button"></button>
+		</div>
+		<div id="wallpaper-actions">
+			<button id="wallpaper-reset">No Background</button>
+			<label id="wallpaper-upload-label">
+				Upload Image
+				<input id="wallpaper-upload" type="file" accept="image/*" />
+			</label>
+		</div>
+		<div id="wallpaper-grid"></div>
+	</div>
+
 	<script type="text/javascript" src="tiles-shim.js"></script>
 	<script type="text/javascript" src="prefs.js"></script>
 	<script type="text/javascript" src="newTab.js"></script>
