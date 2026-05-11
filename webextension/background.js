@@ -194,8 +194,12 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
 	case 'Thumbnails.capture':
 		if (sender.tab) {
-			captureAndStore(sender.tab.id, sender.tab.windowId, sender.tab.url);
+			startCaptureSession(sender.tab.id, sender.tab.windowId, sender.tab.url);
 		}
+		return false;
+
+	case 'Thumbnails.delete':
+		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
 
 	case 'Export:backup':
@@ -207,6 +211,10 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	}
 	return false;
 });
+
+// ---------------------------------------------------------------------------
+// Network idle monitor
+// ---------------------------------------------------------------------------
 
 var networkIdleWatchers = new Map();
 
@@ -253,6 +261,10 @@ chrome.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<a
 chrome.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 
+// ---------------------------------------------------------------------------
+// Thumbnail helpers: resize, capture, blankness detection
+// ---------------------------------------------------------------------------
+
 function resizeThumbnail(dataURL, targetWidth) {
 	return new Promise(function(resolve) {
 		let img = new Image();
@@ -269,31 +281,242 @@ function resizeThumbnail(dataURL, targetWidth) {
 	});
 }
 
-function captureAndStore(tabId, windowId, url, label) {
-	console.log('[thumbnail]', label || 'capture', '— tabId:', tabId, 'url:', url);
-	chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
-		if (!dataURL) {
-			console.warn('[thumbnail]', label || 'capture', '— captureVisibleTab returned empty for', url,
-				chrome.runtime.lastError ? chrome.runtime.lastError.message : '');
+/**
+ * Capture the visible tab and return the data URL via callback.
+ * Verifies the target tab is still active before capturing — if the user
+ * switched tabs, captureVisibleTab would screenshot the wrong page.
+ * Returns null if the tab is no longer active or captureVisibleTab fails.
+ */
+function captureTab(tabId, windowId, label, callback) {
+	chrome.tabs.get(tabId, function(tab) {
+		if (chrome.runtime.lastError || !tab || !tab.active) {
+			console.log('[thumbnail]', label, '— skipped, tab', tabId, 'no longer active');
+			callback(null);
 			return;
 		}
-		console.log('[thumbnail]', label || 'capture', '— got dataURL, length:', dataURL.length, 'for', url);
+		chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
+			if (!dataURL) {
+				console.warn('[thumbnail]', label, '— captureVisibleTab returned empty',
+					chrome.runtime.lastError ? chrome.runtime.lastError.message : '');
+				callback(null);
+				return;
+			}
+			console.log('[thumbnail]', label, '— got dataURL, length:', dataURL.length);
+			callback(dataURL);
+		});
+	});
+}
+
+/**
+ * Detect if a screenshot is blank (single-color).
+ * Decodes onto a 50×50 canvas, samples all pixels.
+ * Returns Promise<boolean>: true if >97% of pixels share the dominant color.
+ */
+function isBlank(dataURL) {
+	return new Promise(function(resolve) {
+		let img = new Image();
+		img.onload = function() {
+			let size = 50;
+			let canvas = document.createElement('canvas');
+			canvas.width = size;
+			canvas.height = size;
+			let ctx = canvas.getContext('2d');
+			ctx.drawImage(img, 0, 0, size, size);
+			let data = ctx.getImageData(0, 0, size, size).data;
+			let totalPixels = size * size;
+
+			// Find dominant color (first pixel as seed).
+			let dr = data[0], dg = data[1], db = data[2];
+			let matchCount = 0;
+			let tolerance = 5;
+
+			for (let i = 0; i < data.length; i += 4) {
+				if (Math.abs(data[i] - dr) <= tolerance &&
+					Math.abs(data[i + 1] - dg) <= tolerance &&
+					Math.abs(data[i + 2] - db) <= tolerance) {
+					matchCount++;
+				}
+			}
+
+			let ratio = matchCount / totalPixels;
+			console.log('[thumbnail] isBlank — dominant: rgb(' + dr + ',' + dg + ',' + db + '), match:', (ratio * 100).toFixed(1) + '%');
+			resolve(ratio > 0.97);
+		};
+		img.onerror = function() {
+			resolve(true); // Treat decode failures as blank.
+		};
+		img.src = dataURL;
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Multi-stage capture sessions
+// ---------------------------------------------------------------------------
+
+var captureSessions = new Map();
+var pendingCaptures = new Map();
+
+/**
+ * Start a multi-stage capture session for a tab.
+ *
+ * All tabs (both active on load and activated from background):
+ *   A — immediate capture
+ *   B — 500ms later (SPA first meaningful paint)
+ *   C — on network idle, capped at 2s (user may scroll)
+ *   After C (or 2s timeout), pickAndStore selects the best capture.
+ *
+ * Background tabs that haven't been activated yet are deferred via
+ * pendingCaptures — the full A/B/C flow starts when the user switches
+ * to the tab, since SPAs often only render after activation.
+ */
+function startCaptureSession(tabId, windowId, url) {
+	// Clean up any prior session for this tab (SPA navigations can trigger
+	// multiple onCompleted events for the same tabId).
+	let oldSession = captureSessions.get(tabId);
+	if (oldSession) {
+		oldSession.timers.forEach(function(t) { clearTimeout(t); });
+		console.log('[thumbnail] startCaptureSession — cancelled', oldSession.timers.length, 'timers from prior session for tabId:', tabId);
+	}
+	captureSessions.delete(tabId);
+	disarmNetworkIdle(tabId);
+
+	let session = {
+		url: url,
+		windowId: windowId,
+		captures: [],
+		timers: [],
+	};
+	captureSessions.set(tabId, session);
+
+	console.log('[thumbnail] startCaptureSession — tabId:', tabId, 'url:', url);
+
+	// Capture A: immediate.
+	captureTab(tabId, windowId, 'A', function(dataURL) {
+		if (dataURL && captureSessions.get(tabId) === session) {
+			session.captures.push({label: 'A', dataURL: dataURL});
+			console.log('[thumbnail] A — stored in session for', url);
+		}
+	});
+
+	// Capture B: 500ms later.
+	let timerB = setTimeout(function() {
+		if (captureSessions.get(tabId) !== session) {
+			return;
+		}
+		captureTab(tabId, windowId, 'B', function(dataURL) {
+			if (dataURL && captureSessions.get(tabId) === session) {
+				session.captures.push({label: 'B', dataURL: dataURL});
+				console.log('[thumbnail] B — stored in session for', url);
+			}
+		});
+	}, 500);
+	session.timers.push(timerB);
+
+	// Capture C: on network idle, capped at 2s.
+	// Hard deadline at 2s ensures we finalize even if network never goes idle.
+	// Kept short because users frequently scroll within 2s.
+	let finalized = false;
+
+	let hardDeadline = setTimeout(function() {
+		if (!finalized && captureSessions.get(tabId) === session) {
+			finalized = true;
+			disarmNetworkIdle(tabId);
+			console.log('[thumbnail] C — hard deadline 2000ms, capturing + finalizing for', url);
+			captureTab(tabId, windowId, 'C', function(dataURL) {
+				if (dataURL && captureSessions.get(tabId) === session) {
+					session.captures.push({label: 'C', dataURL: dataURL});
+					console.log('[thumbnail] C — stored in session for', url);
+				}
+				pickAndStore(tabId);
+			});
+		}
+	}, 2000);
+	session.timers.push(hardDeadline);
+
+	armNetworkIdle(tabId, function(elapsed) {
+		if (finalized || captureSessions.get(tabId) !== session) {
+			return;
+		}
+		if (elapsed <= 2000) {
+			// Network idle within 2s — take Capture C, then finalize.
+			captureTab(tabId, windowId, 'C', function(dataURL) {
+				if (dataURL && captureSessions.get(tabId) === session) {
+					session.captures.push({label: 'C', dataURL: dataURL});
+					console.log('[thumbnail] C — stored in session for', url);
+				}
+				if (!finalized && captureSessions.get(tabId) === session) {
+					finalized = true;
+					clearTimeout(hardDeadline);
+					pickAndStore(tabId);
+				}
+			});
+		} else {
+			// Network idle after 2s — skip C (user may have scrolled), finalize with A/B.
+			console.log('[thumbnail] C — skipped, elapsed', elapsed + 'ms > 2000ms cutoff, url:', url);
+			if (!finalized && captureSessions.get(tabId) === session) {
+				finalized = true;
+				clearTimeout(hardDeadline);
+				pickAndStore(tabId);
+			}
+		}
+	});
+}
+
+/**
+ * Select the best capture from the session and write it to IDB.
+ * Picks the latest non-blank capture. If all are blank, keeps the latest.
+ */
+function pickAndStore(tabId) {
+	let session = captureSessions.get(tabId);
+	if (!session || session.captures.length === 0) {
+		console.log('[thumbnail] pickAndStore — no captures for tabId:', tabId);
+		captureSessions.delete(tabId);
+		return;
+	}
+
+	let url = session.url;
+	let captures = session.captures;
+	captureSessions.delete(tabId);
+
+	// Clear any remaining timers.
+	session.timers.forEach(function(t) { clearTimeout(t); });
+
+	console.log('[thumbnail] pickAndStore — evaluating', captures.length, 'captures for', url);
+
+	// Check blankness of all captures in parallel, then pick the best.
+	Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })).then(function(blankResults) {
+		// Pick latest non-blank; fall back to latest overall.
+		let bestIndex = captures.length - 1; // default: latest
+		for (let i = captures.length - 1; i >= 0; i--) {
+			if (!blankResults[i]) {
+				bestIndex = i;
+				break;
+			}
+		}
+
+		let best = captures[bestIndex];
+		console.log('[thumbnail] pickAndStore — selected', best.label,
+			'(blank:', blankResults[bestIndex] + ') from', captures.map(function(c, i) { return c.label + (blankResults[i] ? '*' : ''); }).join(','),
+			'for', url);
+
 		chrome.storage.local.get({'thumbnailSize': 600}, function(prefs) {
-			resizeThumbnail(dataURL, prefs.thumbnailSize).then(function(blob) {
+			resizeThumbnail(best.dataURL, prefs.thumbnailSize).then(function(blob) {
 				let today = getTZDateString();
 				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
-					url,
+					url: url,
 					image: blob,
 					stored: today,
 					used: today,
 				});
-				console.log('[thumbnail]', label || 'capture', '— stored', blob.size, 'bytes for', url);
+				console.log('[thumbnail] pickAndStore — stored', blob.size, 'bytes for', url);
 			});
 		});
 	});
 }
 
-var pendingCaptures = new Map();
+// ---------------------------------------------------------------------------
+// Navigation triggers
+// ---------------------------------------------------------------------------
 
 chrome.webNavigation.onCompleted.addListener(function(details) {
 	console.log('[thumbnail] onCompleted — frameId:', details.frameId, 'url:', details.url);
@@ -308,7 +531,6 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	chrome.browserAction.enable(details.tabId);
 
-	// We might not have called getAllTiles yet.
 	Tiles.ensureReady().then(function({cache}) {
 		console.log('[thumbnail] cache check — url:', details.url, 'inCache:', cache.includes(details.url), 'cacheSize:', cache.length);
 		if (cache.includes(details.url)) {
@@ -319,20 +541,8 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 				}
 				console.log('[thumbnail] tab state — active:', tab.active, 'tabId:', details.tabId);
 				if (tab.active) {
-					// Capture A: immediate screenshot (page at top, may be incomplete)
-					captureAndStore(details.tabId, tab.windowId, details.url, 'A');
-					// Arm network idle for Capture B (fully rendered replacement)
-					armNetworkIdle(details.tabId, function(elapsed) {
-						if (elapsed <= 5000) {
-							// Page idle within 5s — user likely hasn't scrolled
-							captureAndStore(details.tabId, tab.windowId, details.url, 'B');
-						} else {
-							console.log('[thumbnail] Capture B skipped — elapsed', elapsed + 'ms > 5000ms cutoff, url:', details.url);
-						}
-					});
+					startCaptureSession(details.tabId, tab.windowId, details.url);
 				} else {
-					// Tab not active — captureVisibleTab won't work.
-					// Mark as pending; capture on tabs.onActivated.
 					pendingCaptures.set(details.tabId, {
 						url: details.url,
 						windowId: tab.windowId,
@@ -347,17 +557,13 @@ chrome.tabs.onActivated.addListener(function(activeInfo) {
 	let pending = pendingCaptures.get(activeInfo.tabId);
 	if (pending) {
 		pendingCaptures.delete(activeInfo.tabId);
-		captureAndStore(activeInfo.tabId, pending.windowId, pending.url);
-		armNetworkIdle(activeInfo.tabId, function(elapsed) {
-			if (elapsed <= 5000) {
-				captureAndStore(activeInfo.tabId, pending.windowId, pending.url);
-			}
-		});
+		startCaptureSession(activeInfo.tabId, pending.windowId, pending.url);
 	}
 });
 
 chrome.tabs.onRemoved.addListener(function(tabId) {
 	pendingCaptures.delete(tabId);
+	captureSessions.delete(tabId);
 	disarmNetworkIdle(tabId);
 });
 

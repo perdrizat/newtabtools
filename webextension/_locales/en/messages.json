@@ -219,6 +219,9 @@
 	"tile_pin": {
 		"message": "Pin this site at its current position"
 	},
+	"tile_removethumbnail": {
+		"message": "Remove thumbnail"
+	},
 	"tile_savedthumb_label": {
 		"message": "Saved image:"
 	},

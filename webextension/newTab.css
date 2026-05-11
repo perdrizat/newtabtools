@@ -417,6 +417,11 @@ svg {
 .newtab-control-block {
 	background-position: -48px 0;
 }
+.newtab-control-thumbnail {
+	right: 4px;
+	top: 32px;
+	background-position: -72px 0;
+}
 /* DRAG & DROP
  * This is just a temporary drag element used for dataTransfer.setDragImage()
  * so that we can use custom drag images and elements. It needs an opacity of

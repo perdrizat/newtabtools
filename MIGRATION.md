@@ -29,7 +29,7 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 
 | Feature | Current state | Strategy | Implementation refs (legacy) | Test status |
 |---|---|---|---|---|
-| **Auto-thumbnail of recently visited pages** | **complete** — rewritten to use `captureVisibleTab()` from background; no content scripts injected | ~~Port + rewrite (capture)~~ — `drawWindow` content-script replaced with `captureVisibleTab()` + two-stage capture (immediate + network-idle). `thumbnail.js` deleted, `executeScript` removed. §2.6 resolved. | `background.js` (`captureAndStore`, `armNetworkIdle`, `resizeThumbnail`), `action.js` (capture button) | **Integration + E2E** (`auto-thumbnail.test.ts` — 59 tests: resizeThumbnail, network idle monitor, captureAndStore, onCompleted trigger, tabs.onActivated/onRemoved, action.js capture button, Thumbnails.capture handler, display, save/get, cleanup; `tests/e2e/auto-thumbnail.test.js` — 2 E2E) |
+| **Auto-thumbnail of recently visited pages** | **complete** — rewritten to use `captureVisibleTab()` from background; multi-stage capture (A/B/C) with blankness detection; no content scripts injected | ~~Port + rewrite (capture)~~ — `drawWindow` content-script replaced with `captureVisibleTab()` + multi-stage capture (A immediate, B 500ms, C1 network idle / 5s cap). `thumbnail.js` deleted, `executeScript` removed. §2.6 resolved. | `background.js` (`startCaptureSession`, `captureTab`, `isBlank`, `pickAndStore`, `armNetworkIdle`, `resizeThumbnail`), `action.js` (capture button) | **Integration + E2E** (`auto-thumbnail.test.ts` — 32 tests: behavioral via `vm.runInThisContext` — onCompleted trigger, multi-stage A/B/C1 capture with fake timers, C2 path, network idle, Thumbnails.capture/delete handlers, pickAndStore IDB write, getThumbnails display; `tests/e2e/auto-thumbnail.test.ts` — 2 E2E) |
 | **Arbitrarily large tiles** | **complete** — no migration needed | ~~Port from NTT~~ — emergent property of CSS flexbox layout; works as-is | grid layout in `newTab.js` / `newTab.css` | **E2E** (`tests/e2e/large-tiles.test.js` — 2 E2E tests: flex layout fills grid space with equal-width cells; grid rows × columns structure consistency) |
 | **Configurable columns and unconstrained grid** | **complete** — no migration needed | ~~Port from NTT~~ — simple prefs + DOM loops; works as-is | grid setup in `newTab.js` (rows × columns prefs, layout calculations) | **Integration + E2E** (`layout.test.ts` — optionsOnChange int parse + updateUI input value for rows/columns; `tests/e2e/configurable-grid.test.js` — 2 E2E tests: columns/rows change via settings + persistence) |
 | **Layout micro-tuning** (opacity, title size, margin, spacing) | **complete** — no migration needed | ~~Port from NTT~~ — pref toggles + CSS variables; works as-is | settings panel in `newTab.js` / `newTab.xhtml`; prefs in `prefs.js` | **Integration + E2E** (prefs read/write/validation in `prefs-persistence.test.ts`; UI wiring in `layout.test.ts`; `tests/e2e/layout-tuning.test.js` — 4 E2E tests: opacity/titleSize/spacing/margin via settings) |
@@ -120,7 +120,7 @@ Suggested execution order. The first three slots are the security boundaries ide
 13. Filter cap with subdomain wildcards — ✅ **Done:** `tests/integration/filter-cap.test.ts` — 16 tests in two describe blocks. UI wiring (9): options-filter-set calls Filters.setFilter + Updater.updateGrid + clears inputs + highlights host, plus/minus buttons increment/decrement count + setFilter, minus at zero shows unlimited + disables button, minus returns early when already unlimited, plus from unlimited starts at 0. Filter matching (7): exact host filter at 0 blocks all, filter at 1 allows one, dot-prefix wildcard matches subdomains, dot-prefix matches bare domain, no filter allows all, blocked sites filtered regardless, non-http protocols filtered out.
 14. Recently-closed-tabs row + restore — ✅ **Done:** `tests/integration/recent-tabs.test.ts` — 17 tests extracting `refreshRecent`, `trimRecent`, and `isValidURL` from real `newTab.js`: Prefs.recent guard (2: hides list when false, calls getRecentlyClosed when true), item creation (4: anchor href/class/sessionId, title with URL, title=URL, empty title), skipping (2: incognito tabs, window sessions), favicon (3: valid favIconUrl adds img, falsy skips, javascript: protocol skips), visibility (2: hides when no items, shows when items), onclick (1: calls chrome.sessions.restore), multiple items (1: creates correct count), text fallback (1: uses URL when title empty).
 15. Page background image, hide history-derived tiles — ✅ **Done:** `tests/integration/background-and-history.test.ts` — 9 tests in two describe blocks. Page background rendering (4): applies background URL to document.body + backgroundFake, clears both when no background, disables/enables remove button. Hide history tiles (5): Prefs.history=false skips topSites and returns only pinned, sparse slice characterization, empty array when no pins, history=true calls topSites and fills slots, no duplication of pinned URLs. Page background set/remove already covered by slot 8.
-16. Auto-thumbnail — ✅ most complex, **rewritten**. `tests/integration/auto-thumbnail.test.ts` — 59 tests across 12 describe blocks. New code: resizeThumbnail (6 tests), network idle monitor (9 tests), captureAndStore (5 tests), tabs.onActivated handler (5 tests), tabs.onRemoved cleanup (3 tests), action.js capture button (3 tests), Thumbnails.capture handler (3 tests). Rewritten: webNavigation.onCompleted trigger (12 tests: no executeScript, no staleness check, captureAndStore for active tabs, armNetworkIdle, pendingCaptures for background tabs). Unchanged: getThumbnails display (5), Thumbnails.save/get (4+4), cleanupThumbnails (4). Content script tests and drawWindow characterization removed (thumbnail.js deleted).
+16. Auto-thumbnail — ✅ most complex, **rewritten** with behavioral tests. `tests/integration/auto-thumbnail.test.ts` — 32 tests. Behavioral tests load `background.js` via `vm.runInThisContext` with mocked chrome.* APIs and fake timers: onCompleted trigger (6: active tab, subframe, non-http, cache miss, incognito, inactive deferral), multi-stage capture (4: A+B timing, C1 hard deadline, C1 network idle, network resets), C2 path (2), cleanup (1), network idle monitor (3: timing, reset, disarm), Thumbnails.delete (1), Thumbnails.capture (1), pickAndStore IDB write (1). Source-scanning reserved for wiring only (3: no executeScript, no staleness). Display: getThumbnails (5) via vm. Action.js: 3 source-scan. Remove-thumbnail button: 3 (XHTML + fx-newTab.js source-scan).
 
 **E2E characterization (slots 17–28):**
 
@@ -161,6 +161,27 @@ Extracting pure logic to standalone `lib/` modules is deferred to the MV3 migrat
 ### Phase 4: Stabilization → unblock MV3 stage
 
 When phases 2–3 are substantially done, the pre-requisite gate in [`ROADMAP.md`](ROADMAP.md)'s "Chrome support / MV3 migration" entry will be met. That's the natural moment to start the Firefox MV3 port (stage 2), and after it bakes, Chrome support (stage 3).
+
+### Known test debt: source-scanning → behavioral audit
+
+Several Phase 1 integration test files use **source scanning** (`expect(source).toContain(...)`) for tests that should be **behavioral** (`vm.runInThisContext` + mock APIs + assertions on side effects). Source-scanning tests verify that code *exists* but not that it *works correctly* — logic bugs, wrong execution order, and dead-code paths all pass silently. This gap was discovered when `auto-thumbnail.test.ts` source-scanning tests missed a bug where the 5-second hard deadline finalized without taking a capture.
+
+`auto-thumbnail.test.ts` was rewritten to behavioral tests (2026-05-11). The following test files should be audited for the same pattern — any test that reads source and checks `toContain` for logic that could instead be exercised via `vm.runInThisContext` with mocked globals:
+
+- `background-messages.test.ts` — already behavioral (good reference pattern)
+- `backup-restore.test.ts` — already behavioral
+- `tiles-pin.test.ts` — already behavioral
+- `prefs-persistence.test.ts` — already behavioral
+- `drag-reorder.test.ts` — already behavioral
+- `tile-editing.test.ts` — already behavioral
+- `theme.test.ts` — already behavioral
+- `layout.test.ts` — already behavioral
+- `recent-tabs.test.ts` — already behavioral
+- `filter-cap.test.ts` — already behavioral
+- `tile-url-render.test.ts` — already behavioral
+- `background-and-history.test.ts` — already behavioral
+
+Most test files are already behavioral. The audit is mainly a confirmation pass — flag any remaining source-scanning tests in these files that assert logic rather than wiring.
 
 ## Language and type safety
 

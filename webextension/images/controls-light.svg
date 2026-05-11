@@ -1,7 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="72" height="24">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="96" height="24">
 	<defs>
 		<path id="a" d="M13 4l.055 3L9 11H6l2.969 2.969-4.5 4.5L5.53 19.53l4.5-4.5L13 18v-3l4-4.055L20 11zm18 0h10l-2 2v6l2 2h-4.25v6h-1.5v-6H31l2-2V6zm23.707 1.293l-1.414 1.414L58.586 12l-5.293 5.293 1.414 1.414L60 13.414l5.293 5.293 1.414-1.414L61.414 12l5.293-5.293-1.414-1.414L60 10.586z"/>
+		<path id="cam" d="M3 3L6 6M21 21L19.85 19.82M9.74 4.07C9.84 4.04 9.93 4.02 10.03 4.01C10.15 4 10.27 4 10.51 4H13.53C13.78 4 13.9 4 14.02 4.01C14.61 4.08 15.14 4.41 15.46 4.91C15.53 5 15.58 5.11 15.69 5.33C15.75 5.44 15.77 5.5 15.8 5.55C15.97 5.8 16.23 5.96 16.53 5.99C16.58 6 16.65 6 16.77 6H17.82C18.94 6 19.5 6 19.93 6.22C20.31 6.41 20.61 6.72 20.81 7.09C21.02 7.52 21.02 8.08 21.02 9.2V15.35M19.85 19.82C19.43 20 18.87 20 17.82 20H6.22C5.1 20 4.54 20 4.12 19.78C3.74 19.59 3.43 19.28 3.24 18.91C3.02 18.48 3.02 17.92 3.02 16.8V9.2C3.02 8.08 3.02 7.52 3.24 7.09C3.43 6.72 3.74 6.41 4.12 6.22C4.51 6.02 5.03 6 6 6M19.85 19.82L14.56 14.56M14.56 14.56C14.03 15.42 13.08 16 12 16C10.34 16 9 14.66 9 13C9 11.92 9.58 10.97 10.44 10.44M14.56 14.56L10.44 10.44M10.44 10.44L6 6"/>
 	</defs>
 	<use fill="#fff" stroke="#fff" stroke-width="2" filter="blur(1px)" xlink:href="#a"/>
 	<use fill="#1f364c" xlink:href="#a"/>
+	<use transform="translate(72,0)" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" filter="blur(1px)" xlink:href="#cam"/>
+	<use transform="translate(72,0)" fill="none" stroke="#1f364c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xlink:href="#cam"/>
 </svg>

@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2026-05-11]
 
+### Changed
+
+- Auto-thumbnail rewrite: multi-stage capture (A/B/C) with blankness detection for heavy SPAs like X.com
+- `Thumbnails.capture` handler uses new `startCaptureSession` instead of removed `captureAndStore`
+- Rewrote `auto-thumbnail.test.ts` from source-scanning to behavioral tests (vm.runInThisContext + fake timers)
+
+### Added
+
+- Remove-thumbnail button on tile hover (alongside pin and block controls)
+- `Thumbnails.delete` message handler to remove thumbnails from IDB
+
+### Fixed
+
+- Hard deadline now takes a C capture before finalizing (was finalizing with A+B only)
+- Tab-active guard in `captureTab` prevents capturing wrong tab when user switches mid-session
+- SPA double-`onCompleted` cancels prior session timers to prevent stale hard-deadline firing
+
 ### Removed
 
 - Donation link, "What Changed?" button, and in-app update notice (Phase 3 fork cleanup)

@@ -882,6 +882,9 @@ Site.prototype = {
 		event.preventDefault();
 		if (event.target.classList.contains('newtab-control-block')) {
 			this.block();
+		} else if (event.target.classList.contains('newtab-control-thumbnail')) {
+			chrome.runtime.sendMessage({ name: 'Thumbnails.delete', url: this.link.url });
+			this.thumbnail.style.backgroundImage = '';
 		} else if (this.isPinned) {
 			this.unpin();
 		} else {
