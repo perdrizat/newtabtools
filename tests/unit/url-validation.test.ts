@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 // Inline copy of newTabTools.isValidURL (newTab.js:13-18).
 function isValidURL(url: string): boolean {
 	try {
-		return ['data:', 'ftp:', 'http:', 'https:', 'moz-extension:'].includes(new URL(url).protocol);
+		return ['ftp:', 'http:', 'https:'].includes(new URL(url).protocol);
 	} catch {
 		return false;
 	}
@@ -31,13 +31,13 @@ describe('isValidURL — URL scheme whitelist (newTab.js:13-18)', () => {
 	describe('accepted schemes', () => {
 		it('accepts http:', () => expect(isValidURL('http://example.com')).toBe(true));
 		it('accepts https:', () => expect(isValidURL('https://example.com')).toBe(true));
-		it('accepts data:', () => expect(isValidURL('data:text/html,hi')).toBe(true));
 		it('accepts ftp:', () => expect(isValidURL('ftp://files.example.com')).toBe(true));
-		it('accepts moz-extension:', () => expect(isValidURL('moz-extension://uuid/page.html')).toBe(true));
 	});
 
 	describe('rejected schemes (not in whitelist)', () => {
 		it('rejects javascript:', () => expect(isValidURL('javascript:alert(1)')).toBe(false));
+		it('rejects data:', () => expect(isValidURL('data:text/html,hi')).toBe(false));
+		it('rejects moz-extension:', () => expect(isValidURL('moz-extension://uuid/page.html')).toBe(false));
 		it('rejects chrome:', () => expect(isValidURL('chrome://settings')).toBe(false));
 		it('rejects file:', () => expect(isValidURL('file:///etc/passwd')).toBe(false));
 		it('rejects blob:', () => expect(isValidURL('blob:http://example.com/uuid')).toBe(false));

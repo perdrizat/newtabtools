@@ -49,7 +49,7 @@ What it leaves open (three options for the takeover):
 2. **Cherry-pick + reference rewrite.** Use Activity Stream as a *visual and behavioral reference* (license-compatible: both MPL-2.0). Reimplement the parity features cleanly in WebExtension scope, port the salvageable parts of NTT for the gap features, drop the rest.
 3. **Lean rewrite.** Start fresh from a clean WebExtension skeleton; reimplement parity features minimally and the gap features fully. Smallest codebase; most work upfront.
 
-This decision is open and should be made before serious code work begins. Option 2 is probably the strongest: it preserves the parts of NTT that solve real problems (the auto-thumbnail pipeline, the filter logic, the export format), discards the parts Firefox now handles, and keeps the codebase small enough for a single maintainer.
+**Decided 2026-05-03: option 2.** It preserves the parts of NTT that solve real problems (the auto-thumbnail pipeline, the filter logic, the export format), discards the parts Firefox now handles, and keeps the codebase small enough for a single maintainer.
 
 ## Feature scope (the keep/match/drop matrix)
 
@@ -59,7 +59,7 @@ These are the reasons New Tab Tools exists in 2026.
 
 | Feature | Native status | Notes |
 |---|---|---|
-| **Auto-thumbnail of recently visited pages** | **missing** | NTT does this via `CanvasRenderingContext2D.drawWindow()` running in a content script — a non-standard, Firefox-only Canvas API with restricted access in modern Firefox. It still works on simple pages but captures only ~50% in practice; CSP, cross-origin restrictions, sites blocking content-script execution, and timing issues all defeat it. Modernization target: replace with `browser.tabs.captureTab()` triggered by `browser.webNavigation.onCompleted`, with results cached by URL in `browser.storage.local`. **This is the flagship gap feature** — Firefox's per-tile custom image takes a static upload, never auto-captures what the page actually looks like when visited. |
+| **Auto-thumbnail of recently visited pages** | **missing** | **Rewritten.** The legacy `drawWindow` content script has been replaced with `captureVisibleTab()` called from the background page — no content scripts injected into visited pages (§2.6 resolved). Uses multi-stage capture: A (immediate), B (500ms for SPA first paint), C (network idle, capped at 2s). Blankness detection via canvas pixel sampling picks the best non-blank capture. Works on heavy SPAs like X.com. **This is the flagship gap feature** — Firefox's per-tile custom image takes a static upload, never auto-captures what the page actually looks like when visited. |
 | **Arbitrarily large tiles** | **missing** | Native Firefox tiles are capped at a small thumbnail size, and reducing rows from 4 to 1 doesn't make individual tiles bigger — the layout reserves the unused space rather than reflowing. NTT's grid scales tile size to fill the viewport: a 2×2 grid in a wide browser window produces tiles that are genuinely large. This is one of the most visceral "I can finally *see* my pinned sites" benefits when switching from native. Note: this is an emergent property of an unconstrained grid, not a separate "tile size" slider — it follows directly from "Configurable columns" + the grid being free to use available space. |
 | **Configurable columns and unconstrained grid** | **missing** | Native does rows (1-4) but column count scales responsively to window width with no user override, and tile size stays small regardless of how few tiles are shown. NTT lets users pick exact rows × columns and the grid fills the available viewport, which is what makes large tiles possible. |
 | **Layout micro-tuning** | **missing** | Foreground opacity slider, tile title size (Small/Medium/Large), per-side margin (Small/Medium/Large), grid spacing. None exposed in native Firefox; never will be (Mozilla optimizes for one default). |
@@ -90,10 +90,10 @@ These exist in native Firefox. NTT must implement them or installing NTT means l
 
 | Feature | Why drop |
 |---|---|
-| Donation link to the previous maintainer | Already changed to an alert clarifying that no donations are currently accepted (per CHANGELOG); permanent removal once the fork has its own donation story (or none). |
-| In-app update notice ("New Tab Tools has been updated to version X. New Tab Tools is free, but your donation is appreciated!") | AMO handles update notifications natively. The in-app notice predates that and is no longer pulling weight. Strip the modal and its prefs (`versionLastUpdate`, `versionLastAck`). |
-| Beta channel link, "What Changed?" link to AMO version-history page | The beta channel was removed by the previous maintainer. The version-history link points to Geoff's listing; will be irrelevant under the fork's listing. Re-evaluate after AMO publication path is decided. |
-| Capture-and-save-current-thumbnail button (manual UI for the broken thumbnail capture) | Once auto-thumbnail is revived via `tabs.captureTab`, this manual button is redundant. Keep until the auto path is proven; drop after. |
+| ~~Donation link to the previous maintainer~~ | **Deleted.** Settings-panel fieldset, alert handler, CSS, and locale strings removed. |
+| ~~In-app update notice~~ | **Deleted.** Banner, version-tracking prefs (`versionLastUpdate`, `versionLastAck`), locale strings, and `background.js` version-update trigger all removed. |
+| ~~Beta channel link, "What Changed?" link~~ | **Deleted** (removed as part of update-notice cleanup). |
+| Capture-and-save-current-thumbnail button | **Kept.** Now uses the same `captureVisibleTab` path as auto-capture. Useful for manual re-capture of individual tiles. |
 
 ### Out of scope (won't add)
 

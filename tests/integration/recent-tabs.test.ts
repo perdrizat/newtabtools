@@ -238,6 +238,17 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		expect(anchor.appendChild).toHaveBeenCalledTimes(1);
 	});
 
+	it('does not add favicon when favIconUrl is a data: URI', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'data:image/png;base64,abc', incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const anchor = appendedElements[0];
+		// Only text node appended — no favicon img
+		expect(anchor.appendChild).toHaveBeenCalledTimes(1);
+	});
+
 	// ==================== visibility ====================
 
 	it('hides recent list when no items added', () => {

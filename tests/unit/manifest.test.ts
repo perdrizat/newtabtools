@@ -56,6 +56,13 @@ describe('manifest.json — security configuration', () => {
 		});
 	});
 
+	describe('Minimum version', () => {
+		it('requires at least Firefox ESR 128', () => {
+			const minVersion = parseFloat(manifest.applications.gecko.strict_min_version);
+			expect(minVersion).toBeGreaterThanOrEqual(128);
+		});
+	});
+
 	describe('Permissions (auto-thumbnail rewrite)', () => {
 		it('includes webRequest permission for network idle detection', () => {
 			expect(manifest.permissions).toContain('webRequest');

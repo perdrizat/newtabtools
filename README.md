@@ -9,7 +9,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 > Firefox's built-in new tab page covers the basics: drag-to-reorder shortcuts, custom titles, a custom uploaded image per tile, and (since version 138) custom wallpapers. NTT replaces that page entirely and adds the controls and visual cues the default doesn't expose.
 
 - **Tiles you can actually see.** Firefox's built-in shortcuts stay small no matter how few you choose, reserving the unused space rather than reflowing. NTT lets you pick a fixed grid — 2 × 3, 4 × 6, whatever fits — and the tiles scale to fill the viewport. Big enough to read titles and recognize pages at a glance.
-- **Tiles that look like the sites they link to.** NTT auto-captures a thumbnail of each top site the way it actually appeared the last time you visited, and uses that as the tile image. Firefox's native shortcuts only accept a manual image upload, which never reflects the live page. *(This feature relied on a Firefox API Mozilla recently removed; restoring it on top of modern WebExtension APIs is a flagship goal of the takeover — see [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md).)*
+- **Tiles that look like the sites they link to.** NTT auto-captures a thumbnail of each top site the way it actually appeared the last time you visited, and uses that as the tile image. Firefox's native shortcuts only accept a manual image upload, which never reflects the live page. The capture uses a multi-stage approach (immediate, 500ms, and 2s network-idle) with blankness detection to handle heavy SPAs like X.com.
 - **Pixel-level layout control.** Pick exact rows and columns, tune foreground opacity, tile title size, page margins, and grid spacing — then lock the grid so you don't reorder it by accident. None of these knobs are exposed in Firefox's native page.
 - **Top sites that aren't dominated by one domain.** Cap how many tiles a single host can take (with subdomain wildcards like `.example.com`), hide auto-generated history tiles entirely, or pull pin suggestions from your open tabs, bookmarks, and history via autocomplete. Native Firefox enforces a hard "one tile per domain" rule and offers no autocomplete in its Add Shortcut form.
 - **Per-tile personalization.** Set a custom background color per tile (native supports a custom *image* but not a *color*), edit titles and URLs, manually upload a thumbnail when auto-capture isn't an option (login walls, dark pages, sites you haven't visited yet).
@@ -17,7 +17,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 ## What's in this repo
 
-- `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR. Functionally unchanged from the upstream's last release.
+- `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — log of architectural decisions, both taken and deferred. Records the chosen codebase strategy (cherry-pick + reference rewrite) and the deferral of Chrome support / MV3 migration until Firefox-only stabilization is finished.
 - [`MIGRATION.md`](MIGRATION.md) — the working migration ledger for the cherry-pick + reference rewrite. Per-feature table with current state, strategy, implementation refs, and test status; plus the suggested phasing.
@@ -33,16 +33,14 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - [x] 3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
 - [x] 4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
 - [x] 5. Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md) for the rationale, [`MIGRATION.md`](MIGRATION.md) for the per-feature plan).
-- [x] 6. Security & tooling: hardening (cheap wins) & tooling prep for type checking.
-- [x] 7. Test-first characterization sweep: built a comprehensive safety net before any code is rewritten.
+- [x] 6. Security & tooling: all 7 security findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved (§2.1 stored XSS, §2.2 vendored zip.js, §2.3 CSP, §2.4 sender validation, §2.5 pref filtering, §2.6 `executeScript` removal, §2.7 CI audit). TypeScript tooling in place.
+- [x] 7. Test-first characterization sweep: 313 integration + 38 E2E tests across all 22 features. All E2E tests converted to TypeScript.
+- [x] 8. Migration phases 2–3 complete. Auto-thumbnail rewritten (`drawWindow` content script → `captureVisibleTab` multi-stage capture from background). Drop sweep done (donation link, update notice, version-tracking prefs removed).
 
 **Outstanding (in rough order):**
-- [ ] 8. Walk the first migration slice end-to-end to establish the pattern (see [`MIGRATION.md`](MIGRATION.md) phase 2).
 - [ ] 9. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
-- [ ] 10. First republished release on AMO, functionally identical to the upstream's last release. **Security preconditions** (per the [pre-takeover review](audit/2026-05-04-security-review.md)): threat-model and data-classification doc landed (findings §2.1 and §2.2 are already fixed). These gate the republish — proving the publish pipeline doesn't waive them.
+- [ ] 10. First republished release on AMO. All security preconditions from the [pre-takeover review](audit/2026-05-04-security-review.md) are met (7/7 findings fixed).
 - [ ] 11. Open the issue tracker for new bug reports.
-
-Until at least step 8 is done, this repository is not ready for general use and will not be published to AMO as an installable extension.
 
 ## For developers
  

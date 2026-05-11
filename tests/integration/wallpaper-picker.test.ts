@@ -8,47 +8,176 @@
  * The wallpaper picker fetches Mozilla's curated wallpapers from Remote
  * Settings, displays them in a category-grouped grid, and persists the
  * selection as a `backgroundUrl` pref (CDN URL string).
+ *
+ * Fetch logic is tested behaviorally by extracting `fetchFirefoxWallpapers`
+ * from the real newTab.js and running it with a mocked `fetch`.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
-const MOZILLA_API_URL = 'https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/newtab-wallpapers-v2/records';
 const MOZILLA_CDN_BASE = 'https://firefox-settings-attachments.cdn.mozilla.net/';
 
-describe('Wallpaper fetch logic — newTab.js', () => {
-	let source: string;
+function extractMethod(source: string, methodName: string): string {
+	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
+	const match = source.match(sigPattern);
+	if (!match || match.index === undefined) {throw new Error(`${methodName} not found`);}
+	let depth = 0;
+	const start = match.index;
+	let i = source.indexOf('{', start);
+	for (; i < source.length; i++) {
+		if (source[i] === '{') {depth++;}
+		else if (source[i] === '}') { depth--; if (depth === 0) {return source.substring(start, i + 1);} }
+	}
+	throw new Error('Unbalanced braces');
+}
+
+// ===========================================================================
+// Wallpaper fetch logic — behavioral (vm.runInThisContext)
+// ===========================================================================
+
+describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
+	let harness: { fetchFirefoxWallpapers: () => Promise<any[]>; _wallpaperCache: any };
 
 	beforeAll(() => {
-		source = fs.readFileSync(NEWTAB_PATH, 'utf8');
+		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
+		const method = extractMethod(source, 'fetchFirefoxWallpapers');
+
+		const code = `var newTabTools = { ${method}, _wallpaperCache: null };`;
+		vm.runInThisContext(code, { filename: 'wallpaper-harness.js' });
+		harness = (globalThis as any).newTabTools;
 	});
 
-	it('defines fetchFirefoxWallpapers as an async function', () => {
-		expect(source).toMatch(/async\s+fetchFirefoxWallpapers\s*\(/);
+	beforeEach(() => {
+		harness._wallpaperCache = null;
 	});
 
-	it('fetches from the Mozilla Remote Settings endpoint', () => {
-		expect(source).toContain(MOZILLA_API_URL);
+	it('returns wallpapers with imageUrl assembled from CDN base + attachment.location', async () => {
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({
+				data: [
+					{
+						title: 'Beach',
+						theme: 'light',
+						category: 'landscape',
+						attachment: { location: 'main-workspace/beach.avif' },
+						attribution: 'Photo by Someone',
+					},
+				],
+			}),
+		});
+
+		const result = await harness.fetchFirefoxWallpapers();
+		expect(result).toHaveLength(1);
+		expect(result[0]).toEqual({
+			title: 'Beach',
+			theme: 'light',
+			category: 'landscape',
+			imageUrl: MOZILLA_CDN_BASE + 'main-workspace/beach.avif',
+			attribution: 'Photo by Someone',
+		});
 	});
 
-	it('uses the Mozilla CDN base URL for image assembly', () => {
-		expect(source).toContain(MOZILLA_CDN_BASE);
+	it('filters out items with category "firefox"', async () => {
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({
+				data: [
+					{
+						title: 'Firefox Branded',
+						theme: 'dark',
+						category: 'firefox',
+						attachment: { location: 'firefox-branded.avif' },
+					},
+					{
+						title: 'Mountain',
+						theme: 'light',
+						category: 'nature',
+						attachment: { location: 'mountain.avif' },
+					},
+				],
+			}),
+		});
+
+		const result = await harness.fetchFirefoxWallpapers();
+		expect(result).toHaveLength(1);
+		expect(result[0].title).toBe('Mountain');
 	});
 
-	it('filters out firefox category items and records without attachments', () => {
-		expect(source).toMatch(/category\s*!==?\s*['"]firefox['"]/);
-		expect(source).toContain('item.attachment');
+	it('filters out items without attachment', async () => {
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({
+				data: [
+					{ title: 'No Attachment', theme: 'dark', category: 'abstract' },
+					{
+						title: 'Valid',
+						theme: 'light',
+						category: 'abstract',
+						attachment: { location: 'valid.avif' },
+					},
+				],
+			}),
+		});
+
+		const result = await harness.fetchFirefoxWallpapers();
+		expect(result).toHaveLength(1);
+		expect(result[0].title).toBe('Valid');
 	});
 
-	it('assembles full image URL from CDN base + attachment.location', () => {
-		expect(source).toContain('attachment.location');
+	it('filters out items where attachment has no location', async () => {
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({
+				data: [
+					{
+						title: 'No Location',
+						theme: 'dark',
+						category: 'abstract',
+						attachment: {},
+					},
+					{
+						title: 'Has Location',
+						theme: 'light',
+						category: 'abstract',
+						attachment: { location: 'has-loc.avif' },
+					},
+				],
+			}),
+		});
+
+		const result = await harness.fetchFirefoxWallpapers();
+		expect(result).toHaveLength(1);
+		expect(result[0].title).toBe('Has Location');
+	});
+
+	it('caches results and returns cache on subsequent calls', async () => {
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({
+				data: [
+					{
+						title: 'Cached',
+						theme: 'light',
+						category: 'nature',
+						attachment: { location: 'cached.avif' },
+					},
+				],
+			}),
+		});
+
+		const first = await harness.fetchFirefoxWallpapers();
+		const second = await harness.fetchFirefoxWallpapers();
+		expect(first).toBe(second); // same reference
+		expect((globalThis as any).fetch).toHaveBeenCalledTimes(1); // only one fetch
 	});
 });
+
+// ===========================================================================
+// Wallpaper picker UI — newTab.xhtml (wiring)
+// ===========================================================================
 
 describe('Wallpaper picker UI — newTab.xhtml', () => {
 	let xhtml: string;
@@ -84,6 +213,10 @@ describe('Wallpaper picker UI — newTab.xhtml', () => {
 	});
 });
 
+// ===========================================================================
+// Wallpaper picker CSS — newTab.css (wiring)
+// ===========================================================================
+
 describe('Wallpaper picker CSS — newTab.css', () => {
 	let css: string;
 
@@ -106,6 +239,10 @@ describe('Wallpaper picker CSS — newTab.css', () => {
 		expect(css).toContain('.wallpaper-thumb[selected]');
 	});
 });
+
+// ===========================================================================
+// backgroundUrl pref — prefs.js (wiring)
+// ===========================================================================
 
 describe('backgroundUrl pref — prefs.js', () => {
 	let prefsSource: string;

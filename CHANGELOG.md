@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-11b]
+
+### Added
+
+- Post-takeover code review and assessment at `audit/2026-05-11-code-review.md`
+
+### Fixed
+
+- Export/Import `sendResponse()` invoked immediately instead of passed as callback (§5.1)
+- `isValidURL` allow-list tightened from 5 schemes to 3 (`http:`, `https:`, `ftp:`) — aligns with restore/render boundaries (§5.2)
+- `strict_min_version` bumped from 91.0 to 128.0 (current ESR) (§5.3)
+
+### Changed
+
+- Removed ~25 debug `console.log`/`console.warn` calls from `background.js` (§5.5)
+- Pinned all devDependency versions to exact (no `^` ranges) (§5.4)
+- `MIGRATION.md` marked complete — fixed stale entries (C1→C, 5s→2s, .test.js→.test.ts), added wallpaper picker and remove-thumbnail rows, updated capture-button status
+
+### Security
+
+- `npm audit fix` — resolved `fast-uri` path traversal via percent-encoded dot segments
+
 ## [2026-05-11]
 
 ### Changed
@@ -13,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Auto-thumbnail rewrite: multi-stage capture (A/B/C) with blankness detection for heavy SPAs like X.com
 - `Thumbnails.capture` handler uses new `startCaptureSession` instead of removed `captureAndStore`
 - Rewrote `auto-thumbnail.test.ts` from source-scanning to behavioral tests (vm.runInThisContext + fake timers)
+- Rewrote `wallpaper-picker.test.ts` fetch logic from source-scanning to behavioral tests
+- Completed source-scanning → behavioral audit across all 14 integration test files
 
 ### Added
 

@@ -455,36 +455,30 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 	// ======================== EXPORT / IMPORT HANDLERS ========================
 
 	describe('Export/Import handlers', () => {
-		// BUG characterization: lines 199 and 202 of background.js read
-		//   makeZip().then(sendResponse())
-		//   readZip(message.file).then(sendResponse())
-		// sendResponse() is *invoked* immediately (no args), and its return
-		// value is passed to .then(). The intended code was almost certainly
-		//   .then(sendResponse)      — pass the function as a callback.
-		// These tests pin the current (buggy) behaviour.
-
 		beforeEach(() => {
 			mockMakeZip.mockClear();
 			mockReadZip.mockClear();
 		});
 
-		it('Export:backup — calls sendResponse immediately with no args (known bug)', () => {
+		it('Export:backup — calls sendResponse with makeZip result', async () => {
+			const zipResult = { blob: 'fake-zip-blob' };
+			mockMakeZip.mockResolvedValueOnce(zipResult);
 			const result = listener({ name: 'Export:backup' }, validSender, sendResponse);
 			expect(result).toBe(true);
-			expect(sendResponse).toHaveBeenCalledTimes(1);
-			expect(sendResponse).toHaveBeenCalledWith();
 			expect(mockMakeZip).toHaveBeenCalled();
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(zipResult));
 		});
 
-		it('Import:restore — calls sendResponse immediately with no args (known bug)', () => {
+		it('Import:restore — calls sendResponse with readZip result', async () => {
+			const restoreResult = { tiles: 3 };
+			mockReadZip.mockResolvedValueOnce(restoreResult);
 			const result = listener(
 				{ name: 'Import:restore', file: 'fake-zip-data' },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			expect(sendResponse).toHaveBeenCalledTimes(1);
-			expect(sendResponse).toHaveBeenCalledWith();
 			expect(mockReadZip).toHaveBeenCalledWith('fake-zip-data');
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(restoreResult));
 		});
 	});
 

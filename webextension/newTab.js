@@ -12,7 +12,7 @@ var newTabTools = {
 	},
 	isValidURL(url) {
 		try {
-			return ['data:', 'ftp:', 'http:', 'https:', 'moz-extension:'].includes(new URL(url).protocol);
+			return ['ftp:', 'http:', 'https:'].includes(new URL(url).protocol);
 		} catch (ex) {
 			return false;
 		}

@@ -203,10 +203,10 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return false;
 
 	case 'Export:backup':
-		makeZip().then(sendResponse());
+		makeZip().then(sendResponse);
 		return true;
 	case 'Import:restore':
-		readZip(message.file).then(sendResponse());
+		readZip(message.file).then(sendResponse);
 		return true;
 	}
 	return false;
@@ -220,7 +220,6 @@ var networkIdleWatchers = new Map();
 
 function armNetworkIdle(tabId, callback) {
 	disarmNetworkIdle(tabId);
-	console.log('[thumbnail] armNetworkIdle — tabId:', tabId);
 	let watcher = {
 		startTime: Date.now(),
 		callback: callback,
@@ -228,7 +227,6 @@ function armNetworkIdle(tabId, callback) {
 		timer: setTimeout(function() {
 			let elapsed = Date.now() - watcher.startTime;
 			networkIdleWatchers.delete(tabId);
-			console.log('[thumbnail] networkIdle fired — tabId:', tabId, 'elapsed:', elapsed + 'ms', 'resets:', watcher.resetCount);
 			callback(elapsed);
 		}, 2000),
 	};
@@ -251,7 +249,6 @@ function resetNetworkIdleTimer(details) {
 		watcher.timer = setTimeout(function() {
 			let elapsed = Date.now() - watcher.startTime;
 			networkIdleWatchers.delete(details.tabId);
-			console.log('[thumbnail] networkIdle fired — tabId:', details.tabId, 'elapsed:', elapsed + 'ms', 'resets:', watcher.resetCount);
 			watcher.callback(elapsed);
 		}, 2000);
 	}
@@ -290,18 +287,14 @@ function resizeThumbnail(dataURL, targetWidth) {
 function captureTab(tabId, windowId, label, callback) {
 	chrome.tabs.get(tabId, function(tab) {
 		if (chrome.runtime.lastError || !tab || !tab.active) {
-			console.log('[thumbnail]', label, '— skipped, tab', tabId, 'no longer active');
 			callback(null);
 			return;
 		}
 		chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
 			if (!dataURL) {
-				console.warn('[thumbnail]', label, '— captureVisibleTab returned empty',
-					chrome.runtime.lastError ? chrome.runtime.lastError.message : '');
 				callback(null);
 				return;
 			}
-			console.log('[thumbnail]', label, '— got dataURL, length:', dataURL.length);
 			callback(dataURL);
 		});
 	});
@@ -339,7 +332,6 @@ function isBlank(dataURL) {
 			}
 
 			let ratio = matchCount / totalPixels;
-			console.log('[thumbnail] isBlank — dominant: rgb(' + dr + ',' + dg + ',' + db + '), match:', (ratio * 100).toFixed(1) + '%');
 			resolve(ratio > 0.97);
 		};
 		img.onerror = function() {
@@ -375,7 +367,6 @@ function startCaptureSession(tabId, windowId, url) {
 	let oldSession = captureSessions.get(tabId);
 	if (oldSession) {
 		oldSession.timers.forEach(function(t) { clearTimeout(t); });
-		console.log('[thumbnail] startCaptureSession — cancelled', oldSession.timers.length, 'timers from prior session for tabId:', tabId);
 	}
 	captureSessions.delete(tabId);
 	disarmNetworkIdle(tabId);
@@ -388,13 +379,10 @@ function startCaptureSession(tabId, windowId, url) {
 	};
 	captureSessions.set(tabId, session);
 
-	console.log('[thumbnail] startCaptureSession — tabId:', tabId, 'url:', url);
-
 	// Capture A: immediate.
 	captureTab(tabId, windowId, 'A', function(dataURL) {
 		if (dataURL && captureSessions.get(tabId) === session) {
 			session.captures.push({label: 'A', dataURL: dataURL});
-			console.log('[thumbnail] A — stored in session for', url);
 		}
 	});
 
@@ -406,7 +394,6 @@ function startCaptureSession(tabId, windowId, url) {
 		captureTab(tabId, windowId, 'B', function(dataURL) {
 			if (dataURL && captureSessions.get(tabId) === session) {
 				session.captures.push({label: 'B', dataURL: dataURL});
-				console.log('[thumbnail] B — stored in session for', url);
 			}
 		});
 	}, 500);
@@ -421,11 +408,9 @@ function startCaptureSession(tabId, windowId, url) {
 		if (!finalized && captureSessions.get(tabId) === session) {
 			finalized = true;
 			disarmNetworkIdle(tabId);
-			console.log('[thumbnail] C — hard deadline 2000ms, capturing + finalizing for', url);
 			captureTab(tabId, windowId, 'C', function(dataURL) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
-					console.log('[thumbnail] C — stored in session for', url);
 				}
 				pickAndStore(tabId);
 			});
@@ -442,7 +427,6 @@ function startCaptureSession(tabId, windowId, url) {
 			captureTab(tabId, windowId, 'C', function(dataURL) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
-					console.log('[thumbnail] C — stored in session for', url);
 				}
 				if (!finalized && captureSessions.get(tabId) === session) {
 					finalized = true;
@@ -452,7 +436,6 @@ function startCaptureSession(tabId, windowId, url) {
 			});
 		} else {
 			// Network idle after 2s — skip C (user may have scrolled), finalize with A/B.
-			console.log('[thumbnail] C — skipped, elapsed', elapsed + 'ms > 2000ms cutoff, url:', url);
 			if (!finalized && captureSessions.get(tabId) === session) {
 				finalized = true;
 				clearTimeout(hardDeadline);
@@ -469,7 +452,6 @@ function startCaptureSession(tabId, windowId, url) {
 function pickAndStore(tabId) {
 	let session = captureSessions.get(tabId);
 	if (!session || session.captures.length === 0) {
-		console.log('[thumbnail] pickAndStore — no captures for tabId:', tabId);
 		captureSessions.delete(tabId);
 		return;
 	}
@@ -480,8 +462,6 @@ function pickAndStore(tabId) {
 
 	// Clear any remaining timers.
 	session.timers.forEach(function(t) { clearTimeout(t); });
-
-	console.log('[thumbnail] pickAndStore — evaluating', captures.length, 'captures for', url);
 
 	// Check blankness of all captures in parallel, then pick the best.
 	Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })).then(function(blankResults) {
@@ -495,9 +475,6 @@ function pickAndStore(tabId) {
 		}
 
 		let best = captures[bestIndex];
-		console.log('[thumbnail] pickAndStore — selected', best.label,
-			'(blank:', blankResults[bestIndex] + ') from', captures.map(function(c, i) { return c.label + (blankResults[i] ? '*' : ''); }).join(','),
-			'for', url);
 
 		chrome.storage.local.get({'thumbnailSize': 600}, function(prefs) {
 			resizeThumbnail(best.dataURL, prefs.thumbnailSize).then(function(blob) {
@@ -508,7 +485,6 @@ function pickAndStore(tabId) {
 					stored: today,
 					used: today,
 				});
-				console.log('[thumbnail] pickAndStore — stored', blob.size, 'bytes for', url);
 			});
 		});
 	});
@@ -519,7 +495,6 @@ function pickAndStore(tabId) {
 // ---------------------------------------------------------------------------
 
 chrome.webNavigation.onCompleted.addListener(function(details) {
-	console.log('[thumbnail] onCompleted — frameId:', details.frameId, 'url:', details.url);
 	if (details.frameId !== 0) {
 		return;
 	}
@@ -532,14 +507,11 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 	chrome.browserAction.enable(details.tabId);
 
 	Tiles.ensureReady().then(function({cache}) {
-		console.log('[thumbnail] cache check — url:', details.url, 'inCache:', cache.includes(details.url), 'cacheSize:', cache.length);
 		if (cache.includes(details.url)) {
 			chrome.tabs.get(details.tabId, function(tab) {
 				if (tab.incognito) {
-					console.log('[thumbnail] skipped — incognito tab');
 					return;
 				}
-				console.log('[thumbnail] tab state — active:', tab.active, 'tabId:', details.tabId);
 				if (tab.active) {
 					startCaptureSession(details.tabId, tab.windowId, details.url);
 				} else {
