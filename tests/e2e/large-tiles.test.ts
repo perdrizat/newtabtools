@@ -1,14 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -60,30 +61,31 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 			});
 
 			expect(layout).not.toBeNull();
+			const l = layout!;
 
 			// Grid should have substantial dimensions (min-width: 600px, min-height: 400px in CSS).
-			expect(layout.gridWidth).toBeGreaterThanOrEqual(600);
-			expect(layout.gridHeight).toBeGreaterThanOrEqual(400);
+			expect(l.gridWidth).toBeGreaterThanOrEqual(600);
+			expect(l.gridHeight).toBeGreaterThanOrEqual(400);
 
 			// Cells should be large — this is the "arbitrarily large tiles" feature.
 			// With default 3 columns, each cell should be at least ~180px wide.
-			for (const w of layout.cellWidths) {
+			for (const w of l.cellWidths) {
 				expect(w).toBeGreaterThan(100);
 			}
-			for (const h of layout.cellHeights) {
+			for (const h of l.cellHeights) {
 				expect(h).toBeGreaterThan(50);
 			}
 
 			// All cells in the row should be approximately equal width (flex: 1).
 			// Allow 2px tolerance for subpixel rounding.
-			const maxW = Math.max(...layout.cellWidths);
-			const minW = Math.min(...layout.cellWidths);
+			const maxW = Math.max(...l.cellWidths);
+			const minW = Math.min(...l.cellWidths);
 			expect(maxW - minW).toBeLessThanOrEqual(2);
 
 			// Cells should fill the row width (total cell width + margins ≈ row width).
 			// Margins are 5px per cell gap (CSS default spacing), so allow generous tolerance.
-			const marginBudget = (layout.cellsPerRow - 1) * 25; // up to 25px per gap at large spacing
-			expect(layout.totalCellWidth).toBeGreaterThan(layout.rowWidth - marginBudget);
+			const marginBudget = (l.cellsPerRow - 1) * 25; // up to 25px per gap at large spacing
+			expect(l.totalCellWidth).toBeGreaterThan(l.rowWidth - marginBudget);
 		} catch (e) {
 			await captureFailure(page, 'large-tiles-flex');
 			throw e;
@@ -114,11 +116,12 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 			});
 
 			expect(gridShape).not.toBeNull();
+			const gs = gridShape!;
 			// Default Prefs: rows=3, columns=3 (or whatever the extension default is).
 			// Just verify the structure is consistent: total = rows × columns.
-			expect(gridShape.rows).toBeGreaterThan(0);
-			expect(gridShape.columns).toBeGreaterThan(0);
-			expect(gridShape.totalCells).toBe(gridShape.rows * gridShape.columns);
+			expect(gs.rows).toBeGreaterThan(0);
+			expect(gs.columns).toBeGreaterThan(0);
+			expect(gs.totalCells).toBe(gs.rows * gs.columns);
 		} catch (e) {
 			await captureFailure(page, 'large-tiles-grid-shape');
 			throw e;

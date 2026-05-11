@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -7,13 +8,13 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const TEST_URL_A = 'https://drag-a.example.com/';
 const TEST_URL_B = 'https://drag-b.example.com/';
 
 describe('E2E: Drag-reorder tiles (slot 27)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -66,7 +67,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 				(a, b) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const urls = g.sites.filter(s => s).map(s => s.url);
+					const urls = g.sites.filter((s: any) => s).map((s: any) => s.url);
 					return urls.includes(a) && urls.includes(b);
 				},
 				[TEST_URL_A, TEST_URL_B],
@@ -76,8 +77,8 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			// Record initial positions.
 			const initialPositions = await page.evaluate((a, b) => {
 				const g = window.Grid;
-				const posA = g.sites.findIndex(s => s && s.url === a);
-				const posB = g.sites.findIndex(s => s && s.url === b);
+				const posA = g.sites.findIndex((s: any) => s && s.url === a);
+				const posB = g.sites.findIndex((s: any) => s && s.url === b);
 				return { posA, posB };
 			}, TEST_URL_A, TEST_URL_B);
 
@@ -125,14 +126,14 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 				(a, b) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const posA = g.sites.findIndex(s => s && s.url === a);
-					const posB = g.sites.findIndex(s => s && s.url === b);
+					const posA = g.sites.findIndex((s: any) => s && s.url === a);
+					const posB = g.sites.findIndex((s: any) => s && s.url === b);
 					if (posA === -1 || posB === -1) {return false;}
 					return { posA, posB };
 				},
 				[TEST_URL_A, TEST_URL_B],
 				{ timeout: 10_000, message: 'Tiles not found after reload' }
-			);
+			) as { posA: number; posB: number };
 
 			// The tiles should have swapped: A should now be after B.
 			expect(newPositions.posA).toBeGreaterThan(newPositions.posB);

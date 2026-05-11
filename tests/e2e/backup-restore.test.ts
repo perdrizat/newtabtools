@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,7 +10,7 @@ import {
 	waitForCondition,
 	captureFailure,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * { name: string, data: Buffer | string } entries.
  * Returns a Node.js Buffer containing the complete ZIP.
  */
-function buildStoredZip(entries) {
+function buildStoredZip(entries: {name: string, data: Buffer | string}[]) {
 	const localHeaders = [];
 	const centralRecords = [];
 	let offset = 0;
@@ -98,21 +99,21 @@ function buildStoredZip(entries) {
 }
 
 /** CRC-32 (ISO 3309) — tiny table-driven implementation, no dependency. */
-function crc32(buf) {
-	let table = crc32._table;
-	if (!table) {
-		table = crc32._table = new Uint32Array(256);
+let crc32Table: Uint32Array | undefined;
+function crc32(buf: Buffer): number {
+	if (!crc32Table) {
+		crc32Table = new Uint32Array(256);
 		for (let i = 0; i < 256; i++) {
 			let c = i;
 			for (let j = 0; j < 8; j++) {
 				c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
 			}
-			table[i] = c;
+			crc32Table[i] = c;
 		}
 	}
 	let crc = 0xFFFFFFFF;
 	for (let i = 0; i < buf.length; i++) {
-		crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+		crc = crc32Table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
 	}
 	return (crc ^ 0xFFFFFFFF) >>> 0;
 }
@@ -133,8 +134,8 @@ const RESTORE_PREFS = { theme: 'dark', rows: 3 };
 // ---------------------------------------------------------------------------
 
 describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
-	let browser;
-	let zipFixturePath;
+	let browser: Browser;
+	let zipFixturePath: string;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -178,14 +179,14 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 			await new Promise(r => setTimeout(r, 500));
 
 			// 3. Upload the zip fixture into the file input
-			const fileInput = await page.$('#options-restore-file');
+			const fileInput = await page.$('#options-restore-file') as import('puppeteer-core').ElementHandle<HTMLInputElement> | null;
 			expect(fileInput).not.toBeNull();
-			await fileInput.uploadFile(zipFixturePath);
+			await fileInput!.uploadFile(zipFixturePath);
 
 			// 4. Wait for the restore button to become enabled (change event)
 			await waitForCondition(
 				page,
-				() => !document.getElementById('options-restore')?.disabled,
+				() => !(document.getElementById('options-restore') as HTMLInputElement | null)?.disabled,
 				[],
 				{ timeout: 5000, message: 'restore button did not enable after file upload' },
 			);
@@ -204,7 +205,7 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 					if (!g || !g.sites) {
 						return false;
 					}
-					return g.sites.some(s => s && s.url === expectedUrl);
+					return g.sites.some((s: any) => s && s.url === expectedUrl);
 				},
 				[RESTORE_TILES[0].url],
 				{ timeout: 15_000, message: 'restored tile did not appear in the grid' },
@@ -217,17 +218,17 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 					return { hasGrid: false };
 				}
 				const found = urls.map(url => {
-					const site = g.sites.find(s => s && s.url === url);
+					const site = g.sites.find((s: any) => s && s.url === url);
 					return site ? { url: site.url, title: site.title || '' } : null;
 				});
 				return { hasGrid: true, found };
 			}, RESTORE_TILES.map(t => t.url));
 
 			expect(gridState.hasGrid).toBe(true);
-			expect(gridState.found[0]).toEqual(
+			expect(gridState.found![0]).toEqual(
 				expect.objectContaining({ url: RESTORE_TILES[0].url }),
 			);
-			expect(gridState.found[1]).toEqual(
+			expect(gridState.found![1]).toEqual(
 				expect.objectContaining({ url: RESTORE_TILES[1].url }),
 			);
 		} catch (e) {
@@ -251,7 +252,7 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 					if (!g || !g.sites) {
 						return false;
 					}
-					return g.sites.some(s => s && s.url === expectedUrl);
+					return g.sites.some((s: any) => s && s.url === expectedUrl);
 				},
 				[RESTORE_TILES[0].url],
 				{ timeout: 15_000, message: 'restored tile did not persist after reload' },
@@ -263,15 +264,15 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 					return { hasGrid: false };
 				}
 				const found = urls.map(url => {
-					const site = g.sites.find(s => s && s.url === url);
+					const site = g.sites.find((s: any) => s && s.url === url);
 					return site ? { url: site.url } : null;
 				});
 				return { hasGrid: true, found };
 			}, RESTORE_TILES.map(t => t.url));
 
 			expect(gridState.hasGrid).toBe(true);
-			expect(gridState.found[0]).not.toBeNull();
-			expect(gridState.found[1]).not.toBeNull();
+			expect(gridState.found![0]).not.toBeNull();
+			expect(gridState.found![1]).not.toBeNull();
 		} catch (e) {
 			await captureFailure(page, 'backup-restore-persist');
 			throw e;

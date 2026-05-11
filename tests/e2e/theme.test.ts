@@ -6,7 +6,7 @@ import {
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Light / dark / auto theme (slot 26)', () => {
 	let browser: Browser;

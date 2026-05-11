@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -7,7 +8,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const TEST_URL = 'https://example.com/';
 
@@ -31,7 +32,7 @@ const TEST_URL = 'https://example.com/';
 // optional history permission. A future test can add the Add-Tile UI flow
 // once permission setup is solved (see E2E_REVIEW_TASKS.md item 2 followups).
 describe('E2E Smoke: Pin/unpin via UI', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -71,7 +72,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const site = g.sites.find(s => s && s.url === u);
+					const site = g.sites.find((s: any) => s && s.url === u);
 					return site && site.isPinned;
 				},
 				[TEST_URL],
@@ -88,7 +89,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const match = g.sites.find(s => s && s.url === u);
+					const match = g.sites.find((s: any) => s && s.url === u);
 					if (!match) {return false;}
 					return {
 						hasGrid: true,
@@ -122,7 +123,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					return g.sites.some(s => s && s.url === u && s.isPinned);
+					return g.sites.some((s: any) => s && s.url === u && s.isPinned);
 				},
 				[TEST_URL],
 				{ timeout: 15_000, message: 'Precondition failed: TEST_URL not pinned' }
@@ -131,9 +132,9 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			// Click the pin button for our specific tile. Find it by URL,
 			// then dispatch a click on its pin control.
 			await page.evaluate((u) => {
-				const site = window.Grid.sites.find(s => s && s.url === u);
+				const site = window.Grid.sites.find((s: any) => s && s.url === u);
 				const pinBtn = site.node.querySelector('.newtab-control-pin');
-				pinBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+				pinBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 			}, TEST_URL);
 
 			// The site object's pinned state should flip in-memory.
@@ -142,7 +143,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const match = g.sites.find(s => s && s.url === u);
+					const match = g.sites.find((s: any) => s && s.url === u);
 					// Either the site is no longer in the grid, or it's no longer pinned.
 					return !match || !match.isPinned;
 				},
@@ -159,7 +160,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				if (!g || !g.sites) {
 					return { hasGrid: false };
 				}
-				const match = g.sites.find(s => s && s.url === u);
+				const match = g.sites.find((s: any) => s && s.url === u);
 				return {
 					hasGrid: true,
 					found: !!match,

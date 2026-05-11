@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -7,10 +8,10 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Lock-grid toggle (slot 21)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -46,7 +47,7 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 				page,
 				() => {
 					const g = window.Grid;
-					return g && g.sites && g.sites.some(s => s && s.url === 'https://lock-test.example.com/');
+					return g && g.sites && g.sites.some((s: any) => s && s.url === 'https://lock-test.example.com/');
 				},
 				[],
 				{ timeout: 10_000, message: 'Pinned tile not in grid' }
@@ -59,12 +60,12 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 			expect(initialLocked).toBe(false);
 
 			// Open settings.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Enable lock.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]');
+				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
 				cb.checked = true;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -85,7 +86,7 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 
 			// Disable lock.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]');
+				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
 				cb.checked = false;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -128,10 +129,10 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 			expect(hasButton).toBe(true);
 
 			// Enable lock via settings.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]');
+				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
 				cb.checked = true;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -145,7 +146,7 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 
 			// Cleanup: unlock.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]');
+				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
 				cb.checked = false;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});

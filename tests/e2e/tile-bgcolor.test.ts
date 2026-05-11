@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -7,12 +8,12 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const TEST_URL = 'https://bgcolor-test.example.com/';
 
 describe('E2E: Per-tile background color (slot 22)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -51,7 +52,7 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 				page,
 				(u) => {
 					const g = window.Grid;
-					return g && g.sites && g.sites.some(s => s && s.url === u);
+					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
 				},
 				[TEST_URL],
 				{ timeout: 10_000, message: 'Pinned tile not in grid' }
@@ -59,9 +60,9 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 
 			// Open settings and select the pinned tile.
 			await page.evaluate((u) => {
-				document.getElementById('options-toggle').click();
+				document.getElementById('options-toggle')!.click();
 				// Find the index of our tile and select it.
-				const idx = window.Grid.sites.findIndex(s => s && s.url === u);
+				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
 				if (idx >= 0) {
 					newTabTools.selectedSiteIndex = idx;
 				}
@@ -71,7 +72,7 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 			// Set background color via the color input. The change event
 			// enables the set button (initially disabled when no bgcolor).
 			await page.evaluate(() => {
-				const colorInput = document.getElementById('options-bgcolor-input');
+				const colorInput = document.getElementById('options-bgcolor-input') as HTMLInputElement;
 				colorInput.value = '#ff0000';
 				colorInput.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -79,13 +80,13 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 
 			// Click set button (now enabled after change event).
 			await page.evaluate(() => {
-				document.getElementById('options-bgcolor-set').click();
+				document.getElementById('options-bgcolor-set')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
 			// Verify the tile's thumbnail has the background color.
 			const bgColor = await page.evaluate((u) => {
-				const site = window.Grid.sites.find(s => s && s.url === u);
+				const site = window.Grid.sites.find((s: any) => s && s.url === u);
 				if (!site) {return null;}
 				return site.thumbnail.style.backgroundColor;
 			}, TEST_URL);
@@ -93,12 +94,12 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 
 			// Reset the color.
 			await page.evaluate(() => {
-				document.getElementById('options-bgcolor-reset').click();
+				document.getElementById('options-bgcolor-reset')!.click();
 			});
 			await new Promise(r => setTimeout(r, 300));
 
 			const bgColorAfterReset = await page.evaluate((u) => {
-				const site = window.Grid.sites.find(s => s && s.url === u);
+				const site = window.Grid.sites.find((s: any) => s && s.url === u);
 				if (!site) {return 'still-set';}
 				return site.thumbnail.style.backgroundColor;
 			}, TEST_URL);

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,13 +10,13 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('E2E: Page background image (slot 25)', () => {
-	let browser;
-	let testImagePath;
+	let browser: Browser;
+	let testImagePath: string;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -47,16 +48,16 @@ describe('E2E: Page background image (slot 25)', () => {
 
 		try {
 			// Open settings.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Open the wallpaper picker.
-			await page.evaluate(() => document.getElementById('options-wallpaper-btn').click());
+			await page.evaluate(() => document.getElementById('options-wallpaper-btn')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Upload the test image via the wallpaper picker's file input.
-			const fileInput = await page.$('#wallpaper-upload');
-			await fileInput.uploadFile(testImagePath);
+			const fileInput = await page.$('#wallpaper-upload') as import('puppeteer-core').ElementHandle<HTMLInputElement> | null;
+			await fileInput!.uploadFile(testImagePath);
 
 			// Wait for the background to be applied.
 			const hasBg = await waitForCondition(
@@ -72,7 +73,7 @@ describe('E2E: Page background image (slot 25)', () => {
 
 			// Now remove via the options panel remove button.
 			await page.evaluate(() => {
-				document.getElementById('options-bg-remove').click();
+				document.getElementById('options-bg-remove')!.click();
 			});
 			await new Promise(r => setTimeout(r, 1000));
 

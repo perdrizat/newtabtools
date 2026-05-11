@@ -10,7 +10,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -108,9 +108,9 @@ describe('E2E: Wallpaper picker', () => {
 			// Wait for background to be applied.
 			const bgImage = await waitForCondition(
 				page,
-				(expectedUrl: string) => {
+				(expectedUrl: unknown) => {
 					const bg = document.body.style.backgroundImage;
-					return bg && bg.includes(expectedUrl) ? bg : null;
+					return bg && bg.includes(expectedUrl as string) ? bg : null;
 				},
 				[testUrl],
 				{ timeout: 10_000, message: 'Wallpaper not applied to body' }

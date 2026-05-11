@@ -30,7 +30,7 @@ Use the helper in [`_helpers.js`](_helpers.js) to keep boilerplate to one line:
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectToFirefox } from './_helpers.js';
+import { connectToFirefox } from './_helpers.ts';
 
 describe('my smoke', () => {
   let browser;

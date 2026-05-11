@@ -1,14 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Per-domain filter cap (slot 23)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -27,12 +28,12 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 		try {
 			// Open settings panel.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Ensure history is enabled (filter button is only active when history is on).
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="history"]');
+				const cb = document.querySelector('[name="history"]') as HTMLInputElement;
 				if (!cb.checked) {
 					cb.checked = true;
 					cb.dispatchEvent(new Event('change', { bubbles: true }));
@@ -42,7 +43,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 			// Click the filter button to show the filter panel.
 			await page.evaluate(() => {
-				document.getElementById('historytiles-filter').click();
+				document.getElementById('historytiles-filter')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
@@ -54,8 +55,8 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 			// Add a filter: domain "test.example.com", count 2.
 			await page.evaluate(() => {
-				const hostInput = document.getElementById('options-filter-host');
-				const countInput = document.getElementById('options-filter-count');
+				const hostInput = document.getElementById('options-filter-host') as HTMLInputElement;
+				const countInput = document.getElementById('options-filter-count') as HTMLInputElement;
 				hostInput.value = 'test.example.com';
 				countInput.value = '2';
 				// Trigger input events to enable the set button.
@@ -66,7 +67,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 			// Click set.
 			await page.evaluate(() => {
-				document.getElementById('options-filter-set').click();
+				document.getElementById('options-filter-set')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
@@ -86,8 +87,8 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			});
 
 			expect(filterRow).not.toBeNull();
-			expect(filterRow.domain).toBe('test.example.com');
-			expect(filterRow.count).toBe('2');
+			expect(filterRow!.domain).toBe('test.example.com');
+			expect(filterRow!.count).toBe('2');
 
 			// Verify the filter is persisted via Filters.getList().
 			const stored = await page.evaluate(() => {
@@ -118,10 +119,10 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			});
 
 			// Open settings → filter panel.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="history"]');
+				const cb = document.querySelector('[name="history"]') as HTMLInputElement;
 				if (!cb.checked) {
 					cb.checked = true;
 					cb.dispatchEvent(new Event('change', { bubbles: true }));
@@ -129,13 +130,13 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			});
 			await new Promise(r => setTimeout(r, 300));
 			await page.evaluate(() => {
-				document.getElementById('historytiles-filter').click();
+				document.getElementById('historytiles-filter')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
 			// Find the filter row and click plus.
 			const countBefore = await page.evaluate(() => {
-				const tbody = document.querySelector('#options-filter tbody');
+				const tbody = document.querySelector('#options-filter tbody')!;
 				for (const row of tbody.querySelectorAll('tr')) {
 					if (row.cells[0]?.textContent === 'adjust.example.com') {
 						return row.cells[2]?.querySelector('span')?.textContent;
@@ -147,10 +148,10 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 			// Click plus button.
 			await page.evaluate(() => {
-				const tbody = document.querySelector('#options-filter tbody');
+				const tbody = document.querySelector('#options-filter tbody')!;
 				for (const row of tbody.querySelectorAll('tr')) {
 					if (row.cells[0]?.textContent === 'adjust.example.com') {
-						row.querySelector('.plus-button').click();
+						(row.querySelector('.plus-button') as HTMLElement)!.click();
 						break;
 					}
 				}
@@ -158,7 +159,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			await new Promise(r => setTimeout(r, 300));
 
 			const countAfterPlus = await page.evaluate(() => {
-				const tbody = document.querySelector('#options-filter tbody');
+				const tbody = document.querySelector('#options-filter tbody')!;
 				for (const row of tbody.querySelectorAll('tr')) {
 					if (row.cells[0]?.textContent === 'adjust.example.com') {
 						return row.cells[2]?.querySelector('span')?.textContent;
@@ -170,10 +171,10 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 			// Click minus button.
 			await page.evaluate(() => {
-				const tbody = document.querySelector('#options-filter tbody');
+				const tbody = document.querySelector('#options-filter tbody')!;
 				for (const row of tbody.querySelectorAll('tr')) {
 					if (row.cells[0]?.textContent === 'adjust.example.com') {
-						row.querySelector('.minus-button').click();
+						(row.querySelector('.minus-button') as HTMLElement)!.click();
 						break;
 					}
 				}
@@ -181,7 +182,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			await new Promise(r => setTimeout(r, 300));
 
 			const countAfterMinus = await page.evaluate(() => {
-				const tbody = document.querySelector('#options-filter tbody');
+				const tbody = document.querySelector('#options-filter tbody')!;
 				for (const row of tbody.querySelectorAll('tr')) {
 					if (row.cells[0]?.textContent === 'adjust.example.com') {
 						return row.cells[2]?.querySelector('span')?.textContent;

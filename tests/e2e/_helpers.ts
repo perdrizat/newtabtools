@@ -1,5 +1,4 @@
-// @ts-nocheck
-import puppeteer from 'puppeteer-core';
+import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,10 +17,10 @@ export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
 // fork picks a new ID, no test code needs to change.
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
-export const EXTENSION_ID = manifest.applications.gecko.id;
+export const EXTENSION_ID: string = manifest.applications.gecko.id;
 
 const verboseEnabled = !!process.env.E2E_VERBOSE;
-function verbose(...args) {
+function verbose(...args: unknown[]) {
 	if (verboseEnabled) {
 		console.log(...args);
 	}
@@ -30,7 +29,7 @@ function verbose(...args) {
 /**
  * Connect to the running Firefox ESR instance via WebDriver BiDi.
  */
-export async function connectToFirefox() {
+export async function connectToFirefox(): Promise<Browser> {
 	return puppeteer.connect({
 		browserWSEndpoint: BIDI_ENDPOINT,
 		protocol: 'webDriverBiDi',
@@ -56,7 +55,7 @@ export async function connectToFirefox() {
  * Recovery: launch web-ext run interactively (drop -headless), inspect the
  * prefs.js file under PROFILE_DIR for the new format, and update the regex.
  */
-export async function getExtensionUUID() {
+export async function getExtensionUUID(): Promise<string> {
 	const prefsPath = path.join(PROFILE_DIR, 'prefs.js');
 	verbose(`[UUID Discovery] Searching for prefs.js in ${PROFILE_DIR}`);
 
@@ -79,13 +78,13 @@ export async function getExtensionUUID() {
 	if (match) {
 		const jsonStr = match[1].replace(/\\"/g, '"');
 		try {
-			const uuids = JSON.parse(jsonStr);
+			const uuids: Record<string, string> = JSON.parse(jsonStr);
 			const uuid = uuids[EXTENSION_ID];
 			if (uuid) {
 				return uuid;
 			}
 		} catch (e) {
-			console.error(`[UUID Discovery] Failed to parse JSON: ${e.message}`);
+			console.error(`[UUID Discovery] Failed to parse JSON: ${(e as Error).message}`);
 		}
 	}
 
@@ -95,9 +94,15 @@ export async function getExtensionUUID() {
 /**
  * Get the full URL to the extension's new tab page.
  */
-export async function getNewTabURL() {
+export async function getNewTabURL(): Promise<string> {
 	const uuid = await getExtensionUUID();
 	return `moz-extension://${uuid}/newTab.xhtml`;
+}
+
+export interface WaitForConditionOpts {
+	timeout?: number;
+	interval?: number;
+	message?: string;
 }
 
 /**
@@ -109,10 +114,15 @@ export async function getNewTabURL() {
  * `predicate` runs in the page; `args` are passed to it (must be JSON-
  * serialisable). Returns the predicate's resolved value.
  */
-export async function waitForCondition(page, predicate, args = [], opts = {}) {
+export async function waitForCondition(
+	page: Page,
+	predicate: (...args: unknown[]) => unknown,
+	args: unknown[] = [],
+	opts: WaitForConditionOpts = {},
+): Promise<unknown> {
 	const { timeout = 10_000, interval = 200, message } = opts;
 	const deadline = Date.now() + timeout;
-	let lastValue;
+	let lastValue: unknown;
 	while (Date.now() < deadline) {
 		lastValue = await page.evaluate(predicate, ...args);
 		if (lastValue) {
@@ -127,7 +137,7 @@ export async function waitForCondition(page, predicate, args = [], opts = {}) {
  * Save a screenshot of `page` for debugging into the artifacts directory.
  * Filename is sanitised; directory is created on demand.
  */
-export async function captureFailure(page, label) {
+export async function captureFailure(page: Page, label: string): Promise<string> {
 	const safeLabel = String(label).replace(/[^a-z0-9._-]+/gi, '_').slice(0, 80);
 	fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
 	const target = path.join(ARTIFACTS_DIR, `${safeLabel}.png`);
@@ -135,9 +145,13 @@ export async function captureFailure(page, label) {
 		await page.screenshot({ path: target });
 		console.error(`[E2E] Failure screenshot saved to ${target}`);
 	} catch (ssErr) {
-		console.error(`[E2E] Could not save failure screenshot: ${ssErr.message}`);
+		console.error(`[E2E] Could not save failure screenshot: ${(ssErr as Error).message}`);
 	}
 	return target;
+}
+
+export interface OpenNewTabOpts {
+	beforeNavigate?: (page: Page) => void | Promise<void>;
 }
 
 /**
@@ -151,7 +165,7 @@ export async function captureFailure(page, label) {
  * Returns the Puppeteer Page object. Use waitForGridReady(page) afterwards
  * to ensure the UI has finished initialising.
  */
-export async function openNewTab(browser, opts = {}) {
+export async function openNewTab(browser: Browser, opts: OpenNewTabOpts = {}): Promise<Page> {
 	const url = await getNewTabURL();
 	const page = await browser.newPage();
 
@@ -168,7 +182,7 @@ export async function openNewTab(browser, opts = {}) {
 		waitUntil: 'domcontentloaded',
 		timeout: 3_000, // Always times out on moz-extension:// (BiDi issue); caught below.
 	}).catch(e => {
-		verbose(`[Navigation] Initial goto warning (ignoring): ${e.message}`);
+		verbose(`[Navigation] Initial goto warning (ignoring): ${(e as Error).message}`);
 	});
 
 	return page;
@@ -180,15 +194,15 @@ export async function openNewTab(browser, opts = {}) {
  * destabilises the BiDi connection. Call in `beforeAll` after
  * `connectToFirefox()`.
  */
-export async function clearPinnedTiles(browser) {
+export async function clearPinnedTiles(browser: Browser): Promise<void> {
 	const page = await openNewTab(browser);
 	await waitForGridReady(page);
 	try {
 		await page.evaluate(async () => {
-			const tiles = await Tiles.getAllTiles();
+			const tiles = await (window as any).Tiles.getAllTiles();
 			for (const tile of tiles) {
 				if (tile && tile.url) {
-					await Tiles.removeTile(tile);
+					await (window as any).Tiles.removeTile(tile);
 				}
 			}
 		});
@@ -204,22 +218,23 @@ export async function clearPinnedTiles(browser) {
  * Prefer `resetTestState(browser)` instead — it combines tile clearing and
  * pref reset in a single page open/close cycle.
  */
-export async function resetPrefs(browser) {
+export async function resetPrefs(browser: Browser): Promise<void> {
 	const page = await openNewTab(browser);
 	await waitForGridReady(page);
 	try {
 		await page.evaluate(() => {
-			Prefs.rows = 3;
-			Prefs.columns = 3;
-			Prefs.locked = false;
-			Prefs.theme = 'system';
-			Prefs.themeAuto = false;
-			Prefs.opacity = 80;
-			Prefs.titleSize = 'small';
-			Prefs.spacing = 'small';
-			Prefs.margin = ['small', 'small', 'small', 'small'];
-			Prefs.history = true;
-			Prefs.recent = true;
+			const P = (window as any).Prefs;
+			P.rows = 3;
+			P.columns = 3;
+			P.locked = false;
+			P.theme = 'system';
+			P.themeAuto = false;
+			P.opacity = 80;
+			P.titleSize = 'small';
+			P.spacing = 'small';
+			P.margin = ['small', 'small', 'small', 'small'];
+			P.history = true;
+			P.recent = true;
 		});
 	} finally {
 		await page.close();
@@ -236,7 +251,7 @@ export async function resetPrefs(browser) {
  * `chrome.storage.local.set` call with a read-back fence, and skips
  * `waitForGridReady` (only needs the extension runtime, not the full Grid).
  */
-export async function resetTestState(browser) {
+export async function resetTestState(browser: Browser): Promise<void> {
 	const url = await getNewTabURL();
 	const page = await browser.newPage();
 	await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 3_000 }).catch(() => {});
@@ -251,12 +266,12 @@ export async function resetTestState(browser) {
 
 	try {
 		// Clear all tiles via single IDB objectStore.clear().
-		await page.evaluate(() => new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, resolve);
+		await page.evaluate(() => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
 		}));
 
 		// Reset all prefs in one write + read-back fence.
-		await page.evaluate(() => new Promise(resolve => {
+		await page.evaluate(() => new Promise<void>(resolve => {
 			chrome.storage.local.set({
 				rows: 3, columns: 3, locked: false,
 				theme: 'system', themeAuto: false, opacity: 80,
@@ -282,18 +297,18 @@ export async function resetTestState(browser) {
  * JavaScript executes. Uses `waitForCondition` because the extension's CSP
  * blocks `page.waitForFunction` (it relies on `Function()` constructor).
  */
-export async function waitForGridReady(page, timeout = 15_000) {
+export async function waitForGridReady(page: Page, timeout = 15_000): Promise<void> {
 	verbose('[Navigation] Waiting for Grid.ready...');
 	try {
 		await waitForCondition(
 			page,
-			() => typeof Grid !== 'undefined' && Grid.ready,
+			() => typeof Grid !== 'undefined' && (Grid as any).ready,
 			[],
 			{ timeout, message: 'Grid not ready (Grid.init has not run)' }
 		);
 		verbose('[Navigation] Grid ready!');
 	} catch (e) {
-		console.error(`[Navigation] Readiness check failed: ${e.message}`);
+		console.error(`[Navigation] Readiness check failed: ${(e as Error).message}`);
 		await captureFailure(page, 'grid-not-ready');
 		throw e;
 	}

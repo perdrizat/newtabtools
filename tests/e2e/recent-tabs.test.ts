@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -6,10 +7,10 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Recently-closed-tabs row (slot 24)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -50,7 +51,7 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 			// Verify the recently-closed row contains a link to the closed tab.
 			const recentUrls = await page.evaluate(() => {
 				const list = document.getElementById('newtab-recent');
-				return [...list.querySelectorAll('a.recent')].map(a => a.href);
+				return [...list!.querySelectorAll('a.recent')].map(a => (a as HTMLAnchorElement).href);
 			});
 			expect(recentUrls.some(u => u.includes('example.com'))).toBe(true);
 		} catch (e) {
@@ -67,24 +68,24 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 
 		try {
 			// Open settings and uncheck recent.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="recent"]');
+				const cb = document.querySelector('[name="recent"]') as HTMLInputElement;
 				cb.checked = false;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});
 			await new Promise(r => setTimeout(r, 500));
 
 			const listHidden = await page.evaluate(() => {
-				return document.getElementById('newtab-recent').hidden;
+				return document.getElementById('newtab-recent')!.hidden;
 			});
 			expect(listHidden).toBe(true);
 
 			// Re-enable.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="recent"]');
+				const cb = document.querySelector('[name="recent"]') as HTMLInputElement;
 				cb.checked = true;
 				cb.dispatchEvent(new Event('change', { bubbles: true }));
 			});

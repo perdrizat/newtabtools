@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.js';
+import type { Browser, Page } from 'puppeteer-core';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.ts';
 
 describe('E2E Smoke: Settings panel opens and closes', () => {
-	let browser;
-	let page;
+	let browser: Browser;
+	let page: Page;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();

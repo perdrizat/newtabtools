@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.js';
+import type { Browser, Page } from 'puppeteer-core';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.ts';
 
 describe('E2E Smoke: Extension loads cleanly', () => {
-	let browser;
-	let page;
-	const consoleErrors = [];
+	let browser: Browser;
+	let page: Page;
+	const consoleErrors: string[] = [];
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -14,8 +15,8 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 		// returns would race the navigation and miss early errors; attaching
 		// to a separately-created page would orphan the listener entirely.
 		page = await openNewTab(browser, {
-			beforeNavigate: (p) => {
-				p.on('console', (msg) => {
+			beforeNavigate: (p: Page) => {
+				p.on('console', (msg: any) => {
 					if (msg.type() === 'error') {
 						consoleErrors.push(msg.text());
 					}

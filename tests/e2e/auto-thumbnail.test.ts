@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
@@ -7,13 +8,13 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 // Use example.com — a simple, static page where drawWindow reliably works.
 const TEST_URL = 'https://example.com/';
 
 describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -71,7 +72,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 				(testUrl) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const site = g.sites.find(s => s && s.link && s.link.url === testUrl);
+					const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
 					if (!site) {return false;}
 					const bg = site.thumbnail.style.backgroundImage;
 					// Must be a blob: URL set by getThumbnails
@@ -102,7 +103,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 				(testUrl) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const site = g.sites.find(s => s && s.link && s.link.url === testUrl);
+					const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
 					if (!site) {return false;}
 					const bg = site.thumbnail.style.backgroundImage;
 					return bg && bg.startsWith('url(');

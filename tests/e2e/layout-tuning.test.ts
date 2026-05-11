@@ -1,14 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot 20)', () => {
-	let browser;
+	let browser: Browser;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -27,12 +28,12 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 		try {
 			// Open settings.
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Set opacity to 50.
 			await page.evaluate(() => {
-				const input = document.querySelector('[name="opacity"]');
+				const input = document.querySelector('[name="opacity"]') as HTMLInputElement;
 				input.value = '50';
 				input.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -45,7 +46,7 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 			// Restore default (80).
 			await page.evaluate(() => {
-				const input = document.querySelector('[name="opacity"]');
+				const input = document.querySelector('[name="opacity"]') as HTMLInputElement;
 				input.value = '80';
 				input.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -62,12 +63,12 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Set titleSize to large.
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="titleSize"]');
+				const select = document.querySelector('[name="titleSize"]') as HTMLInputElement;
 				select.value = 'large';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -80,7 +81,7 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 			// Set to hidden and verify.
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="titleSize"]');
+				const select = document.querySelector('[name="titleSize"]') as HTMLInputElement;
 				select.value = 'hidden';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -93,7 +94,7 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 			// Restore default (small).
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="titleSize"]');
+				const select = document.querySelector('[name="titleSize"]') as HTMLInputElement;
 				select.value = 'small';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -110,11 +111,11 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="spacing"]');
+				const select = document.querySelector('[name="spacing"]') as HTMLInputElement;
 				select.value = 'large';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -127,7 +128,7 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 			// Restore default (small).
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="spacing"]');
+				const select = document.querySelector('[name="spacing"]') as HTMLInputElement;
 				select.value = 'small';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
@@ -144,20 +145,20 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => document.getElementById('options-toggle').click());
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 
 			// Set margin to large.
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="margin"]');
+				const select = document.querySelector('[name="margin"]') as HTMLInputElement;
 				select.value = 'large large large large';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});
 			await new Promise(r => setTimeout(r, 300));
 
 			const marginClasses = await page.evaluate(() => {
-				const top = document.getElementById('newtab-margin-top');
-				const left = document.querySelector('.newtab-margin-left');
+				const top = document.getElementById('newtab-margin-top') as HTMLElement;
+				const left = document.querySelector('.newtab-margin-left') as HTMLElement;
 				return {
 					topHasLarge: top.classList.contains('large'),
 					leftHasLarge: left.classList.contains('large'),
@@ -168,7 +169,7 @@ describe('E2E: Layout micro-tuning — opacity, titleSize, margin, spacing (slot
 
 			// Restore default (small).
 			await page.evaluate(() => {
-				const select = document.querySelector('[name="margin"]');
+				const select = document.querySelector('[name="margin"]') as HTMLInputElement;
 				select.value = 'small small small small';
 				select.dispatchEvent(new Event('change', { bubbles: true }));
 			});

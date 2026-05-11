@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,15 +11,15 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-} from './_helpers.js';
+} from './_helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_URL_TITLE = 'https://title-test.example.com/';
 const TEST_URL_THUMB = 'https://thumb-test.example.com/';
 
 describe('E2E: Per-tile custom title and image (slot 28)', () => {
-	let browser;
-	let testImagePath;
+	let browser: Browser;
+	let testImagePath: string;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
@@ -67,7 +68,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				page,
 				(u) => {
 					const g = window.Grid;
-					return g && g.sites && g.sites.some(s => s && s.url === u);
+					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
 				},
 				[TEST_URL_TITLE],
 				{ timeout: 10_000, message: 'Tile not in grid' }
@@ -75,22 +76,22 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 
 			// Open settings and select our tile.
 			await page.evaluate((u) => {
-				document.getElementById('options-toggle').click();
-				const idx = window.Grid.sites.findIndex(s => s && s.url === u);
+				document.getElementById('options-toggle')!.click();
+				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
 				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
 			}, TEST_URL_TITLE);
 			await new Promise(r => setTimeout(r, 500));
 
 			// Set a custom title.
 			await page.evaluate(() => {
-				document.getElementById('options-title-input').value = 'My Custom Title';
-				document.getElementById('options-title-set').click();
+				(document.getElementById('options-title-input') as HTMLInputElement).value = 'My Custom Title';
+				document.getElementById('options-title-set')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
 			// Verify the title renders on the tile.
 			const tileTitle = await page.evaluate((u) => {
-				const site = window.Grid.sites.find(s => s && s.url === u);
+				const site = window.Grid.sites.find((s: any) => s && s.url === u);
 				if (!site) {return null;}
 				const titleSpan = site.node.querySelector('.newtab-title');
 				return titleSpan ? titleSpan.textContent : null;
@@ -106,7 +107,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const site = g.sites.find(s => s && s.url === u);
+					const site = g.sites.find((s: any) => s && s.url === u);
 					if (!site) {return false;}
 					const titleSpan = site.node.querySelector('.newtab-title');
 					return titleSpan && titleSpan.textContent === 'My Custom Title' ? titleSpan.textContent : false;
@@ -154,7 +155,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				page,
 				(u) => {
 					const g = window.Grid;
-					return g && g.sites && g.sites.some(s => s && s.url === u);
+					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
 				},
 				[TEST_URL_THUMB],
 				{ timeout: 10_000, message: 'Tile not in grid' }
@@ -162,20 +163,20 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 
 			// Open settings and select our tile.
 			await page.evaluate((u) => {
-				document.getElementById('options-toggle').click();
-				const idx = window.Grid.sites.findIndex(s => s && s.url === u);
+				document.getElementById('options-toggle')!.click();
+				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
 				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
 			}, TEST_URL_THUMB);
 			await new Promise(r => setTimeout(r, 500));
 
 			// Upload a custom thumbnail.
-			const fileInput = await page.$('#options-savedthumb-input');
-			await fileInput.uploadFile(testImagePath);
+			const fileInput = await page.$('#options-savedthumb-input') as import('puppeteer-core').ElementHandle<HTMLInputElement> | null;
+			await fileInput!.uploadFile(testImagePath);
 			await new Promise(r => setTimeout(r, 500));
 
 			// Click set.
 			await page.evaluate(() => {
-				document.getElementById('options-savedthumb-set').click();
+				document.getElementById('options-savedthumb-set')!.click();
 			});
 			await new Promise(r => setTimeout(r, 1000));
 
@@ -185,7 +186,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				(u) => {
 					const g = window.Grid;
 					if (!g || !g.sites) {return false;}
-					const site = g.sites.find(s => s && s.url === u);
+					const site = g.sites.find((s: any) => s && s.url === u);
 					if (!site) {return false;}
 					const bg = site.thumbnail.style.backgroundImage;
 					return bg && bg.startsWith('url(');
@@ -197,7 +198,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 
 			// Remove the thumbnail.
 			await page.evaluate(() => {
-				document.getElementById('options-savedthumb-remove').click();
+				document.getElementById('options-savedthumb-remove')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
