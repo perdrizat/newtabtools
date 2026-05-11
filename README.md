@@ -2,7 +2,7 @@
 
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. Think of it as **PowerTools for your browser**—extending the new tab experience in creative ways, much like Microsoft PowerToys does for Windows.
 
-> **Status: takeover in preparation.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. It is **not yet published** under new ownership on AMO — the version currently on [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/new-tab-tools/) is still the original maintainer's last release. The bug intake process and the AMO listing for the continuation are not yet finalized; please do not file new issues here until that's announced.
+> **Status: preparing for AMO publication.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. The codebase migration (cherry-pick + reference rewrite) is complete — all 22 features characterized, tested, and working, all 7 security findings resolved. Next step is AMO publication (pending contact with the original maintainer about a possible handover). MV3 migration follows; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) for the plan.
 
 ## Main features
 
@@ -17,30 +17,30 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 ## What's in this repo
 
-- `webextension/` — the extension source. MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
+- `webextension/` — the extension source. Currently MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
+- [`MV3_MIGRATION.md`](MV3_MIGRATION.md) — the active migration plan for Manifest V3 (Firefox-only first, Chrome deferred).
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
-- [`ROADMAP.md`](ROADMAP.md) — log of architectural decisions, both taken and deferred. Records the chosen codebase strategy (cherry-pick + reference rewrite) and the deferral of Chrome support / MV3 migration until Firefox-only stabilization is finished.
-- [`MIGRATION.md`](MIGRATION.md) — the working migration ledger for the cherry-pick + reference rewrite. Per-feature table with current state, strategy, implementation refs, and test status; plus the suggested phasing.
+- [`ROADMAP.md`](ROADMAP.md) — log of architectural decisions, both taken and deferred.
+- [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md) — historical record of the completed cherry-pick + reference rewrite migration. Per-feature table with strategy, implementation refs, and test status.
 - [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md) — gap analysis vs. native Firefox; drives which features get full E2E coverage and which get parity smokes.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — bug-report guidance carried over from the original maintainer; will be updated once the continuation's intake process is in place.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, AI-assisted contribution guardrails.
 
-## Where the takeover stands
+## Project history
 
-**Done:**
-- [x] 1. License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
-- [x] 2. Testing strategy, bootstrap plan, and roadmap documented.
-- [x] 3. Forked the repository under the continuation maintainer's GitHub account; re-pointed local remotes.
-- [x] 4. Completed bootstrap: test infrastructure green in CI; the first three E2E smokes passing.
-- [x] 5. Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md) for the rationale, [`MIGRATION.md`](MIGRATION.md) for the per-feature plan).
-- [x] 6. Security & tooling: all 7 security findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved (§2.1 stored XSS, §2.2 vendored zip.js, §2.3 CSP, §2.4 sender validation, §2.5 pref filtering, §2.6 `executeScript` removal, §2.7 CI audit). TypeScript tooling in place.
-- [x] 7. Test-first characterization sweep: 313 integration + 38 E2E tests across all 22 features. All E2E tests converted to TypeScript.
-- [x] 8. Migration phases 2–3 complete. Auto-thumbnail rewritten (`drawWindow` content script → `captureVisibleTab` multi-stage capture from background). Drop sweep done (donation link, update notice, version-tracking prefs removed).
-
-**Outstanding (in rough order):**
-- [ ] 9. Decide the AMO publication path — either ownership transfer from the original maintainer (preserves the existing extension ID and user base) or publication as a new extension under a new ID and name.
-- [ ] 10. First republished release on AMO. All security preconditions from the [pre-takeover review](audit/2026-05-04-security-review.md) are met (7/7 findings fixed).
-- [ ] 11. Open the issue tracker for new bug reports.
+**Completed:**
+- [x] License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
+- [x] Testing strategy, bootstrap plan, and roadmap documented.
+- [x] Forked the repository; test infrastructure green in CI.
+- [x] Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md)).
+- [x] Security: all 7 findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved. [Post-takeover code review](audit/2026-05-11-code-review.md) completed.
+- [x] Test-first characterization sweep: 313 integration + 38 E2E tests across all 22 features.
+- [x] Codebase migration complete (see [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md)). Auto-thumbnail rewritten, drop sweep done, all features working.
+**Next:**
+- [ ] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Fallback: publish as a new extension under a new ID.
+- [ ] First release on AMO.
+- [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
+- [ ] Open the issue tracker for new bug reports.
 
 ## For developers
  

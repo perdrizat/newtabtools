@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - Post-takeover code review and assessment at `audit/2026-05-11-code-review.md`
+- `MV3_MIGRATION.md` is now the active migration plan
 
 ### Fixed
 
@@ -20,9 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Updated `README.md` to reflect completed migration and active MV3 work
 - Removed ~25 debug `console.log`/`console.warn` calls from `background.js` (§5.5)
 - Pinned all devDependency versions to exact (no `^` ranges) (§5.4)
-- `MIGRATION.md` marked complete — fixed stale entries (C1→C, 5s→2s, .test.js→.test.ts), added wallpaper picker and remove-thumbnail rows, updated capture-button status
+- `MIGRATION.md` marked complete and renamed to `MIGRATION_COMPLETED.md`
 
 ### Security
 
