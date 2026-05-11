@@ -20,12 +20,6 @@
 	"contextmenu_unpin": {
 		"message": "Sblocca questo riquadro"
 	},
-	"donate": {
-		"message": "Fai una donazione…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools si sostiene con le donazioni degli utenti."
-	},
 	"extensionDescription": {
 		"message": "Personalizza la pagina nuova scheda. Puoi aggiungere più riquadri, la barra di avvio di Firefox, o un'immagine di sfondo. Ed è possibile impostare nuove immagini nei riquadri e nuovi titoli."
 	},
@@ -49,9 +43,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Annulla"
-	},
-	"newversion": {
-		"message": "New Tab Tools è stato aggiornato alla versione $1. Per favore fai una donazione."
 	},
 	"options_columns": {
 		"message": "Colonne"

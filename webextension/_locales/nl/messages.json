@@ -29,9 +29,6 @@
 	"bg_set": {
 		"message": "Instellen"
 	},
-	"changelog_label": {
-		"message": "Wat is er gewijzigd?"
-	},
 	"contextmenu_block": {
 		"message": "Deze tegel verwijderen"
 	},
@@ -68,12 +65,6 @@
 	},
 	"database_error_restart": {
 		"message": "U dient New Tab Tools opnieuw te starten (of herstart gewoon Firefox) om deze wijzigingen van kracht te laten worden."
-	},
-	"donate": {
-		"message": "Doneren…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools wordt gefinancierd door gebruikersdonaties."
 	},
 	"extensionDescription": {
 		"message": "Maakt de nieuw-tabbladpagina aanpasbaar. U kunt meer tegels toevoegen, of een achtergrondafbeelding. Ook kunt u nieuwe tegels en tegelafbeeldingen instellen."
@@ -131,15 +122,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Ongedaan maken"
-	},
-	"newversion": {
-		"message": "New Tab Tools is bijgewerkt naar versie $VERSION$. New Tab Tools is gratis, maar uw donatie is welkom!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "Kolommen"

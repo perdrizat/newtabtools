@@ -11,9 +11,6 @@
 	"bg_set": {
 		"message": "Beállítás"
 	},
-	"changelog_label": {
-		"message": "Mi változott?"
-	},
 	"contextmenu_block": {
 		"message": "Csempe eltávolítása"
 	},
@@ -28,12 +25,6 @@
 	},
 	"contextmenu_unpin": {
 		"message": "Csempe rögzítésének feloldása"
-	},
-	"donate": {
-		"message": "Adományozás…"
-	},
-	"donate_label": {
-		"message": "A New Tab Tools-t a felhasználói adományok finanszírozzák."
 	},
 	"extensionDescription": {
 		"message": "Személyre szabja az új lap oldalt. Hozzáadhat további csempéket, a Firefox start gyorsindítóját, vagy egy háttérképet. Megadhat új csempeképeket és feliratokat."
@@ -61,9 +52,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Visszavonás"
-	},
-	"newversion": {
-		"message": "A New Tab Tools frissítve lett a $1 verzióra. A New Tab Tools ingyenes, de minden támogatást szívesen fogadok!"
 	},
 	"options_columns": {
 		"message": "Oszlopok"

@@ -169,32 +169,13 @@ input[type="button"] {
 	background-repeat: no-repeat;
 	vertical-align: middle;
 }
-/* UPDATE NOTICE */
-#newtab-update-outer {
-	flex: 1;
-	text-align: center;
-}
-#newtab-update-notice:not([hidden]) {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	line-height: 28px;
-}
-#newtab-update-notice:not(:hover) {
-	opacity: var(--opacity);
-}
-:root[spacing="medium"] #newtab-margin-bottom:is(.medium, .large) :is(#newtab-update-outer, #locked-toggle) {
+:root[spacing="medium"] #newtab-margin-bottom:is(.medium, .large) #locked-toggle {
 	margin-top: 8px;
 }
-:root[spacing="large"] #newtab-margin-bottom:is(.medium, .large) :is(#newtab-update-outer, #locked-toggle) {
+:root[spacing="large"] #newtab-margin-bottom:is(.medium, .large) #locked-toggle {
 	margin-top: 18px;
 }
-#newtab-update-text {
-	color: var(--fore-opaque);
-	margin-inline-end: 1em;
-}
-#newtab-undo-container button:not(.close-button),
-#newtab-update-notice button:not(.close-button) {
+#newtab-undo-container button:not(.close-button) {
 	min-width: 0;
 	padding: 0 2px;
 	font-size: 12px;
@@ -697,14 +678,6 @@ input[type="number"] {
 a {
 	color: LinkText;
 	white-space: nowrap;
-}
-#options-donate-wrap {
-	border: 1px #b2aeaa solid !important;
-	background-color: rgba(0, 0, 0, 0.1);
-	text-align: center;
-}
-#options-donate-wrap > div {
-	margin: 0.5em;
 }
 /* AUTOCOMPLETE */
 #autocomplete {

@@ -8,9 +8,6 @@
 	"bg_set": {
 		"message": "Übernehmen"
 	},
-	"changelog_label": {
-		"message": "Was ist neu?"
-	},
 	"contextmenu_block": {
 		"message": "Kachel entfernen"
 	},
@@ -25,12 +22,6 @@
 	},
 	"contextmenu_unpin": {
 		"message": "Kachel ablösen"
-	},
-	"donate": {
-		"message": "Spenden…"
-	},
-	"donate_label": {
-		"message": "Neuer-Tab-Tools wird durch Spenden finanziert."
 	},
 	"extensionDescription": {
 		"message": "Passt die Neuer-Tab-Seite an. Sie können neue Schaltflächen anlegen, die Schnellstartleiste versetzen, oder ein Hintergrundbild verwenden. Außerdem sind nun die Bilder der Schaltflächen und die Titel veränderbar."
@@ -55,9 +46,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Rückgängig"
-	},
-	"newversion": {
-		"message": "Neuer-Tab-Tools wurde auf Version $1 aktualisiert. Bitte erwägen Sie eine Spende."
 	},
 	"options_columns": {
 		"message": "Spalten"

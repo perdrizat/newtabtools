@@ -58,7 +58,7 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const optionsOnClick = extractMethod(source, 'optionsOnClick');
 
-		globalThis.Prefs = { rows: 3, columns: 3, versionLastAck: new Date(0) };
+		globalThis.Prefs = { rows: 3, columns: 3 };
 		globalThis.Filters = { setFilter: vi.fn() };
 		globalThis.Updater = { updateGrid: vi.fn() };
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };

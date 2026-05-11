@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, compareVersions, makeZip, Prefs, readZip, Tiles */
+/* globals Background, makeZip, Prefs, readZip, Tiles */
 
 Promise.all([
 	Prefs.init(),
@@ -19,11 +19,6 @@ Promise.all([
 	chrome.management.getSelf(function({version: currentVersion}) {
 		if (previousVersion != currentVersion) {
 			Prefs.version = currentVersion;
-			if (previousVersion != -1 &&
-					compareVersions(currentVersion, previousVersion) > 0 &&
-					(currentVersion.includes('b') || parseFloat(currentVersion, 10) != parseFloat(previousVersion, 10))) {
-				Prefs.versionLastUpdate = new Date();
-			}
 		}
 	});
 }).catch(function(event) {

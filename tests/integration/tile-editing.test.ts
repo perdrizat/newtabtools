@@ -51,7 +51,7 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		const body = extractMethod(source, 'optionsOnClick');
 
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
-		globalThis.Prefs = { rows: 3, columns: 3, versionLastAck: new Date(0) };
+		globalThis.Prefs = { rows: 3, columns: 3 };
 		globalThis.Filters = { setFilter: vi.fn() };
 		globalThis.Updater = { updateGrid: vi.fn() };
 		globalThis.Background = { setBackground: vi.fn().mockResolvedValue(undefined) };

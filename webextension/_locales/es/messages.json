@@ -8,9 +8,6 @@
 	"bg_set": {
 		"message": "Fijar"
 	},
-	"changelog_label": {
-		"message": "¿Qué ha cambiado?"
-	},
 	"contextmenu_block": {
 		"message": "Eliminar este contenedor"
 	},
@@ -26,12 +23,6 @@
 	"contextmenu_unpin": {
 		"message": "Soltar este contenedor"
 	},
-	"donate": {
-		"message": "Donar…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools se financia a través de donaciones de usuarios."
-	},
 	"extensionDescription": {
 		"message": "Personaliza la página de Nueva Pestaña. Puedes añadir más contenedores (páginas), lanzar New Tab Tools al inicio de Firefox o incluir una imagen de fondo. También puedes modificar la imagen y el título de los contenedores."
 	},
@@ -40,9 +31,6 @@
 	},
 	"github": {
 		"message": "New Tab Tools en GitHub"
-	},
-	"newversion": {
-		"message": "New Tab Tools ha sido actualizado a la versión $1. Aunque New Tab Tools es gratis, ¡toda donación es bienvenida!"
 	},
 	"options_columns": {
 		"message": "Columnas"

@@ -357,19 +357,6 @@ var newTabTools = {
 			let input = newTabTools.optionsPane.querySelector('#options-export input[type="file"]');
 			chrome.runtime.sendMessage({name: 'Import:restore', file: input.files[0]});
 			return;
-		case 'options-donate':
-		case 'newtab-update-donate':
-			window.alert('Currently, no donations are accepted. Thank you for your support!');
-			Prefs.versionLastAck = new Date();
-			break;
-		case 'newtab-update-changelog':
-			window.open('https://addons.mozilla.org/addon/new-tab-tools/versions/' + this.updateNotice.dataset.version);
-			Prefs.versionLastAck = new Date();
-			break;
-		case 'newtab-update-hide':
-			this.updateNotice.hidden = true;
-			Prefs.versionLastAck = new Date();
-			break;
 		}
 
 		if (classList.contains('plus-button') || classList.contains('minus-button')) {
@@ -1171,14 +1158,6 @@ var newTabTools = {
 					this.pinURLBlocked.hidden = true;
 				}
 			});
-
-			newTabTools.updateText.textContent = newTabTools.getString('newversion', Prefs.version);
-			newTabTools.updateNotice.dataset.version = Prefs.version;
-
-			let now = new Date();
-			if (now - Prefs.versionLastUpdate < 43200000 && now - Prefs.versionLastAck > 604800000) {
-				newTabTools.updateNotice.hidden = false;
-			}
 		}).catch(console.error);
 	},
 	getThumbnails() {
@@ -1248,8 +1227,6 @@ var newTabTools = {
 		'optionsFilterHostAutocomplete': 'host-autocomplete',
 		'optionsFilterCount': 'options-filter-count',
 		'optionsFilterSet': 'options-filter-set',
-		'updateNotice': 'newtab-update-notice',
-		'updateText': 'newtab-update-text',
 		'lockedToggleButton': 'locked-toggle',
 		'databaseError': 'database-error',
 		'contextMenu': 'context-menu',
@@ -1269,7 +1246,6 @@ var newTabTools = {
 		}
 	}
 
-	newTabTools.updateNotice.addEventListener('click', newTabTools.optionsOnClick.bind(newTabTools));
 	newTabTools.lockedToggleButton.addEventListener('click', function() {
 		Prefs.locked = !Prefs.locked;
 		this.blur();

@@ -29,9 +29,6 @@
 	"bg_set": {
 		"message": "Ustaw"
 	},
-	"changelog_label": {
-		"message": "Co nowego?"
-	},
 	"contextmenu_block": {
 		"message": "Usuń ten kafelek"
 	},
@@ -68,12 +65,6 @@
 	},
 	"database_error_restart": {
 		"message": "Musisz zrestartować New Tab Tools (lub zrestartować Firefoxa), aby te zmiany odniosły efekt."
-	},
-	"donate": {
-		"message": "Wspomóż…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools jest finansowany z darowizn użytkowników."
 	},
 	"extensionDescription": {
 		"message": "Modyfikuje stronę nowej karty. Możesz dodać więcej kafelków, pasek uruchamiania lub obrazek w tle. Możesz też ustawiać obrazy i tytuły dla kafelków."
@@ -131,15 +122,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Cofnij."
-	},
-	"newversion": {
-		"message": "New Tab Tools zaktualizowano do wersji $VERSION$. New Tab Tools jest darmowe, ale Twoja darowizna jest mile widziana!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "Kolumny"

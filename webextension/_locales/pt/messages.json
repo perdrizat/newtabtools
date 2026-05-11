@@ -17,9 +17,6 @@
 	"bg_set": {
 		"message": "Definir"
 	},
-	"changelog_label": {
-		"message": "O Que Mudou?"
-	},
 	"contextmenu_block": {
 		"message": "Remover este azulejo"
 	},
@@ -56,12 +53,6 @@
 	},
 	"database_error_restart": {
 		"message": "Tens de reiniciar as Ferramentas do Novo Separador (ou apenas o Firefox) para estas alterações terem efeito."
-	},
-	"donate": {
-		"message": "Doar…"
-	},
-	"donate_label": {
-		"message": "As Ferramentas do Novo Separador são financiadas por doações de utilizadores."
 	},
 	"extensionDescription": {
 		"message": "Personaliza a página de Novo Separador. Podes adicionar mais azulejos, ou uma imagem de fundo. Podes também definir novas imagens de azulejo e títulos."
@@ -119,15 +110,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Anular"
-	},
-	"newversion": {
-		"message": "As Ferramentas do Novo Separador foram actualizadas para a versão $VERSION$. As Ferramentas do Novo Separador são grátis, mas as tuas doações são apreciadas!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "Colunas"

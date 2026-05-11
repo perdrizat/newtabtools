@@ -29,9 +29,6 @@
 	"bg_set": {
 		"message": "Εφαρμογή"
 	},
-	"changelog_label": {
-		"message": "Τι άλλαξε;"
-	},
 	"contextmenu_block": {
 		"message": "Αφαίρεση πλακιδίου"
 	},
@@ -62,12 +59,6 @@
 	},
 	"database_error_restart": {
 		"message": "Θα πρέπει να ξαναξεκινήσετε το New Tab Tools (ή απλώς ξαναξεκινστε τον Firefox) για να εφαρμοστούν οι αλλαγές."
-	},
-	"donate": {
-		"message": "Δωρίστε…"
-	},
-	"donate_label": {
-		"message": "To New Tab Tools χρηματοδοτείται απο δωρεές χρηστών."
 	},
 	"extensionDescription": {
 		"message": "Παραμετροποιεί την σελίδα της νέας καρτέλας. Μπορείτε να προσθέσετε περισσότερα πλακίδια, ή μια εικόνα παρασκηνίου. Επίσης μπορείτε να προσθέσετε νέες εικόνες πλακιδίων και τίτλους."
@@ -125,9 +116,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Αναίρεση"
-	},
-	"newversion": {
-		"message": "Το New Tab Tools έχει ενημερωθεί στην έκδοση $1. Το New Tab Tools είναι δωρεάν, αλλά η συνεισφορά σας θα εκτιμηθεί!"
 	},
 	"options_columns": {
 		"message": "Στήλες"

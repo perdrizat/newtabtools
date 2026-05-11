@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-11]
+
+### Removed
+
+- Donation link, "What Changed?" button, and in-app update notice (Phase 3 fork cleanup)
+- `versionLastUpdate` and `versionLastAck` prefs (version notice tracking no longer needed)
+- `donate`, `donate_label`, `changelog_label`, `newversion` locale strings from all 21 locale files
+
+### Changed
+
+- Converted all 17 E2E test files + `_helpers` from JavaScript to TypeScript with full type annotations
+
 ## [2026-05-10]
 
 ### Added

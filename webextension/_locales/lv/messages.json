@@ -11,9 +11,6 @@
 	"bg_set": {
 		"message": "Iestatīt"
 	},
-	"changelog_label": {
-		"message": "Kas mainījies?"
-	},
 	"contextmenu_block": {
 		"message": "Noņemt elementu"
 	},
@@ -28,12 +25,6 @@
 	},
 	"contextmenu_unpin": {
 		"message": "Atspraust elementu"
-	},
-	"donate": {
-		"message": "Ziedot…"
-	},
-	"donate_label": {
-		"message": "NewTabTools tiek finansēts no lietotāju ziedojumiem."
 	},
 	"extensionDescription": {
 		"message": "Personalizē jaunas cilnes lapu. Jūs varat pievienot vairāk elementus, palaidējjoslu no Firefox sākumlapas vai fona attēlu, kā arī mainīt vietņu attēlus un nosaukumus."
@@ -61,9 +52,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Atcelt"
-	},
-	"newversion": {
-		"message": "NewTabTools ir atjaunināts uz versiju $1. NewTabTools ir bezmaksas, taču jūsu ziedojums tiks novērtēts!"
 	},
 	"options_columns": {
 		"message": "Kolonnas"

@@ -11,9 +11,6 @@
 	"bg_set": {
 		"message": "Задай"
 	},
-	"changelog_label": {
-		"message": "Какво се промени?"
-	},
 	"contextmenu_block": {
 		"message": "Премахни плочката"
 	},
@@ -28,12 +25,6 @@
 	},
 	"contextmenu_unpin": {
 		"message": "Откачи плочката"
-	},
-	"donate": {
-		"message": "Дарение…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools се издържа от дарения."
 	},
 	"extensionName": {
 		"message": "New Tab Tools"
@@ -58,9 +49,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Отмяна"
-	},
-	"newversion": {
-		"message": "New Tab Tools се обнови до версия $1. New Tab Tools е безплатно, но даренията са добре дошли!"
 	},
 	"options_columns": {
 		"message": "Колони"

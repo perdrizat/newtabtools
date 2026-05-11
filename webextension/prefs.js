@@ -20,8 +20,6 @@ var Prefs = {
 	_thumbnailSize: 600,
 	_backgroundUrl: '',
 	_version: -1,
-	_versionLastUpdate: new Date(0),
-	_versionLastAck: new Date(0),
 
 	init() {
 		chrome.storage.local.remove(['toolbarIcon']);
@@ -109,12 +107,6 @@ var Prefs = {
 		if ('version' in prefs && typeof prefs.version == 'number' || typeof prefs.version == 'string') {
 			this._version = prefs.version;
 		}
-		if ('versionLastUpdate' in prefs) {
-			this._versionLastUpdate = new Date(prefs.versionLastUpdate);
-		}
-		if ('versionLastAck' in prefs) {
-			this._versionLastAck = new Date(prefs.versionLastAck);
-		}
 	},
 	prefsChanged(changes) {
 		let prefs = Object.create(null);
@@ -144,20 +136,6 @@ var Prefs = {
 			}
 		}
 	},
-	get versionLastAck() {
-		return this._versionLastAck;
-	},
-	set versionLastAck(value) {
-		chrome.storage.local.set({ versionLastAck: value.toJSON() });
-	},
-	get versionLastUpdate() {
-		return this._versionLastUpdate;
-	},
-	set versionLastUpdate(value) {
-		// Make sure this is up to date for synchronous code.
-		this._versionLastUpdate = value;
-		chrome.storage.local.set({ versionLastUpdate: value.toJSON() });
-	}
 };
 
 var Blocked = {

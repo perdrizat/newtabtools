@@ -18,7 +18,7 @@ async function makeZip() {
 	let prefs = await new Promise(function(resolve) {
 		chrome.storage.local.get(resolve);
 	});
-	for (let k of ['thumbnailSize', 'version', 'versionLastUpdate', 'versionLastAck']) {
+	for (let k of ['thumbnailSize', 'version']) {
 		delete prefs[k];
 	}
 	await writer.add('prefs.json', new zip.TextReader(JSON.stringify(prefs, null, '\t')));

@@ -17,9 +17,6 @@
 	"bg_set": {
 		"message": "설정"
 	},
-	"changelog_label": {
-		"message": "변경 내용"
-	},
 	"contextmenu_block": {
 		"message": "선택한 타일 제거"
 	},
@@ -56,12 +53,6 @@
 	},
 	"database_error_restart": {
 		"message": "변경된 설정을 적용하기 위해서는 New Tab Tools 또는 Firefox 재시작이 필요할 수 있습니다."
-	},
-	"donate": {
-		"message": "기부하기..."
-	},
-	"donate_label": {
-		"message": "New Tab Tools은 여러분의 기부로 개발됩니다."
 	},
 	"extensionDescription": {
 		"message": "새 탭 페에지를 커스텀 하며, 새로운 탭과 백그라운드 이미지를 추가할 수 있습니다. 그리고 새로운 타일 이미지와 타일 타이틀을 설정할 수 있습니다."
@@ -119,15 +110,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "취소"
-	},
-	"newversion": {
-		"message": "New Tab Tools이 $VERSION$으로 업데이트 되었습니다. New Tab Tools은 무료이며, 여러분의 기부를 언제나 환영합니다!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "모든 열"

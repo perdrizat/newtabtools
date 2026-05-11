@@ -11,9 +11,6 @@
 	"bg_set": {
 		"message": "设为背景"
 	},
-	"changelog_label": {
-		"message": "有什么变化？"
-	},
 	"contextmenu_block": {
 		"message": "移除此磁贴"
 	},
@@ -28,12 +25,6 @@
 	},
 	"contextmenu_unpin": {
 		"message": "解除固定此磁贴"
-	},
-	"donate": {
-		"message": "捐助…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools 依靠用户捐助维持。"
 	},
 	"extensionDescription": {
 		"message": "自定义新标签页。您可以添加更多的磁贴，一个 Firefox 的快速启动栏，以及设置背景图片。您还可以设定新建磁贴的图片和标题。"
@@ -58,9 +49,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "撤销"
-	},
-	"newversion": {
-		"message": "New Tab Tools 已更新到版本 $1。请考虑做点捐助。"
 	},
 	"options_columns": {
 		"message": "横向行"

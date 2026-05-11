@@ -81,8 +81,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		Prefs._recent = true;
 		Prefs._thumbnailSize = 600;
 		Prefs._version = -1;
-		Prefs._versionLastUpdate = new Date(0);
-		Prefs._versionLastAck = new Date(0);
 
 		Blocked._list = [];
 		Filters._list = Object.create(null);
@@ -205,13 +203,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Prefs._version).toBe('2.0');
 	});
 
-	it('parsePrefs accepts versionLastUpdate and versionLastAck as date strings', () => {
-		const dateStr = '2026-01-15T00:00:00.000Z';
-		Prefs.parsePrefs({ versionLastUpdate: dateStr, versionLastAck: dateStr });
-		expect(Prefs._versionLastUpdate.toISOString()).toBe(dateStr);
-		expect(Prefs._versionLastAck.toISOString()).toBe(dateStr);
-	});
-
 	// ==================== parsePrefs — invalid/missing values ====================
 
 	it('parsePrefs rejects invalid theme (keeps default)', () => {
@@ -312,23 +303,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 	});
 
 	// ==================== Prefs version setters ====================
-
-	it('versionLastAck setter writes JSON date to storage', () => {
-		const d = new Date('2026-06-01T00:00:00.000Z');
-		Prefs.versionLastAck = d;
-		expect(chrome.storage.local.set).toHaveBeenCalledWith({
-			versionLastAck: d.toJSON(),
-		});
-	});
-
-	it('versionLastUpdate setter writes JSON date and updates internal field', () => {
-		const d = new Date('2026-06-01T00:00:00.000Z');
-		Prefs.versionLastUpdate = d;
-		expect(Prefs._versionLastUpdate).toBe(d);
-		expect(chrome.storage.local.set).toHaveBeenCalledWith({
-			versionLastUpdate: d.toJSON(),
-		});
-	});
 
 	// ==================== Blocked ====================
 

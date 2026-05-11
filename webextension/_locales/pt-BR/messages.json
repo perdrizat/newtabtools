@@ -29,9 +29,6 @@
 	"bg_set": {
 		"message": "Definir"
 	},
-	"changelog_label": {
-		"message": "O Que Mudou?"
-	},
 	"contextmenu_block": {
 		"message": "Remover este bloco"
 	},
@@ -68,12 +65,6 @@
 	},
 	"database_error_restart": {
 		"message": "Você precisará reiniciar o New Tab Tools (ou só reiniciar o Firefox) para que as alterações sejam aplicadas."
-	},
-	"donate": {
-		"message": "Doar…"
-	},
-	"donate_label": {
-		"message": "O New Tab Tools é mantido com doações de usuários."
 	},
 	"extensionDescription": {
 		"message": "Personaliza a página 'Nova Aba'. Você pode adicionar mais blocos, o iniciador do Firefox, ou uma imagem de fundo. E você pode definir novos blocos e suas imagens."
@@ -131,15 +122,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Desfazer"
-	},
-	"newversion": {
-		"message": "O New Tab Tools foi atualizado para a versão $VERSION$. O New Tab Tools é gratuito, mas uma doação é bem vinda!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "Colunas"

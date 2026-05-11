@@ -17,9 +17,6 @@
 	"bg_set": {
 		"message": "Nastavit"
 	},
-	"changelog_label": {
-		"message": "Co se změnilo?"
-	},
 	"contextmenu_block": {
 		"message": "Odebrat dlaždici"
 	},
@@ -56,12 +53,6 @@
 	},
 	"database_error_restart": {
 		"message": "Budete muset restartovat New Tab Tools (nebo jen restartovat Firefox), jinak se změny neprojeví."
-	},
-	"donate": {
-		"message": "Darovat…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools je financován z darů uživatelů."
 	},
 	"extensionDescription": {
 		"message": "Přizpůsobí stránku nového panelu. Můžete přidat další dlaždice nebo obrázek na pozadí. Také můžete nastavit vlastní obrázek a název dlaždice."
@@ -119,15 +110,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "Zpět"
-	},
-	"newversion": {
-		"message": "New Tab Tools byl aktualizován na verzi $VERSION$. New Tab Tools je volně použitelný, ale váš dar potěší!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "Sloupců"

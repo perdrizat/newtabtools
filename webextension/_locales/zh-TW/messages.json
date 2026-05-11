@@ -29,9 +29,6 @@
 	"bg_set": {
 		"message": "設為背景"
 	},
-	"changelog_label": {
-		"message": "有那些變更?"
-	},
 	"contextmenu_block": {
 		"message": "移除此首頁磚"
 	},
@@ -68,12 +65,6 @@
 	},
 	"database_error_restart": {
 		"message": "您需要重新啟動New Tab Tools（或者重新啟動Firefox）才能使這些更改生效。"
-	},
-	"donate": {
-		"message": "捐款…"
-	},
-	"donate_label": {
-		"message": "New Tab Tools是由使用者的捐款資助。"
 	},
 	"extensionDescription": {
 		"message": "自訂新分頁頁面。你可以添加更多首頁磚、或是自訂背景圖片，你也能為首頁磚設定新的圖片和標題。"
@@ -131,15 +122,6 @@
 	},
 	"newtab_undo_undoButton": {
 		"message": "恢復"
-	},
-	"newversion": {
-		"message": "New Tab Tools已更新至版本$VERSION$。New Tab Tools是免費的，但您的捐贈是值得讚賞的!",
-		"placeholders": {
-			"version": {
-				"content": "$1",
-				"example": "84"
-			}
-		}
 	},
 	"options_columns": {
 		"message": "欄"

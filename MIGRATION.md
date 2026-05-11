@@ -58,9 +58,9 @@ For each row, what *currently* exists in the test suite. Updated as tests land.
 
 | Feature | Current state | Strategy | Implementation refs (legacy) | Test status |
 |---|---|---|---|---|
-| Donation link to previous maintainer | already disabled (alert only) | Ready to delete — ~20 LOC across `newTab.js`/`newTab.xhtml`/CSS + `donate` strings in 20 locale files | settings panel donation row in `newTab.js` / `newTab.xhtml` | None |
-| In-app update notice ("New Tab Tools has been updated…") | working | Delete — but must coordinate removal of version-update flow in `background.js` simultaneously (~30 LOC across 3 files: `newTab.js`, `prefs.js`, `background.js`, `export.js`) | update modal in `newTab.js`; prefs `versionLastUpdate`/`versionLastAck` in `prefs.js`; version check in `background.js` | None |
-| Beta channel link, "What Changed?" link to AMO version-history | beta link already gone; version-history link still present | Ready to delete — ~5 LOC in `newTab.xhtml`/`newTab.js` + `changelog_label` in 20 locale files | links in `newTab.xhtml` | None |
+| Donation link to previous maintainer | **deleted** | Removed settings-panel donate fieldset, alert handler, CSS, `donate`/`donate_label` strings from 20 locales | ~~settings panel donation row~~ | None |
+| In-app update notice ("New Tab Tools has been updated…") | **deleted** | Removed update-notice banner, version-tracking prefs (`versionLastUpdate`/`versionLastAck`), `newversion`/`changelog_label` strings from 20 locales, `export.js` exclusion list entry | ~~update modal in `newTab.js`; prefs in `prefs.js`; version check in `background.js`~~ | None |
+| Beta channel link, "What Changed?" link to AMO version-history | **deleted** | Removed as part of update-notice deletion | ~~links in `newTab.xhtml`~~ | None |
 | Capture-and-save-current-thumbnail button | working — `action.js` sends `Thumbnails.capture` message, background calls `captureVisibleTab` | Ready to evaluate — auto-thumbnail rewrite complete; button now uses same capture path as auto-capture | capture button in `action.js`; `Thumbnails.capture` handler in `background.js` | **Integration** (`auto-thumbnail.test.ts` — action.js capture button tests) |
 
 ## Sequencing
@@ -150,15 +150,13 @@ All 22 features are complete. The only feature that required an actual rewrite w
 
 Extracting pure logic to standalone `lib/` modules is deferred to the MV3 migration — MV2 script-mode files can't import ES modules.
 
-### Phase 3: Drop sweep
+### Phase 3: Drop sweep (complete)
 
-Three features are ready to delete, one needs evaluation:
-
-1. **Donation link** — ready to delete (~20 LOC + locale strings).
-2. **"What Changed?" link** — ready to delete (~5 LOC + locale strings).
-3. **In-app update notice** — must coordinate removal with `background.js` version-update flow (~30 LOC across 3 files).
-4. **Capture-and-save-current-thumbnail button** — no longer blocked. Evaluate whether to keep (now working via `captureVisibleTab`) or delete.
-5. **Convert E2E tests from JS to TS** — all E2E test files (`tests/e2e/*.test.js`) are plain JavaScript while integration/unit tests use TypeScript. Convert them to `.ts` for consistency and type safety. Update `vitest.config.js` e2e include pattern to `tests/e2e/**/*.test.{js,ts}` and `TESTING.md` references.
+1. [x] **Donation link** — deleted. Settings-panel fieldset, alert handler, CSS, `donate`/`donate_label` locale strings removed.
+2. [x] **"What Changed?" link** — deleted (part of update-notice removal).
+3. [x] **In-app update notice** — deleted. Banner HTML, version-tracking prefs (`versionLastUpdate`/`versionLastAck`), `newversion`/`changelog_label` locale strings, `export.js` exclusion, `background.js` version-update trigger all removed.
+4. **Capture-and-save-current-thumbnail button** — kept (working via `captureVisibleTab`).
+5. [x] **Convert E2E tests from JS to TS** — all 17 E2E test files converted to `.ts` with full type annotations. `_helpers.js` → `_helpers.ts`. `tsconfig.json` updated with `allowImportingTsExtensions`.
 
 ### Phase 4: Stabilization → unblock MV3 stage
 

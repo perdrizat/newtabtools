@@ -165,8 +165,6 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 				columns: 5,
 				thumbnailSize: 600,
 				version: '2.0',
-				versionLastUpdate: '2026-01-01',
-				versionLastAck: '2026-01-01',
 			}));
 
 			await makeZip();
@@ -180,8 +178,6 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			// These internal keys must be stripped:
 			expect(prefs).not.toHaveProperty('thumbnailSize');
 			expect(prefs).not.toHaveProperty('version');
-			expect(prefs).not.toHaveProperty('versionLastUpdate');
-			expect(prefs).not.toHaveProperty('versionLastAck');
 		});
 
 		it('exports tiles.json with tile data', async () => {
