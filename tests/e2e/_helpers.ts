@@ -231,6 +231,7 @@ export async function resetPrefs(browser: Browser): Promise<void> {
 			P.themeAuto = false;
 			P.opacity = 80;
 			P.titleSize = 'small';
+			P.tileAspect = 'fill';
 			P.spacing = 'small';
 			P.margin = ['small', 'small', 'small', 'small'];
 			P.history = true;
@@ -275,7 +276,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
 			chrome.storage.local.set({
 				rows: 3, columns: 3, locked: false,
 				theme: 'system', themeAuto: false, opacity: 80,
-				titleSize: 'small', spacing: 'small',
+				titleSize: 'small', tileAspect: 'fill', spacing: 'small',
 				margin: ['small', 'small', 'small', 'small'],
 				history: true, recent: true,
 			}, () => {

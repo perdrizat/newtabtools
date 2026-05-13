@@ -356,6 +356,18 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			expect(storedPrefs).not.toHaveProperty('__proto__');
 		});
 
+		it('passes tileAspect through the restore allow-list', async () => {
+			const prefs = { theme: 'dark', tileAspect: '16-9' };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.tileAspect).toBe('16-9');
+		});
+
 		it('stores tiles with HTML in titles without sanitization', async () => {
 			const tiles = [
 				{ id: 3, url: 'https://legit.com', title: '<img src=x onerror=alert(1)>', position: 0 },

@@ -180,6 +180,24 @@
 	"options_thumb_titlesize": {
 		"message": "Tile title size"
 	},
+	"options_tile_aspect": {
+		"message": "Tile aspect ratio"
+	},
+	"options_tile_aspect_fill": {
+		"message": "Fill viewport"
+	},
+	"options_tile_aspect_16_9": {
+		"message": "16:9"
+	},
+	"options_tile_aspect_4_3": {
+		"message": "4:3"
+	},
+	"options_tile_aspect_1_1": {
+		"message": "1:1"
+	},
+	"options_tile_aspect_3_4": {
+		"message": "3:4"
+	},
 	"pin_url_button": {
 		"message": "Add"
 	},

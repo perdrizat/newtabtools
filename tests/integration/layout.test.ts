@@ -59,6 +59,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			rows: 3, columns: 3, opacity: 80,
 			margin: ['small', 'small', 'small', 'small'],
 			spacing: 'small', titleSize: 'small',
+			tileAspect: 'fill',
 			history: true, recent: true,
 		};
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
@@ -71,7 +72,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
+		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
 		vm.runInThisContext(code, { filename: 'layout-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -84,6 +85,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		Prefs.margin = ['small', 'small', 'small', 'small'];
 		Prefs.spacing = 'small';
 		Prefs.titleSize = 'small';
+		Prefs.tileAspect = 'fill';
 		Prefs.locked = false;
 		Prefs.theme = 'light';
 		Prefs.themeAuto = false;
@@ -137,6 +139,11 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 	it('optionsOnChange sets titleSize as string', () => {
 		harness.optionsOnChange({ target: { disabled: false, name: 'titleSize', value: 'hidden', checked: false } });
 		expect(Prefs.titleSize).toBe('hidden');
+	});
+
+	it('optionsOnChange sets tileAspect as string', () => {
+		harness.optionsOnChange({ target: { disabled: false, name: 'tileAspect', value: '16-9', checked: false } });
+		expect(Prefs.tileAspect).toBe('16-9');
 	});
 
 	it('optionsOnChange sets locked from checked boolean', () => {
@@ -202,6 +209,17 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		harness.updateUI(['spacing']);
 		expect(mockInput.value).toBe('medium');
 		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('spacing', 'medium');
+	});
+
+	// ==================== updateUI('tileAspect') ====================
+
+	it('updateUI sets tileAspect input value and attribute', () => {
+		Prefs.tileAspect = '3-4';
+		const mockInput = { value: '' };
+		document.querySelector = vi.fn(() => mockInput) as any;
+		harness.updateUI(['tileAspect']);
+		expect(mockInput.value).toBe('3-4');
+		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('tileaspect', '3-4');
 	});
 
 	// ==================== updateUI('margin') ====================

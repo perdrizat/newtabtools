@@ -388,6 +388,7 @@ var newTabTools = {
 		case 'theme':
 		case 'spacing':
 		case 'titleSize':
+		case 'tileAspect':
 			Prefs[name] = value;
 			break;
 		case 'opacity':
@@ -851,6 +852,16 @@ var newTabTools = {
 			document.documentElement.setAttribute('spacing', spacing);
 		}
 
+		if (!keys || keys.includes('tileAspect')) {
+			let tileAspect = Prefs.tileAspect;
+			document.querySelector('[name="tileAspect"]').value = tileAspect;
+			document.documentElement.setAttribute('tileaspect', tileAspect);
+		}
+
+		if (!keys || keys.includes('tileAspect') || keys.includes('rows') || keys.includes('columns') || keys.includes('spacing')) {
+			this.applyTileAspect();
+		}
+
 		if (!keys || keys.includes('opacity')) {
 			let opacity = Prefs.opacity;
 			document.querySelector('[name="opacity"]').value = opacity;
@@ -1039,6 +1050,51 @@ var newTabTools = {
 			this.siteThumbnail.style.width = 150 * ratio + 'px';
 			this.siteThumbnail.style.height = '150px';
 		}
+	},
+	computeCellDimensions(gridWidth, gridHeight, rows, cols, gap, aspect) {
+		if (aspect == null) {
+			return null;
+		}
+		if (gridWidth <= 0 || gridHeight <= 0 || rows <= 0 || cols <= 0) {
+			return null;
+		}
+		let availW = gridWidth - (cols - 1) * gap;
+		let availH = gridHeight - (rows - 1) * gap;
+		if (availW <= 0 || availH <= 0) {
+			return null;
+		}
+		let cellWFromWidth = availW / cols;
+		let cellHFromWidth = cellWFromWidth / aspect;
+		if (cellHFromWidth * rows + (rows - 1) * gap <= gridHeight) {
+			return { cellWidth: cellWFromWidth, cellHeight: cellHFromWidth };
+		}
+		let cellHFromHeight = availH / rows;
+		let cellWFromHeight = cellHFromHeight * aspect;
+		return { cellWidth: cellWFromHeight, cellHeight: cellHFromHeight };
+	},
+	applyTileAspect() {
+		if (!('Grid' in window) || !Grid.node) {
+			return;
+		}
+		let grid = Grid.node;
+		// 'fill' uses the existing flex behavior — clear inline vars and exit.
+		let map = { 'fill': null, '16-9': 16 / 9, '4-3': 4 / 3, '1-1': 1, '3-4': 3 / 4 };
+		let aspect = map[Prefs.tileAspect];
+		if (aspect == null) {
+			grid.style.removeProperty('--cell-width');
+			grid.style.removeProperty('--cell-height');
+			return;
+		}
+		let gap = { small: 5, medium: 10, large: 20 }[Prefs.spacing] || 5;
+		let dims = this.computeCellDimensions(
+			grid.clientWidth, grid.clientHeight,
+			Prefs.rows, Prefs.columns, gap, aspect
+		);
+		if (!dims) {
+			return;
+		}
+		grid.style.setProperty('--cell-width', dims.cellWidth + 'px');
+		grid.style.setProperty('--cell-height', dims.cellHeight + 'px');
 	},
 	showOptionsExtra(which) {
 		if (!which) {
@@ -1369,5 +1425,6 @@ var newTabTools = {
 	}, true);
 	window.addEventListener('resize', function() {
 		newTabTools.refreshRecent();
+		newTabTools.applyTileAspect();
 	});
 })();

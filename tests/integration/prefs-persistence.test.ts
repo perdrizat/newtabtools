@@ -76,6 +76,7 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		Prefs._margin = ['small', 'small', 'small', 'small'];
 		Prefs._spacing = 'small';
 		Prefs._titleSize = 'small';
+		Prefs._tileAspect = 'fill';
 		Prefs._locked = false;
 		Prefs._history = true;
 		Prefs._recent = true;
@@ -176,6 +177,13 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		}
 	});
 
+	it('parsePrefs accepts valid tileAspect', () => {
+		for (const v of ['fill', '16-9', '4-3', '1-1', '3-4']) {
+			Prefs.parsePrefs({ tileAspect: v });
+			expect(Prefs._tileAspect).toBe(v);
+		}
+	});
+
 	it('parsePrefs accepts valid locked', () => {
 		Prefs.parsePrefs({ locked: true });
 		expect(Prefs._locked).toBe(true);
@@ -246,6 +254,15 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 	it('parsePrefs rejects invalid titleSize', () => {
 		Prefs.parsePrefs({ titleSize: 'tiny' });
 		expect(Prefs._titleSize).toBe('small');
+	});
+
+	it('parsePrefs rejects invalid tileAspect (keeps default)', () => {
+		Prefs.parsePrefs({ tileAspect: 'crooked' });
+		expect(Prefs._tileAspect).toBe('fill');
+		Prefs.parsePrefs({ tileAspect: '16:9' });
+		expect(Prefs._tileAspect).toBe('fill');
+		Prefs.parsePrefs({ tileAspect: null });
+		expect(Prefs._tileAspect).toBe('fill');
 	});
 
 	it('parsePrefs coerces locked to strict boolean', () => {

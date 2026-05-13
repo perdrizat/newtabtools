@@ -272,6 +272,39 @@ input[type="button"] {
 .newtab-cell:last-child {
 	margin-inline-end: 0;
 }
+/* TILE ASPECT RATIO — locked modes.
+ * When the user selects a non-fill aspect, cells get explicit pixel
+ * dimensions from --cell-width / --cell-height (computed by JS via
+ * newTabTools.applyTileAspect to fit both viewport axes). Rows shrink
+ * to cell height; the grid centers in its available space so unused
+ * slack becomes outer margin. The aspect-ratio rule is a belt-and-
+ * suspenders guarantee in case the vars are momentarily unset. */
+:root[tileaspect="16-9"] #newtab-grid,
+:root[tileaspect="4-3"] #newtab-grid,
+:root[tileaspect="1-1"] #newtab-grid,
+:root[tileaspect="3-4"] #newtab-grid {
+	justify-content: center;
+	align-items: center;
+}
+:root[tileaspect="16-9"] .newtab-row,
+:root[tileaspect="4-3"] .newtab-row,
+:root[tileaspect="1-1"] .newtab-row,
+:root[tileaspect="3-4"] .newtab-row {
+	flex: 0 0 auto;
+	justify-content: center;
+}
+:root[tileaspect="16-9"] .newtab-cell,
+:root[tileaspect="4-3"] .newtab-cell,
+:root[tileaspect="1-1"] .newtab-cell,
+:root[tileaspect="3-4"] .newtab-cell {
+	flex: 0 0 auto;
+	width: var(--cell-width);
+	height: var(--cell-height);
+}
+:root[tileaspect="16-9"] .newtab-cell { aspect-ratio: 16 / 9; }
+:root[tileaspect="4-3"]  .newtab-cell { aspect-ratio: 4 / 3; }
+:root[tileaspect="1-1"]  .newtab-cell { aspect-ratio: 1 / 1; }
+:root[tileaspect="3-4"]  .newtab-cell { aspect-ratio: 3 / 4; }
 /* SITES */
 .newtab-site {
 	position: relative;

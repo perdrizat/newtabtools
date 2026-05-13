@@ -6,18 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [2026-05-11b]
+## [2026-05-13]
 
 ### Added
 
-- Post-takeover code review and assessment at `audit/2026-05-11-code-review.md`
-- `MV3_MIGRATION.md` is now the active migration plan
+- Tile aspect ratio setting in the layout panel: `Fill viewport` (default, unchanged behavior), `16:9`, `4:3`, `1:1`, `3:4` (portrait). Resolves upstream issue #505 — tiles maintain the chosen ratio and the grid centers in the available space.
+- `newTabTools.computeCellDimensions` pure helper plus `applyTileAspect` integrator; cell dimensions are JS-computed when an aspect is locked (CSS `aspect-ratio` alone collapses to zero in the existing flex layout). Recomputes on window resize and on rows/columns/spacing/tileAspect changes.
+- `tileAspect` added to the §2.5 restore allow-list so the setting round-trips through backup/restore.
 
-### Fixed
+### Changed
 
-- Export/Import `sendResponse()` invoked immediately instead of passed as callback (§5.1)
-- `isValidURL` allow-list tightened from 5 schemes to 3 (`http:`, `https:`, `ftp:`) — aligns with restore/render boundaries (§5.2)
-- `strict_min_version` bumped from 91.0 to 128.0 (current ESR) (§5.3)
+- `package-lock.json` regenerated to drop `^` ranges from devDependency records, aligning the lock file with the exact pinning already declared in `package.json`.
+
+## [2026-05-11]
+
+### Security
+
+- `npm audit fix` — resolved `fast-uri` path traversal via percent-encoded dot segments
 
 ### Changed
 
@@ -25,28 +30,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Removed ~25 debug `console.log`/`console.warn` calls from `background.js` (§5.5)
 - Pinned all devDependency versions to exact (no `^` ranges) (§5.4)
 - `MIGRATION.md` marked complete and renamed to `MIGRATION_COMPLETED.md`
-
-### Security
-
-- `npm audit fix` — resolved `fast-uri` path traversal via percent-encoded dot segments
-
-## [2026-05-11]
-
-### Changed
-
 - Auto-thumbnail rewrite: multi-stage capture (A/B/C) with blankness detection for heavy SPAs like X.com
 - `Thumbnails.capture` handler uses new `startCaptureSession` instead of removed `captureAndStore`
 - Rewrote `auto-thumbnail.test.ts` from source-scanning to behavioral tests (vm.runInThisContext + fake timers)
 - Rewrote `wallpaper-picker.test.ts` fetch logic from source-scanning to behavioral tests
 - Completed source-scanning → behavioral audit across all 14 integration test files
+- Converted all 17 E2E test files + `_helpers` from JavaScript to TypeScript with full type annotations
 
 ### Added
 
+- Post-takeover code review and assessment at `audit/2026-05-11-code-review.md`
+- `MV3_MIGRATION.md` is now the active migration plan
 - Remove-thumbnail button on tile hover (alongside pin and block controls)
 - `Thumbnails.delete` message handler to remove thumbnails from IDB
 
 ### Fixed
 
+- Export/Import `sendResponse()` invoked immediately instead of passed as callback (§5.1)
+- `isValidURL` allow-list tightened from 5 schemes to 3 (`http:`, `https:`, `ftp:`) — aligns with restore/render boundaries (§5.2)
+- `strict_min_version` bumped from 91.0 to 128.0 (current ESR) (§5.3)
 - Hard deadline now takes a C capture before finalizing (was finalizing with A+B only)
 - Tab-active guard in `captureTab` prevents capturing wrong tab when user switches mid-session
 - SPA double-`onCompleted` cancels prior session timers to prevent stale hard-deadline firing
@@ -56,10 +58,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Donation link, "What Changed?" button, and in-app update notice (Phase 3 fork cleanup)
 - `versionLastUpdate` and `versionLastAck` prefs (version notice tracking no longer needed)
 - `donate`, `donate_label`, `changelog_label`, `newversion` locale strings from all 21 locale files
-
-### Changed
-
-- Converted all 17 E2E test files + `_helpers` from JavaScript to TypeScript with full type annotations
 
 ## [2026-05-10]
 
