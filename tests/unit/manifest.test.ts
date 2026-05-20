@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
+// eslint-disable-next-line ntt/no-source-grep -- loading manifest for structural validation
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
 
 describe('manifest.json — security configuration', () => {

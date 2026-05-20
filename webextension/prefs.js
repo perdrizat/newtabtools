@@ -15,6 +15,7 @@ var Prefs = {
 	_spacing: 'small',
 	_titleSize: 'small',
 	_tileAspect: 'fill',
+	_statType: 'none',
 	_locked: false,
 	_history: true,
 	_recent: true,
@@ -35,6 +36,7 @@ var Prefs = {
 			'spacing',
 			'titleSize',
 			'tileAspect',
+			'statType',
 			'locked',
 			'history',
 			'recent',
@@ -87,6 +89,9 @@ var Prefs = {
 		}
 		if (['fill', '16-9', '4-3', '1-1', '3-4'].includes(prefs.tileAspect)) {
 			this._tileAspect = prefs.tileAspect;
+		}
+		if (['none', 'visits', 'last', 'trend', 'rank', 'fresh'].includes(prefs.statType)) {
+			this._statType = prefs.statType;
 		}
 		if ('locked' in prefs) {
 			this._locked = prefs.locked === true;

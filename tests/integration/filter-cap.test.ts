@@ -55,6 +55,7 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 	let harness: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const optionsOnClick = extractMethod(source, 'optionsOnClick');
 
@@ -255,7 +256,9 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 	let Tiles: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
 
 		// Provide globals

@@ -46,6 +46,7 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 	let harness: { fetchFirefoxWallpapers: () => Promise<any[]>; _wallpaperCache: any };
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const method = extractMethod(source, 'fetchFirefoxWallpapers');
 
@@ -183,6 +184,7 @@ describe('Wallpaper picker UI — newTab.xhtml', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
 		);
@@ -221,6 +223,7 @@ describe('Wallpaper picker CSS — newTab.css', () => {
 	let css: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.css'), 'utf8'
 		);
@@ -248,6 +251,7 @@ describe('backgroundUrl pref — prefs.js', () => {
 	let prefsSource: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: pref wiring
 		prefsSource = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/prefs.js'), 'utf8'
 		);

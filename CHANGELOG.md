@@ -6,6 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-20 b]
+
+### Added
+
+- New tile template: rounded corners, bottom gradient overlay with favicon + title, pin stripe accent bar
+- Logo-emanation fallback thumbnail: radial gradient bloom with centered favicon letter when no screenshot
+- Tile hover action row: 5 inline SVG buttons (edit URL, open in new tab, refresh thumbnail, pin/unpin, remove)
+- `stats.js`: TileStats module computing visit count, last-visited age, trend, rank, and freshness from `browser.history`
+- `statType` pref (none/visits/last/trend/rank/fresh) with backup/restore support
+- Stat chip slot rendered on tiles (top-left, monospace, backdrop blur)
+- Integration tests for tile redesign (42 tests), tile stats (23 tests)
+- E2E test suite for tile redesign (21 tests: structure, actions, pin toggle, remove, open, refresh, visual sanity)
+- E2E visual sanity checks: thumbnail dimensions, fallback coverage, glyph containment, overlay position, occlusion detection
+- Behavioral tests for `_renderLogoFallback`, `_renderActions`, `updateAttributes`, and `statType` validation
+- `ntt/no-source-grep` ESLint rule: flags `readFileSync` of `webextension/` files in tests, enforces behavioral-test preference
+- `tests/integration/_helpers.ts`: `loadModule()` and `mountSite()` helpers for behavioral tests
+- "Test Design Principles" section in TESTING.md documenting behavioral-test preference
+
+### Changed
+
+- Replaced old `<input>` tile controls (pin/block/remove-thumbnail) with inline SVG action buttons
+- `Site._render` now calls `_renderActions`, `_renderFavicon`, `_renderStatChip`, and `_renderLogoFallback`
+- `Site._onClick` handles action buttons via `data-action` attribute instead of class-based dispatch
+- `Site.updateAttributes` sets `pinned` on `.newtab-site` node instead of old pin control
+- Updated E2E tests (`pin-persists`, `lock-grid`, `drag-reorder`, `auto-thumbnail`) for new tile structure
+- Auto-thumbnail E2E tests now assert fallback is not visually occluding loaded thumbnails
+- Tile action buttons scaled to medium size (33x33px buttons, 16px icons, 7px radius) — 1.5x previous small size
+- Overlay gradient strengthened to 3-stop ramp (0→0.55→0.85) for better title contrast over thumbnails
+- Title text-shadow increased to `0 1px 3px rgba(0,0,0,0.55)` and bottom padding bumped for legibility
+- Logo fallback gradient now uses CSS `--ntt-brand` custom property and `color-mix()` instead of string interpolation
+- "Fresh" stat chip uses `[data-stat-fresh]` attribute + CSS instead of inline styles
+- Extracted `siteGlyph(url)` helper to deduplicate glyph computation
+- `statType` pref change now triggers stat chip re-render on all tiles via `updateUI`
+- Removed `aspect-ratio: 16/9` from `.newtab-site` — cell controls aspect ratio (§2.3)
+
+### Fixed
+
+- Thumbnail `objectURL` leak: previous URL now revoked before creating new one
+- Open action validates URL protocol before `chrome.tabs.create` (§1.2)
+- E2E `css-grid-layout` drag test: pin a test tile in `beforeAll` so `.newtab-site` exists on fresh CI profiles
+- `getThumbnails()` now removes `.ntt-logo-fallback` overlay when an IDB thumbnail is loaded, fixing logo letter covering screenshots
+- Action button SVG icons now visible: added `.ntt-action-btn svg` override for blanket `svg{display:none}` rule
+
+### Security
+
+- `backgroundColor` validated against `/^#[0-9a-f]{3,8}$/i` at restore boundary and render time (§1.1)
+- `browser.history.getVisits` guarded by cached `browser.permissions.contains` check (§1.3)
+
+### Removed
+
+- Old `.newtab-control` CSS rules and SVG sprite background images (`controls-light.svg`)
+- Old `newtab-control-pin`, `newtab-control-block`, `newtab-control-thumbnail` input buttons from template
+- Themed control image logic from `createSite` and `updateThemeColours`
+
 ## [2026-05-20]
 
 ### Added

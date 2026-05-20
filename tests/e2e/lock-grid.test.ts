@@ -30,7 +30,7 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			// Pin a tile so .newtab-control elements exist in the grid.
+			// Pin a tile so action buttons exist in the grid.
 			await page.evaluate(async () => {
 				return new Promise(resolve => {
 					chrome.runtime.sendMessage({
@@ -76,13 +76,13 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 			});
 			expect(lockedAfter).toBe('true');
 
-			// When locked, .newtab-control elements are display: none (CSS rule).
-			const controlDisplay = await page.evaluate(() => {
-				const ctrl = document.querySelector('.newtab-control');
-				if (!ctrl) {return 'no-control-found';}
-				return window.getComputedStyle(ctrl).display;
+			// When locked, .ntt-actions are display: none (CSS rule).
+			const actionsDisplay = await page.evaluate(() => {
+				const actions = document.querySelector('.ntt-actions');
+				if (!actions) {return 'no-actions-found';}
+				return window.getComputedStyle(actions).display;
 			});
-			expect(controlDisplay).toBe('none');
+			expect(actionsDisplay).toBe('none');
 
 			// Disable lock.
 			await page.evaluate(() => {

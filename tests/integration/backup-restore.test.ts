@@ -132,6 +132,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		DefaultZipReader = (globalThis as any).zip.ZipReader;
 
 		// --- Load export.js ---
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const code = fs.readFileSync(EXPORT_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'export.js' });
 
@@ -366,6 +367,39 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
 			expect(storedPrefs.tileAspect).toBe('16-9');
+		});
+
+		it('sanitizes malicious backgroundColor in restored tiles (§1.1 fix)', async () => {
+			const tiles = [
+				{ id: 4, url: 'https://legit.com', title: 'Evil BG', position: 0,
+					backgroundColor: '#ff0000); background-image: url(http://attacker.example/x' },
+			];
+			setupReader([
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedTile = (mockTiles.putTile as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+			expect(storedTile).toBeDefined();
+			expect(storedTile.url).toBe('https://legit.com');
+			// The malicious backgroundColor must be stripped — only valid hex colors pass
+			expect(storedTile.backgroundColor).toBeUndefined();
+		});
+
+		it('preserves valid hex backgroundColor in restored tiles (§1.1 fix)', async () => {
+			const tiles = [
+				{ id: 5, url: 'https://safe.com', title: 'Safe BG', position: 0,
+					backgroundColor: '#c96442' },
+			];
+			setupReader([
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedTile = (mockTiles.putTile as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
+			expect(storedTile.backgroundColor).toBe('#c96442');
 		});
 
 		it('stores tiles with HTML in titles without sanitization', async () => {

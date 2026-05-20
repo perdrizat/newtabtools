@@ -50,6 +50,7 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 	let harness: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
 
@@ -112,7 +113,9 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 	let Tiles: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
 
 		globalThis.Blocked = { isBlocked: vi.fn(() => false) };

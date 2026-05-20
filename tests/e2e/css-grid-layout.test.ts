@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition, getNewTabURL } from './_helpers.ts';
 
 describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	let browser: Browser;
@@ -10,6 +10,19 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 		browser = await connectToFirefox();
 		await resetTestState(browser);
 		page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		// Pin a test tile so .newtab-site exists for drag-related tests.
+		// Fresh CI profiles have no topSites, leaving the grid empty.
+		await page.evaluate(() => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({
+				name: 'Tiles.pinTile',
+				title: 'Grid Test',
+				url: 'https://grid-test.example.com/',
+			}, () => resolve());
+		}));
+		const url = await getNewTabURL();
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 		await waitForGridReady(page);
 	}, 60_000);
 

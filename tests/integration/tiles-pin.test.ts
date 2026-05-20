@@ -140,6 +140,7 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 
 	beforeAll(() => {
 		// Load compareVersions from common.js
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
 		vm.runInThisContext(commonSrc, { filename: 'common.js' });
 
@@ -149,6 +150,7 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
 
 		// Load tiles.js — this defines global `Tiles` and `Background`
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
 		vm.runInThisContext(tilesSrc, { filename: 'tiles.js' });
 

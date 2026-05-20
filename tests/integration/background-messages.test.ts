@@ -207,6 +207,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		// --- Load background.js (script-mode, runs in global scope) ---
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const code = fs.readFileSync(BACKGROUND_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'background.js' });
 

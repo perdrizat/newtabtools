@@ -26,6 +26,7 @@ describe('Tile aspect ratio CSS — newTab.css', () => {
 	let css: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS aspect-ratio rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});
 
@@ -65,6 +66,7 @@ describe('Tile aspect ratio UI — newTab.xhtml', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
 		);

@@ -3,7 +3,7 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Page */
-/* globals Blocked, newTabTools, Prefs, Tiles */
+/* globals Blocked, newTabTools, NttIcons, Prefs, Tiles, TileStats */
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -386,13 +386,6 @@ var Grid = {
 	createSite(link, cell) {
 		let node = cell.node;
 		node.appendChild(this._siteFragment.cloneNode(true));
-		if (Prefs.themeAuto) {
-			newTabTools.getThemedImageURL('controls').then(url => {
-				for (let element of this._siteFragment.querySelectorAll('.newtab-control')) {
-					element.style.backgroundImage = url ? `url(${url})` : null;
-				}
-			});
-		}
 		return new Site(node.firstElementChild, link);
 	},
 
@@ -466,9 +459,6 @@ var Grid = {
 	   */
 	_createSiteFragment() {
 		this._siteFragment = document.getElementById('newtab-site').content.firstElementChild.cloneNode(true);
-		this._siteFragment.querySelectorAll('[data-title]').forEach(n => {
-			n.title = newTabTools.getString(n.dataset.title);
-		});
 	},
 
 	/**
@@ -661,6 +651,15 @@ Cell.prototype = {
 	}
 };
 
+function siteGlyph(url) {
+	try {
+		let hostname = new URL(url).hostname.replace(/^www\./, '');
+		return hostname.charAt(0).toUpperCase();
+	} catch (ex) {
+		return '·';
+	}
+}
+
 /**
  * This class represents a site that is contained in a cell and can be pinned,
  * moved around or deleted.
@@ -706,6 +705,10 @@ Site.prototype = {
 
 	get thumbnail() {
 		return this._querySelector('.newtab-thumbnail');
+	},
+
+	get overlay() {
+		return this._querySelector('.ntt-overlay');
 	},
 
 	/**
@@ -786,14 +789,14 @@ Site.prototype = {
 	   * @param pinned Whether this site is now pinned or unpinned.
 	   */
 	updateAttributes(pinned) {
-		let control = this._querySelector('.newtab-control-pin');
-
 		if (pinned) {
-			control.setAttribute('pinned', true);
-			control.setAttribute('title', newTabTools.getString('tile_unpin'));
+			this._node.setAttribute('pinned', 'true');
 		} else {
-			control.removeAttribute('pinned');
-			control.setAttribute('title', newTabTools.getString('tile_pin'));
+			this._node.removeAttribute('pinned');
+		}
+		let pinBtn = this._querySelector('.ntt-action-btn[data-action="pin"]');
+		if (pinBtn) {
+			pinBtn.setAttribute('title', newTabTools.getString(pinned ? 'tile_unpin' : 'tile_pin'));
 		}
 	},
 
@@ -804,9 +807,47 @@ Site.prototype = {
 		if (this.isPinned) {
 			this.updateAttributes(true);
 		}
-		// but still display whatever thumbnail might be available now.
 		this.refreshThumbnail();
 		this.addTitle();
+		this._renderActions();
+		this._renderFavicon();
+		this._renderStatChip();
+	},
+
+	_renderStatChip() {
+		let chip = this._querySelector('.ntt-stat-chip');
+		if (!chip) {
+			return;
+		}
+		let statType = Prefs.statType;
+		if (statType === 'none') {
+			chip.textContent = '';
+			chip.removeAttribute('data-stat-fresh');
+			return;
+		}
+		if (typeof TileStats === 'undefined') {
+			return;
+		}
+		TileStats.compute(this.url, statType).then(stat => {
+			if (!stat) {
+				chip.textContent = '';
+				chip.removeAttribute('data-stat-fresh');
+				return;
+			}
+			if (stat.type === 'trend') {
+				chip.removeAttribute('data-stat-fresh');
+				chip.textContent = (stat.dir === 'up' ? '↑' : '↓') + stat.value;
+			} else if (stat.type === 'rank') {
+				chip.removeAttribute('data-stat-fresh');
+				chip.textContent = '#' + stat.value;
+			} else if (stat.type === 'fresh') {
+				chip.textContent = '';
+				chip.setAttribute('data-stat-fresh', '');
+			} else {
+				chip.removeAttribute('data-stat-fresh');
+				chip.textContent = stat.value;
+			}
+		});
 	},
 
 	addTitle() {
@@ -830,24 +871,87 @@ Site.prototype = {
 		}
 	},
 
-	/**
-	   * Refreshes the thumbnail for the site.
-	   */
+	_renderFavicon() {
+		let favicon = this._querySelector('.ntt-favicon');
+		if (!favicon) {
+			return;
+		}
+		let rawColor = this.link.backgroundColor || '#666';
+		let brandColor = /^#[0-9a-f]{3,8}$/i.test(rawColor) ? rawColor : '#666';
+		favicon.style.backgroundColor = brandColor;
+		favicon.textContent = siteGlyph(this.url);
+	},
+
+	_renderActions() {
+		let container = this._querySelector('.ntt-actions');
+		if (!container || container.children.length > 0) {
+			return;
+		}
+		let actions = [
+			{ action: 'edit', icon: 'edit', title: 'tile_edit_url' },
+			{ action: 'open', icon: 'open', title: 'tile_open_newtab' },
+			{ action: 'refresh', icon: 'refresh', title: 'tile_refresh_thumbnail' },
+			{ action: 'pin', icon: 'pin', title: this.isPinned ? 'tile_unpin' : 'tile_pin' },
+			{ action: 'remove', icon: 'close', title: 'tile_block' },
+		];
+
+		for (let def of actions) {
+			let btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
+			btn.className = 'ntt-action-btn';
+			btn.setAttribute('data-action', def.action);
+			btn.setAttribute('title', newTabTools.getString(def.title));
+			let icon = NttIcons.create(def.icon, 16);
+			if (icon) {
+				btn.appendChild(icon);
+			}
+			container.appendChild(btn);
+		}
+	},
+
 	refreshThumbnail() {
 		let thumbnail = this.thumbnail;
-		thumbnail.style.backgroundColor = this.link.backgroundColor || null;
 		if (this.link.image) {
+			if (this._thumbnailObjectURL) {
+				URL.revokeObjectURL(this._thumbnailObjectURL);
+			}
 			let thumbnailURL = URL.createObjectURL(this.link.image);
+			this._thumbnailObjectURL = thumbnailURL;
 			thumbnail.style.backgroundImage = 'url("' + thumbnailURL + '")';
+			thumbnail.style.backgroundColor = this.link.backgroundColor || null;
 			if (this.link.imageIsThumbnail) {
 				thumbnail.classList.remove('custom-thumbnail');
 			} else {
 				thumbnail.classList.add('custom-thumbnail');
 			}
+			let fallback = thumbnail.querySelector('.ntt-logo-fallback');
+			if (fallback) {
+				fallback.remove();
+			}
 		} else {
 			thumbnail.style.backgroundImage = null;
 			thumbnail.classList.remove('custom-thumbnail');
+			this._renderLogoFallback();
 		}
+	},
+
+	_renderLogoFallback() {
+		let thumbnail = this.thumbnail;
+		if (thumbnail.querySelector('.ntt-logo-fallback')) {
+			return;
+		}
+		let rawColor = this.link.backgroundColor || '#666';
+		let brandColor = /^#[0-9a-f]{3,8}$/i.test(rawColor) ? rawColor : '#666';
+
+		let fallback = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+		fallback.className = 'ntt-logo-fallback';
+		fallback.style.setProperty('--ntt-brand', brandColor);
+
+		let glyphEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+		glyphEl.className = 'ntt-logo-glyph';
+		glyphEl.textContent = siteGlyph(this.url);
+		fallback.appendChild(glyphEl);
+
+		thumbnail.appendChild(fallback);
 	},
 
 	/**
@@ -865,21 +969,42 @@ Site.prototype = {
 	   */
 	_onClick(event) {
 		let target = event.target;
-		if (target.classList.contains('newtab-link') ||
-		target.parentElement.classList.contains('newtab-link')) {
+		let actionBtn = target.closest('.ntt-action-btn');
+		if (actionBtn) {
+			event.preventDefault();
+			let action = actionBtn.getAttribute('data-action');
+			switch (action) {
+			case 'remove':
+				this.block();
+				break;
+			case 'pin':
+				if (this.isPinned) {
+					this.unpin();
+				} else {
+					this.pin();
+				}
+				break;
+			case 'refresh':
+				chrome.runtime.sendMessage({ name: 'Thumbnails.capture', url: this.link.url });
+				break;
+			case 'open':
+				if (newTabTools.isValidURL(this.url)) {
+					chrome.tabs.create({ url: this.url, active: false });
+				}
+				break;
+			case 'edit':
+				if (typeof newTabTools !== 'undefined' && newTabTools.setPinURLInputValue) {
+					newTabTools.setPinURLInputValue(this.url);
+				}
+				break;
+			}
 			return;
 		}
 
-		event.preventDefault();
-		if (event.target.classList.contains('newtab-control-block')) {
-			this.block();
-		} else if (event.target.classList.contains('newtab-control-thumbnail')) {
-			chrome.runtime.sendMessage({ name: 'Thumbnails.delete', url: this.link.url });
-			this.thumbnail.style.backgroundImage = '';
-		} else if (this.isPinned) {
-			this.unpin();
-		} else {
-			this.pin();
+		if (target.classList.contains('newtab-link') ||
+		target.closest('.newtab-link') ||
+		target.closest('.ntt-overlay')) {
+			return;
 		}
 	},
 
@@ -938,7 +1063,7 @@ var Drag = {
 		this._draggedSite = site;
 
 		// Mark nodes as being dragged.
-		let selector = '.newtab-site, .newtab-control, .newtab-thumbnail';
+		let selector = '.newtab-site, .ntt-actions, .newtab-thumbnail';
 		let parentCell = site.node.parentNode;
 		let nodes = parentCell.querySelectorAll(selector);
 		for (let i = 0; i < nodes.length; i++) {

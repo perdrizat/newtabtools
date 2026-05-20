@@ -49,6 +49,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 	let harness: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const updateUI = extractMethod(source, 'updateUI');
 		const optionsOnChange = extractMethod(source, 'optionsOnChange');

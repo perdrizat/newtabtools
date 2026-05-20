@@ -22,6 +22,7 @@ describe('Design tokens — tokens.css', () => {
 	let css: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS tokens
 		css = fs.readFileSync(TOKENS_PATH, 'utf8');
 	});
 
@@ -116,6 +117,7 @@ describe('Design tokens — tokens.css', () => {
 		let xhtml: string;
 
 		beforeAll(() => {
+			// eslint-disable-next-line ntt/no-source-grep -- wiring check: stylesheet link
 			xhtml = fs.readFileSync(
 				path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
 			);

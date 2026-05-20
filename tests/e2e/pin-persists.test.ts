@@ -129,11 +129,10 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 				{ timeout: 15_000, message: 'Precondition failed: TEST_URL not pinned' }
 			);
 
-			// Click the pin button for our specific tile. Find it by URL,
-			// then dispatch a click on its pin control.
+			// Click the pin action button for our specific tile.
 			await page.evaluate((u) => {
 				const site = window.Grid.sites.find((s: any) => s && s.url === u);
-				const pinBtn = site.node.querySelector('.newtab-control-pin');
+				const pinBtn = site.node.querySelector('.ntt-action-btn[data-action="pin"]');
 				pinBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 			}, TEST_URL);
 

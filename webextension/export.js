@@ -73,8 +73,8 @@ async function readZip(file) {
 	let prefs = await getAsJSON('prefs.json');
 	if (prefs) {
 		let allowedKeys = ['theme', 'themeAuto', 'opacity', 'rows', 'columns',
-			'margin', 'spacing', 'titleSize', 'tileAspect', 'locked', 'history',
-			'recent', 'blocked', 'filters', 'backgroundUrl'];
+			'margin', 'spacing', 'titleSize', 'tileAspect', 'statType', 'locked',
+			'history', 'recent', 'blocked', 'filters', 'backgroundUrl'];
 		let filtered = {};
 		for (let k of allowedKeys) {
 			if (k in prefs) {
@@ -103,6 +103,7 @@ async function readZip(file) {
 
 	await Tiles.clear();
 	let safeProtocols = ['http:', 'https:', 'ftp:'];
+	let safeHexColor = /^#[0-9a-f]{3,8}$/i;
 	for (let t of tilesMap.values()) {
 		try {
 			if (!safeProtocols.includes(new URL(t.url).protocol)) {
@@ -110,6 +111,9 @@ async function readZip(file) {
 			}
 		} catch (ex) {
 			continue;
+		}
+		if (t.backgroundColor && !safeHexColor.test(t.backgroundColor)) {
+			delete t.backgroundColor;
 		}
 		await Tiles.putTile(t);
 	}

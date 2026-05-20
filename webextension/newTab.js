@@ -744,7 +744,6 @@ var newTabTools = {
 
 		for (let [selector, name] of Object.entries({
 			'.close-button': 'close',
-			'.newtab-control': 'controls',
 			'#options-toggle': 'options',
 			'#locked-toggle': 'unlocked',
 			':root[locked="true"] #locked-toggle': 'locked',
@@ -880,6 +879,14 @@ var newTabTools = {
 			let recent = Prefs.recent;
 			document.querySelector('[name="recent"]').checked = recent;
 			this.refreshRecent();
+		}
+
+		if (keys && keys.includes('statType') && 'Grid' in window) {
+			for (let site of Grid.sites) {
+				if (site) {
+					site._renderStatChip();
+				}
+			}
 		}
 
 		if ('Grid' in window && 'cacheCellPositions' in Grid) {
@@ -1233,6 +1240,10 @@ var newTabTools = {
 					if (thumb) {
 						let css = 'url(' + URL.createObjectURL(thumb) + ')';
 						s.thumbnail.style.backgroundImage = css;
+						let logoFallback = s.thumbnail.querySelector('.ntt-logo-fallback');
+						if (logoFallback) {
+							logoFallback.remove();
+						}
 
 						if (newTabTools.selectedSite == s) {
 							newTabTools.siteThumbnail.style.backgroundImage = css;

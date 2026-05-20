@@ -10,6 +10,17 @@ This is the testing guide for this repository. Any contributor working on this c
 - **Never skip or weaken tests:** Fix them or delete them with justification in the commit message. Never use `--no-verify`.
 - **TDD applies to Unit and Integration tests only:** End-to-end (E2E) testing sits outside the tight TDD loop — it runs at feature completion and pre-commit, not on every save.
 
+## Test Design Principles
+
+**Tests assert behavior, not source contents.** During the May 2026 codebase audit, many integration tests were written as "source-grep" — reading production `.js`/`.css` files with `fs.readFileSync` and asserting on string patterns (`expect(source).toContain(...)`). This was expedient for initial characterization but is fragile: a rename, refactor, or dead-code removal can silently break or false-pass these tests.
+
+Prefer **behavioral tests** that load the module via `vm.runInThisContext` or `vm.createContext` and exercise it through its public API. The helpers in [`tests/integration/_helpers.ts`](tests/integration/_helpers.ts) reduce the boilerplate:
+
+- **`loadModule(path, sandbox?)`** — loads a production JS file into an isolated `vm.createContext` sandbox with sensible default mocks. Returns the populated sandbox.
+- **`mountSite(linkData)`** — one-liner to construct a `Site` instance with the full tile environment (template, icons.js, fx-newTab.js, global mocks). Returns `{ site, node, cleanup }`.
+
+Source-grep is acceptable for purely structural checks (template element presence, CSS rule existence, deprecated symbol absence). These are flagged by the **`ntt/no-source-grep`** ESLint rule — add an `eslint-disable-next-line` comment with a brief justification when the check is intentional.
+
 ## Environment Setup
 
 These tools must be present on your host machine to develop and test this extension.

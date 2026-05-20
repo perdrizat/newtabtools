@@ -50,7 +50,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			await waitForGridReady(page);
 
 			// Confirm precondition: tile is rendered and pinned.
-			await page.waitForSelector('.newtab-control-pin[pinned]', { timeout: 15_000 });
+			await page.waitForSelector('.newtab-site[pinned]', { timeout: 15_000 });
 
 			// Step 2: Navigate to the test URL. This triggers
 			// webNavigation.onCompleted → thumbnail.js injection → drawWindow
@@ -83,6 +83,25 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			);
 
 			expect(hasThumbnail).toBeTruthy();
+
+			// Visual sanity: the logo fallback must not be covering the thumbnail.
+			const fallbackCovers = await page.evaluate((testUrl) => {
+				const g = window.Grid;
+				const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+				if (!site) {return { error: 'site not found' };}
+				const thumb = site.thumbnail;
+				const fallback = thumb.querySelector('.ntt-logo-fallback');
+				if (!fallback) {return { occluded: false };}
+				const fRect = fallback.getBoundingClientRect();
+				const tRect = thumb.getBoundingClientRect();
+				const coversArea = fRect.width >= tRect.width && fRect.height >= tRect.height;
+				const isVisible = getComputedStyle(fallback).display !== 'none'
+					&& getComputedStyle(fallback).visibility !== 'hidden'
+					&& getComputedStyle(fallback).opacity !== '0';
+				return { occluded: coversArea && isVisible };
+			}, TEST_URL);
+
+			expect(fallbackCovers).toEqual({ occluded: false });
 		} catch (e) {
 			await captureFailure(page, 'auto-thumbnail-capture');
 			throw e;
@@ -113,6 +132,25 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			);
 
 			expect(hasThumbnail).toBeTruthy();
+
+			// Visual sanity: fallback must not occlude the loaded thumbnail.
+			const fallbackCovers = await page.evaluate((testUrl) => {
+				const g = window.Grid;
+				const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+				if (!site) {return { error: 'site not found' };}
+				const thumb = site.thumbnail;
+				const fallback = thumb.querySelector('.ntt-logo-fallback');
+				if (!fallback) {return { occluded: false };}
+				const fRect = fallback.getBoundingClientRect();
+				const tRect = thumb.getBoundingClientRect();
+				const coversArea = fRect.width >= tRect.width && fRect.height >= tRect.height;
+				const isVisible = getComputedStyle(fallback).display !== 'none'
+					&& getComputedStyle(fallback).visibility !== 'hidden'
+					&& getComputedStyle(fallback).opacity !== '0';
+				return { occluded: coversArea && isVisible };
+			}, TEST_URL);
+
+			expect(fallbackCovers).toEqual({ occluded: false });
 		} catch (e) {
 			await captureFailure(page, 'auto-thumbnail-persist');
 			throw e;

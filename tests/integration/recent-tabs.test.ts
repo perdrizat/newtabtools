@@ -52,6 +52,7 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 	let appendedElements: any[];
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const refreshRecent = extractMethod(source, 'refreshRecent');
 		const trimRecent = extractMethod(source, 'trimRecent');

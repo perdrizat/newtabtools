@@ -69,6 +69,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 	let Transformation: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(FX_PATH, 'utf8');
 
 		// Globals fx-newTab.js expects (it defines its own Grid, Drag, Drop, etc.)

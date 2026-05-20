@@ -47,6 +47,7 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 	let selectedSite: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'optionsOnClick');
 

@@ -48,6 +48,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 	let harness: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const updateThemeColours = extractMethod(source, 'updateThemeColours');
 		const getThemedImageURL = extractMethod(source, 'getThemedImageURL');

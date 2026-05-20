@@ -64,6 +64,7 @@ web-ext build --source-dir webextension/
 ### Before Committing
 
 - **Run the full test suite** including E2E tests (`npm test`) if not done already as part of finishing feature work. Fast tests alone are not sufficient.
+- If your new tests use `fs.readFileSync` on files under `webextension/`, the ESLint rule `ntt/no-source-grep` will flag it — add a disable comment with justification if the check is purely structural.
 - Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
 - After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 

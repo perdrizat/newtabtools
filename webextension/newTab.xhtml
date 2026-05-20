@@ -312,11 +312,14 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 		<div class="newtab-site" draggable="true">
 			<a class="newtab-link">
 				<span class="newtab-thumbnail" />
-				<span class="newtab-title" />
 			</a>
-			<input type="button" class="newtab-control newtab-control-pin" data-title="tile_pin" />
-			<input type="button" class="newtab-control newtab-control-block" data-title="tile_block" />
-			<input type="button" class="newtab-control newtab-control-thumbnail" data-title="tile_removethumbnail" />
+			<span class="ntt-pin-stripe" />
+			<span class="ntt-stat-chip" />
+			<span class="ntt-actions" />
+			<span class="ntt-overlay">
+				<span class="ntt-favicon" />
+				<span class="newtab-title" />
+			</span>
 		</div>
 	</template>
 	<svg xmlns="http://www.w3.org/2000/svg">
@@ -339,6 +342,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	</div>
 
 	<script type="text/javascript" src="icons.js"></script>
+	<script type="text/javascript" src="stats.js"></script>
 	<script type="text/javascript" src="tiles-shim.js"></script>
 	<script type="text/javascript" src="prefs.js"></script>
 	<script type="text/javascript" src="newTab.js"></script>

@@ -40,6 +40,7 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 
 	beforeAll(() => {
 		// Load prefs.js — defines Prefs, Blocked, Filters on globalThis
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const src = fs.readFileSync(PREFS_PATH, 'utf8');
 		vm.runInThisContext(src, { filename: 'prefs.js' });
 

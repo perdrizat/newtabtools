@@ -23,6 +23,7 @@ describe('CSS Grid layout — newTab.css', () => {
 	let css: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS grid rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});
 
@@ -63,6 +64,7 @@ describe('CSS Grid — fx-newTab.js _renderGrid', () => {
 	let source: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: JS grid rendering
 		source = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/fx-newTab.js'), 'utf8'
 		);

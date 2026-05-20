@@ -31,6 +31,62 @@ const nttGlobals = {
 	Updater: 'readonly',
 };
 
+const nttPlugin = {
+	rules: {
+		'no-source-grep': {
+			meta: {
+				type: 'suggestion',
+				messages: {
+					avoid: 'Prefer behavioral tests over source-grep. If this is a legitimate wiring check or module load, add an eslint-disable comment with justification.',
+				},
+			},
+			create(context) {
+				return {
+					CallExpression(node) {
+						const { callee } = node;
+						const isReadFileSync =
+							(callee.type === 'MemberExpression' &&
+								callee.property.type === 'Identifier' &&
+								callee.property.name === 'readFileSync') ||
+							(callee.type === 'Identifier' &&
+								callee.name === 'readFileSync');
+
+						if (!isReadFileSync || !node.arguments.length) {
+							return;
+						}
+
+						const arg = node.arguments[0];
+
+						if (arg.type === 'Literal' && typeof arg.value === 'string' &&
+							arg.value.includes('webextension/')) {
+							context.report({ node, messageId: 'avoid' });
+							return;
+						}
+
+						if (arg.type === 'TemplateLiteral' &&
+							arg.quasis.some(q => q.value.raw.includes('webextension/'))) {
+							context.report({ node, messageId: 'avoid' });
+							return;
+						}
+
+						if (arg.type === 'Identifier' && arg.name.endsWith('_PATH')) {
+							context.report({ node, messageId: 'avoid' });
+							return;
+						}
+
+						if (arg.type === 'CallExpression' &&
+							arg.arguments.some(a =>
+								a.type === 'Literal' && typeof a.value === 'string' &&
+								a.value.includes('webextension/'))) {
+							context.report({ node, messageId: 'avoid' });
+						}
+					},
+				};
+			},
+		},
+	},
+};
+
 const projectRules = {
 	'comma-dangle': [2, 'only-multiline'],
 	'complexity': 0,
@@ -125,6 +181,7 @@ export default [
 		},
 		plugins: {
 			'@typescript-eslint': tseslint,
+			'ntt': nttPlugin,
 		},
 		rules: {
 			...projectRules,
@@ -134,6 +191,7 @@ export default [
 			'no-unused-vars': 0,
 			'@typescript-eslint/no-unused-vars': [2, { caughtErrors: 'none', argsIgnorePattern: '^_' }],
 			'no-console': 0,
+			'ntt/no-source-grep': 2,
 		},
 	},
 ];

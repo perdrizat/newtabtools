@@ -16,6 +16,7 @@ export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
 // test time. When the AMO publication path is decided (see ROADMAP.md) and the
 // fork picks a new ID, no test code needs to change.
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
+// eslint-disable-next-line ntt/no-source-grep -- loading manifest for extension ID
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
 export const EXTENSION_ID: string = manifest.applications.gecko.id;
 

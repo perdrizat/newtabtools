@@ -67,6 +67,7 @@ describe('Wiring checks — background.js (source scan)', () => {
 	let bgSource: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: deprecated API absence
 		bgSource = fs.readFileSync(BACKGROUND_PATH, 'utf8');
 	});
 
@@ -83,6 +84,7 @@ describe('Wiring checks — action.js (source scan)', () => {
 	let actionSource: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: deprecated API absence
 		actionSource = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/action.js'), 'utf8'
 		);
@@ -105,13 +107,14 @@ describe('Remove-thumbnail button — newTab.xhtml (source scan)', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
 		);
 	});
 
-	it('site template has a thumbnail control button', () => {
-		expect(xhtml).toContain('newtab-control-thumbnail');
+	it('site template has action buttons container for thumbnail actions', () => {
+		expect(xhtml).toContain('ntt-actions');
 	});
 });
 
@@ -296,6 +299,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		// --- Load background.js ---
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
 		(globalThis as any).chrome.webNavigation.onCompleted.addListener.mockClear();
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const code = fs.readFileSync(BACKGROUND_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'background.js' });
 
@@ -614,21 +618,22 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 // Remove-thumbnail button — fx-newTab.js (behavioral)
 // ===========================================================================
 
-describe('Remove-thumbnail button — fx-newTab.js (behavioral)', () => {
+describe('Thumbnail action buttons — fx-newTab.js (behavioral)', () => {
 	let fxSource: string;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: action handler strings
 		fxSource = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/fx-newTab.js'), 'utf8'
 		);
 	});
 
-	it('_onClick handles newtab-control-thumbnail class', () => {
-		expect(fxSource).toContain('newtab-control-thumbnail');
+	it('_onClick handles action buttons by data-action attribute', () => {
+		expect(fxSource).toContain('data-action');
 	});
 
-	it('sends Thumbnails.delete message on click', () => {
-		expect(fxSource).toContain('Thumbnails.delete');
+	it('refresh action sends Thumbnails.capture message', () => {
+		expect(fxSource).toContain('Thumbnails.capture');
 	});
 });
 
@@ -641,6 +646,7 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 	let gridSites: any[];
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const getThumbnails = extractMethod(source, 'getThumbnails');
 
@@ -680,7 +686,7 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 	});
 
 	it('applies thumbnail as CSS backgroundImage from Map response', () => {
-		const site = { link: { url: 'https://a.com' }, thumbnail: { style: { backgroundImage: '' } } };
+		const site = { link: { url: 'https://a.com' }, thumbnail: { style: { backgroundImage: '' }, querySelector: () => null } };
 		gridSites.push(site);
 		(globalThis as any).Grid.sites = gridSites;
 
@@ -710,7 +716,7 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 	});
 
 	it('updates siteThumbnail and enables save button for selected site', () => {
-		const site = { link: { url: 'https://a.com' }, thumbnail: { style: { backgroundImage: '' } } };
+		const site = { link: { url: 'https://a.com' }, thumbnail: { style: { backgroundImage: '' }, querySelector: () => null } };
 		gridSites.push(site);
 		(globalThis as any).Grid.sites = gridSites;
 		harness.selectedSite = site;
@@ -733,5 +739,34 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 		chrome.runtime.sendMessage.mockImplementation((_msg: any, cb: any) => cb(thumbMap));
 
 		expect(() => harness.getThumbnails()).not.toThrow();
+	});
+
+	it('removes .ntt-logo-fallback overlay when thumbnail is loaded', () => {
+		const ns = 'http://www.w3.org/1999/xhtml';
+		const thumbnailEl = document.createElementNS(ns, 'span');
+		thumbnailEl.className = 'newtab-thumbnail';
+		const fallback = document.createElementNS(ns, 'div');
+		fallback.className = 'ntt-logo-fallback';
+		thumbnailEl.appendChild(fallback);
+		document.body.appendChild(thumbnailEl);
+
+		const site = {
+			link: { url: 'https://a.com' },
+			thumbnail: thumbnailEl,
+		};
+		gridSites.push(site);
+		(globalThis as any).Grid.sites = gridSites;
+
+		const thumbBlob = new Blob(['thumb']);
+		globalThis.URL.createObjectURL = vi.fn(() => 'blob:thumb-url');
+		const thumbMap = new Map([['https://a.com', thumbBlob]]);
+		chrome.runtime.sendMessage.mockImplementation((_msg: any, cb: any) => cb(thumbMap));
+
+		harness.getThumbnails();
+
+		expect(thumbnailEl.style.backgroundImage).toContain('blob:thumb-url');
+		expect(thumbnailEl.querySelector('.ntt-logo-fallback')).toBeNull();
+
+		thumbnailEl.remove();
 	});
 });

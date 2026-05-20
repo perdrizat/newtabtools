@@ -39,6 +39,7 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 		// but lines 1939-1941 call UndoDialog.init() and newTabTools.startup()
 		// which need the full new-tab DOM. We strip those two calls — we only
 		// need the Site prototype definitions.
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const raw = fs.readFileSync(FX_NEWTAB_PATH, 'utf8');
 		const code = raw
 			.replace(/^UndoDialog\.init\(\);$/m, '// [stripped for test]')

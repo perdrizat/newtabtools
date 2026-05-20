@@ -31,6 +31,7 @@ describe('NttIcons — icons.js', () => {
 	let NttIcons: any;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(ICONS_PATH, 'utf8');
 		vm.runInThisContext(source, { filename: 'icons.js' });
 		NttIcons = (globalThis as any).NttIcons;

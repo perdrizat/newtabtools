@@ -41,6 +41,7 @@ describe('computeCellDimensions — newTab.js', () => {
 		{ cellWidth: number; cellHeight: number } | null;
 
 	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const fn = extractMethod(source, 'computeCellDimensions');
 		const code = `var newTabTools = { ${fn} };`;

@@ -231,6 +231,15 @@
 	"tile_block": {
 		"message": "Remove this site"
 	},
+	"tile_edit_url": {
+		"message": "Change URL"
+	},
+	"tile_open_newtab": {
+		"message": "Open in new tab"
+	},
+	"tile_refresh_thumbnail": {
+		"message": "Refresh thumbnail"
+	},
 	"tile_header": {
 		"message": "Tiles:"
 	},
