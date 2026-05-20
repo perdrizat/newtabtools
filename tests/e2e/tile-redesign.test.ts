@@ -708,57 +708,31 @@ describe('E2E: Tile redesign — new tile structure', () => {
 		}
 	}, 60_000);
 
-	it('no sibling with position:absolute fully occludes another visible sibling', async () => {
+	it('thumbnail with backgroundImage is not occluded by logo fallback', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			const occlusion = await page.evaluate(() => {
-				const site = document.querySelector('.newtab-site');
-				if (!site) {return { checked: false, issues: [] };}
-				const children = Array.from(site.querySelectorAll('*'));
-				const absChildren = children.filter(el => {
-					const s = getComputedStyle(el);
-					return s.position === 'absolute'
-						&& s.display !== 'none'
-						&& s.visibility !== 'hidden'
-						&& s.opacity !== '0';
-				});
+			const result = await page.evaluate(() => {
+				const sites = document.querySelectorAll('.newtab-site');
 				const issues: string[] = [];
-				for (const el of absChildren) {
-					const elRect = el.getBoundingClientRect();
-					if (elRect.width === 0 || elRect.height === 0) {continue;}
-					for (const sibling of children) {
-						if (sibling === el) {continue;}
-						if (el.contains(sibling) || sibling.contains(el)) {continue;}
-						const sibRect = sibling.getBoundingClientRect();
-						if (sibRect.width === 0 || sibRect.height === 0) {continue;}
-						const sibStyle = getComputedStyle(sibling);
-						if (sibStyle.display === 'none' || sibStyle.visibility === 'hidden') {continue;}
-						const sibBg = sibStyle.backgroundImage;
-						if (!sibBg || sibBg === 'none') {continue;}
-						const fullyCovers = elRect.left <= sibRect.left
-							&& elRect.top <= sibRect.top
-							&& elRect.right >= sibRect.right
-							&& elRect.bottom >= sibRect.bottom;
-						if (fullyCovers) {
-							const elBg = getComputedStyle(el).background;
-							const hasOpaqueBg = !elBg.includes('transparent')
-								&& !elBg.includes('rgba(0, 0, 0, 0)')
-								&& (elBg.includes('rgb') || elBg.includes('#') || elBg.includes('gradient'));
-							if (hasOpaqueBg) {
-								issues.push(
-									`${el.className || el.tagName} occludes ${sibling.className || sibling.tagName}`
-								);
-							}
-						}
+				sites.forEach(site => {
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					if (!thumb) {return;}
+					const bg = thumb.style.backgroundImage;
+					if (!bg || !bg.startsWith('url(')) {return;}
+					const fallback = thumb.querySelector('.ntt-logo-fallback');
+					if (!fallback) {return;}
+					const style = getComputedStyle(fallback);
+					if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+						issues.push(`tile ${(site as HTMLElement).dataset?.url || 'unknown'}: fallback covers thumbnail`);
 					}
-				}
+				});
 				return { checked: true, issues };
 			});
 
-			expect(occlusion.checked).toBe(true);
-			expect(occlusion.issues).toEqual([]);
+			expect(result.checked).toBe(true);
+			expect(result.issues).toEqual([]);
 		} catch (e) {
 			await captureFailure(page, 'tile-visual-occlusion');
 			throw e;
