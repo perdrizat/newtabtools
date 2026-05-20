@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-20]
+
+### Added
+
+- feat: NTT v2 Phase 0 — design tokens, SVG icons, CSS Grid layout
+
 ## [2026-05-13]
 
 ### Added

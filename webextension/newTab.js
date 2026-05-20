@@ -850,6 +850,8 @@ var newTabTools = {
 			let spacing = Prefs.spacing;
 			document.querySelector('[name="spacing"]').value = spacing;
 			document.documentElement.setAttribute('spacing', spacing);
+			let gapMap = { small: '5px', medium: '10px', large: '20px' };
+			document.documentElement.style.setProperty('--ntt-gap', gapMap[spacing] || '18px');
 		}
 
 		if (!keys || keys.includes('tileAspect')) {
@@ -1085,7 +1087,7 @@ var newTabTools = {
 			grid.style.removeProperty('--cell-height');
 			return;
 		}
-		let gap = { small: 5, medium: 10, large: 20 }[Prefs.spacing] || 5;
+		let gap = parseInt(getComputedStyle(grid).getPropertyValue('--ntt-gap')) || 18;
 		let dims = this.computeCellDimensions(
 			grid.clientWidth, grid.clientHeight,
 			Prefs.rows, Prefs.columns, gap, aspect

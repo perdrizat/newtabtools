@@ -50,11 +50,8 @@ describe('Tile aspect ratio CSS — newTab.css', () => {
 		expect(css).toMatch(/:root\[tileaspect="(?:16-9|4-3|1-1|3-4)"\][^{}]*#newtab-grid\s*\{[^}]*justify-content:\s*center/);
 	});
 
-	it('stops .newtab-row from stretching vertically when aspect is locked', () => {
-		// In fill mode, rows have flex: 1. In aspect-locked mode, rows must
-		// shrink-fit to cell height so the aspect-locked cells' derived height
-		// is honored. The rule overrides the default flex on rows.
-		expect(css).toMatch(/:root\[tileaspect="(?:16-9|4-3|1-1|3-4)"\][^{}]*\.newtab-row\s*\{[^}]*flex:\s*0\s+0\s+auto/);
+	it('centers the grid content when aspect is locked', () => {
+		expect(css).toMatch(/:root\[tileaspect="(?:16-9|4-3|1-1|3-4)"\][^{}]*#newtab-grid\s*\{[^}]*align-content:\s*center/);
 	});
 
 	it('does not change defaults when [tileaspect="fill"] (no rule for fill)', () => {

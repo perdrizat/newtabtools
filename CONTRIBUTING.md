@@ -56,9 +56,14 @@ web-ext build --source-dir webextension/
 - **Red/Green TDD is mandatory:** Write failing tests first. See [`TESTING.md`](TESTING.md) for the tier-by-tier strategy.
 - **Language:** Production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the full rules.
 
+### After Finishing Feature Work
+
+- **Always run E2E tests** with `npm run test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script handles the full Firefox ESR lifecycle (launch, port wait, test run, cleanup) automatically.
+- **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox ESR with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
+
 ### Before Committing
 
-- **Run the full test suite** including E2E tests (`npm test`). Fast tests alone are not sufficient.
+- **Run the full test suite** including E2E tests (`npm test`) if not done already as part of finishing feature work. Fast tests alone are not sufficient.
 - Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
 - After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 

@@ -228,11 +228,12 @@ input[type="button"] {
 .newtab-side-margin.large {
 	width: 120px;
 }
-/* GRID */
+/* GRID — flat CSS Grid, cells are direct children (no .newtab-row wrappers) */
 #newtab-grid {
-	display: flex;
+	display: grid;
+	grid-template-columns: repeat(var(--ntt-cols, 3), 1fr);
+	gap: var(--ntt-gap);
 	flex: 5;
-	flex-direction: column;
 	min-width: 600px;
 	min-height: 400px;
 	transition: 100ms ease-out;
@@ -241,63 +242,27 @@ input[type="button"] {
 #newtab-grid[locked] {
 	pointer-events: none;
 }
-/* ROWS */
-.newtab-row {
-	display: flex;
-	flex-direction: row;
-	flex: 1;
-	margin-bottom: 5px;
-}
-:root[spacing="medium"] .newtab-row:not(:last-child) {
-	margin-bottom: 10px;
-}
-:root[spacing="large"] .newtab-row:not(:last-child) {
-	margin-bottom: 20px;
-}
-.newtab-row:last-child {
-	margin-bottom: 0;
-}
 /* CELLS */
 .newtab-cell {
+	position: relative;
 	display: flex;
-	flex: 1;
-	margin-inline-end: 5px;
-}
-:root[spacing="medium"] .newtab-cell:not(:last-child) {
-	margin-inline-end: 10px;
-}
-:root[spacing="large"] .newtab-cell:not(:last-child) {
-	margin-inline-end: 20px;
-}
-.newtab-cell:last-child {
-	margin-inline-end: 0;
 }
 /* TILE ASPECT RATIO — locked modes.
  * When the user selects a non-fill aspect, cells get explicit pixel
  * dimensions from --cell-width / --cell-height (computed by JS via
- * newTabTools.applyTileAspect to fit both viewport axes). Rows shrink
- * to cell height; the grid centers in its available space so unused
- * slack becomes outer margin. The aspect-ratio rule is a belt-and-
- * suspenders guarantee in case the vars are momentarily unset. */
+ * newTabTools.applyTileAspect to fit both viewport axes). The grid
+ * centers in its available space so unused slack becomes outer margin. */
 :root[tileaspect="16-9"] #newtab-grid,
 :root[tileaspect="4-3"] #newtab-grid,
 :root[tileaspect="1-1"] #newtab-grid,
 :root[tileaspect="3-4"] #newtab-grid {
 	justify-content: center;
-	align-items: center;
-}
-:root[tileaspect="16-9"] .newtab-row,
-:root[tileaspect="4-3"] .newtab-row,
-:root[tileaspect="1-1"] .newtab-row,
-:root[tileaspect="3-4"] .newtab-row {
-	flex: 0 0 auto;
-	justify-content: center;
+	align-content: center;
 }
 :root[tileaspect="16-9"] .newtab-cell,
 :root[tileaspect="4-3"] .newtab-cell,
 :root[tileaspect="1-1"] .newtab-cell,
 :root[tileaspect="3-4"] .newtab-cell {
-	flex: 0 0 auto;
 	width: var(--cell-width);
 	height: var(--cell-height);
 }

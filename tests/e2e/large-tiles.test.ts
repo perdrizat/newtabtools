@@ -22,7 +22,7 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 		}
 	});
 
-	it('tiles fill available grid space via flex layout', async () => {
+	it('tiles fill available grid space via CSS Grid layout', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -31,29 +31,24 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 				const grid = document.getElementById('newtab-grid');
 				if (!grid) {return null;}
 
-				const rows = grid.querySelectorAll('.newtab-row');
 				const cells = grid.querySelectorAll('.newtab-cell');
-				if (rows.length === 0 || cells.length === 0) {return null;}
+				if (cells.length === 0) {return null;}
 
 				const gridRect = grid.getBoundingClientRect();
-				const firstRow = rows[0];
-				const firstRowRect = firstRow.getBoundingClientRect();
-				const rowCells = firstRow.querySelectorAll('.newtab-cell');
-				const cellRects = [...rowCells].map(c => {
+				const cols = parseInt(getComputedStyle(grid).getPropertyValue('--ntt-cols')) || 3;
+				const firstRowCells = [...cells].slice(0, cols);
+				const cellRects = firstRowCells.map(c => {
 					const r = c.getBoundingClientRect();
 					return { width: Math.round(r.width), height: Math.round(r.height) };
 				});
 
-				// Sum of cell widths + margins should approximate row width.
 				const totalCellWidth = cellRects.reduce((sum, c) => sum + c.width, 0);
 
 				return {
 					gridWidth: Math.round(gridRect.width),
 					gridHeight: Math.round(gridRect.height),
-					rowCount: rows.length,
-					cellsPerRow: rowCells.length,
+					cellsPerRow: cols,
 					totalCells: cells.length,
-					rowWidth: Math.round(firstRowRect.width),
 					cellWidths: cellRects.map(c => c.width),
 					cellHeights: cellRects.map(c => c.height),
 					totalCellWidth,
@@ -63,12 +58,9 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 			expect(layout).not.toBeNull();
 			const l = layout!;
 
-			// Grid should have substantial dimensions (min-width: 600px, min-height: 400px in CSS).
 			expect(l.gridWidth).toBeGreaterThanOrEqual(600);
 			expect(l.gridHeight).toBeGreaterThanOrEqual(400);
 
-			// Cells should be large — this is the "arbitrarily large tiles" feature.
-			// With default 3 columns, each cell should be at least ~180px wide.
 			for (const w of l.cellWidths) {
 				expect(w).toBeGreaterThan(100);
 			}
@@ -76,25 +68,21 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 				expect(h).toBeGreaterThan(50);
 			}
 
-			// All cells in the row should be approximately equal width (flex: 1).
-			// Allow 2px tolerance for subpixel rounding.
 			const maxW = Math.max(...l.cellWidths);
 			const minW = Math.min(...l.cellWidths);
 			expect(maxW - minW).toBeLessThanOrEqual(2);
 
-			// Cells should fill the row width (total cell width + margins ≈ row width).
-			// Margins are 5px per cell gap (CSS default spacing), so allow generous tolerance.
-			const marginBudget = (l.cellsPerRow - 1) * 25; // up to 25px per gap at large spacing
-			expect(l.totalCellWidth).toBeGreaterThan(l.rowWidth - marginBudget);
+			const gapBudget = (l.cellsPerRow - 1) * 25;
+			expect(l.totalCellWidth).toBeGreaterThan(l.gridWidth - gapBudget);
 		} catch (e) {
-			await captureFailure(page, 'large-tiles-flex');
+			await captureFailure(page, 'large-tiles-grid');
 			throw e;
 		} finally {
 			await page.close();
 		}
 	}, 90_000);
 
-	it('grid rows and columns match Prefs.rows × Prefs.columns', async () => {
+	it('grid cell count matches Prefs.rows × Prefs.columns', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -103,22 +91,16 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 				const grid = document.getElementById('newtab-grid');
 				if (!grid) {return null;}
 
-				const rows = grid.querySelectorAll('.newtab-row');
-				const cellsPerRow = rows.length > 0
-					? rows[0].querySelectorAll('.newtab-cell').length
-					: 0;
-
+				const P = (window as any).Prefs;
 				return {
-					rows: rows.length,
-					columns: cellsPerRow,
+					rows: P.rows,
+					columns: P.columns,
 					totalCells: grid.querySelectorAll('.newtab-cell').length,
 				};
 			});
 
 			expect(gridShape).not.toBeNull();
 			const gs = gridShape!;
-			// Default Prefs: rows=3, columns=3 (or whatever the extension default is).
-			// Just verify the structure is consistent: total = rows × columns.
 			expect(gs.rows).toBeGreaterThan(0);
 			expect(gs.columns).toBeGreaterThan(0);
 			expect(gs.totalCells).toBe(gs.rows * gs.columns);

@@ -429,27 +429,20 @@ var Grid = {
 	},
 
 	/**
-	   * Creates the newtab grid.
+	   * Creates the newtab grid as a flat list of cells (CSS Grid handles rows).
 	   */
 	_renderGrid() {
-		let row = document.createElementNS(HTML_NAMESPACE, 'div');
 		let cell = document.createElementNS(HTML_NAMESPACE, 'div');
-		row.classList.add('newtab-row');
 		cell.classList.add('newtab-cell');
 
-		// Clear the grid
 		this._node.innerHTML = '';
+		this._node.style.setProperty('--ntt-cols', Prefs.columns);
 
-		// Creates the structure of one row
-		for (let i = 0; i < Prefs.columns; i++) {
-			row.appendChild(cell.cloneNode(true));
-		}
-		// Creates the grid
-		for (let j = 0; j < Prefs.rows; j++) {
-			this._node.appendChild(row.cloneNode(true));
+		let total = Prefs.rows * Prefs.columns;
+		for (let i = 0; i < total; i++) {
+			this._node.appendChild(cell.cloneNode(true));
 		}
 
-		// (Re-)initialize all cells.
 		let cellElements = this.node.querySelectorAll('.newtab-cell');
 		this._cells = [...cellElements].map(cell => new Cell(this, cell));
 
@@ -541,10 +534,8 @@ var Grid = {
 	},
 
 	_shouldRenderGrid() {
-		let rowsLength = this._node.querySelectorAll('.newtab-row').length;
 		let cellsLength = this._node.querySelectorAll('.newtab-cell').length;
-
-		return (rowsLength != Prefs.rows || cellsLength != (Prefs.rows * Prefs.columns));
+		return cellsLength != (Prefs.rows * Prefs.columns);
 	}
 };
 

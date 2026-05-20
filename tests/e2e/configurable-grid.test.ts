@@ -30,22 +30,17 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			// Set columns to 5. Write to storage via the Prefs setter AND
-			// call Grid.refresh() directly — the storage.onChanged →
-			// prefsChanged → Grid.refresh() async chain does not reliably
-			// fire within Puppeteer BiDi evaluate calls.
 			await page.evaluate(async () => {
 				Prefs.columns = 5;
 				await Grid.refresh();
 			});
 
-			// Wait for the grid to rebuild with 5 columns.
 			const colsAfter = await waitForCondition(
 				page,
 				() => {
-					const rows = document.querySelectorAll('.newtab-row');
-					if (rows.length === 0) {return false;}
-					const cols = rows[0].querySelectorAll('.newtab-cell').length;
+					const grid = document.getElementById('newtab-grid');
+					if (!grid) {return false;}
+					const cols = parseInt(getComputedStyle(grid).getPropertyValue('--ntt-cols')) || 0;
 					return cols === 5 ? cols : false;
 				},
 				[],
@@ -53,23 +48,22 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 			);
 			expect(colsAfter).toBe(5);
 
-			// Reload and verify persistence.
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
 			const colsReload = await waitForCondition(
 				page,
 				() => {
-					const rows = document.querySelectorAll('.newtab-row');
-					if (rows.length === 0) {return false;}
-					return rows[0].querySelectorAll('.newtab-cell').length === 5 ? 5 : false;
+					const grid = document.getElementById('newtab-grid');
+					if (!grid) {return false;}
+					const cols = parseInt(getComputedStyle(grid).getPropertyValue('--ntt-cols')) || 0;
+					return cols === 5 ? 5 : false;
 				},
 				[],
 				{ timeout: 10_000, message: 'Columns did not persist as 5 after reload' }
 			);
 			expect(colsReload).toBe(5);
 
-			// Restore default (3 columns).
 			await page.evaluate(() => {
 				Prefs.columns = 3;
 			});
@@ -87,39 +81,41 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			// Set rows to 5. Same pattern as columns test.
 			await page.evaluate(async () => {
 				Prefs.rows = 5;
 				await Grid.refresh();
 			});
 
-			// Wait for the grid to rebuild with 5 rows.
-			const rowCount = await waitForCondition(
+			const cellCount = await waitForCondition(
 				page,
 				() => {
-					const rows = document.querySelectorAll('.newtab-row').length;
-					return rows === 5 ? rows : false;
+					const grid = document.getElementById('newtab-grid');
+					if (!grid) {return false;}
+					const cells = grid.querySelectorAll('.newtab-cell').length;
+					const cols = parseInt(getComputedStyle(grid).getPropertyValue('--ntt-cols')) || 3;
+					return cells === 5 * cols ? cells : false;
 				},
 				[],
 				{ timeout: 10_000, message: 'Grid did not rebuild to 5 rows' }
 			);
-			expect(rowCount).toBe(5);
+			expect(cellCount).toBe(15);
 
-			// Reload and verify persistence.
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
-			const rowsReload = await waitForCondition(
+			const cellsReload = await waitForCondition(
 				page,
 				() => {
-					return document.querySelectorAll('.newtab-row').length === 5 ? 5 : false;
+					const grid = document.getElementById('newtab-grid');
+					if (!grid) {return false;}
+					const cells = grid.querySelectorAll('.newtab-cell').length;
+					return cells === 15 ? 15 : false;
 				},
 				[],
 				{ timeout: 10_000, message: 'Rows did not persist as 5 after reload' }
 			);
-			expect(rowsReload).toBe(5);
+			expect(cellsReload).toBe(15);
 
-			// Restore default (3 rows).
 			await page.evaluate(() => {
 				Prefs.rows = 3;
 			});

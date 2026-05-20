@@ -1,0 +1,68 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* NTT v2 design tokens — light defaults on :root, dark overrides below. */
+
+:root {
+	/* ── Colors ── */
+	--ntt-page-bg: #faf8f4;
+	--ntt-surface: #ffffff;
+	--ntt-surface-soft: rgba(0, 0, 0, 0.04);
+	--ntt-ink: #1c1a17;
+	--ntt-sub: rgba(0, 0, 0, 0.6);
+	--ntt-mute: rgba(0, 0, 0, 0.42);
+	--ntt-line: rgba(0, 0, 0, 0.07);
+	--ntt-line-soft: rgba(0, 0, 0, 0.05);
+	--ntt-kbd-bg: rgba(0, 0, 0, 0.05);
+	--ntt-kbd-ink: rgba(0, 0, 0, 0.62);
+	--ntt-accent: #c96442;
+	--ntt-accent-tint: rgba(201, 100, 66, 0.16);
+	--ntt-success: #2e8c5b;
+	--ntt-danger: #b14b27;
+
+	/* ── Spacing (user-adjustable defaults) ── */
+	--ntt-gap: 18px;
+	--ntt-outer-pad-x: 48px;
+	--ntt-radius: 10px;
+
+	/* ── Typography ── */
+	--ntt-font-ui: message-box, -apple-system, system-ui, sans-serif;
+	--ntt-font-mono: ui-monospace, 'SF Mono', monospace;
+
+	/* ── Shadows ── */
+	--ntt-shadow-tile-rest: 0 0 0 1px var(--ntt-line), 0 1px 2px rgba(20, 15, 10, 0.04);
+	--ntt-shadow-tile-hover: 0 0 0 1px var(--ntt-line), 0 8px 24px rgba(15, 12, 8, 0.12);
+	--ntt-shadow-tile-selected: 0 0 0 2px var(--ntt-accent), 0 0 0 5px rgba(201, 100, 66, 0.16), 0 6px 16px rgba(15, 12, 8, 0.10);
+
+	/* ── Page background gradient (light) ── */
+	background:
+		radial-gradient(ellipse 100% 60% at 60% -10%, rgba(201, 100, 66, 0.05), transparent 65%),
+		var(--ntt-page-bg);
+}
+
+:root[theme="dark"] {
+	--ntt-page-bg: #161412;
+	--ntt-surface: #1f1d1a;
+	--ntt-surface-soft: rgba(255, 255, 255, 0.04);
+	--ntt-ink: rgba(255, 255, 255, 0.95);
+	--ntt-sub: rgba(255, 255, 255, 0.58);
+	--ntt-mute: rgba(255, 255, 255, 0.36);
+	--ntt-line: rgba(255, 255, 255, 0.07);
+	--ntt-line-soft: rgba(255, 255, 255, 0.05);
+	--ntt-kbd-bg: rgba(255, 255, 255, 0.08);
+	--ntt-kbd-ink: rgba(255, 255, 255, 0.72);
+	--ntt-accent: #e07a5d;
+	--ntt-accent-tint: rgba(224, 122, 93, 0.20);
+	--ntt-success: #7ad19b;
+	--ntt-danger: #e89279;
+
+	--ntt-shadow-tile-rest: 0 0 0 1px var(--ntt-line), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+	--ntt-shadow-tile-hover: 0 0 0 1px var(--ntt-line), 0 8px 24px rgba(15, 12, 8, 0.12);
+	--ntt-shadow-tile-selected: 0 0 0 2px var(--ntt-accent), 0 0 0 5px rgba(224, 122, 93, 0.20), 0 6px 16px rgba(15, 12, 8, 0.10);
+
+	background:
+		radial-gradient(ellipse 80% 60% at 70% -20%, rgba(224, 122, 93, 0.10), transparent 60%),
+		radial-gradient(ellipse 60% 70% at 5% 120%, rgba(96, 118, 170, 0.08), transparent 60%),
+		var(--ntt-page-bg);
+}
