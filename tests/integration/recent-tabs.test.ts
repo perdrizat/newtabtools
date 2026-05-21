@@ -3,24 +3,11 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Integration test: recently-closed-tabs row + one-click restore.
- * Phase 1 slot 14 of the migration plan (MIGRATION.md).
+ * Integration test: recently-closed-tabs card strip + one-click restore.
  *
- * Extracts `refreshRecent`, `trimRecent`, and `isValidURL` from the real
- * `newTab.js` via `vm.runInThisContext` and exercises the recently-closed
- * tabs logic with mocked `chrome.sessions` and DOM.
- *
- * Characterizes:
- *   - refreshRecent: hides list when Prefs.recent is false
- *   - refreshRecent: clears existing items before rebuilding
- *   - refreshRecent: creates anchor elements from session items
- *   - refreshRecent: skips incognito tabs
- *   - refreshRecent: skips items without a tab property
- *   - refreshRecent: sets title, href, sessionId, onclick handler
- *   - refreshRecent: adds favicon img when favIconUrl is valid
- *   - refreshRecent: hides list when no items added
- *   - refreshRecent: shows list when items added
- *   - onclick handler calls chrome.sessions.restore with sessionId
+ * Extracts `refreshRecent`, `trimRecent`, `isValidURL`, and `_formatAge`
+ * from the real `newTab.js` via `vm.runInThisContext` and exercises the
+ * recently-closed tabs logic with mocked `chrome.sessions` and DOM.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -46,10 +33,25 @@ function extractMethod(source: string, methodName: string): string {
 	throw new Error('Unbalanced braces');
 }
 
-describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
+function makeMockElement(): any {
+	const children: any[] = [];
+	return {
+		href: '',
+		className: '',
+		title: '',
+		style: {},
+		dataset: {},
+		onclick: null,
+		appendChild: vi.fn((child: any) => { children.push(child); return child; }),
+		_children: children,
+	};
+}
+
+describe('Recently-closed tabs — newTab.js', () => {
 	let harness: any;
 	let recentList: any;
-	let appendedElements: any[];
+	let strip: any;
+	let appendedCards: any[];
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
@@ -57,6 +59,7 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		const refreshRecent = extractMethod(source, 'refreshRecent');
 		const trimRecent = extractMethod(source, 'trimRecent');
 		const isValidURL = extractMethod(source, 'isValidURL');
+		const _formatAge = extractMethod(source, '_formatAge');
 
 		globalThis.Prefs = { recent: true };
 		(globalThis as any).HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
@@ -67,7 +70,7 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 			onChanged: { addListener: vi.fn() },
 		} as any;
 
-		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, recentList: null, recentListOuter: null };`;
+		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, recentListOuter: null };`;
 		vm.runInThisContext(code, { filename: 'recent-tabs-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -75,41 +78,33 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		Prefs.recent = true;
-		appendedElements = [];
+		appendedCards = [];
+
+		strip = {
+			querySelectorAll: vi.fn(() => []),
+			removeChild: vi.fn(),
+			appendChild: vi.fn((el: any) => { appendedCards.push(el); return el; }),
+		};
 
 		recentList = {
 			hidden: false,
-			querySelectorAll: vi.fn(() => []),
-			removeChild: vi.fn(),
-			appendChild: vi.fn((el: any) => appendedElements.push(el)),
-			style: { width: '' },
-			offsetLeft: 0,
+			querySelector: vi.fn((sel: string) => {
+				if (sel === '#newtab-recent-strip') {
+					return strip;
+				}
+				return null;
+			}),
 		};
 		harness.recentList = recentList;
-		harness.recentListOuter = { clientWidth: 800 };
 
-		// Mock DOM creation
-		document.createElementNS = vi.fn((_ns: string, _tag: string) => {
-			const children: any[] = [];
-			const el: any = {
-				href: '',
-				className: '',
-				title: '',
-				dataset: {},
-				onclick: null,
-				appendChild: vi.fn((child: any) => children.push(child)),
-				_children: children,
-			};
-			return el;
-		}) as any;
+		document.createElementNS = vi.fn(() => makeMockElement()) as any;
 
-		document.createElement = vi.fn((_tag: string) => {
-			return {
-				classList: { add: vi.fn() },
-				onerror: null,
-				src: '',
-			};
-		}) as any;
+		document.createElement = vi.fn(() => ({
+			classList: { add: vi.fn() },
+			onerror: null,
+			src: '',
+			remove: vi.fn(),
+		})) as any;
 
 		document.createTextNode = vi.fn((text: string) => ({ textContent: text })) as any;
 	});
@@ -130,57 +125,103 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 
 	// ==================== clearing existing items ====================
 
-	it('removes existing anchor elements before rebuilding', () => {
-		const existingA = { tagName: 'A' };
-		recentList.querySelectorAll.mockReturnValue([existingA]);
+	it('removes existing cards before rebuilding', () => {
+		const existingCard = { className: 'ntt-recent-card' };
+		strip.querySelectorAll.mockReturnValue([existingCard]);
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb([]));
 		harness.refreshRecent();
-		expect(recentList.removeChild).toHaveBeenCalledWith(existingA);
+		expect(strip.removeChild).toHaveBeenCalledWith(existingCard);
 	});
 
 	// ==================== creating items ====================
 
-	it('creates anchor elements from session tab items', () => {
+	it('creates card elements with ntt-recent-card class', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 120 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(strip.appendChild).toHaveBeenCalledTimes(1);
+		const card = appendedCards[0];
+		expect(card.className).toBe('ntt-recent-card');
+		expect(card.dataset.sessionId).toBe('s1');
+	});
+
+	it('card is an anchor with href set to the tab URL', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		expect(recentList.appendChild).toHaveBeenCalledTimes(1);
-		const anchor = appendedElements[0];
-		expect(anchor.href).toBe('https://example.com');
-		expect(anchor.className).toBe('recent');
-		expect(anchor.dataset.sessionId).toBe('s1');
+		expect(appendedCards[0].href).toBe('https://example.com');
 	});
 
-	it('sets title with title and URL when both differ', () => {
+	it('card has favicon, text, and age children', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 120 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const card = appendedCards[0];
+		expect(card.appendChild).toHaveBeenCalledTimes(3);
+		const [fav, text, age] = card._children;
+		expect(fav.className).toBe('ntt-recent-favicon');
+		expect(text.className).toBe('ntt-recent-text');
+		expect(age.className).toBe('ntt-recent-age');
+	});
+
+	it('text span contains name and domain sub-spans', () => {
+		const items = [
+			{ tab: { url: 'https://example.com/page', title: 'My Page', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const text = appendedCards[0]._children[1];
+		expect(text.appendChild).toHaveBeenCalledTimes(2);
+		const [nameEl, urlEl] = text._children;
+		expect(nameEl.className).toBe('ntt-recent-name');
+		expect(urlEl.className).toBe('ntt-recent-url');
+	});
+
+	it('name span shows title, domain span shows hostname', () => {
+		const items = [
+			{ tab: { url: 'https://example.com/page', title: 'My Page', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const text = appendedCards[0]._children[1];
+		const [nameEl, urlEl] = text._children;
+		const nameText = nameEl._children[0];
+		const urlText = urlEl._children[0];
+		expect(nameText.textContent).toBe('My Page');
+		expect(urlText.textContent).toBe('example.com');
+	});
+
+	it('sets tooltip with title and URL when both differ', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		expect(anchor.title).toBe('Example\nhttps://example.com');
+		expect(appendedCards[0].title).toBe('Example\nhttps://example.com');
 	});
 
-	it('sets title to just URL when title equals URL', () => {
+	it('sets tooltip to just URL when title equals URL', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'https://example.com', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		expect(anchor.title).toBe('https://example.com');
+		expect(appendedCards[0].title).toBe('https://example.com');
 	});
 
-	it('sets title to empty when title is empty', () => {
+	it('sets tooltip to empty when title is empty', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: '', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		expect(anchor.title).toBe('');
+		expect(appendedCards[0].title).toBe('');
 	});
 
 	// ==================== skipping items ====================
@@ -191,7 +232,7 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		expect(recentList.appendChild).not.toHaveBeenCalled();
+		expect(strip.appendChild).not.toHaveBeenCalled();
 	});
 
 	it('skips items without a tab property (window sessions)', () => {
@@ -200,54 +241,74 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		expect(recentList.appendChild).not.toHaveBeenCalled();
+		expect(strip.appendChild).not.toHaveBeenCalled();
+	});
+
+	it('skips tabs with moz-extension:// URLs (filters out own new-tab page)', () => {
+		const items = [
+			{ tab: { url: 'moz-extension://abc-123/newTab.xhtml', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(1);
+		expect(appendedCards[0].href).toBe('https://example.com');
 	});
 
 	// ==================== favicon ====================
 
-	it('adds favicon img when favIconUrl is valid', () => {
+	it('adds favicon img inside favicon span when favIconUrl is valid', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'https://example.com/favicon.ico', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		// anchor should have two children: favicon img + text node
-		expect(anchor.appendChild).toHaveBeenCalledTimes(2);
-		const favicon = anchor.appendChild.mock.calls[0][0];
-		expect(favicon.src).toBe('https://example.com/favicon.ico');
+		const card = appendedCards[0];
+		const fav = card._children[0];
+		expect(fav.className).toBe('ntt-recent-favicon');
+		const img = fav._children[0];
+		expect(img.src).toBe('https://example.com/favicon.ico');
 	});
 
-	it('does not add favicon when favIconUrl is falsy', () => {
+	it('shows letter glyph in favicon span when favIconUrl is falsy', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		// Only text node child
-		expect(anchor.appendChild).toHaveBeenCalledTimes(1);
+		const fav = appendedCards[0]._children[0];
+		const glyph = fav._children[0];
+		expect(glyph.textContent).toBe('E');
 	});
 
-	it('does not add favicon when favIconUrl has invalid protocol', () => {
+	it('does not add favicon img when favIconUrl has invalid protocol', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'javascript:alert(1)', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		expect(anchor.appendChild).toHaveBeenCalledTimes(1);
+		const fav = appendedCards[0]._children[0];
+		expect(fav._children[0].textContent).toBe('E');
 	});
 
-	it('does not add favicon when favIconUrl is a data: URI', () => {
+	it('does not add favicon img when favIconUrl is a data: URI', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'data:image/png;base64,abc', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		// Only text node appended — no favicon img
-		expect(anchor.appendChild).toHaveBeenCalledTimes(1);
+		const fav = appendedCards[0]._children[0];
+		expect(fav._children[0].textContent).toBe('E');
+	});
+
+	it('favicon span gets a hue-based backgroundColor', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const fav = appendedCards[0]._children[0];
+		expect(fav.style.backgroundColor).toMatch(/^hsl\(\d+, 50%, 40%\)$/);
 	});
 
 	// ==================== visibility ====================
@@ -276,16 +337,15 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		// Call onclick with the anchor as `this`
-		const result = anchor.onclick.call(anchor);
+		const card = appendedCards[0];
+		const result = card.onclick.call(card);
 		expect(chrome.sessions.restore).toHaveBeenCalledWith('abc123');
 		expect(result).toBe(false);
 	});
 
 	// ==================== multiple items ====================
 
-	it('creates multiple anchors for multiple valid tabs', () => {
+	it('creates multiple cards for multiple valid tabs', () => {
 		const items = [
 			{ tab: { url: 'https://a.com', title: 'A', sessionId: 's1', favIconUrl: null, incognito: false } },
 			{ tab: { url: 'https://b.com', title: 'B', sessionId: 's2', favIconUrl: null, incognito: false } },
@@ -293,19 +353,167 @@ describe('Recently-closed tabs — newTab.js (Phase 1 slot 14)', () => {
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		expect(appendedElements).toHaveLength(2);
+		expect(appendedCards).toHaveLength(2);
 	});
 
 	// ==================== text content fallback ====================
 
-	it('uses URL as text when title is empty', () => {
+	it('uses URL as name text when title is empty', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: '', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
-		const anchor = appendedElements[0];
-		const textNode = anchor.appendChild.mock.calls[0][0];
-		expect(textNode.textContent).toBe('https://example.com');
+		const text = appendedCards[0]._children[1];
+		const nameEl = text._children[0];
+		expect(nameEl._children[0].textContent).toBe('https://example.com');
+	});
+
+	// ==================== age formatting ====================
+
+	it('omits age span when lastModified is falsy', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: undefined } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const card = appendedCards[0];
+		expect(card.appendChild).toHaveBeenCalledTimes(2);
+	});
+
+	it('shows age in seconds for very recent tabs', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 30 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const age = appendedCards[0]._children[2];
+		expect(age._children[0].textContent).toMatch(/^\d+s$/);
+	});
+
+	it('shows age in minutes', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 300 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const age = appendedCards[0]._children[2];
+		expect(age._children[0].textContent).toBe('5m');
+	});
+
+	it('shows age in hours', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 7200 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const age = appendedCards[0]._children[2];
+		expect(age._children[0].textContent).toBe('2h');
+	});
+
+	it('shows age in days', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 172800 } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const age = appendedCards[0]._children[2];
+		expect(age._children[0].textContent).toBe('2d');
+	});
+
+	// ==================== max items cap ====================
+
+	it('shows at most 10 cards even when more sessions available', () => {
+		const items = Array.from({ length: 15 }, (_, i) => ({
+			tab: { url: `https://site${i}.com`, title: `Site ${i}`, sessionId: `s${i}`, favIconUrl: null, incognito: false },
+		}));
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(10);
+	});
+
+	// ==================== skip URLs already in tiles ====================
+
+	it('skips tabs whose URL matches a visible tile', () => {
+		(globalThis as any).Grid = {
+			sites: [
+				{ url: 'https://already-pinned.com' },
+				null,
+				{ url: 'https://another-tile.com' },
+			],
+		};
+		const items = [
+			{ tab: { url: 'https://already-pinned.com', title: 'Pinned', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://unique.com', title: 'Unique', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(1);
+		expect(appendedCards[0].href).toBe('https://unique.com');
+		delete (globalThis as any).Grid;
+	});
+
+	// ==================== deduplication ====================
+
+	it('deduplicates tabs with same title and same hostname', () => {
+		const items = [
+			{ tab: { url: 'https://example.com/page1', title: 'News', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com/page2', title: 'News', sessionId: 's2', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://other.com/page', title: 'News', sessionId: 's3', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(2);
+		expect(appendedCards[0].href).toBe('https://example.com/page1');
+		expect(appendedCards[1].href).toBe('https://other.com/page');
+	});
+
+	it('allows tabs with same hostname but different titles', () => {
+		const items = [
+			{ tab: { url: 'https://example.com/page1', title: 'Article A', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com/page2', title: 'Article B', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(2);
+	});
+});
+
+describe('Recently-closed cards — CSS (newTab.css)', () => {
+	let css: string;
+
+	beforeAll(() => {
+		const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
+		css = fs.readFileSync(CSS_PATH, 'utf8');
+	});
+
+	it('.ntt-recent-card has surface background and border-radius', () => {
+		const cardRule = css.match(/\.ntt-recent-card\s*\{[^}]*\}/s);
+		expect(cardRule).toBeTruthy();
+		expect(cardRule![0]).toMatch(/background:\s*var\(--ntt-surface/);
+		expect(cardRule![0]).toMatch(/border-radius:\s*7px/);
+	});
+
+	it('.ntt-recent-card is a fixed-width flex row', () => {
+		const cardRule = css.match(/\.ntt-recent-card\s*\{[^}]*\}/s);
+		expect(cardRule).toBeTruthy();
+		expect(cardRule![0]).toMatch(/display:\s*flex/);
+		expect(cardRule![0]).toMatch(/width:\s*186px/);
+	});
+
+	it('#newtab-recent-strip is a horizontal flex container with grid-spacing gap', () => {
+		const stripRule = css.match(/#newtab-recent-strip\s*\{[^}]*\}/s);
+		expect(stripRule).toBeTruthy();
+		expect(stripRule![0]).toMatch(/display:\s*flex/);
+		expect(stripRule![0]).toMatch(/gap:\s*var\(--ntt-gap/);
+		expect(stripRule![0]).toMatch(/overflow:\s*hidden/);
+	});
+
+	it('.ntt-recent-name truncates with ellipsis', () => {
+		const nameRule = css.match(/\.ntt-recent-name\s*\{[^}]*\}/s);
+		expect(nameRule).toBeTruthy();
+		expect(nameRule![0]).toMatch(/text-overflow:\s*ellipsis/);
+		expect(nameRule![0]).toMatch(/overflow:\s*hidden/);
 	});
 });

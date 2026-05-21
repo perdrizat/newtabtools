@@ -897,6 +897,25 @@ var newTabTools = {
 			this.resizeOptionsThumbnail();
 		}
 	},
+	_formatAge(lastModified) {
+		if (!lastModified) {
+			return '';
+		}
+		let seconds = Math.floor(Date.now() / 1000) - lastModified;
+		if (seconds < 60) {
+			return seconds + 's';
+		}
+		let minutes = Math.floor(seconds / 60);
+		if (minutes < 60) {
+			return minutes + 'm';
+		}
+		let hours = Math.floor(minutes / 60);
+		if (hours < 24) {
+			return hours + 'h';
+		}
+		let days = Math.floor(hours / 24);
+		return days + 'd';
+	},
 	refreshRecent() {
 		if (!Prefs.recent) {
 			this.recentList.hidden = true;
@@ -904,66 +923,109 @@ var newTabTools = {
 		}
 
 		chrome.sessions.getRecentlyClosed(undoItems => {
+			let strip = this.recentList.querySelector('#newtab-recent-strip');
+			if (!strip) {
+				strip = this.recentList;
+			}
 			let added = 0;
 
-			for (let element of this.recentList.querySelectorAll('a')) {
-				this.recentList.removeChild(element);
+			for (let element of strip.querySelectorAll('.ntt-recent-card')) {
+				strip.removeChild(element);
 			}
 
-			function recent_onclick() {
+			function card_onclick() {
 				chrome.sessions.restore(this.dataset.sessionId);
 				return false;
 			}
 
+			let tileURLs = new Set();
+			if (typeof Grid !== 'undefined' && Grid.sites) {
+				for (let site of Grid.sites) {
+					if (site && site.url) {
+						tileURLs.add(site.url);
+					}
+				}
+			}
+			let seen = new Set();
+
 			for (let item of undoItems) {
+				if (added >= 10) {
+					break;
+				}
 				if (!item.tab || item.tab.incognito) {
 					continue;
 				}
-
-				let {url, title, sessionId, favIconUrl} = item.tab;
-
-				let a = document.createElementNS(HTML_NAMESPACE, 'a');
-				a.href = url;
-				a.className = 'recent';
-				a.title = (!title || title == url ? title : title + '\n' + url);
-				a.dataset.sessionId = sessionId;
-				a.onclick = recent_onclick;
-				if (favIconUrl && newTabTools.isValidURL(favIconUrl)) {
-					let favIcon = document.createElement('img');
-					favIcon.classList.add('favicon');
-					favIcon.onerror	= function() {
-						this.remove();
-					};
-					favIcon.src = favIconUrl;
-					a.appendChild(favIcon);
+				if (item.tab.url && item.tab.url.startsWith('moz-extension://')) {
+					continue;
 				}
-				a.appendChild(document.createTextNode(title || url));
-				this.recentList.appendChild(a);
+				if (tileURLs.has(item.tab.url)) {
+					continue;
+				}
+
+				let {url, title, sessionId, favIconUrl, lastModified} = item.tab;
+				let displayTitle = title || url;
+				let domain;
+				try {
+					domain = new URL(url).hostname;
+				} catch (e) {
+					domain = url;
+				}
+
+				let dedup = (title || '') + '\n' + domain;
+				if (seen.has(dedup)) {
+					continue;
+				}
+				seen.add(dedup);
+
+				let card = document.createElementNS(HTML_NAMESPACE, 'a');
+				card.href = url;
+				card.className = 'ntt-recent-card';
+				card.title = (!title || title == url ? title : title + '\n' + url);
+				card.dataset.sessionId = sessionId;
+				card.onclick = card_onclick;
+
+				let fav = document.createElementNS(HTML_NAMESPACE, 'span');
+				fav.className = 'ntt-recent-favicon';
+				let glyph = displayTitle.charAt(0).toUpperCase();
+				let hue = (url.length * 7 + glyph.charCodeAt(0) * 13) % 360;
+				fav.style.backgroundColor = 'hsl(' + hue + ', 50%, 40%)';
+				if (favIconUrl && newTabTools.isValidURL(favIconUrl)) {
+					let img = document.createElement('img');
+					img.onerror = function() { this.remove(); };
+					img.src = favIconUrl;
+					fav.appendChild(img);
+				} else {
+					fav.appendChild(document.createTextNode(glyph));
+				}
+				card.appendChild(fav);
+
+				let text = document.createElementNS(HTML_NAMESPACE, 'span');
+				text.className = 'ntt-recent-text';
+				let nameEl = document.createElementNS(HTML_NAMESPACE, 'span');
+				nameEl.className = 'ntt-recent-name';
+				nameEl.appendChild(document.createTextNode(displayTitle));
+				text.appendChild(nameEl);
+				let urlEl = document.createElementNS(HTML_NAMESPACE, 'span');
+				urlEl.className = 'ntt-recent-url';
+				urlEl.appendChild(document.createTextNode(domain));
+				text.appendChild(urlEl);
+				card.appendChild(text);
+
+				let age = newTabTools._formatAge(lastModified);
+				if (age) {
+					let ageEl = document.createElementNS(HTML_NAMESPACE, 'span');
+					ageEl.className = 'ntt-recent-age';
+					ageEl.appendChild(document.createTextNode(age));
+					card.appendChild(ageEl);
+				}
+
+				strip.appendChild(card);
 				added++;
 			}
-			this.trimRecent();
 			this.recentList.hidden = !added;
 		});
 	},
 	trimRecent() {
-		this.recentList.style.width = '0';
-
-		let width = this.recentListOuter.clientWidth;
-		let elements = document.querySelectorAll('.recent');
-
-		for (let recent of elements) {
-			// see .recent
-			let right = recent.offsetLeft + recent.offsetWidth - this.recentList.offsetLeft + 4;
-			if (right == 4) {
-				requestAnimationFrame(this.trimRecent.bind(this));
-				return;
-			}
-			if (right <= width) {
-				this.recentList.style.width = right + 'px';
-			} else {
-				break;
-			}
-		}
 	},
 	get selectedSiteIndex() {
 		return this._selectedSiteIndex;

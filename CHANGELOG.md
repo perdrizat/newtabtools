@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-21]
+
+### Changed
+
+- Recently-closed bar redesigned as mini-tile cards with inline "Recently Closed" label on the left
+
 ## [2026-05-20]
 
 ### Added

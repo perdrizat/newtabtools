@@ -41,7 +41,7 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 				() => {
 					const list = document.getElementById('newtab-recent');
 					if (!list || list.hidden) {return false;}
-					return list.querySelectorAll('a.recent').length > 0;
+					return list.querySelectorAll('a.ntt-recent-card').length > 0;
 				},
 				[],
 				{ timeout: 10_000, message: 'Recently-closed list did not show any items' }
@@ -51,7 +51,7 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 			// Verify the recently-closed row contains a link to the closed tab.
 			const recentUrls = await page.evaluate(() => {
 				const list = document.getElementById('newtab-recent');
-				return [...list!.querySelectorAll('a.recent')].map(a => (a as HTMLAnchorElement).href);
+				return [...list!.querySelectorAll('a.ntt-recent-card')].map(a => (a as HTMLAnchorElement).href);
 			});
 			expect(recentUrls.some(u => u.includes('example.com'))).toBe(true);
 		} catch (e) {
