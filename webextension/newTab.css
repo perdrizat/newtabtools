@@ -76,6 +76,166 @@ input[type="button"] {
 	white-space: nowrap;
 	padding: 2px 5px;
 }
+/* TITLEBAR */
+#ntt-titlebar {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	padding: 30px 30px 14px;
+	border-bottom: 1px solid var(--ntt-line-soft);
+	margin-bottom: var(--ntt-gap, 10px);
+	font-family: var(--ntt-font-ui);
+}
+#ntt-titlebar.medium {
+	padding-left: 60px;
+	padding-right: 60px;
+	padding-top: 60px;
+}
+#ntt-titlebar.large {
+	padding-left: 120px;
+	padding-right: 120px;
+	padding-top: 120px;
+}
+#ntt-wordmark {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+#ntt-wordmark-icon {
+	width: 22px;
+	height: 22px;
+	border-radius: 5px;
+	background: linear-gradient(135deg, #d97757 0%, #b8492d 100%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-style: italic;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1;
+	box-shadow: 0 1px 2px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.18);
+}
+#ntt-wordmark-text {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	line-height: 1;
+}
+#ntt-wordmark-name {
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--ntt-ink);
+	letter-spacing: -0.012em;
+}
+#ntt-wordmark-version {
+	font-size: 9.5px;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+	letter-spacing: 0.04em;
+	margin-top: 1px;
+}
+.ntt-titlebar-divider {
+	width: 1px;
+	height: 22px;
+	background: var(--ntt-line);
+	flex: 0 0 auto;
+}
+#ntt-search {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	max-width: 440px;
+	height: 38px;
+	padding: 0 12px 0 14px;
+	background: var(--ntt-surface);
+	border: 1px solid var(--ntt-line);
+	border-radius: 9px;
+	box-shadow: 0 1px 2px rgba(20,15,10,.03);
+	cursor: text;
+	margin: 0 auto;
+}
+:root[theme="dark"] #ntt-search {
+	background: rgba(255,255,255,.04);
+	box-shadow: none;
+}
+#ntt-search svg {
+	flex: 0 0 auto;
+	color: var(--ntt-mute);
+}
+#ntt-search-input {
+	flex: 1;
+	font-size: 13px;
+	color: var(--ntt-ink);
+	letter-spacing: -0.005em;
+	background: transparent;
+	border: none;
+	outline: none;
+	font-family: var(--ntt-font-ui);
+	min-width: 0;
+}
+#ntt-search-input::placeholder {
+	color: var(--ntt-sub);
+}
+.ntt-search-kbd {
+	padding: 2px 6px;
+	border-radius: 4px;
+	background: var(--ntt-kbd-bg);
+	color: var(--ntt-kbd-ink);
+	font-size: 10px;
+	font-weight: 600;
+	font-family: var(--ntt-font-mono);
+	flex: 0 0 auto;
+}
+#ntt-clock {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 0;
+	line-height: 1;
+	flex: 0 0 auto;
+}
+#ntt-clock-time {
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--ntt-ink);
+	letter-spacing: -0.012em;
+	font-variant-numeric: tabular-nums;
+}
+#ntt-clock-date {
+	font-size: 10.5px;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+	margin-top: 2px;
+}
+#ntt-titlebar-buttons {
+	display: flex;
+	gap: 2px;
+	flex: 0 0 auto;
+}
+#ntt-titlebar-buttons button {
+	width: 32px;
+	height: 32px;
+	border-radius: 7px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	color: var(--ntt-sub);
+	border: 1px solid transparent;
+	cursor: pointer;
+	padding: 0;
+}
+#ntt-titlebar-buttons button:hover {
+	background: var(--ntt-surface-soft);
+	border-color: var(--ntt-line);
+}
+#ntt-titlebar-buttons button svg {
+	pointer-events: none;
+}
+
 /* SCROLLBOX */
 #newtab-scrollbox {
 	display: flex;
@@ -251,8 +411,6 @@ input[type="button"] {
 	align-items: flex-end;
 	justify-content: flex-start;
 	position: relative;
-	padding-top: 30px;
-	padding-right: 30px;
 }
 #newtab-margin-bottom {
 	align-items: flex-start;
@@ -260,16 +418,8 @@ input[type="button"] {
 #newtab-margin-bottom {
 	height: 30px;
 }
-#newtab-margin-top.medium {
-	padding-top: 60px;
-	padding-right: 60px;
-}
 #newtab-margin-bottom.medium {
 	height: 60px;
-}
-#newtab-margin-top.large {
-	padding-top: 120px;
-	padding-right: 120px;
 }
 #newtab-margin-bottom.large {
 	height: 120px;
@@ -568,11 +718,11 @@ svg {
 	opacity: 0.01;
 }
 /* OPTIONS */
-#newtab-margin-top > .newtab-margin-right {
+#ntt-cogwheel-wrap {
 	position: absolute;
-	top: 0;
-	right: 0;
-	z-index: 5;
+	top: 10px;
+	right: 10px;
+	z-index: 10;
 }
 .newtab-margin-right {
 	justify-content: flex-start;

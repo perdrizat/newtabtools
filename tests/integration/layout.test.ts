@@ -73,7 +73,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
+		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
 		vm.runInThisContext(code, { filename: 'layout-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

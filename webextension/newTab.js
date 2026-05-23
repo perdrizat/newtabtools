@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, compareVersions, Filters, Grid, Page, Prefs, Tiles, Transformation, Updater */
+/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, Transformation, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -843,6 +843,7 @@ var newTabTools = {
 			setMargin('.newtab-margin-right', margin[1]);
 			setMargin('#newtab-margin-bottom', margin[2]);
 			setMargin('.newtab-margin-left', margin[3]);
+			setMargin('#ntt-titlebar', margin[3]);
 		}
 
 		if (!keys || keys.includes('spacing')) {
@@ -881,6 +882,25 @@ var newTabTools = {
 			this.refreshRecent();
 		}
 
+		if (!keys || keys.includes('titleBarWordmark')) {
+			let el = document.getElementById('ntt-wordmark');
+			let divider = document.querySelector('.ntt-titlebar-divider');
+			if (el) { el.hidden = !Prefs.titleBarWordmark; }
+			if (divider) { divider.hidden = !Prefs.titleBarWordmark; }
+		}
+		if (!keys || keys.includes('titleBarSearch')) {
+			let el = document.getElementById('ntt-search');
+			if (el) { el.hidden = !Prefs.titleBarSearch; }
+		}
+		if (!keys || keys.includes('titleBarClock')) {
+			let el = document.getElementById('ntt-clock');
+			if (el) { el.hidden = !Prefs.titleBarClock; }
+		}
+
+		if (!keys || keys.includes('theme')) {
+			this._updateThemeToggleIcon();
+		}
+
 		if (keys && keys.includes('statType') && 'Grid' in window) {
 			for (let site of Grid.sites) {
 				if (site) {
@@ -896,6 +916,61 @@ var newTabTools = {
 		if (!document.documentElement.hasAttribute('options-hidden')) {
 			this.resizeOptionsThumbnail();
 		}
+	},
+	_formatTime(date) {
+		let h = date.getHours();
+		let m = date.getMinutes();
+		return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+	},
+	_formatDate(date) {
+		let days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		let months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		return days[date.getDay()] + ' · ' + months[date.getMonth()] + ' ' + date.getDate();
+	},
+	_updateClock() {
+		let timeEl = document.getElementById('ntt-clock-time');
+		let dateEl = document.getElementById('ntt-clock-date');
+		if (timeEl && dateEl) {
+			let now = new Date();
+			timeEl.textContent = this._formatTime(now);
+			dateEl.textContent = this._formatDate(now);
+		}
+	},
+	_initTitlebar() {
+		let searchEl = document.getElementById('ntt-search');
+		if (searchEl) {
+			let icon = NttIcons.create('search', 14);
+			searchEl.insertBefore(icon, searchEl.firstChild);
+		}
+
+		let themeBtn = document.getElementById('ntt-theme-toggle');
+		if (themeBtn) {
+			this._updateThemeToggleIcon();
+			themeBtn.addEventListener('click', () => {
+				let current = Prefs.theme;
+				if (current === 'system') {
+					Prefs.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+				} else {
+					Prefs.theme = current === 'dark' ? 'light' : 'dark';
+				}
+			});
+		}
+
+		this._updateClock();
+		this._clockInterval = setInterval(() => this._updateClock(), 60000);
+	},
+	_updateThemeToggleIcon() {
+		let btn = document.getElementById('ntt-theme-toggle');
+		if (!btn) {
+			return;
+		}
+		while (btn.firstChild) {
+			btn.firstChild.remove();
+		}
+		let effectiveTheme = Prefs.theme === 'system'
+			? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+			: Prefs.theme;
+		btn.appendChild(NttIcons.create(effectiveTheme === 'dark' ? 'sun' : 'moon', 14));
 	},
 	_formatAge(lastModified) {
 		if (!lastModified) {
@@ -1264,6 +1339,7 @@ var newTabTools = {
 		Prefs.init().then(() => {
 			// Everything is loaded. Initialize the New Tab Page.
 			Page.init();
+			newTabTools._initTitlebar();
 			newTabTools.updateUI();
 			newTabTools.refreshBackgroundImage();
 

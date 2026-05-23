@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-23]
+
+### Added
+
+- NTT v2 Phase 2-1: titlebar with wordmark, live clock, theme toggle, settings gear
+- Titlebar prefs (`titleBarWordmark`, `titleBarSearch`, `titleBarClock`, `titleBarStatus`) for toggling each element
+- Titlebar prefs added to backup/restore allow-list
+- Search input in titlebar (hidden by default — wired in Phase 4)
+
+### Changed
+
+- Cogwheel moved to absolute top-right corner, outside content margins
+- `#newtab-margin-top` padding-top removed (titlebar handles top spacing now)
+- Search bar defaults to hidden (`titleBarSearch: false`) until search logic is implemented
+- Removed duplicate settings gear from titlebar (cogwheel is the single settings entry point)
+
+### Fixed
+
+- Titlebar respects grid margin setting (padding matches side margins)
+- Titlebar-to-content spacing matches `--ntt-gap` (grid spacing)
+- Clock/theme-toggle right-aligned with tile grid edge
+
 ## [2026-05-21]
 
 ### Changed

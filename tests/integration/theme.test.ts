@@ -77,7 +77,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).window = {
 			matchMedia: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn() }),
 		};
-		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {} };`;
+		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {}, _updateThemeToggleIcon() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

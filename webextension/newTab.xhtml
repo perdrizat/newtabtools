@@ -14,6 +14,30 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	<div id="background-fake"></div>
 	<div id="newtab-scrollbox" tabindex="0">
 		<div id="newtab-vertical-margin">
+			<div id="ntt-cogwheel-wrap">
+				<input id="options-toggle" type="button"/>
+			</div>
+			<div id="ntt-titlebar">
+				<div id="ntt-wordmark">
+					<div id="ntt-wordmark-icon">N</div>
+					<div id="ntt-wordmark-text">
+						<span id="ntt-wordmark-name">New Tab Tools</span>
+						<span id="ntt-wordmark-version">v2.0 · powertools</span>
+					</div>
+				</div>
+				<div class="ntt-titlebar-divider"></div>
+				<div id="ntt-search">
+					<input id="ntt-search-input" type="text" placeholder="Search the web, jump to a tile, or paste a URL…" autocomplete="off" />
+					<span class="ntt-search-kbd">/</span>
+				</div>
+				<div id="ntt-clock">
+					<span id="ntt-clock-time"></span>
+					<span id="ntt-clock-date"></span>
+				</div>
+				<div id="ntt-titlebar-buttons">
+					<button id="ntt-theme-toggle" type="button"></button>
+				</div>
+			</div>
 			<div id="newtab-margin-top">
 				<div class="newtab-side-margin newtab-margin-left"></div>
 				<div id="newtab-recent-outer">
@@ -27,9 +51,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<button id="newtab-undo-restore-button" tabindex="-1" data-message="newtab_undo_restoreButton"></button>
 					<button id="newtab-undo-close-button" class="close-button" tabindex="-1" data-title="newtab_undo_closeTooltip"></button>
 				</div>
-				<div class="newtab-side-margin newtab-margin-right">
-					<input id="options-toggle" type="button"/>
-				</div>
+				<div class="newtab-side-margin newtab-margin-right"></div>
 			</div>
 			<div id="newtab-horizontal-margin">
 				<div class="newtab-side-margin newtab-margin-left"></div>
