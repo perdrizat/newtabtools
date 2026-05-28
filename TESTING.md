@@ -128,6 +128,7 @@ These commands are the primary interface for development. Run them from the proj
 | `npm run test:fast` | Run Unit + Integration tests | TDD Loop |
 | `npm run test:e2e` | Run full E2E suite against Firefox ESR | Validation |
 | `npm test` | Run all tests (Fast + E2E) | Pre-commit |
+| `npm run test:uat` *(planned)* | Run LLM-driven user acceptance scenarios against Firefox ESR | UAT (pre-release) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 
@@ -167,13 +168,14 @@ The files below make up the test scaffold. A new maintainer should not need to r
 
 ## The Testing Strategy
 
-Testing has three tiers, each with its own directory, runner setup, and cadence:
+Testing has three deterministic tiers plus a fourth judgment-based tier (planned), each with its own directory, runner setup, and cadence:
 
 | Tier | Directory | Runs in | npm script | When to run |
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | Vitest + jsdom | `npm run test:unit` | On every save during TDD |
 | **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `npm run test:integration` | On every save during TDD |
 | **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR via WebDriver BiDi | `npm run test:e2e` | At feature completion and pre-commit |
+| **UAT** *(planned)* | `tests/uat/` | Claude Code (headless) + our MCP server + Puppeteer + Firefox ESR via WebDriver BiDi | `npm run test:uat` | Pre-release only; never on PR/CI |
 
 `npm run test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
 
@@ -279,6 +281,18 @@ document.querySelector('.newtab-site .newtab-control-pin');
 ```
 
 **Cleanup is optional but encouraged.** If a test pins tiles with unique URLs (e.g. `https://my-feature-test.example.com/`), unpin them in the test's `finally` block. This is a courtesy to other test files, not a substitute for `clearPinnedTiles` — every file must still call `clearPinnedTiles` in its own `beforeAll`.
+
+### UAT tests (`tests/uat/`) — planned, see [`UAT_PLAN.md`](UAT_PLAN.md)
+
+User Acceptance Testing tier driven by an LLM agent. Scenarios are written in plain English; an agent (Claude Code in headless mode) walks through each one, takes screenshots, and judges the rendered state against criteria stated in the scenario file. Produces JSON reports + screenshot artifacts for human review. Catches the bug class that structural tests miss (occlusion, contrast, layering, "looks broken to a user").
+
+- **Status:** Plan in [`UAT_PLAN.md`](UAT_PLAN.md); implementation in progress. Step 0 (architecture spike) complete 2026-05-21; remaining steps tracked in the plan.
+- **Tool stack:** **Same Firefox ESR + `web-ext` + WebDriver BiDi as the E2E tier.** The agent talks to an MCP server we own (`tests/uat/_tools/mcp-server.ts`), which wraps the existing `tests/e2e/_helpers.js` (Puppeteer-over-BiDi) and exposes a small set of MCP tools: `browser_navigate`, `browser_click`, `browser_hover`, `browser_file_upload`, `browser_take_screenshot`, `browser_snapshot`, `browser_evaluate`. The server uses `@modelcontextprotocol/sdk` over stdio; Claude Code spawns it per scenario.
+- **Why not `@playwright/mcp`?** Same fundamental reason we don't use Playwright for E2E: Playwright's Firefox driver requires Playwright's patched Firefox build (Juggler protocol) and cannot drive system `firefox-esr`. The Step 0 spike confirmed `@playwright/mcp` would test Playwright-bundled Firefox, not the ESR users install — which would undermine the value of running UAT next to a firefox-esr-anchored E2E tier. See `UAT_PLAN.md` §"Spike outcome" for the full diagnosis.
+- **Why not Bash + standalone CLI scripts?** That route works for browser control but doubles the screenshot turn cost (every screenshot becomes `Bash → save → Read`, two events instead of one) and weakens the `--allowedTools` allowlist (broad `Bash(...)` glob vs precise per-tool MCP names). Kept warm as the fallback if the MCP wrapper proves painful in stdio framing.
+- **Per-scenario known-good fixture:** every scenario starts by restoring `tests/uat/newtabtools_knowngood.zip` (a checked-in NTT backup) so findings reflect the code change, not profile drift. The restore flow is exercised on every run as a side effect — a broken restore feature fails UAT loudly.
+- **When to run:** Pre-release only (e.g. before AMO submission). **Never on PR / commit / CI** — non-deterministic, costs subscription quota, and judgment-based by design.
+- **Verdict is "investigate", not "pass/fail".** The runner always exits 0. A human reviews the summary artifact before releasing. UAT does not gate merges.
 
 ## TDD Workflow per Task
 
