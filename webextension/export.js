@@ -121,8 +121,17 @@ async function readZip(file) {
 	}
 
 	for (let v of views) {
-		await new Promise(function(resolve) {
-			v.Updater.updateGrid(resolve);
-		});
+		// Full grid rebuild — `Updater.updateGrid` reuses existing Site
+		// instances when their URL still matches, which after a restore
+		// means the in-memory `_link` reference points to the pre-restore
+		// data. The custom thumbnails (and any other link metadata) only
+		// show up after a manual page reload. `Grid.refresh()` strips the
+		// DOM children and re-renders from scratch, which forces every
+		// site to pick up its newly-restored link.
+		await v.Grid.refresh();
+		// `Grid.refresh()` doesn't pull screenshots from the Thumbnails
+		// IDB store on its own — kick that off so auto-captured tile
+		// images appear immediately.
+		v.newTabTools.getThumbnails();
 	}
 }

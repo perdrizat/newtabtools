@@ -3,7 +3,7 @@ This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
 file, you can obtain one at http://mozilla.org/MPL/2.0/.
 -->
-<html xmlns="http://www.w3.org/1999/xhtml" options-hidden="true" drawer-tab="layout">
+<html xmlns="http://www.w3.org/1999/xhtml" options-hidden="true" drawer-tab="page">
 <head>
 	<title data-message="newtab_pageTitle"></title>
 	<link rel="stylesheet" href="tokens.css" type="text/css" />
@@ -14,9 +14,6 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	<div id="background-fake"></div>
 	<div id="newtab-scrollbox" tabindex="0">
 		<div id="newtab-vertical-margin">
-			<div id="ntt-cogwheel-wrap">
-				<input id="options-toggle" type="button"/>
-			</div>
 			<div id="ntt-titlebar">
 				<div id="ntt-wordmark">
 					<div id="ntt-wordmark-icon">N</div>
@@ -36,6 +33,8 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				</div>
 				<div id="ntt-titlebar-buttons">
 					<button id="ntt-theme-toggle" type="button"></button>
+					<input id="locked-toggle" type="button" data-title="options_locked" />
+					<input id="options-toggle" type="button" data-title="options_button" />
 				</div>
 			</div>
 			<div id="newtab-margin-top">
@@ -60,9 +59,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 			</div>
 			<div id="newtab-margin-bottom">
 				<div class="newtab-side-margin newtab-margin-left"></div>
-				<div class="newtab-side-margin newtab-margin-right">
-					<input id="locked-toggle" type="button" data-title="options_locked" />
-				</div>
+				<div class="newtab-side-margin newtab-margin-right"></div>
 			</div>
 			<div id="ntt-statusbar">
 				<div id="ntt-statusbar-hints">
@@ -87,51 +84,43 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 		</header>
 		<nav id="ntt-drawer-tabs" role="tablist">
 			<button type="button" role="tab" data-drawer-tab="tile" data-active="false">Tile</button>
-			<button type="button" role="tab" data-drawer-tab="layout" data-active="true">Layout</button>
-			<button type="button" role="tab" data-drawer-tab="appearance" data-active="false">Appearance</button>
+			<button type="button" role="tab" data-drawer-tab="page" data-active="true">Page</button>
 			<button type="button" role="tab" data-drawer-tab="advanced" data-active="false">Advanced</button>
 		</nav>
 		<div id="ntt-drawer-body">
 			<section data-drawer-panel="tile" hidden="">
+				<fieldset>
+					<legend data-message="pin_url_header"></legend>
+					<div class="options-row">
+						<input id="options-pinURL-input" type="url" required="true" autocomplete="off" data-placeholder="pin_url_placeholder" />
+						<button id="options-pinURL" data-message="pin_url_button"></button>
+					</div>
+					<div class="options-row" style="position: relative;">
+						<ul id="autocomplete" hidden="">
+							<li id="options-pinURL-blocked">
+								<p data-message="pin_url_permissions"></p>
+								<div>
+									<button id="options-pinURL-permissions" data-message="pin_url_request"></button>
+								</div>
+							</li>
+						</ul>
+						<template>
+							<li>
+								<div class="autocomplete-icon"></div>
+								<div class="autocomplete-detail">
+									<div class="autocomplete-title" tabindex="-1"></div>
+									<div class="autocomplete-url" tabindex="-1"></div>
+								</div>
+							</li>
+						</template>
+					</div>
+				</fieldset>
+				<div class="ntt-empty-state" data-tile-empty="" data-message="tile_empty_state"></div>
 				<div id="options-tile">
 					<fieldset>
-						<legend data-message="pin_url_header"></legend>
-						<div class="options-row">
-							<input id="options-pinURL-input" type="url" required="true" autocomplete="off" data-placeholder="pin_url_placeholder" />
-							<button id="options-pinURL" data-message="pin_url_button"></button>
-						</div>
-						<div class="options-row" style="position: relative;">
-							<ul id="autocomplete" hidden="">
-								<li id="options-pinURL-blocked">
-									<p data-message="pin_url_permissions"></p>
-									<div>
-										<button id="options-pinURL-permissions" data-message="pin_url_request"></button>
-									</div>
-								</li>
-							</ul>
-							<template>
-								<li>
-									<div class="autocomplete-icon"></div>
-									<div class="autocomplete-detail">
-										<div class="autocomplete-title" tabindex="-1"></div>
-										<div class="autocomplete-url" tabindex="-1"></div>
-									</div>
-								</li>
-							</template>
-						</div>
-					</fieldset>
-					<fieldset>
 						<legend data-message="tile_header"></legend>
-						<div class="options-row">
-							<button id="options-previous-row-tile" class="arrow" data-title="tile_selection_previousrow_tooltip"></button>
-						</div>
 						<div id="options-thumbnail-wrap" class="options-row">
-							<button id="options-previous-tile" class="arrow" data-title="tile_selection_previous_tooltip"></button>
 							<div id="options-thumbnail" class="newtab-thumbnail"></div>
-							<button id="options-next-tile" class="arrow" data-title="tile_selection_next_tooltip"></button>
-						</div>
-						<div class="options-row">
-							<button id="options-next-row-tile" class="arrow" data-title="tile_selection_nextrow_tooltip"></button>
 						</div>
 						<label id="options-url"></label>
 						<div id="options-edit-url" class="options-row">
@@ -162,16 +151,70 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 							<button id="options-title-set" data-message="tile_title_set"></button>
 						</div>
 					</fieldset>
-					<fieldset id="options-bg-group">
-						<legend data-message="bg_header"></legend>
-						<div class="options-row">
-							<button id="options-wallpaper-btn">Choose Wallpaper</button>
-							<button id="options-bg-remove" disabled="" data-message="bg_remove"></button>
-						</div>
-					</fieldset>
+				</div>
+				<hr class="ntt-drawer-divider" />
+				<div class="ntt-form-group" data-group="aspect">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="options_tile_aspect"></span>
+					</div>
+					<div class="ntt-segmented" role="radiogroup" data-pref="tileAspect">
+						<button type="button" role="radio" data-value="fill" data-message="options_tile_aspect_fill"></button>
+						<button type="button" role="radio" data-value="16-9">16:9</button>
+						<button type="button" role="radio" data-value="4-3">4:3</button>
+						<button type="button" role="radio" data-value="1-1">1:1</button>
+						<button type="button" role="radio" data-value="3-4">3:4</button>
+					</div>
+				</div>
+				<div class="ntt-form-group" data-group="tilechrome">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="options_tilechrome_header"></span>
+					</div>
+					<div class="ntt-toggle-row" data-pref="titleSize">
+						<span class="ntt-toggle-label-stack">
+							<span class="ntt-toggle-label" data-message="options_tilechrome_overlay"></span>
+							<span class="ntt-toggle-sub" data-message="options_tilechrome_overlay_sub"></span>
+						</span>
+						<button type="button" role="switch" class="ntt-toggle" data-pref="titleSize" aria-checked="true"></button>
+					</div>
+					<div class="ntt-toggle-row" data-pref="tileActions">
+						<span class="ntt-toggle-label-stack">
+							<span class="ntt-toggle-label" data-message="options_tilechrome_actions"></span>
+							<span class="ntt-toggle-sub" data-message="options_tilechrome_actions_sub"></span>
+						</span>
+						<button type="button" role="switch" class="ntt-toggle" data-pref="tileActions" aria-checked="true"></button>
+					</div>
+				</div>
+				<div class="ntt-form-group" data-group="stat">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="options_stat_header"></span>
+						<span class="ntt-form-group-help" data-message="options_stat_help"></span>
+					</div>
+					<div class="ntt-segmented" role="radiogroup" data-pref="statType">
+						<button type="button" role="radio" data-value="none" data-message="options_stat_none"></button>
+						<button type="button" role="radio" data-value="visits" data-message="options_stat_visits"></button>
+						<button type="button" role="radio" data-value="last" data-message="options_stat_last"></button>
+						<button type="button" role="radio" data-value="trend" data-message="options_stat_trend"></button>
+						<button type="button" role="radio" data-value="rank" data-message="options_stat_rank"></button>
+						<button type="button" role="radio" data-value="fresh" data-message="options_stat_fresh"></button>
+					</div>
+				</div>
+				<div class="ntt-form-group" data-group="actionsize">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="options_actionsize_header"></span>
+					</div>
+					<div class="ntt-segmented" role="radiogroup" data-pref="actionIconSize">
+						<button type="button" role="radio" data-value="small" data-message="options_size_small"></button>
+						<button type="button" role="radio" data-value="medium" data-message="options_size_medium"></button>
+						<button type="button" role="radio" data-value="large" data-message="options_size_large"></button>
+					</div>
+				</div>
+				<div class="ntt-form-group">
+					<label class="ntt-checkbox-row">
+						<input type="checkbox" name="locked" data-label="options_locked" />
+					</label>
 				</div>
 			</section>
-			<section data-drawer-panel="layout">
+			<section data-drawer-panel="page">
 				<div class="ntt-form-group" data-group="grid">
 					<div class="ntt-form-group-head">
 						<span class="ntt-form-group-label" data-message="options_grid_header"></span>
@@ -221,13 +264,32 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<input type="range" min="0" max="2" step="1" data-pref="tileRadius" />
 					</div>
 				</div>
-				<div class="ntt-form-group" data-group="recent">
+				<div class="ntt-form-group">
 					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_recent_header"></span>
+						<span class="ntt-form-group-label" data-message="options_theme"></span>
+						<span class="ntt-form-group-help" data-message="options_theme_help"></span>
 					</div>
-					<div class="ntt-segmented" role="radiogroup" data-pref="recent">
-						<button type="button" role="radio" data-value="false" data-message="options_recent_off"></button>
-						<button type="button" role="radio" data-value="true" data-message="options_recent_top"></button>
+					<div class="ntt-theme-cards" role="radiogroup" data-pref="theme">
+						<button type="button" role="radio" class="ntt-theme-card" data-value="system" aria-checked="true">
+							<span class="ntt-theme-card-swatch ntt-theme-swatch-inherit"></span>
+							<span class="ntt-theme-card-label" data-message="options_theme_system"></span>
+							<span class="ntt-theme-card-sub" data-message="options_theme_system_sub"></span>
+						</button>
+						<button type="button" role="radio" class="ntt-theme-card" data-value="light" aria-checked="false">
+							<span class="ntt-theme-card-swatch ntt-theme-swatch-light"></span>
+							<span class="ntt-theme-card-label" data-message="options_theme_light"></span>
+							<span class="ntt-theme-card-sub" data-message="options_theme_light_sub"></span>
+						</button>
+						<button type="button" role="radio" class="ntt-theme-card" data-value="dark" aria-checked="false">
+							<span class="ntt-theme-card-swatch ntt-theme-swatch-dark"></span>
+							<span class="ntt-theme-card-label" data-message="options_theme_dark"></span>
+							<span class="ntt-theme-card-sub" data-message="options_theme_dark_sub"></span>
+						</button>
+						<button type="button" role="radio" class="ntt-theme-card" data-value="contrast" aria-checked="false">
+							<span class="ntt-theme-card-swatch ntt-theme-swatch-contrast"></span>
+							<span class="ntt-theme-card-label" data-message="options_theme_contrast"></span>
+							<span class="ntt-theme-card-sub" data-message="options_theme_contrast_sub"></span>
+						</button>
 					</div>
 				</div>
 				<div class="ntt-form-group" data-group="titlebar">
@@ -252,59 +314,13 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarStatus" aria-checked="true"></button>
 					</div>
 				</div>
-				<div class="ntt-form-group" data-group="tilechrome">
+				<div class="ntt-form-group" id="options-bg-group">
 					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_tilechrome_header"></span>
+						<span class="ntt-form-group-label" data-message="bg_header"></span>
 					</div>
-					<div class="ntt-toggle-row" data-pref="titleSize">
-						<span class="ntt-toggle-label-stack">
-							<span class="ntt-toggle-label" data-message="options_tilechrome_overlay"></span>
-							<span class="ntt-toggle-sub" data-message="options_tilechrome_overlay_sub"></span>
-						</span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="titleSize" aria-checked="true"></button>
-					</div>
-					<div class="ntt-toggle-row" data-pref="tileActions">
-						<span class="ntt-toggle-label-stack">
-							<span class="ntt-toggle-label" data-message="options_tilechrome_actions"></span>
-							<span class="ntt-toggle-sub" data-message="options_tilechrome_actions_sub"></span>
-						</span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="tileActions" aria-checked="true"></button>
-					</div>
-				</div>
-				<div class="ntt-form-group" data-group="stat">
-					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_stat_header"></span>
-						<span class="ntt-form-group-help" data-message="options_stat_help"></span>
-					</div>
-					<div class="ntt-segmented" role="radiogroup" data-pref="statType">
-						<button type="button" role="radio" data-value="none" data-message="options_stat_none"></button>
-						<button type="button" role="radio" data-value="visits" data-message="options_stat_visits"></button>
-						<button type="button" role="radio" data-value="last" data-message="options_stat_last"></button>
-						<button type="button" role="radio" data-value="trend" data-message="options_stat_trend"></button>
-						<button type="button" role="radio" data-value="rank" data-message="options_stat_rank"></button>
-						<button type="button" role="radio" data-value="fresh" data-message="options_stat_fresh"></button>
-					</div>
-				</div>
-				<div class="ntt-form-group" data-group="actionsize">
-					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_actionsize_header"></span>
-					</div>
-					<div class="ntt-segmented" role="radiogroup" data-pref="actionIconSize">
-						<button type="button" role="radio" data-value="small" data-message="options_size_small"></button>
-						<button type="button" role="radio" data-value="medium" data-message="options_size_medium"></button>
-						<button type="button" role="radio" data-value="large" data-message="options_size_large"></button>
-					</div>
-				</div>
-			</section>
-			<section data-drawer-panel="appearance" hidden="">
-				<div class="ntt-form-group">
-					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_theme"></span>
-					</div>
-					<div class="ntt-radio-stack">
-						<label><input type="radio" name="theme" value="system" data-label="options_theme_system" /></label>
-						<label><input type="radio" name="theme" value="light" data-label="options_theme_light" /></label>
-						<label><input type="radio" name="theme" value="dark" data-label="options_theme_dark" /></label>
+					<div class="options-row">
+						<button id="options-wallpaper-btn" data-message="bg_choose"></button>
+						<button id="options-bg-remove" disabled="" data-message="bg_remove"></button>
 					</div>
 				</div>
 				<div class="ntt-form-group">
@@ -313,27 +329,21 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					</div>
 					<input type="range" name="opacity" max="100" min="0" step="10" />
 				</div>
-				<div class="ntt-form-group">
-					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_tile_aspect"></span>
-					</div>
-					<select name="tileAspect">
-						<option value="fill" data-message="options_tile_aspect_fill"></option>
-						<option value="16-9" data-message="options_tile_aspect_16_9"></option>
-						<option value="4-3" data-message="options_tile_aspect_4_3"></option>
-						<option value="1-1" data-message="options_tile_aspect_1_1"></option>
-						<option value="3-4" data-message="options_tile_aspect_3_4"></option>
-					</select>
-				</div>
 			</section>
 			<section data-drawer-panel="advanced" hidden="">
+				<div class="ntt-form-group" data-group="recent">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="options_recent_header"></span>
+					</div>
+					<div class="ntt-segmented" role="radiogroup" data-pref="recent">
+						<button type="button" role="radio" data-value="false" data-message="options_recent_off"></button>
+						<button type="button" role="radio" data-value="true" data-message="options_recent_top"></button>
+					</div>
+				</div>
 				<div class="ntt-form-group">
 					<label class="ntt-checkbox-row">
 						<input type="checkbox" name="history" data-label="options_historytiles" />
 						<button id="historytiles-filter" data-message="filter_button"></button>
-					</label>
-					<label class="ntt-checkbox-row">
-						<input type="checkbox" name="locked" data-label="options_locked" />
 					</label>
 				</div>
 				<div class="ntt-form-group" id="options-filter">
@@ -385,15 +395,12 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				</div>
 				<div class="ntt-form-group" id="options-export">
 					<fieldset>
-						<legend data-message="backup_header"></legend>
+						<legend data-message="backup_restore_header"></legend>
 						<p data-message="backup_description"></p>
 						<div class="options-row">
 							<button id="options-backup" data-message="backup_button"></button>
 						</div>
-					</fieldset>
-					<fieldset>
-						<legend data-message="restore_header"></legend>
-						<p data-message="restore_description"></p>
+						<p data-message="restore_description" style="margin-top: 1em;"></p>
 						<p data-message="restore_warning" style="font-style: italic;"></p>
 						<div class="options-row">
 							<input id="options-restore-file" type="file" accept="application/zip" />

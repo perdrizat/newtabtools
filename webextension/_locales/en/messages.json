@@ -172,7 +172,7 @@
 		"message": "show / hide each"
 	},
 	"options_titlebar_wordmark": {
-		"message": "Wordmark"
+		"message": "NTT Logo"
 	},
 	"options_titlebar_search": {
 		"message": "Search"
@@ -228,6 +228,33 @@
 	"options_autosaved": {
 		"message": "Auto-saved"
 	},
+	"backup_restore_header": {
+		"message": "Backup & Restore"
+	},
+	"options_theme_help": {
+		"message": "inherits Firefox by default"
+	},
+	"options_theme_system_sub": {
+		"message": "follows OS theme"
+	},
+	"options_theme_light_sub": {
+		"message": "maximal contrast"
+	},
+	"options_theme_dark_sub": {
+		"message": "OLED-friendly"
+	},
+	"options_theme_contrast": {
+		"message": "High-contrast"
+	},
+	"options_theme_contrast_sub": {
+		"message": "WCAG AAA"
+	},
+	"tile_empty_state": {
+		"message": "Click a tile to edit"
+	},
+	"bg_choose": {
+		"message": "Choose wallpaper"
+	},
 	"options_header": {
 		"message": "Options:"
 	},
@@ -239,6 +266,9 @@
 	},
 	"options_locked": {
 		"message": "Prevent tiles being dragged"
+	},
+	"options_button": {
+		"message": "Settings"
 	},
 	"options_recent": {
 		"message": "Recently closed tabs"
@@ -274,7 +304,7 @@
 		"message": "Tile aspect ratio"
 	},
 	"options_tile_aspect_fill": {
-		"message": "Fill viewport"
+		"message": "Fill"
 	},
 	"options_tile_aspect_16_9": {
 		"message": "16:9"

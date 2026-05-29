@@ -31,15 +31,10 @@ describe('E2E: Tile aspect ratio (issue #505)', () => {
 		}
 	});
 
-	/** Set tileAspect via the settings select and wait for reflow. */
+	/** Set tileAspect via the Prefs setter (drawer segmented control is the
+	 * dedicated UI as of Phase 3-2; here we drive the pref directly). */
 	async function setAspect(page: any, value: string): Promise<void> {
-		await page.evaluate(() => document.getElementById('options-toggle')!.click());
-		await new Promise(r => setTimeout(r, 300));
-		await page.evaluate((v: string) => {
-			const select = document.querySelector('[name="tileAspect"]') as HTMLSelectElement;
-			select.value = v;
-			select.dispatchEvent(new Event('change', { bubbles: true }));
-		}, value);
+		await page.evaluate((v: string) => { (window as any).Prefs.tileAspect = v; }, value);
 		await new Promise(r => setTimeout(r, 300));
 	}
 

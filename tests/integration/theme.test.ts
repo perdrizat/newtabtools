@@ -55,6 +55,9 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		const optionsOnChange = extractMethod(source, 'optionsOnChange');
 		const updateUI = extractMethod(source, 'updateUI');
 		const parseColour = extractMethod(source, 'parseColour');
+		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
+		const syncToggle = extractMethod(source, '_syncDrawerToggle');
+		const syncSlider = extractMethod(source, '_syncDrawerSlider');
 
 		globalThis.Prefs = { theme: 'system', locked: false, rows: 3, columns: 3, opacity: 80, margin: ['small','small','small','small'], spacing: 'small', titleSize: 'small', history: true, recent: true };
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
@@ -77,7 +80,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).window = {
 			matchMedia: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn() }),
 		};
-		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {}, _updateThemeToggleIcon() {} };`;
+		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, applyTileAspect() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

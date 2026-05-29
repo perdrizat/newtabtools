@@ -75,7 +75,7 @@ var Prefs = {
 		});
 	},
 	parsePrefs(prefs) {
-		if (['system', 'light', 'dark'].includes(prefs.theme)) {
+		if (['system', 'light', 'dark', 'contrast'].includes(prefs.theme)) {
 			this._theme = prefs.theme;
 		}
 		if (Number.isInteger(prefs.opacity) && prefs.opacity >= 0 && prefs.opacity <= 100) {

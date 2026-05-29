@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Transformation, Updater */
+/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -17,8 +17,32 @@ var newTabTools = {
 			return false;
 		}
 	},
+	normalizePinURL(raw) {
+		let v = (raw || '').trim();
+		if (!v) {
+			return '';
+		}
+		// Auto-prepend https:// when the user types a bare domain or path.
+		return /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : 'https://' + v;
+	},
+	historyTitleFor(url) {
+		// Look up the title that Firefox knows for `url` (browsing history).
+		// Resolves to a string or null. Never rejects: if the optional
+		// `history` permission is not granted, this just returns null.
+		return new Promise(resolve => {
+			try {
+				chrome.history.search({ text: url, startTime: 0 }, results => {
+					let entry = (results || []).find(r => r.url === url);
+					resolve((entry && entry.title) || null);
+				});
+			} catch (e) {
+				resolve(null);
+			}
+		});
+	},
 	autocomplete() {
-		this.pinURLButton.disabled = !this.pinURLInput.checkValidity() || !this.isValidURL(this.pinURLInput.value);
+		let normalized = this.normalizePinURL(this.pinURLInput.value);
+		this.pinURLButton.disabled = !this.isValidURL(normalized);
 		let value = this.pinURLInput.value;
 		if (value.length < 2) {
 			this.pinURLAutocomplete.hidden = true;
@@ -157,114 +181,64 @@ var newTabTools = {
 				}
 			});
 			return;
-		case 'options-pinURL':
-			if (!this.pinURLInput.checkValidity()) {
+		case 'options-pinURL': {
+			let pinUrl = this.normalizePinURL(this.pinURLInput.value);
+			if (!this.isValidURL(pinUrl)) {
 				throw 'URL is invalid';
 			}
-
-			let position, cell, length, svg, path, dbID;
-			let shouldUpdateGrid = true;
-			let url = this.pinURLInput.value;
-			Tiles.getTile(url).then(tile => {
-				return tile ? tile : new Promise(resolve => {
-					chrome.history.search({
-						text: url,
-						startTime: 0
-					}, function(result) {
-						let entry = result.find(function(f) {
-							return f.url == url;
-						});
-						tile = { url };
-						if (entry && entry.title) {
-							tile.title = entry.title;
-						}
-						resolve(tile);
-					});
-				});
+			Tiles.getTile(pinUrl).then(async tile => {
+				if (tile) {
+					return tile;
+				}
+				let historyTitle = await this.historyTitleFor(pinUrl);
+				return historyTitle ? { url: pinUrl, title: historyTitle } : { url: pinUrl };
 			}).then(tile => {
 				if ('position' in tile && tile.position < Prefs.rows * Prefs.columns) {
-					console.warn('Already pinned');
-					position = tile.position;
-					cell = Grid.cells[tile.position];
-					shouldUpdateGrid = false;
-					return Promise.resolve();
+					return tile.position;
 				}
-
-				cell = Grid.cells.find(c => !c.containsPinnedSite());
+				let cell = Grid.cells.find(c => !c.containsPinnedSite());
 				if (!cell) {
 					throw 'No free space';
 				}
-				tile.position = position = cell.index;
-				return Tiles.putTile(tile);
-			}).then(id => {
-				dbID = id;
-				return new Promise(resolve => {
-					let bcr = cell.node.getBoundingClientRect();
-					let width = Math.round(bcr.width) + 2;
-					let height = Math.round(bcr.height) + 2;
-					let halfLength = width + height;
-					length = halfLength * 2;
-
-					svg = document.querySelector('svg');
-					svg.style.left = Math.round(bcr.left - 2) + 'px';
-					svg.style.top = Math.round(bcr.top - 2) + 'px';
-					svg.setAttribute('width', width + 2);
-					svg.setAttribute('height', height + 2);
-
-					path = svg.querySelector('path');
-					path.setAttribute('d', 'M1 1V' + (height + 1) + 'H' + (width + 1) + 'V1Z');
-					path.style.strokeDasharray = [halfLength, halfLength, halfLength, length].join(' ');
-
-					setTimeout(resolve, 150);
-				});
-			}).then(() => {
-				return shouldUpdateGrid ? new Promise(resolve => {
-					Updater.updateGrid(resolve);
-				}) : Promise.resolve();
-			}).then(() => {
-				// Ensure that the just added site is pinned and selected.
-				let site = Grid.sites[position];
-				site.link.id = dbID;
-				site.link.position = position;
-				site.updateAttributes(true);
+				tile.position = cell.index;
+				return Tiles.putTile(tile).then(() => cell.index);
+			}).then(pos => new Promise(resolve => {
+				Updater.updateGrid(() => resolve(pos));
+			})).then(pos => {
 				newTabTools.setPinURLInputValue('');
-				newTabTools.selectedSiteIndex = position;
-
-				Transformation.freezeSitePosition(site);
-				site.node.setAttribute('highlighted', 'true');
-				return new Promise(resolve => {
-					svg.style.display = 'block';
-					path.animate([
-						{'strokeDashoffset': 0 - length},
-						{'strokeDashoffset': length * 1.5}
-					], {duration: 1500, fill: 'both'}).onfinish = () => {
-						svg.style.display = null;
-						site.node.removeAttribute('highlighted');
-						Transformation.unfreezeSitePosition(site);
-						setTimeout(resolve, 150);
-					};
-				});
+				let site = Grid.sites[pos] || Grid.sites.find(s => s && s.url === pinUrl);
+				if (site && site.cell) {
+					newTabTools.selectedSiteIndex = site.cell.index;
+				}
 			}).catch(console.error);
 			break;
-		case 'options-previous-row-tile':
-			this.selectedSiteIndex = (this._selectedSiteIndex - Prefs.columns + Grid.cells.length) % Grid.cells.length;
+		}
+		case 'options-url-set': {
+			let nextUrl = this.normalizePinURL(this.siteURLInput.value);
+			if (!this.isValidURL(nextUrl) || !this.selectedSite) {
+				return;
+			}
+			let link = this.selectedSite.link;
+			link.url = nextUrl;
+			delete link.title;
+			link.titleIsUserSet = false;
+			// Refresh the title from browsing history if available; the
+			// user can always override it via Set Title afterwards.
+			this.historyTitleFor(nextUrl).then(historyTitle => {
+				if (historyTitle) {
+					link.title = historyTitle;
+				}
+				this.selectedSite.addTitle();
+				Tiles.putTile(link);
+				if (this.setTitleInput) {
+					this.setTitleInput.value = link.title || '';
+				}
+				if (this.siteURL) {
+					this.siteURL.textContent = link.url;
+				}
+			});
 			break;
-		case 'options-previous-tile':
-		case 'options-next-tile':
-			let { columns } = Prefs;
-			let row = Math.floor(this._selectedSiteIndex / columns);
-			let column = (this._selectedSiteIndex + (id == 'options-previous-tile' ? -1 : 1) + columns) % columns;
-
-			this.selectedSiteIndex = row * columns + column;
-			break;
-		case 'options-next-row-tile':
-			this.selectedSiteIndex = (this._selectedSiteIndex + Prefs.columns) % Grid.cells.length;
-			break;
-		case 'options-url-set':
-			this.selectedSite.link.url = this.siteURLInput.value;
-			this.selectedSite.addTitle();
-			Tiles.putTile(this.selectedSite.link);
-			break;
+		}
 		case 'options-savethumb':
 			let link = this.selectedSite.link;
 			let siteURL = link.url;
@@ -314,6 +288,7 @@ var newTabTools = {
 			break;
 		case 'options-title-set':
 			this.selectedSite.link.title = this.setTitleInput.value;
+			this.selectedSite.link.titleIsUserSet = true;
 			this.selectedSite.addTitle();
 			Tiles.putTile(this.selectedSite.link);
 			break;
@@ -794,10 +769,14 @@ var newTabTools = {
 
 		if (!keys || keys.includes('theme')) {
 			let theme = Prefs.theme;
-			let effectiveTheme = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
-			document.querySelector('[name="theme"][value="' + theme + '"]').checked = true;
+			let effectiveTheme = theme === 'system'
+				? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+				: theme;
+			let radio = document.querySelector('[name="theme"][value="' + theme + '"]');
+			if (radio) { radio.checked = true; }
 			document.documentElement.setAttribute('theme', effectiveTheme);
 			this.darkIcons.disabled = effectiveTheme == 'light';
+			this._syncDrawerSegmented('theme', theme);
 			this.updateThemeColours();
 			if (theme === 'system') {
 				browser.theme.onUpdated.addListener(this.updateThemeColours);
@@ -880,8 +859,10 @@ var newTabTools = {
 
 		if (!keys || keys.includes('tileAspect')) {
 			let tileAspect = Prefs.tileAspect;
-			document.querySelector('[name="tileAspect"]').value = tileAspect;
+			let el = document.querySelector('[name="tileAspect"]');
+			if (el) { el.value = tileAspect; }
 			document.documentElement.setAttribute('tileaspect', tileAspect);
+			this._syncDrawerSegmented('tileAspect', tileAspect);
 		}
 
 		if (!keys || keys.includes('tileAspect') || keys.includes('rows') || keys.includes('columns') || keys.includes('spacing')) {
@@ -1169,8 +1150,30 @@ var newTabTools = {
 	},
 	set selectedSiteIndex(index) {
 		this._selectedSiteIndex = index;
-		let site = this.selectedSite;
-		let disabled = site === null;
+		let site = (index == null) ? null : this.selectedSite;
+		let disabled = site == null;
+
+		// Tile tab empty state — hide edit area + show placeholder when
+		// nothing is selected (Phase 3-2).
+		let emptyState = document.querySelector('[data-tile-empty]');
+		let editArea = document.getElementById('options-tile');
+		if (emptyState) { emptyState.hidden = !disabled; }
+		if (editArea) { editArea.hidden = disabled; }
+
+		// Move `[data-selected]` from any prior selection to the new one
+		// so CSS can draw the copper ring on the active tile.
+		if ('Grid' in window && Grid.sites) {
+			for (let s of Grid.sites) {
+				if (s && s.node) { s.node.removeAttribute('data-selected'); }
+			}
+		}
+		if (site && site.node) { site.node.setAttribute('data-selected', 'true'); }
+
+		if (disabled) {
+			// The fields below need real DOM stubs — bail out early when no
+			// tile is selected (the empty state is doing the talking).
+			return;
+		}
 
 		this.setSavedThumbInput.value = '';
 		this.setSavedThumbInput.disabled =
@@ -1210,14 +1213,6 @@ var newTabTools = {
 			this.removeSavedThumbButton.disabled = true;
 		}
 
-		let { rows, columns } = Prefs;
-		let row = Math.floor(index / columns);
-		let column = index % columns;
-		this.tilePreviousRow.style.opacity = row === 0 ? 0.25 : null;
-		this.tilePrevious.style.opacity = column === 0 ? 0.25 : null;
-		this.tileNext.style.opacity = (column + 1 == columns) ? 0.25 : null;
-		this.tileNextRow.style.opacity = (row + 1 == rows) ? 0.25 : null;
-
 		this.siteURL.textContent = site.url;
 		this.siteURLInput.value = site.url;
 		this.siteURL.hidden = site.isPinned;
@@ -1234,11 +1229,18 @@ var newTabTools = {
 		let target = event.target;
 
 		// Segmented button click: <button role="radio" data-value="X"> inside
-		// `.ntt-segmented[data-pref]`.
-		let segmented = target.closest && target.closest('.ntt-segmented');
-		if (segmented && target.hasAttribute && target.hasAttribute('data-value')) {
+		// `.ntt-segmented[data-pref]` or `.ntt-theme-cards[data-pref]` (theme
+		// cards are visually distinct but behave like a radiogroup of
+		// segmented buttons).
+		let segmented = target.closest && (
+			target.closest('.ntt-segmented') || target.closest('.ntt-theme-cards')
+		);
+		// Theme card click: target may be a swatch/label child — find the
+		// nearest `[data-value]` ancestor inside the group.
+		let valueEl = segmented && target.closest('[data-value]');
+		if (segmented && valueEl) {
 			let pref = segmented.dataset.pref;
-			let raw = target.dataset.value;
+			let raw = valueEl.dataset.value;
 			if (pref === 'rows' || pref === 'columns') {
 				Prefs[pref] = parseInt(raw, 10);
 			} else if (raw === 'true' || raw === 'false') {
@@ -1314,7 +1316,9 @@ var newTabTools = {
 		this.optionsOnChange(event);
 	},
 	_syncDrawerSegmented(pref, value) {
-		let group = document.querySelector(`.ntt-segmented[data-pref="${pref}"]`);
+		// Matches `.ntt-segmented` and `.ntt-theme-cards` — both carry
+		// `role="radiogroup"` + `data-pref`.
+		let group = document.querySelector(`[role="radiogroup"][data-pref="${pref}"]`);
 		if (!group || typeof group.querySelectorAll !== 'function') {
 			return;
 		}
@@ -1379,12 +1383,23 @@ var newTabTools = {
 			drawer.setAttribute('aria-hidden', 'false');
 			drawer.focus();
 		}
+		this._refreshGridPositionsAfterDrawerTransition();
 	},
 	closeDrawer() {
 		document.documentElement.removeAttribute('drawer-open');
 		let drawer = document.getElementById('ntt-drawer');
 		if (drawer) {
 			drawer.setAttribute('aria-hidden', 'true');
+		}
+		this._refreshGridPositionsAfterDrawerTransition();
+	},
+	_refreshGridPositionsAfterDrawerTransition() {
+		// The drawer's flex-basis/width animates over 220ms. The grid
+		// reflows during that animation but no resize event fires, so any
+		// cached cell positions go stale. Re-cache once the transition
+		// has settled. (Drag.start also re-caches defensively.)
+		if (typeof Grid !== 'undefined' && typeof Grid.cacheCellPositions === 'function') {
+			setTimeout(() => Grid.cacheCellPositions(), 240);
 		}
 	},
 	toggleDrawer() {
@@ -1409,13 +1424,18 @@ var newTabTools = {
 	},
 	resizeOptionsThumbnail() {
 		let node = Grid.node.querySelector('.newtab-thumbnail');
+		if (!node || !node.offsetWidth) {
+			return;
+		}
 		let ratio = node.offsetWidth / node.offsetHeight;
+		// Drawer is 360px wide with ~32px of padding — keep the preview well
+		// inside that envelope so the edit fields don't get crowded.
 		if (ratio > 1.6666) {
-			this.siteThumbnail.style.width = '250px';
-			this.siteThumbnail.style.height = 250 / ratio + 'px';
+			this.siteThumbnail.style.width = '200px';
+			this.siteThumbnail.style.height = 200 / ratio + 'px';
 		} else {
-			this.siteThumbnail.style.width = 150 * ratio + 'px';
-			this.siteThumbnail.style.height = '150px';
+			this.siteThumbnail.style.width = 120 * ratio + 'px';
+			this.siteThumbnail.style.height = '120px';
 		}
 	},
 	computeCellDimensions(gridWidth, gridHeight, rows, cols, gap, aspect) {
@@ -1615,10 +1635,6 @@ var newTabTools = {
 		'pinURLInput': 'options-pinURL-input',
 		'pinURLButton': 'options-pinURL',
 		'pinURLAutocomplete': 'autocomplete',
-		'tilePreviousRow': 'options-previous-row-tile',
-		'tilePrevious': 'options-previous-tile',
-		'tileNext': 'options-next-tile',
-		'tileNextRow': 'options-next-row-tile',
 		'siteThumbnail': 'options-thumbnail',
 		'siteURL': 'options-url',
 		'editSiteURLRow': 'options-edit-url',

@@ -52,7 +52,7 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 		const toggleDrawer = extractMethod(source, 'toggleDrawer');
 		const switchDrawerTab = extractMethod(source, 'switchDrawerTab');
 
-		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab} };`;
+		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab}, _refreshGridPositionsAfterDrawerTransition() {} };`;
 		vm.runInThisContext(code, { filename: 'drawer-harness.js' });
 		harness = (globalThis as any)._drawerHarness;
 	});
@@ -64,14 +64,12 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 			<aside id="ntt-drawer" aria-hidden="true" tabindex="-1">
 				<div id="ntt-drawer-tabs" role="tablist">
 					<button type="button" role="tab" data-drawer-tab="tile" data-active="false">Tile</button>
-					<button type="button" role="tab" data-drawer-tab="layout" data-active="true">Layout</button>
-					<button type="button" role="tab" data-drawer-tab="appearance" data-active="false">Appearance</button>
+					<button type="button" role="tab" data-drawer-tab="page" data-active="true">Page</button>
 					<button type="button" role="tab" data-drawer-tab="advanced" data-active="false">Advanced</button>
 				</div>
 				<div id="ntt-drawer-body">
 					<section data-drawer-panel="tile" hidden=""></section>
-					<section data-drawer-panel="layout"></section>
-					<section data-drawer-panel="appearance" hidden=""></section>
+					<section data-drawer-panel="page"></section>
 					<section data-drawer-panel="advanced" hidden=""></section>
 				</div>
 				<button id="ntt-drawer-close" type="button"></button>
@@ -141,11 +139,11 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 
 	describe('switchDrawerTab', () => {
 		it('sets data-active="true" on the named tab button and false on others', () => {
-			harness.switchDrawerTab('appearance');
+			harness.switchDrawerTab('page');
 			const tabs = document.querySelectorAll<HTMLElement>('[role="tab"]');
 			for (const t of tabs) {
 				const active = t.getAttribute('data-active');
-				const expected = t.getAttribute('data-drawer-tab') === 'appearance' ? 'true' : 'false';
+				const expected = t.getAttribute('data-drawer-tab') === 'page' ? 'true' : 'false';
 				expect(active).toBe(expected);
 			}
 		});
@@ -165,7 +163,7 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 		});
 
 		it('ignores unknown tab names (no-op when name is not in DOM)', () => {
-			harness.switchDrawerTab('layout');
+			harness.switchDrawerTab('page');
 			const before = document.documentElement.getAttribute('drawer-tab');
 			harness.switchDrawerTab('nope');
 			expect(document.documentElement.getAttribute('drawer-tab')).toBe(before);

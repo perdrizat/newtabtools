@@ -52,23 +52,19 @@ describe('E2E: Titlebar', () => {
 		}
 	});
 
-	it('titlebar has bottom border', async () => {
+	it('titlebar has no bottom border (separator dropped — tile-gap spacing only)', async () => {
+		// Phase 3 reshuffle: the underline between titlebar and the grid
+		// was dropped; vertical separation comes from `margin-bottom:
+		// var(--ntt-gap)` instead.
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			const border = await waitForCondition(
-				page,
-				() => {
-					const bar = document.getElementById('ntt-titlebar');
-					if (!bar) { return false; }
-					const bb = getComputedStyle(bar).borderBottomWidth;
-					return bb && bb !== '0px' ? bb : false;
-				},
-				[],
-				{ timeout: 10_000, message: 'Titlebar border not found' }
-			);
-			expect(border).toBe('1px');
+			const border = await page.evaluate(() => {
+				const bar = document.getElementById('ntt-titlebar') as HTMLElement;
+				return getComputedStyle(bar).borderBottomWidth;
+			});
+			expect(border).toBe('0px');
 		} catch (e) {
 			await captureFailure(page, 'titlebar-border');
 			throw e;
@@ -174,4 +170,68 @@ describe('E2E: Titlebar', () => {
 			await page.close();
 		}
 	});
+
+	// --- Regressions from the Phase 3 reshuffle ---
+
+	it('regression: cogwheel + lock-toggle stay at the right edge when the clock is hidden', async () => {
+		// `margin-left: auto` on #ntt-clock used to be the only way the
+		// right cluster reached the right edge. Hiding the clock collapsed
+		// the cogwheel + lock-toggle against the wordmark. The sibling
+		// rule `#ntt-clock[hidden] + #ntt-titlebar-buttons` now picks up
+		// the auto-margin in that case.
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		try {
+			const result = await page.evaluate(() => {
+				(window as any).Prefs.titleBarClock = false;
+				return new Promise<{ buttonsRight: number; titlebarRight: number }>(resolve => {
+					setTimeout(() => {
+						const tb = document.getElementById('ntt-titlebar') as HTMLElement;
+						const btns = document.getElementById('ntt-titlebar-buttons') as HTMLElement;
+						resolve({
+							buttonsRight: btns.getBoundingClientRect().right,
+							titlebarRight: tb.getBoundingClientRect().right,
+						});
+					}, 300);
+				});
+			});
+			// Buttons cluster's right edge sits close to the titlebar's
+			// right edge (allowing for ~30-60px of titlebar padding).
+			expect(result.titlebarRight - result.buttonsRight).toBeLessThan(70);
+		} catch (e) {
+			await captureFailure(page, 'titlebar-buttons-right');
+			throw e;
+		} finally {
+			await page.evaluate(() => { (window as any).Prefs.titleBarClock = true; });
+			await page.close();
+		}
+	}, 30_000);
+
+	it('regression: clock stays at the right edge with search hidden (default state)', async () => {
+		// Default profile: titleBarSearch=false. Clock has its own
+		// `margin-left: auto` and must reach the right edge with no
+		// search bar in between to soak up the space.
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		try {
+			const result = await page.evaluate(() => {
+				const tb = document.getElementById('ntt-titlebar') as HTMLElement;
+				const clock = document.getElementById('ntt-clock') as HTMLElement;
+				return {
+					clockRight: clock.getBoundingClientRect().right,
+					titlebarRight: tb.getBoundingClientRect().right,
+					searchHidden: (document.getElementById('ntt-search') as HTMLElement).hidden,
+				};
+			});
+			expect(result.searchHidden).toBe(true);
+			// Clock right edge within ~150px of titlebar right edge — the
+			// three 32px buttons + 2px gaps + 30px padding sit between.
+			expect(result.titlebarRight - result.clockRight).toBeLessThan(150);
+		} catch (e) {
+			await captureFailure(page, 'titlebar-clock-right-search-hidden');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 30_000);
 });

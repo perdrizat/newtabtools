@@ -40,7 +40,7 @@ function extractMethod(source: string, methodName: string): string {
 }
 
 const PANEL_HTML = `
-	<section data-drawer-panel="layout">
+	<section data-drawer-panel="page">
 		<div class="ntt-form-group">
 			<div class="ntt-segmented" role="radiogroup" data-pref="columns">
 				<button type="button" role="radio" data-value="3">3</button>

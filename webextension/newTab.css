@@ -27,6 +27,22 @@
 	--fore-transp: rgba( 31,  54,  76, var(--opacity));
 	--page-background: #f2f2f2;
 }
+/* High-contrast theme — WCAG AAA palette. Forces pure black/white with
+   the accent color reserved for focus and selection rings. */
+:root[theme="contrast"] {
+	--back-opaque: rgba(0, 0, 0, 1.0);
+	--contrast-opaque: rgb(255, 255, 255);
+	--contrast-transp: rgba(255, 255, 255, var(--opacity));
+	--fore-opaque: rgba(255, 255, 255, 1.0);
+	--fore-trans1: rgba(255, 255, 255, 0.18);
+	--fore-transp: rgba(255, 255, 255, var(--opacity));
+	--page-background: #000000;
+	--ntt-surface: #050505;
+	--ntt-line: rgba(255, 255, 255, 0.32);
+	--ntt-line-soft: rgba(255, 255, 255, 0.18);
+	--ntt-ink: #ffffff;
+	--ntt-mute: rgba(255, 255, 255, 0.72);
+}
 body {
 	height: 100%;
 	display: flex;
@@ -330,6 +346,94 @@ body, #background-fake {
 	flex-direction: column;
 	gap: 4px;
 }
+.ntt-drawer-divider {
+	border: none;
+	border-top: 1px solid var(--ntt-line);
+	margin: 4px 0 0;
+	height: 0;
+}
+.ntt-empty-state {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 36px 16px;
+	color: var(--ntt-mute);
+	font-size: 12px;
+	text-align: center;
+	background: var(--ntt-line-soft);
+	border: 1px dashed var(--ntt-line);
+	border-radius: 7px;
+}
+.ntt-empty-state[hidden] {
+	display: none;
+}
+
+/* Theme override cards — used in the Appearance tab. */
+.ntt-theme-cards {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+.ntt-theme-card {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 9px 10px;
+	border-radius: 7px;
+	border: 1.5px solid var(--ntt-line);
+	background: var(--ntt-surface);
+	cursor: pointer;
+	color: var(--ntt-ink);
+	text-align: left;
+	font-family: var(--ntt-font-ui);
+}
+.ntt-theme-card[aria-checked="true"] {
+	border-color: var(--ntt-accent, #c96442);
+	background: rgba(201, 100, 66, 0.06);
+	box-shadow: 0 0 0 3px rgba(201, 100, 66, 0.12);
+}
+:root[theme="dark"] .ntt-theme-card[aria-checked="true"] {
+	background: rgba(224, 122, 93, 0.10);
+}
+.ntt-theme-card-swatch {
+	display: block;
+	width: 100%;
+	height: 22px;
+	border-radius: 4px;
+	border: 1px solid var(--ntt-line);
+}
+.ntt-theme-swatch-inherit {
+	background: linear-gradient(135deg, #f2f2f2 0% 50%, #171b1f 50% 100%);
+}
+.ntt-theme-swatch-light {
+	background: #ffffff;
+}
+.ntt-theme-swatch-dark {
+	background: #000000;
+}
+.ntt-theme-swatch-contrast {
+	background: linear-gradient(135deg, #000 0% 50%, #fff 50% 100%);
+	border-color: var(--ntt-accent, #c96442);
+}
+.ntt-theme-card-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--ntt-ink);
+	letter-spacing: -0.005em;
+}
+.ntt-theme-card-sub {
+	font-size: 9.5px;
+	color: var(--ntt-mute);
+}
+
+/* Selected-tile ring (driven by `[data-selected="true"]` on .newtab-site). */
+.newtab-site[data-selected="true"] {
+	box-shadow:
+		0 0 0 2px var(--ntt-accent, #c96442),
+		0 0 0 5px rgba(201, 100, 66, 0.18);
+	border-radius: var(--ntt-radius, 10px);
+}
 input[type="button"] {
 	cursor: pointer;
 }
@@ -361,25 +465,42 @@ input[type="button"] {
 .ntt-titlebar-divider[hidden] {
 	display: none;
 }
-/* TITLEBAR */
+/* TITLEBAR
+ * Layout rules (Phase 3 reshuffle):
+ *   - #ntt-wordmark stays left-aligned (flex 0 auto, no margin tricks)
+ *   - #ntt-clock + #ntt-titlebar-buttons stay right-aligned. The right-side
+ *     cluster is pinned by `margin-left: auto` on #ntt-clock, which absorbs
+ *     leftover space no matter which siblings are visible.
+ *   - #ntt-search centers itself in the leftover space via `margin: 0 auto`
+ *     (works in combination with the clock's auto-margin: the three autos
+ *     share space and search lands roughly in the middle).
+ *   - When the wordmark is hidden, search snaps to the left edge instead of
+ *     trying to center against nothing. Conditional via `:has()` (Firefox
+ *     ESR 128+). */
 #ntt-titlebar {
 	display: flex;
 	align-items: center;
 	gap: 18px;
-	padding: 30px 30px 14px;
-	border-bottom: 1px solid var(--ntt-line-soft);
+	padding: 30px 30px 0;
 	margin-bottom: var(--ntt-gap, 10px);
 	font-family: var(--ntt-font-ui);
 }
+#ntt-titlebar > #ntt-clock {
+	margin-left: auto;
+}
+/* When the clock is hidden, the right-side cluster collapses unless the
+ * buttons group itself takes over the auto-margin. */
+#ntt-titlebar > #ntt-clock[hidden] + #ntt-titlebar-buttons {
+	margin-left: auto;
+}
+#ntt-titlebar:has(#ntt-wordmark[hidden]) #ntt-search {
+	margin: 0;
+}
 #ntt-titlebar.medium {
-	padding-left: 60px;
-	padding-right: 60px;
-	padding-top: 60px;
+	padding: 60px 60px 0;
 }
 #ntt-titlebar.large {
-	padding-left: 120px;
-	padding-right: 120px;
-	padding-top: 120px;
+	padding: 120px 120px 0;
 }
 #ntt-wordmark {
 	display: flex;
@@ -763,10 +884,17 @@ input[type="button"] {
 .newtab-side-margin.large {
 	width: 120px;
 }
-/* GRID — flat CSS Grid, cells are direct children (no .newtab-row wrappers) */
+/* GRID — flat CSS Grid, cells are direct children (no .newtab-row wrappers).
+ * `grid-template-rows: 1fr` (one per row) is critical: it keeps row heights
+ * stable even while tiles are `[frozen]` (position:absolute) during a drag
+ * rearrange. Without it the row would auto-size to its remaining flow
+ * content — which is zero for an empty cell — and the grid would "explode"
+ * into giant vertical gaps mid-drag. Aspect-locked modes override this rule
+ * below so cells can size naturally from their aspect-ratio. */
 #newtab-grid {
 	display: grid;
 	grid-template-columns: repeat(var(--ntt-cols, 3), 1fr);
+	grid-template-rows: repeat(var(--ntt-rows, 3), 1fr);
 	gap: var(--ntt-gap);
 	flex: 5;
 	min-width: 600px;
@@ -774,12 +902,25 @@ input[type="button"] {
 	transition: 100ms ease-out;
 	transition-property: opacity;
 }
+:root[tileaspect="16-9"] #newtab-grid,
+:root[tileaspect="4-3"] #newtab-grid,
+:root[tileaspect="1-1"] #newtab-grid,
+:root[tileaspect="3-4"] #newtab-grid {
+	/* In aspect-locked modes cell dimensions are explicit (aspect-ratio +
+	 * --cell-width/--cell-height set by JS), so 1fr rows would fight them. */
+	grid-template-rows: none;
+}
 #newtab-grid[locked] {
 	pointer-events: none;
 }
-/* CELLS */
+/* CELLS — must stay `position: static`. The drag/drop pipeline positions
+ * frozen tiles via `style.left/top` and assumes the offsetParent is the
+ * page wrapper (#newtab-vertical-margin). Setting `position: relative` here
+ * would make the cell itself the offsetParent and the dragged tile would
+ * fly to (cellLeft + clientX) instead of (clientX). Children that need
+ * site-relative absolute positioning (`.ntt-actions`, `.ntt-overlay`,
+ * `.ntt-stat-chip`) attach to `.newtab-site` (which is position:relative). */
 .newtab-cell {
-	position: relative;
 	display: flex;
 }
 /* TILE ASPECT RATIO — locked modes.
@@ -856,7 +997,11 @@ svg {
 	background-size: contain;
 	background-position: 50% 50%;
 }
-/* LOGO-EMANATION FALLBACK */
+/* LOGO-EMANATION FALLBACK
+ * The container is fully opaque; only the BACKGROUND layer (radial
+ * gradient + surface fill) is faded by `--opacity` via a pseudo-element.
+ * The logo glyph itself stays at 100% so it remains prominent and the
+ * wallpaper / page background shines through everything around it. */
 .ntt-logo-fallback {
 	--ntt-brand: #666;
 	position: absolute;
@@ -865,7 +1010,20 @@ svg {
 	align-items: center;
 	justify-content: center;
 	overflow: hidden;
+}
+.ntt-logo-fallback::before {
+	content: "";
+	position: absolute;
+	inset: 0;
 	background: radial-gradient(ellipse 60% 75% at 50% 55%, color-mix(in srgb, var(--ntt-brand) 30%, transparent) 0%, color-mix(in srgb, var(--ntt-brand) 4%, transparent) 55%, var(--ntt-surface, #fff) 90%), var(--ntt-surface, #fff);
+	opacity: var(--opacity);
+	z-index: 0;
+}
+/* Make the underlying thumbnail box transparent when a fallback is being
+ * shown — otherwise its opaque surface color sits between the fallback
+ * gradient and the page wallpaper. */
+.newtab-thumbnail:has(.ntt-logo-fallback) {
+	background-color: transparent;
 }
 .ntt-logo-glyph {
 	width: 34%;
@@ -881,6 +1039,10 @@ svg {
 	letter-spacing: -0.05em;
 	background-color: var(--ntt-brand);
 	box-shadow: 0 8px 24px color-mix(in srgb, var(--ntt-brand) 45%, transparent);
+	/* Stack above the .ntt-logo-fallback::before background so the glyph
+	 * stays at full opacity while the surround fades with `--opacity`. */
+	position: relative;
+	z-index: 1;
 }
 /* PIN STRIPE */
 .ntt-pin-stripe {
@@ -1050,44 +1212,22 @@ svg {
 	background-color: #fff;
 	opacity: 0.01;
 }
-/* OPTIONS */
-#ntt-cogwheel-wrap {
-	position: absolute;
-	top: 10px;
-	right: 10px;
-	z-index: 10;
-}
+/* OPTIONS — cogwheel + lock toggle live in the titlebar (right side). */
 .newtab-margin-right {
 	justify-content: flex-start;
 }
-:root[spacing="medium"] .newtab-margin-right:is(.medium, .large) :is(#options-toggle, #locked-toggle) {
-	margin-inline-start: 8px;
-	margin-inline-end: 0;
-}
-:root[spacing="large"] .newtab-margin-right:is(.medium, .large) :is(#options-toggle, #locked-toggle) {
-	margin-inline-start: 18px;
-	margin-inline-end: 0;
-}
-/* Using :-moz-any on this causes bad things. */
-.newtab-margin-right:not(.medium):not(.large) #options-toggle,
-.newtab-margin-right:not(.medium):not(.large) #locked-toggle {
-	margin-inline-end: 0;
-	padding-inline-start: 1px;
-	width: 27px;
-}
-#options-toggle,
-#locked-toggle {
-	margin-inline-end: -1px;
-	margin-inline-start: 3px;
-	width: 28px;
-	height: 28px;
-	padding: 0;
-	border: none;
+#ntt-titlebar-buttons #options-toggle,
+#ntt-titlebar-buttons #locked-toggle {
+	width: 32px;
+	height: 32px;
+	border-radius: 7px;
+	border: 1px solid transparent;
 	background-color: transparent;
 	background-position: center;
 	background-repeat: no-repeat;
-	background-size: 24px;
-	z-index: 2;
+	background-size: 22px;
+	padding: 0;
+	cursor: pointer;
 	opacity: var(--opacity);
 }
 #options-toggle {
@@ -1099,9 +1239,11 @@ svg {
 :root[locked="true"] #locked-toggle {
 	background-image: url("images/locked-light.svg");
 }
-#options-toggle:hover,
-#locked-toggle:hover {
+#ntt-titlebar-buttons #options-toggle:hover,
+#ntt-titlebar-buttons #locked-toggle:hover {
 	opacity: 1;
+	background-color: var(--ntt-line-soft);
+	border-color: var(--ntt-line);
 }
 :root[options-hidden] #options,
 :root[options-hidden] #options-bg,
@@ -1152,11 +1294,11 @@ svg {
 	display: flex;
 }
 #options-tile {
-	width: 350px;
-	margin-inline-end: 2em;
+	width: 100%;
+	box-sizing: border-box;
 }
 #options-page {
-	width: 400px;
+	width: 100%;
 	display: flex;
 	flex-direction: column;
 }
@@ -1188,8 +1330,9 @@ svg {
 	align-items: baseline;
 	justify-content: center;
 	display: flex;
-	width: 335px;
+	width: 100%;
 	box-sizing: border-box;
+	gap: 6px;
 }
 .options-row[hidden] {
 	display: none;
@@ -1202,6 +1345,7 @@ svg {
 #options-url-input,
 #options-title-input {
 	width: 0;
+	min-width: 0;
 	flex: 1;
 }#options input[type="range"] {
   background-color: transparent;
@@ -1249,7 +1393,8 @@ button.arrow {
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
-	width: 300px;
+	width: 100%;
+	box-sizing: border-box;
 }
 #options-url,
 #options-edit-url {
@@ -1310,7 +1455,7 @@ a {
 /* AUTOCOMPLETE */
 #autocomplete {
 	left: 0;
-	width: 335px;
+	right: 0;
 	margin: 0;
 	padding: 0;
 	box-sizing: border-box;
@@ -1355,7 +1500,9 @@ li.pinned .autocomplete-icon {
 }
 .autocomplete-detail {
 	margin-left: 6px;
-	width: 295px;
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
 }
 .autocomplete-title,
 .autocomplete-url {
@@ -1374,8 +1521,8 @@ li.pinned .autocomplete-icon {
 /* FILTER */
 .options-extra {
 	display: none;
-	margin-inline-start: 2em;
-	width: 350px;
+	width: 100%;
+	box-sizing: border-box;
 }
 #options-filter tfoot,
 #options-filter tbody {

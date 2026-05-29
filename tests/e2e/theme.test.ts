@@ -22,84 +22,60 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 		}
 	});
 
-	it('switching theme via radio buttons updates the theme attribute on root', async () => {
+	it('switching theme via Appearance tab cards updates the theme attribute on root', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			// Open settings.
-			await page.evaluate(() => (document.getElementById('options-toggle') as HTMLElement).click());
-			await new Promise(r => setTimeout(r, 500));
+			// Open the drawer and switch to the Appearance tab where the
+			// theme cards live (Phase 3-2).
+			await page.evaluate(() => {
+				(window as any).newTabTools.openDrawer();
+				(window as any).newTabTools.switchDrawerTab('page');
+			});
+			await new Promise(r => setTimeout(r, 400));
 
-			// Verify default system radio button is checked.
 			const systemChecked = await page.evaluate(() => {
-				return (document.querySelector('[name="theme"][value="system"]') as HTMLInputElement).checked;
+				const card = document.querySelector('.ntt-theme-card[data-value="system"]') as HTMLElement;
+				return card.getAttribute('aria-checked');
 			});
-			expect(systemChecked).toBe(true);
+			expect(systemChecked).toBe('true');
 
-			// Read current effective theme (should be light or dark based on test profile OS).
-			const initialTheme = await page.evaluate(() => {
-				return document.documentElement.getAttribute('theme');
-			});
+			const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('theme'));
 			expect(['light', 'dark']).toContain(initialTheme);
 
-			// Switch to dark.
+			// Switch to dark via theme card.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="dark"]') as HTMLInputElement;
-				radio.checked = true;
-				radio.dispatchEvent(new Event('change', { bubbles: true }));
+				(document.querySelector('.ntt-theme-card[data-value="dark"]') as HTMLElement).click();
 			});
 			await new Promise(r => setTimeout(r, 500));
-
-			const darkTheme = await page.evaluate(() => {
-				return document.documentElement.getAttribute('theme');
-			});
-			expect(darkTheme).toBe('dark');
+			expect(await page.evaluate(() => document.documentElement.getAttribute('theme'))).toBe('dark');
 
 			// Switch to light.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="light"]') as HTMLInputElement;
-				radio.checked = true;
-				radio.dispatchEvent(new Event('change', { bubbles: true }));
+				(document.querySelector('.ntt-theme-card[data-value="light"]') as HTMLElement).click();
 			});
 			await new Promise(r => setTimeout(r, 500));
+			expect(await page.evaluate(() => document.documentElement.getAttribute('theme'))).toBe('light');
 
-			const lightTheme = await page.evaluate(() => {
-				return document.documentElement.getAttribute('theme');
-			});
-			expect(lightTheme).toBe('light');
+			// darkIcons stylesheet disabled when light.
+			expect(await page.evaluate(() => (document.getElementById('dark-icons') as HTMLLinkElement).disabled)).toBe(true);
 
-			// Verify darkIcons stylesheet behavior: disabled when light.
-			const darkIconsDisabled = await page.evaluate(() => {
-				return (document.getElementById('dark-icons') as HTMLLinkElement).disabled;
-			});
-			expect(darkIconsDisabled).toBe(true);
-
-			// Switch to dark — darkIcons should be enabled.
+			// Switch to dark — darkIcons enabled again.
 			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="dark"]') as HTMLInputElement;
-				radio.checked = true;
-				radio.dispatchEvent(new Event('change', { bubbles: true }));
+				(document.querySelector('.ntt-theme-card[data-value="dark"]') as HTMLElement).click();
 			});
 			await new Promise(r => setTimeout(r, 300));
-
-			const darkIconsEnabled = await page.evaluate(() => {
-				return (document.getElementById('dark-icons') as HTMLLinkElement).disabled;
-			});
-			expect(darkIconsEnabled).toBe(false);
-
-			// Restore initial theme (system).
-			await page.evaluate(() => {
-				const radio = document.querySelector('[name="theme"][value="system"]') as HTMLInputElement | null;
-				if (radio) {
-					radio.checked = true;
-					radio.dispatchEvent(new Event('change', { bubbles: true }));
-				}
-			});
+			expect(await page.evaluate(() => (document.getElementById('dark-icons') as HTMLLinkElement).disabled)).toBe(false);
 		} catch (e) {
 			await captureFailure(page, 'theme-switch');
 			throw e;
 		} finally {
+			// Restore default theme and close drawer.
+			await page.evaluate(() => {
+				(window as any).Prefs.theme = 'system';
+				(window as any).newTabTools.closeDrawer();
+			});
 			await page.close();
 		}
 	}, 90_000);

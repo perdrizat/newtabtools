@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, captureFailure } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, waitForCondition, resetTestState, captureFailure, getNewTabURL } from './_helpers.ts';
 
 describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Phase 3-1)', () => {
 	let browser: Browser;
@@ -53,15 +53,15 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		expect(drawerWidth).toBeGreaterThanOrEqual(300);
 	});
 
-	it('Layout tab is active by default when drawer opens', async () => {
+	it('Page tab is active by default when drawer opens', async () => {
 		const tab = await page.evaluate(() => document.documentElement.getAttribute('drawer-tab'));
-		expect(tab).toBe('layout');
+		expect(tab).toBe('page');
 
-		const layoutPanelVisible = await page.evaluate(() => {
-			const panel = document.querySelector('[data-drawer-panel="layout"]') as HTMLElement;
+		const pagePanelVisible = await page.evaluate(() => {
+			const panel = document.querySelector('[data-drawer-panel="page"]') as HTMLElement;
 			return !panel.hidden;
 		});
-		expect(layoutPanelVisible).toBe(true);
+		expect(pagePanelVisible).toBe(true);
 	});
 
 	it('clicking a segmented columns button updates the pref via Prefs', async () => {
@@ -104,15 +104,15 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			});
 			expect(advancedVisible).toBe(true);
 
-			const layoutVisible = await page.evaluate(() => {
-				const panel = document.querySelector('[data-drawer-panel="layout"]') as HTMLElement;
+			const pageVisible = await page.evaluate(() => {
+				const panel = document.querySelector('[data-drawer-panel="page"]') as HTMLElement;
 				return !panel.hidden;
 			});
-			expect(layoutVisible).toBe(false);
+			expect(pageVisible).toBe(false);
 
 			// Restore default tab so subsequent tests start clean.
 			await page.evaluate(() => {
-				const tab = document.querySelector('[data-drawer-tab="layout"]') as HTMLElement;
+				const tab = document.querySelector('[data-drawer-tab="page"]') as HTMLElement;
 				tab.click();
 			});
 		} catch (e) {
@@ -245,11 +245,135 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		}
 	}, 30_000);
 
+	it('Phase 3-2: clicking a theme card flips <html theme="..."> and the active card is aria-checked', async () => {
+		await page.evaluate(() => {
+			(window as any).newTabTools.openDrawer();
+			(window as any).newTabTools.switchDrawerTab('page');
+		});
+		await new Promise(r => setTimeout(r, 200));
+
+		try {
+			await page.evaluate(() => {
+				const card = document.querySelector('.ntt-theme-card[data-value="contrast"]') as HTMLElement;
+				card.click();
+			});
+			await new Promise(r => setTimeout(r, 400));
+
+			const themeAttr = await page.evaluate(() => document.documentElement.getAttribute('theme'));
+			expect(themeAttr).toBe('contrast');
+
+			const checkedCard = await page.evaluate(() => {
+				return Array.from(document.querySelectorAll('.ntt-theme-card[aria-checked="true"]'))
+					.map(c => (c as HTMLElement).getAttribute('data-value'));
+			});
+			expect(checkedCard).toEqual(['contrast']);
+		} finally {
+			await page.evaluate(() => {
+				(window as any).Prefs.theme = 'system';
+				(window as any).newTabTools.closeDrawer();
+			});
+		}
+	}, 30_000);
+
+	it('Phase 3-2: Tile tab shows empty state when nothing is selected', async () => {
+		await page.evaluate(() => {
+			(window as any).newTabTools.openDrawer();
+			(window as any).newTabTools.switchDrawerTab('tile');
+			(window as any).newTabTools.selectedSiteIndex = null;
+		});
+		await new Promise(r => setTimeout(r, 300));
+
+		try {
+			const state = await page.evaluate(() => ({
+				emptyHidden: (document.querySelector('[data-tile-empty]') as HTMLElement).hidden,
+				editHidden: (document.getElementById('options-tile') as HTMLElement).hidden,
+			}));
+			expect(state.emptyHidden).toBe(false);
+			expect(state.editHidden).toBe(true);
+		} finally {
+			await page.evaluate(() => {
+				(window as any).newTabTools.selectedSiteIndex = 0;
+				(window as any).newTabTools.closeDrawer();
+			});
+		}
+	}, 30_000);
+
+	it('Phase 3-2: clicking a tile while Tile tab is active selects it (copper ring + edit area)', async () => {
+		// Pin a tile and reload the page so the grid surfaces it (the running
+		// page caches Grid.sites; Updater.updateGrid alone isn't enough to
+		// guarantee the DOM nodes are present).
+		const TEST_URL = 'https://drawer-tile-select.example/';
+		await page.evaluate(u => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Tile select test' }, () => resolve());
+		}), TEST_URL);
+		const url = await getNewTabURL();
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await waitForGridReady(page);
+		await waitForCondition(
+			page,
+			u => {
+				const g = (window as any).Grid;
+				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
+			},
+			[TEST_URL],
+			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
+		);
+
+		await page.evaluate(() => {
+			(window as any).newTabTools.openDrawer();
+			(window as any).newTabTools.switchDrawerTab('tile');
+			(window as any).newTabTools.selectedSiteIndex = null;
+		});
+		await new Promise(r => setTimeout(r, 300));
+
+		try {
+			await page.evaluate(u => {
+				const tiles = Array.from(document.querySelectorAll('#newtab-grid .newtab-site')) as HTMLElement[];
+				const target = tiles.find(t => (t.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u) || tiles[0];
+				target.click();
+			}, TEST_URL);
+			await new Promise(r => setTimeout(r, 400));
+
+			const result = await page.evaluate(() => {
+				const tile = document.querySelector('#newtab-grid .newtab-site[data-selected="true"]') as HTMLElement | null;
+				const empty = document.querySelector('[data-tile-empty]') as HTMLElement;
+				return {
+					hasSelected: tile != null,
+					emptyHidden: empty.hidden,
+				};
+			});
+			expect(result.hasSelected).toBe(true);
+			expect(result.emptyHidden).toBe(true);
+		} finally {
+			await page.evaluate(u => new Promise<void>(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
+			}), TEST_URL);
+			await page.evaluate(() => { (window as any).newTabTools.closeDrawer(); });
+		}
+	}, 90_000);
+
 	it('regression: rank stat type renders without requiring history permission', async () => {
 		// Rank values come from the tile's own grid index; the original
 		// `_renderStatChip` forgot to pass `rank` to `TileStats.compute`,
 		// so rank fell through to the history-permission branch and
 		// returned null for every tile.
+		const TEST_URL = 'https://drawer-rank.example/';
+		await page.evaluate(u => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Rank test' }, () => resolve());
+		}), TEST_URL);
+		const url = await getNewTabURL();
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await waitForGridReady(page);
+		await waitForCondition(
+			page,
+			u => {
+				const g = (window as any).Grid;
+				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
+			},
+			[TEST_URL],
+			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
+		);
+
 		try {
 			await page.evaluate(() => { (window as any).Prefs.statType = 'rank'; });
 			await new Promise(r => setTimeout(r, 600));
@@ -259,13 +383,13 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 				return chips.map(c => c.textContent).filter(t => t && t.length > 0);
 			});
 
-			// At least one tile renders. Pinned-only profiles may have a
-			// few empty cells; we just need any non-empty rank chip.
 			expect(chipTexts.length).toBeGreaterThan(0);
-			// Rank chips look like "#1", "#2", etc.
 			expect(chipTexts.every(t => /^#\d+$/.test(t!))).toBe(true);
 		} finally {
 			await page.evaluate(() => { (window as any).Prefs.statType = 'none'; });
+			await page.evaluate(u => new Promise<void>(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
+			}), TEST_URL);
 		}
-	}, 30_000);
+	}, 60_000);
 });

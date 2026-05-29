@@ -50,6 +50,9 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'optionsOnClick');
+		const normalizePinURL = extractMethod(source, 'normalizePinURL');
+		const isValidURL = extractMethod(source, 'isValidURL');
+		const historyTitleFor = extractMethod(source, 'historyTitleFor');
 
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
 		globalThis.Prefs = { rows: 3, columns: 3 };
@@ -57,8 +60,12 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		globalThis.Updater = { updateGrid: vi.fn() };
 		globalThis.Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
 		globalThis.Grid = { cells: [{ index: 0, containsPinnedSite: () => false }] };
+		// chrome.history.search is needed by historyTitleFor — return [] so
+		// it resolves to null and the url-set flow continues synchronously.
+		(globalThis as any).chrome = (globalThis as any).chrome || {};
+		(globalThis as any).chrome.history = { search: vi.fn((_q: any, cb: any) => cb([])) };
 
-		const code = `var newTabTools = { ${body}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
+		const code = `var newTabTools = { ${body}, ${normalizePinURL}, ${isValidURL}, ${historyTitleFor}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
 		vm.runInThisContext(code, { filename: 'tile-editing-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -113,9 +120,13 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 
 	// ==================== custom URL ====================
 
-	it('options-url-set writes URL to link and calls putTile', () => {
+	it('options-url-set writes URL to link and calls putTile', async () => {
 		harness.siteURLInput.value = 'https://new-url.com';
+		harness.siteURL = { textContent: '' };
 		harness.optionsOnClick(makeEvent('options-url-set'));
+		// Title refresh + putTile happen inside historyTitleFor().then(...).
+		// Flush the microtask + history.search callback chain.
+		await new Promise(r => setTimeout(r, 0));
 		expect(selectedSite.link.url).toBe('https://new-url.com');
 		expect(selectedSite.addTitle).toHaveBeenCalled();
 		expect(Tiles.putTile).toHaveBeenCalledWith(selectedSite.link);

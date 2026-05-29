@@ -430,6 +430,7 @@ var Grid = {
 
 		this._node.innerHTML = '';
 		this._node.style.setProperty('--ntt-cols', Prefs.columns);
+		this._node.style.setProperty('--ntt-rows', Prefs.rows);
 
 		let total = Prefs.rows * Prefs.columns;
 		for (let i = 0; i < total; i++) {
@@ -443,6 +444,9 @@ var Grid = {
 	},
 
 	cacheCellPositions() {
+		if (!Grid.cells || Grid.cells.length === 0) {
+			return;
+		}
 		for (let c of Grid.cells) {
 			c.position = Transformation.getNodePosition(c.node);
 		}
@@ -899,6 +903,7 @@ Site.prototype = {
 		for (let def of actions) {
 			let btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
 			btn.className = 'ntt-action-btn';
+			btn.setAttribute('type', 'button');
 			btn.setAttribute('data-action', def.action);
 			btn.setAttribute('title', newTabTools.getString(def.title));
 			let icon = NttIcons.create(def.icon, 16);
@@ -976,7 +981,7 @@ Site.prototype = {
 			let action = actionBtn.getAttribute('data-action');
 			switch (action) {
 			case 'remove':
-				this.block();
+				this.block().catch(e => console.error('Site.block failed:', e));
 				break;
 			case 'pin':
 				if (this.isPinned) {
@@ -987,6 +992,23 @@ Site.prototype = {
 				break;
 			case 'refresh':
 				chrome.runtime.sendMessage({ name: 'Thumbnails.capture', url: this.link.url });
+				// Also refresh the title from browsing history (unless the
+				// user explicitly set it via Set Title in the editor).
+				if (!this.link.titleIsUserSet
+					&& typeof newTabTools !== 'undefined'
+					&& typeof newTabTools.historyTitleFor === 'function') {
+					newTabTools.historyTitleFor(this.link.url).then(historyTitle => {
+						if (!historyTitle || historyTitle === this.link.title) {
+							return;
+						}
+						this.link.title = historyTitle;
+						this.addTitle();
+						Tiles.putTile(this.link);
+						if (newTabTools.selectedSite === this && newTabTools.setTitleInput) {
+							newTabTools.setTitleInput.value = historyTitle;
+						}
+					});
+				}
 				break;
 			case 'open':
 				if (newTabTools.isValidURL(this.url)) {
@@ -994,10 +1016,26 @@ Site.prototype = {
 				}
 				break;
 			case 'edit':
-				if (typeof newTabTools !== 'undefined' && newTabTools.setPinURLInputValue) {
-					newTabTools.setPinURLInputValue(this.url);
+				if (typeof newTabTools !== 'undefined') {
+					newTabTools.openDrawer();
+					newTabTools.switchDrawerTab('tile');
+					if (this.cell) {
+						newTabTools.selectedSiteIndex = this.cell.index;
+					}
 				}
 				break;
+			}
+			return;
+		}
+
+		// Tile-selection mode: when the drawer is open AND the Tile tab is
+		// active, clicking a tile selects it for editing instead of
+		// navigating.
+		let docEl = document.documentElement;
+		if (docEl.hasAttribute('drawer-open') && docEl.getAttribute('drawer-tab') === 'tile') {
+			event.preventDefault();
+			if (typeof newTabTools !== 'undefined' && this.cell) {
+				newTabTools.selectedSiteIndex = this.cell.index;
 			}
 			return;
 		}
@@ -1062,6 +1100,11 @@ var Drag = {
 	   */
 	start(site, event) {
 		this._draggedSite = site;
+
+		// Refresh the cell position cache — it was last updated on init /
+		// window resize, but the grid also shifts when the drawer opens or
+		// closes (push-layout) and we never get a resize event for that.
+		Grid.cacheCellPositions();
 
 		// Mark nodes as being dragged.
 		let selector = '.newtab-site, .ntt-actions, .newtab-thumbnail';
