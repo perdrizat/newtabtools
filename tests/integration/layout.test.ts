@@ -56,7 +56,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		const getThemedImageURL = extractMethod(source, 'getThemedImageURL');
 
 		globalThis.Prefs = {
-			theme: 'light', themeAuto: false, locked: false,
+			theme: 'light', locked: false,
 			rows: 3, columns: 3, opacity: 80,
 			margin: ['small', 'small', 'small', 'small'],
 			spacing: 'small', titleSize: 'small',
@@ -73,7 +73,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
+		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
 		vm.runInThisContext(code, { filename: 'layout-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -89,7 +89,6 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		Prefs.tileAspect = 'fill';
 		Prefs.locked = false;
 		Prefs.theme = 'light';
-		Prefs.themeAuto = false;
 		Prefs.history = true;
 		Prefs.recent = true;
 		harness.lockedToggleButton = { style: {} };

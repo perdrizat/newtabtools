@@ -236,6 +236,51 @@ input[type="button"] {
 	pointer-events: none;
 }
 
+/* STATUSBAR */
+#ntt-statusbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 10px 30px 14px;
+	margin-top: var(--ntt-gap, 18px);
+	border-top: 1px solid var(--ntt-line-soft);
+	font-family: var(--ntt-font-mono);
+	font-size: 10.5px;
+	color: var(--ntt-mute);
+}
+#ntt-statusbar.medium {
+	padding-left: 60px;
+	padding-right: 60px;
+}
+#ntt-statusbar.large {
+	padding-left: 120px;
+	padding-right: 120px;
+}
+#ntt-statusbar-hints {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+}
+.ntt-statusbar-hint {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+.ntt-statusbar-kbd {
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--ntt-kbd-bg);
+	color: var(--ntt-kbd-ink);
+	font-weight: 600;
+}
+#ntt-statusbar-summary {
+	display: flex;
+	gap: 14px;
+	align-items: center;
+	flex: 0 0 auto;
+}
+
 /* SCROLLBOX */
 #newtab-scrollbox {
 	display: flex;

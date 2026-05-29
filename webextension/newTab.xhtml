@@ -64,6 +64,20 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<input id="locked-toggle" type="button" data-title="options_locked" />
 				</div>
 			</div>
+			<div id="ntt-statusbar">
+				<div id="ntt-statusbar-hints">
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">1-9</span><span>open tile</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">↑↓←→</span><span>navigate</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">/</span><span>search</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">z</span><span>zen</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">c</span><span>config</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">⌘ K</span><span>commands</span></span>
+					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">?</span><span>all keys</span></span>
+				</div>
+				<div id="ntt-statusbar-summary">
+					<span id="ntt-statusbar-tilecount"></span>
+				</div>
+			</div>
 		</div>
 	</div>
 	<div id="options-bg"></div>
@@ -158,8 +172,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 							<td>
 								<label><input type="radio" name="theme" value="system" data-label="options_theme_system" /></label>
 								<label><input type="radio" name="theme" value="light" data-label="options_theme_light" /></label>
-								<label><input type="radio" name="theme" value="dark" data-label="options_theme_dark" /></label><br />
-								<label><input type="checkbox" name="themeAuto" data-label="options_theme_auto" /></label>
+								<label><input type="radio" name="theme" value="dark" data-label="options_theme_dark" /></label>
 							</td>
 						</tr>
 						<tr>

@@ -399,7 +399,6 @@ var newTabTools = {
 		case 'margin':
 			Prefs.margin = value.split(' ');
 			break;
-		case 'themeAuto':
 		case 'locked':
 		case 'history':
 		case 'recent':
@@ -709,11 +708,20 @@ var newTabTools = {
 			'--page-background': null,
 		};
 
-		if (Prefs.themeAuto) {
+		if (Prefs.theme === 'system') {
 			try {
 				this._theme = updateInfo ? updateInfo.theme : await browser.theme.getCurrent();
-				let back = this.parseColour(this._theme.colors.ntp_background || this._theme.colors.toolbar);
-				let fore = this.parseColour(this._theme.colors.ntp_text || this._theme.colors.toolbar_text);
+			} catch (ex) {
+				console.debug(ex);
+				this._theme = null;
+			}
+			// Firefox's default theme (and wallpaper-only themes) return colors:
+			// null or omit the key entirely. Treat both as "no palette to apply"
+			// and fall through to the designed NTT palette in tokens.css.
+			let colors = this._theme && this._theme.colors;
+			if (colors) {
+				let back = this.parseColour(colors.ntp_background || colors.toolbar);
+				let fore = this.parseColour(colors.ntp_text || colors.toolbar_text);
 
 				if (back && fore) {
 					properties['--back-opaque'] = `rgb(${back.r}, ${back.g}, ${back.b})`;
@@ -731,8 +739,6 @@ var newTabTools = {
 						properties['--contrast-transp'] = 'rgba(0, 0, 0, var(--opacity))';
 					}
 				}
-			} catch (ex) {
-				console.debug(ex);
 			}
 		} else {
 			this._theme = null;
@@ -801,13 +807,7 @@ var newTabTools = {
 			document.documentElement.setAttribute('theme', effectiveTheme);
 			this.darkIcons.disabled = effectiveTheme == 'light';
 			this.updateThemeColours();
-		}
-
-		if (!keys || keys.includes('themeAuto')) {
-			let themeAuto = Prefs.themeAuto;
-			document.querySelector('[name="themeAuto"]').checked = themeAuto;
-			this.updateThemeColours();
-			if (themeAuto) {
+			if (theme === 'system') {
 				browser.theme.onUpdated.addListener(this.updateThemeColours);
 			} else {
 				browser.theme.onUpdated.removeListener(this.updateThemeColours);
@@ -844,13 +844,14 @@ var newTabTools = {
 			setMargin('#newtab-margin-bottom', margin[2]);
 			setMargin('.newtab-margin-left', margin[3]);
 			setMargin('#ntt-titlebar', margin[3]);
+			setMargin('#ntt-statusbar', margin[3]);
 		}
 
 		if (!keys || keys.includes('spacing')) {
 			let spacing = Prefs.spacing;
 			document.querySelector('[name="spacing"]').value = spacing;
 			document.documentElement.setAttribute('spacing', spacing);
-			let gapMap = { small: '5px', medium: '10px', large: '20px' };
+			let gapMap = { small: '10px', medium: '18px', large: '28px' };
 			document.documentElement.style.setProperty('--ntt-gap', gapMap[spacing] || '18px');
 		}
 
@@ -896,9 +897,17 @@ var newTabTools = {
 			let el = document.getElementById('ntt-clock');
 			if (el) { el.hidden = !Prefs.titleBarClock; }
 		}
+		if (!keys || keys.includes('titleBarStatus')) {
+			let el = document.getElementById('ntt-statusbar');
+			if (el) { el.hidden = !Prefs.titleBarStatus; }
+		}
 
 		if (!keys || keys.includes('theme')) {
 			this._updateThemeToggleIcon();
+		}
+
+		if (!keys || keys.includes('rows') || keys.includes('columns')) {
+			this._updateStatusBar();
 		}
 
 		if (keys && keys.includes('statType') && 'Grid' in window) {
@@ -971,6 +980,29 @@ var newTabTools = {
 			? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 			: Prefs.theme;
 		btn.appendChild(NttIcons.create(effectiveTheme === 'dark' ? 'sun' : 'moon', 14));
+	},
+	_updateStatusBar() {
+		let countEl = document.getElementById('ntt-statusbar-tilecount');
+		if (!countEl) {
+			return;
+		}
+		let count = 0;
+		if (typeof Grid !== 'undefined' && Grid && Grid.sites) {
+			for (let s of Grid.sites) {
+				if (s) { count++; }
+			}
+		}
+		let rows = (typeof Prefs !== 'undefined' && Prefs.rows) || 0;
+		let cols = (typeof Prefs !== 'undefined' && Prefs.columns) || 0;
+		countEl.textContent = count + ' tile' + (count == 1 ? '' : 's') + ' · ' + rows + '×' + cols;
+	},
+	_initStatusBar() {
+		this._updateStatusBar();
+		let grid = document.getElementById('newtab-grid');
+		if (grid && typeof MutationObserver !== 'undefined') {
+			this._statusBarObserver = new MutationObserver(() => this._updateStatusBar());
+			this._statusBarObserver.observe(grid, { childList: true, subtree: true });
+		}
 	},
 	_formatAge(lastModified) {
 		if (!lastModified) {
@@ -1340,6 +1372,7 @@ var newTabTools = {
 			// Everything is loaded. Initialize the New Tab Page.
 			Page.init();
 			newTabTools._initTitlebar();
+			newTabTools._initStatusBar();
 			newTabTools.updateUI();
 			newTabTools.refreshBackgroundImage();
 
