@@ -7,6 +7,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	navigateAndConfirm,
 } from './_helpers.ts';
 
 describe('E2E: Recently-closed-tabs row (slot 24)', () => {
@@ -26,7 +27,7 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 	it('recently-closed list is visible and close a tab to populate it', async () => {
 		// First, open a tab to a known URL and close it to seed the session list.
 		const seedPage = await browser.newPage();
-		await seedPage.goto('https://example.com/', { waitUntil: 'load', timeout: 30_000 });
+		await navigateAndConfirm(seedPage, 'https://example.com/', { timeout: 30_000 });
 		await seedPage.close();
 
 		// Now open the new tab page — recent list should show the closed tab.

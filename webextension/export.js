@@ -76,7 +76,8 @@ async function readZip(file) {
 			'margin', 'spacing', 'titleSize', 'tileAspect', 'statType',
 			'titleBarWordmark', 'titleBarSearch', 'titleBarClock', 'titleBarStatus',
 			'actionIconSize', 'tileActions', 'tileRadius',
-			'locked', 'history', 'recent', 'blocked', 'filters', 'backgroundUrl'];
+			'locked', 'history', 'recent', 'blocked', 'filters',
+			'backgroundUrl', 'backgroundPosition', 'backgroundColor'];
 		let filtered = {};
 		for (let k of allowedKeys) {
 			if (k in prefs) {

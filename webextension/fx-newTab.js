@@ -665,6 +665,53 @@ function siteGlyph(url) {
 }
 
 /**
+ * Deterministic hue (0-359) derived from a URL's hostname. Same host always
+ * maps to the same hue. Falls back to null when the URL can't be parsed.
+ *
+ * Used by `Site._renderLogoFallback` so each domain-letter fallback tile
+ * gets a distinct brand color instead of a uniform grey.
+ */
+function siteHue(url) {
+	let host;
+	try {
+		host = new URL(url).hostname.replace(/^www\./, '');
+	} catch (ex) {
+		return null;
+	}
+	if (!host) {
+		return null;
+	}
+	let h = 0;
+	for (let i = 0; i < host.length; i++) {
+		h = ((h * 31) + host.charCodeAt(i)) | 0;
+	}
+	return ((h % 360) + 360) % 360;
+}
+
+/**
+ * Resolve a CSS brand color for a tile's fallback rendering. Order of
+ * precedence:
+ *   1. `link.backgroundColor` if the user set one explicitly (validated as
+ *      a hex color).
+ *   2. Domain-hash → hsl(...) so each hostname gets a stable distinct tone.
+ *   3. `#666` neutral grey if the URL can't be parsed.
+ */
+function siteBrandColor(link) {
+	let raw = link && link.backgroundColor;
+	if (raw && /^#[0-9a-f]{3,8}$/i.test(raw)) {
+		return raw;
+	}
+	let hue = link ? siteHue(link.url) : null;
+	if (hue == null) {
+		return '#666';
+	}
+	// OKLCH instead of HSL: perceptually-uniform lightness/chroma across
+	// hues, so white glyph text on the surround has consistent contrast no
+	// matter which hostname hashed to which hue.
+	return `oklch(65% 0.13 ${hue})`;
+}
+
+/**
  * This class represents a site that is contained in a cell and can be pinned,
  * moved around or deleted.
  */
@@ -801,6 +848,20 @@ Site.prototype = {
 		let pinBtn = this._querySelector('.ntt-action-btn[data-action="pin"]');
 		if (pinBtn) {
 			pinBtn.setAttribute('title', newTabTools.getString(pinned ? 'tile_unpin' : 'tile_pin'));
+			// Swap the SVG icon to match the new state so the affordance
+			// flips immediately on toggle. Lucide-style `pin-off` (diagonal
+			// slash) reads as "click to unpin".
+			let nextIcon = pinned ? 'unpin' : 'pin';
+			pinBtn.setAttribute('data-icon', nextIcon);
+			let existing = pinBtn.firstElementChild;
+			let svg = NttIcons.create(nextIcon, 16);
+			if (svg) {
+				if (existing) {
+					pinBtn.replaceChild(svg, existing);
+				} else {
+					pinBtn.appendChild(svg);
+				}
+			}
 		}
 	},
 
@@ -896,7 +957,7 @@ Site.prototype = {
 			{ action: 'edit', icon: 'edit', title: 'tile_edit_url' },
 			{ action: 'open', icon: 'open', title: 'tile_open_newtab' },
 			{ action: 'refresh', icon: 'refresh', title: 'tile_refresh_thumbnail' },
-			{ action: 'pin', icon: 'pin', title: this.isPinned ? 'tile_unpin' : 'tile_pin' },
+			{ action: 'pin', icon: this.isPinned ? 'unpin' : 'pin', title: this.isPinned ? 'tile_unpin' : 'tile_pin' },
 			{ action: 'remove', icon: 'close', title: 'tile_block' },
 		];
 
@@ -905,6 +966,7 @@ Site.prototype = {
 			btn.className = 'ntt-action-btn';
 			btn.setAttribute('type', 'button');
 			btn.setAttribute('data-action', def.action);
+			btn.setAttribute('data-icon', def.icon);
 			btn.setAttribute('title', newTabTools.getString(def.title));
 			let icon = NttIcons.create(def.icon, 16);
 			if (icon) {
@@ -945,8 +1007,7 @@ Site.prototype = {
 		if (thumbnail.querySelector('.ntt-logo-fallback')) {
 			return;
 		}
-		let rawColor = this.link.backgroundColor || '#666';
-		let brandColor = /^#[0-9a-f]{3,8}$/i.test(rawColor) ? rawColor : '#666';
+		let brandColor = siteBrandColor(this.link);
 
 		let fallback = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
 		fallback.className = 'ntt-logo-fallback';
@@ -958,6 +1019,52 @@ Site.prototype = {
 		fallback.appendChild(glyphEl);
 
 		thumbnail.appendChild(fallback);
+	},
+
+	/**
+	 * Swap the letter glyph inside the existing logo-fallback for a real
+	 * favicon `<img>`. Called from `newTabTools.getFavicons` once the
+	 * background returns a cached favicon blob for this site's URL.
+	 * Safe to call even if the fallback has since been replaced by a
+	 * screenshot — guards on the glyph element's presence.
+	 */
+	applyFavicon(blob) {
+		if (!blob) {
+			return;
+		}
+		// Two render targets: the big centred glyph that shows only when no
+		// screenshot has been captured yet (`.ntt-logo-fallback`), and the
+		// small badge in the bottom overlay that's always present
+		// (`.ntt-favicon`). Updating both means the captured favicon is
+		// visible even after a screenshot has covered the fallback.
+		let fallback = this._querySelector('.ntt-logo-fallback');
+		let badge = this._querySelector('.ntt-favicon');
+		if (!fallback && !badge) {
+			return;
+		}
+		if (this._faviconObjectURL) {
+			URL.revokeObjectURL(this._faviconObjectURL);
+		}
+		this._faviconObjectURL = URL.createObjectURL(blob);
+
+		if (fallback) {
+			let glyph = fallback.querySelector('.ntt-logo-glyph');
+			if (glyph) {
+				let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
+				img.className = 'ntt-logo-favicon';
+				img.src = this._faviconObjectURL;
+				img.alt = '';
+				fallback.replaceChild(img, glyph);
+			}
+		}
+		if (badge) {
+			badge.textContent = '';
+			badge.style.backgroundColor = '#fff';
+			let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
+			img.src = this._faviconObjectURL;
+			img.alt = '';
+			badge.appendChild(img);
+		}
 	},
 
 	/**

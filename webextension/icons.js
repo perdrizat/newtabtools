@@ -43,6 +43,17 @@ var NttIcons = (() => {
 				el('path', { d: 'M9 2h6l-1 5 3 3-5 1-5-1 3-3z' }),
 			];
 		},
+		unpin() {
+			// Lucide `pin-off` — same thumbtack outline with a diagonal slash
+			// cutting through. Industry pattern: outline = "click to pin",
+			// pin-off (with slash) = "click to unpin".
+			return [
+				el('path', { d: 'M12 17v5' }),
+				el('path', { d: 'M15 9.34V6h1a2 2 0 0 0 0-4H7.89' }),
+				el('path', { d: 'm2 2 20 20' }),
+				el('path', { d: 'M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h12' }),
+			];
+		},
 		refresh() {
 			return [
 				el('path', { d: 'M3 12a9 9 0 0 1 15.5-6.3L21 8' }),

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
+/* globals Background, Blocked, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -319,6 +319,9 @@ var newTabTools = {
 			let input = document.getElementById('options-restore-file');
 			chrome.runtime.sendMessage({name: 'Import:restore', file: input.files[0]});
 			return;
+		case 'options-reset-all':
+			this.resetAllSettings();
+			return;
 		}
 
 		if (classList.contains('plus-button') || classList.contains('minus-button')) {
@@ -467,10 +470,21 @@ var newTabTools = {
 		Tiles.putTile(link);
 	},
 	refreshBackgroundImage() {
-		// CDN wallpaper takes priority over IDB blob
+		// CDN wallpaper takes priority over IDB blob. Apply the
+		// `background_position` Firefox publishes alongside each record so
+		// e.g. "top left" wallpapers anchor at the corner the photographer
+		// composed for. Solid-colour records fill the page instead.
+		document.body.style.backgroundPosition =
+			this.backgroundFake.style.backgroundPosition = Prefs.backgroundPosition || 'center center';
+		document.body.style.backgroundColor = Prefs.backgroundColor || '';
 		if (Prefs.backgroundUrl) {
 			document.body.style.backgroundImage =
 				this.backgroundFake.style.backgroundImage = 'url("' + Prefs.backgroundUrl + '")';
+			this.removeBackgroundButton.disabled = false;
+			return Promise.resolve();
+		}
+		if (Prefs.backgroundColor) {
+			document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = '';
 			this.removeBackgroundButton.disabled = false;
 			return Promise.resolve();
 		}
@@ -496,15 +510,28 @@ var newTabTools = {
 		let json = await response.json();
 		let cdnBase = 'https://firefox-settings-attachments.cdn.mozilla.net/';
 		let wallpapers = json.data
-			.filter(function(item) { return item.category !== 'firefox' && item.attachment && item.attachment.location; })
+			.filter(function(item) {
+				if (item.category === 'firefox') { return false; }
+				// Image record (has attachment) OR solid-colour record (has solid_color).
+				return (item.attachment && item.attachment.location) || item.solid_color;
+			})
 			.map(function(item) {
-				return {
+				let record = {
 					title: item.title,
 					theme: item.theme,
 					category: item.category,
-					imageUrl: cdnBase + item.attachment.location,
 					attribution: item.attribution,
+					// Firefox publishes `background_position` on ~1/3 of
+					// records; the rest fall back to centre.
+					backgroundPosition: item.background_position || 'center center',
 				};
+				if (item.attachment && item.attachment.location) {
+					record.imageUrl = cdnBase + item.attachment.location;
+				}
+				if (item.solid_color) {
+					record.solidColor = item.solid_color;
+				}
+				return record;
 			});
 		this._wallpaperCache = wallpapers;
 		return wallpapers;
@@ -543,28 +570,61 @@ var newTabTools = {
 			let row = document.createElement('div');
 			row.className = 'wallpaper-row';
 			for (let wp of items) {
-				let img = document.createElement('img');
-				img.className = 'wallpaper-thumb';
-				img.src = wp.imageUrl;
-				img.alt = wp.title;
-				img.dataset.url = wp.imageUrl;
-				if (Prefs.backgroundUrl === wp.imageUrl) {
-					img.setAttribute('selected', '');
+				let thumb;
+				if (wp.imageUrl) {
+					thumb = document.createElement('img');
+					thumb.src = wp.imageUrl;
+					thumb.dataset.url = wp.imageUrl;
+				} else if (wp.solidColor) {
+					// Solid-colour record — render a swatch instead of an <img>
+					// since there's no image to load.
+					thumb = document.createElement('div');
+					thumb.style.backgroundColor = wp.solidColor;
+					thumb.dataset.solidColor = wp.solidColor;
+				} else {
+					continue;
 				}
-				img.addEventListener('click', () => {
-					this.selectWallpaper(wp.imageUrl);
+				thumb.className = 'wallpaper-thumb';
+				thumb.alt = wp.title;
+				if ((wp.imageUrl && Prefs.backgroundUrl === wp.imageUrl)
+					|| (wp.solidColor && Prefs.backgroundColor === wp.solidColor)) {
+					thumb.setAttribute('selected', '');
+				}
+				thumb.addEventListener('click', () => {
+					this.selectWallpaper(wp);
 				});
-				row.appendChild(img);
+				row.appendChild(thumb);
 			}
 			grid.appendChild(row);
 		}
 	},
-	selectWallpaper(url) {
-		// Clear any custom uploaded background
-		Background.setBackground().then(() => {
+	selectWallpaper(wallpaperOrUrl) {
+		// Accept either a wallpaper record `{imageUrl, backgroundPosition,
+		// solidColor}` (current call site) or a bare URL string
+		// (back-compat). Solid-colour records take a different rendering
+		// path — clear the image URL and write the colour instead.
+		let wp = typeof wallpaperOrUrl === 'string'
+			? { imageUrl: wallpaperOrUrl, backgroundPosition: 'center center' }
+			: wallpaperOrUrl;
+		let url = wp.imageUrl || '';
+		let position = wp.backgroundPosition || 'center center';
+		let solidColor = wp.solidColor || '';
+
+		return Background.setBackground().then(() => {
 			Prefs.backgroundUrl = url;
-			document.body.style.backgroundImage =
-				this.backgroundFake.style.backgroundImage = 'url("' + url + '")';
+			Prefs.backgroundPosition = position;
+			Prefs.backgroundColor = solidColor;
+			document.body.style.backgroundPosition =
+				this.backgroundFake.style.backgroundPosition = position;
+			if (solidColor) {
+				document.body.style.backgroundColor = solidColor;
+				document.body.style.backgroundImage =
+					this.backgroundFake.style.backgroundImage = '';
+			} else {
+				document.body.style.backgroundColor = '';
+				document.body.style.backgroundImage =
+					this.backgroundFake.style.backgroundImage = 'url("' + url + '")';
+			}
 			this.removeBackgroundButton.disabled = false;
 
 			// Update selected state in grid
@@ -580,6 +640,8 @@ var newTabTools = {
 	},
 	resetWallpaper() {
 		Prefs.backgroundUrl = '';
+		Prefs.backgroundPosition = 'center center';
+		Prefs.backgroundColor = '';
 		Background.setBackground().then(() => {
 			this.refreshBackgroundImage();
 			let thumbs = document.querySelectorAll('.wallpaper-thumb');
@@ -1145,6 +1207,78 @@ var newTabTools = {
 	},
 	trimRecent() {
 	},
+	async resetAllSettings() {
+		// Hard reset: wipe pinned tiles, blocked URLs, history filters and
+		// every persisted pref. Confirmed via window.confirm — destructive
+		// and irreversible.
+		let confirmed = window.confirm(this.getString('reset_confirm'));
+		if (!confirmed) {
+			return;
+		}
+		// The page-side `Tiles` (tiles-shim.js) is just an IPC façade — no
+		// `.clear()` method exists. Route through the background which owns
+		// the IDB transaction.
+		await new Promise(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
+		});
+		// Blocked + Filters live inside chrome.storage.local, so clearing
+		// it wipes them along with prefs. We zero the in-memory copies too
+		// so anything reading them before reload sees the cleared state.
+		Blocked._list = [];
+		Filters._list = Object.create(null);
+		await new Promise(resolve => chrome.storage.local.clear(resolve));
+		// Reload so every component picks up the cleared state from a
+		// known-clean start.
+		location.reload();
+	},
+	formatRelativeTime(elapsedMs) {
+		// Used by the drawer's auto-save indicator. Returns the localised
+		// "just now" / "Nm ago" / "Nh ago" string for the elapsed time.
+		if (elapsedMs < 60000) {
+			return this.getString('autosaved_relative_now');
+		}
+		if (elapsedMs < 3600000) {
+			let minutes = Math.floor(elapsedMs / 60000);
+			return this.getString('autosaved_relative_minutes', String(minutes));
+		}
+		let hours = Math.floor(elapsedMs / 3600000);
+		return this.getString('autosaved_relative_hours', String(hours));
+	},
+	_renderAutoSavedIndicator() {
+		let el = document.getElementById('ntt-drawer-footer-msg');
+		if (!el) {
+			return;
+		}
+		if (!this._autoSavedAt) {
+			// No real save has happened yet — hide the indicator instead
+			// of showing a misleading "just now" on a fresh page.
+			el.hidden = true;
+			el.textContent = '';
+			return;
+		}
+		el.hidden = false;
+		let elapsed = Date.now() - this._autoSavedAt;
+		el.textContent = `${this.getString('options_autosaved')} · ${this.formatRelativeTime(elapsed)}`;
+	},
+	_markAutoSaved() {
+		this._autoSavedAt = Date.now();
+		this._renderAutoSavedIndicator();
+	},
+	_initAutoSaveIndicator() {
+		// Don't seed `_autoSavedAt` on init — wait for the first real
+		// prefs change. The indicator stays hidden until then.
+		this._autoSavedAt = null;
+		this._renderAutoSavedIndicator();
+		if (this._autoSaveTickInterval) {
+			clearInterval(this._autoSaveTickInterval);
+		}
+		// Tick once a minute so the relative timestamp advances without
+		// needing further pref activity.
+		this._autoSaveTickInterval = setInterval(
+			() => this._renderAutoSavedIndicator(),
+			60000
+		);
+	},
 	get selectedSiteIndex() {
 		return this._selectedSiteIndex;
 	},
@@ -1383,6 +1517,7 @@ var newTabTools = {
 			drawer.setAttribute('aria-hidden', 'false');
 			drawer.focus();
 		}
+		this._autoSelectFirstTileIfNeeded();
 		this._refreshGridPositionsAfterDrawerTransition();
 	},
 	closeDrawer() {
@@ -1421,6 +1556,27 @@ var newTabTools = {
 			panel.hidden = panel.dataset.drawerPanel !== name;
 		}
 		document.documentElement.setAttribute('drawer-tab', name);
+		if (name === 'tile') {
+			this._autoSelectFirstTileIfNeeded();
+		}
+	},
+	_autoSelectFirstTileIfNeeded() {
+		// Only on the Tile tab — Page/Advanced don't depend on a selection.
+		// Empty state ("Click a tile to edit") still surfaces when the grid
+		// is genuinely empty.
+		if (document.documentElement.getAttribute('drawer-tab') !== 'tile') {
+			return;
+		}
+		if (this.selectedSiteIndex != null) {
+			return;
+		}
+		if (typeof Grid === 'undefined' || !Grid.sites) {
+			return;
+		}
+		let first = Grid.sites.findIndex(s => s && s.node);
+		if (first >= 0) {
+			this.selectedSiteIndex = first;
+		}
 	},
 	resizeOptionsThumbnail() {
 		let node = Grid.node.querySelector('.newtab-thumbnail');
@@ -1570,6 +1726,7 @@ var newTabTools = {
 			Page.init();
 			newTabTools._initTitlebar();
 			newTabTools._initStatusBar();
+			newTabTools._initAutoSaveIndicator();
 			newTabTools.updateUI();
 			newTabTools.refreshBackgroundImage();
 
@@ -1618,6 +1775,40 @@ var newTabTools = {
 							newTabTools.saveCurrentThumbButton.disabled = false;
 						}
 					}
+				}
+			});
+			// After thumbnails settle, pull favicons for any cell that still
+			// shows the logo-fallback (i.e. no screenshot found).
+			newTabTools.getFavicons();
+		});
+	},
+	getFavicons() {
+		// Pull favicons for any tile whose overlay badge (`.ntt-favicon`) is
+		// still showing the letter-glyph fallback (no `<img>` yet). This
+		// covers both screenshot-covered tiles and fallback-only tiles —
+		// the badge in the bottom overlay is visible regardless of whether
+		// the centred fallback glyph is showing.
+		let urls = Grid.sites
+			.filter(s => {
+				if (!s || !s._querySelector) { return false; }
+				let badge = s._querySelector('.ntt-favicon');
+				return badge && !badge.querySelector('img');
+			})
+			.map(s => s.link.url);
+		if (!urls.length) {
+			return;
+		}
+		chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, function(favicons) {
+			if (!favicons || typeof favicons.get !== 'function') {
+				return;
+			}
+			Grid.sites.forEach(s => {
+				if (!s || !s.applyFavicon) {
+					return;
+				}
+				let blob = favicons.get(s.link.url);
+				if (blob) {
+					s.applyFavicon(blob);
 				}
 			});
 		});

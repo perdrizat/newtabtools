@@ -10,8 +10,8 @@ var Prefs = {
 	_opacity: 80,
 	_rows: 3,
 	_columns: 3,
-	_margin: ['small', 'small', 'small', 'small'],
-	_spacing: 'small',
+	_margin: ['medium', 'medium', 'medium', 'medium'],
+	_spacing: 'medium',
 	_titleSize: 'small',
 	_tileAspect: 'fill',
 	_statType: 'none',
@@ -27,6 +27,8 @@ var Prefs = {
 	_recent: true,
 	_thumbnailSize: 600,
 	_backgroundUrl: '',
+	_backgroundPosition: 'center center',
+	_backgroundColor: '',
 	_version: -1,
 
 	init() {
@@ -54,6 +56,8 @@ var Prefs = {
 			'recent',
 			'thumbnailSize',
 			'backgroundUrl',
+			'backgroundPosition',
+			'backgroundColor',
 			'version'
 		];
 
@@ -138,6 +142,21 @@ var Prefs = {
 		if (typeof prefs.backgroundUrl === 'string') {
 			this._backgroundUrl = prefs.backgroundUrl;
 		}
+		// `background_position` from `newtab-wallpapers-v2` only ever emits
+		// these 9 keywords. Anything else (e.g. an arbitrary string from a
+		// crafted backup) is dropped on the floor.
+		if ([
+			'center center', 'center left', 'center right',
+			'top left', 'top center', 'top right',
+			'bottom left', 'bottom center', 'bottom right',
+		].includes(prefs.backgroundPosition)) {
+			this._backgroundPosition = prefs.backgroundPosition;
+		}
+		// Same shape as the per-tile `backgroundColor` validator in export.js.
+		if (typeof prefs.backgroundColor === 'string'
+			&& (prefs.backgroundColor === '' || /^#[0-9a-f]{3,8}$/i.test(prefs.backgroundColor))) {
+			this._backgroundColor = prefs.backgroundColor;
+		}
 		if (Array.isArray(prefs.blocked)) {
 			Blocked._list = prefs.blocked;
 		}
@@ -169,6 +188,9 @@ var Prefs = {
 
 		if ('newTabTools' in window) {
 			newTabTools.updateUI(keys);
+			if (typeof newTabTools._markAutoSaved === 'function') {
+				newTabTools._markAutoSaved();
+			}
 			if (keys.includes('rows') || keys.includes('columns')) {
 				Grid.refresh().then(() => {
 					if (document.documentElement.hasAttribute('drawer-open')

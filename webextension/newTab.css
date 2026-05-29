@@ -163,6 +163,53 @@ body, #background-fake {
 #ntt-drawer-body > section[hidden] {
 	display: none;
 }
+/* Scope the legacy `<fieldset>` / `<legend>` / `<p>` / `<label>` / `<a>` /
+ * `<table>` markup that survives inside the drawer (Pin URL, per-tile
+ * editor, History filter, Backup & Restore, Reset, About link) so the
+ * three tabs land on the same scale as the `.ntt-form-group-*` primitives
+ * used elsewhere. Without these overrides those elements inherit the page
+ * default (~13-16 px) and make the Advanced tab look visibly bigger. */
+#ntt-drawer-body legend {
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	color: var(--ntt-mute);
+	padding: 0;
+}
+#ntt-drawer-body p,
+#ntt-drawer-body label,
+#ntt-drawer-body a,
+#ntt-drawer-body table {
+	font-size: 11.5px;
+}
+/* Tile editor (`#options-tile`) was authored for the old 752-px modal and
+ * leaks horizontal space inside the 360-px drawer — the thumbnail wrap had
+ * `padding: 0 1em`, the bg-colour row has 5 inline children, and the file
+ * input's "Browse" button has no shrinkable min-width. These rules clamp
+ * every descendant so the panel never demands more than its envelope.
+ * Phase 5 plan note: drop these when the markup is consolidated. */
+#ntt-drawer-body #options-tile {
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	box-sizing: border-box;
+	overflow: hidden;
+}
+#ntt-drawer-body #options-tile * {
+	max-width: 100%;
+	box-sizing: border-box;
+}
+#ntt-drawer-body #options-thumbnail-wrap {
+	padding: 0;
+}
+#ntt-drawer-body #options-thumbnail {
+	max-width: 100%;
+}
+#ntt-drawer-body #options-tile .options-row {
+	flex-wrap: wrap;
+	min-width: 0;
+}
 #ntt-drawer-footer {
 	display: flex;
 	align-items: center;
@@ -1044,6 +1091,20 @@ svg {
 	position: relative;
 	z-index: 1;
 }
+/* Favicon variant — same footprint as the letter glyph, but rendered as
+ * an <img> sourced from the captured-favicon blob. */
+.ntt-logo-favicon {
+	width: 34%;
+	aspect-ratio: 1;
+	border-radius: 22%;
+	object-fit: contain;
+	background-color: #fff;
+	padding: 8%;
+	box-sizing: border-box;
+	box-shadow: 0 8px 24px color-mix(in srgb, var(--ntt-brand) 45%, transparent);
+	position: relative;
+	z-index: 1;
+}
 /* PIN STRIPE */
 .ntt-pin-stripe {
 	position: absolute;
@@ -1333,6 +1394,13 @@ svg {
 	width: 100%;
 	box-sizing: border-box;
 	gap: 6px;
+}
+/* Backup, Restore and Reset action rows live in the Advanced tab as
+ * `.options-row` wrappers. They look better aligned with their fieldset's
+ * left edge than centred under their description text. */
+#options-export .options-row,
+#options-reset-group .options-row {
+	justify-content: flex-start;
 }
 .options-row[hidden] {
 	display: none;

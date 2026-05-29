@@ -51,8 +51,9 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 		const closeDrawer = extractMethod(source, 'closeDrawer');
 		const toggleDrawer = extractMethod(source, 'toggleDrawer');
 		const switchDrawerTab = extractMethod(source, 'switchDrawerTab');
+		const autoSelectFirstTile = extractMethod(source, '_autoSelectFirstTileIfNeeded');
 
-		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab}, _refreshGridPositionsAfterDrawerTransition() {} };`;
+		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab}, ${autoSelectFirstTile}, _refreshGridPositionsAfterDrawerTransition() {}, get selectedSiteIndex() { return this._selectedSiteIndex; }, set selectedSiteIndex(i) { this._selectedSiteIndex = i; } };`;
 		vm.runInThisContext(code, { filename: 'drawer-harness.js' });
 		harness = (globalThis as any)._drawerHarness;
 	});

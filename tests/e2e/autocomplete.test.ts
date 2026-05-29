@@ -7,6 +7,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	navigateAndConfirm,
 } from './_helpers.ts';
 
 describe('E2E: Add-shortcut autocomplete (slot 29)', () => {
@@ -26,7 +27,7 @@ describe('E2E: Add-shortcut autocomplete (slot 29)', () => {
 	it('typing in pin-URL input shows autocomplete suggestions from open tabs', async () => {
 		// Open a known page in a separate tab to seed the tab list.
 		const seedPage = await browser.newPage();
-		await seedPage.goto('https://example.com/', { waitUntil: 'load', timeout: 30_000 });
+		await navigateAndConfirm(seedPage, 'https://example.com/', { timeout: 30_000 });
 
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);

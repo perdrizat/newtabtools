@@ -8,6 +8,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	navigateAndConfirm,
 } from './_helpers.ts';
 
 // Use example.com — a simple, static page where drawWindow reliably works.
@@ -55,7 +56,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			// Step 2: Navigate to the test URL. This triggers
 			// webNavigation.onCompleted → thumbnail.js injection → drawWindow
 			// capture → Thumbnails.save message back to background.
-			await page.goto(TEST_URL, { waitUntil: 'load', timeout: 30_000 });
+			await navigateAndConfirm(page, TEST_URL, { timeout: 30_000 });
 
 			// Give the content script time to capture and send the thumbnail.
 			// thumbnail.js runs on document idle, draws the window, converts

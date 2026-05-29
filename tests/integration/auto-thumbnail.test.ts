@@ -652,7 +652,7 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 
 		globalThis.Grid = { sites: [] };
 
-		const code = `var newTabTools = { ${getThumbnails}, selectedSite: null, siteThumbnail: { style: {} }, saveCurrentThumbButton: { disabled: true } };`;
+		const code = `var newTabTools = { ${getThumbnails}, getFavicons() {}, selectedSite: null, siteThumbnail: { style: {} }, saveCurrentThumbButton: { disabled: true } };`;
 		vm.runInThisContext(code, { filename: 'thumbnail-display-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

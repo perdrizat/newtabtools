@@ -319,14 +319,23 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('_renderLogoFallback sanitizes malicious backgroundColor to #666', () => {
+	it('_renderLogoFallback rejects malicious backgroundColor — falls back to a safe domain-hash color', () => {
+		// Phase 4-5 + follow-up: instead of the fixed `#666` grey, an invalid
+		// `link.backgroundColor` falls through to the domain-hash colour,
+		// which now emits OKLCH (was HSL). The security intent (CSS
+		// injection rejected) is unchanged — only the colour-space changed.
 		const { site, cleanup } = mountSite({
 			url: 'https://evil.com/', title: 'Evil',
 			backgroundColor: '#ff0000); url(http://attacker.example/x',
 		});
 		const fallback = site.node.querySelector('.ntt-logo-fallback');
 		expect(fallback).toBeTruthy();
-		expect(fallback.style.getPropertyValue('--ntt-brand')).toBe('#666');
+		const brand = fallback.style.getPropertyValue('--ntt-brand');
+		// The malicious payload must NOT have leaked into the inline style.
+		expect(brand).not.toMatch(/url\(/);
+		expect(brand).not.toMatch(/attacker/);
+		// And the fallback shape is a deterministic safe oklch() value.
+		expect(brand).toMatch(/^oklch\(65% 0\.13 \d+(\.\d+)?\)$/);
 		cleanup();
 	});
 });

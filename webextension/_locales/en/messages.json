@@ -231,6 +231,32 @@
 	"backup_restore_header": {
 		"message": "Backup & Restore"
 	},
+	"reset_header": {
+		"message": "Reset"
+	},
+	"reset_description": {
+		"message": "Clear all pinned tiles, blocked sites, history filters and preferences."
+	},
+	"reset_warning": {
+		"message": "This cannot be undone."
+	},
+	"reset_button": {
+		"message": "Reset everything"
+	},
+	"reset_confirm": {
+		"message": "Reset everything? All pinned tiles, blocked sites, history filters and preferences will be cleared. This cannot be undone."
+	},
+	"autosaved_relative_now": {
+		"message": "just now"
+	},
+	"autosaved_relative_minutes": {
+		"message": "$MINUTES$m ago",
+		"placeholders": { "minutes": { "content": "$1" } }
+	},
+	"autosaved_relative_hours": {
+		"message": "$HOURS$h ago",
+		"placeholders": { "hours": { "content": "$1" } }
+	},
 	"options_theme_help": {
 		"message": "inherits Firefox by default"
 	},

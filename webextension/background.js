@@ -198,6 +198,25 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		}
 		return false;
 
+	case 'Thumbnails.getFavicons':
+		// Walk the thumbnails store and return a `url -> Blob` map for any
+		// requested URL that has a `favicon` field. Mirrors the shape of
+		// `Thumbnails.get`.
+		let faviconMap = new Map();
+		db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+			let cursor = this.result;
+			if (cursor) {
+				let row = cursor.value;
+				if (message.urls.includes(row.url) && row.favicon) {
+					faviconMap.set(row.url, row.favicon);
+				}
+				cursor.continue();
+			} else {
+				sendResponse(faviconMap);
+			}
+		};
+		return true;
+
 	case 'Thumbnails.delete':
 		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
@@ -287,17 +306,84 @@ function resizeThumbnail(dataURL, targetWidth) {
 function captureTab(tabId, windowId, label, callback) {
 	chrome.tabs.get(tabId, function(tab) {
 		if (chrome.runtime.lastError || !tab || !tab.active) {
-			callback(null);
+			callback(null, null);
 			return;
 		}
+		// `favIconUrl` can become available before or after the screenshot
+		// is ready — grab whichever value is current at this moment.
+		let favIconUrl = tab.favIconUrl || null;
 		chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
 			if (!dataURL) {
-				callback(null);
+				callback(null, favIconUrl);
 				return;
 			}
-			callback(dataURL);
+			callback(dataURL, favIconUrl);
 		});
 	});
+}
+
+/**
+ * Decode a `data:` URL into a Blob without going through `fetch`.
+ * The manifest CSP includes `connect-src 'self' https://firefox.settings…`
+ * which blocks `fetch('data:…')`. Many sites (Mozilla properties, Wikipedia,
+ * SPAs) inline their favicon as a data URL, so we have to decode in-process.
+ * Returns `null` for malformed input.
+ */
+function dataURLtoBlob(dataURL) {
+	let m = /^data:([^,;]*)(;base64)?,(.*)$/.exec(dataURL);
+	if (!m) {
+		return null;
+	}
+	let mime = m[1] || 'application/octet-stream';
+	let isBase64 = !!m[2];
+	let payload = m[3];
+	let bytes;
+	try {
+		let binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
+		bytes = new Uint8Array(binary.length);
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i);
+		}
+	} catch (ex) {
+		return null;
+	}
+	return new Blob([bytes], { type: mime });
+}
+
+/**
+ * Fetch a favicon URL and return a Blob. Resolves to `null` if the URL is
+ * empty, unfetchable, or the response can't be turned into a Blob.
+ * Caps the result at ~64 KB so we don't bloat the IDB store with massive
+ * SVG favicons.
+ *
+ * `data:` URLs are decoded in-process (see `dataURLtoBlob`) because the
+ * manifest CSP blocks `fetch()` on them.
+ */
+function fetchFaviconBlob(favIconUrl) {
+	if (!favIconUrl) {
+		return Promise.resolve(null);
+	}
+	if (favIconUrl.startsWith('data:')) {
+		let blob = dataURLtoBlob(favIconUrl);
+		if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
+			return Promise.resolve(null);
+		}
+		return Promise.resolve(blob);
+	}
+	return fetch(favIconUrl)
+		.then(function(r) {
+			if (!r.ok) {
+				return null;
+			}
+			return r.blob();
+		})
+		.then(function(blob) {
+			if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
+				return null;
+			}
+			return blob;
+		})
+		.catch(function() { return null; });
 }
 
 /**
@@ -380,9 +466,12 @@ function startCaptureSession(tabId, windowId, url) {
 	captureSessions.set(tabId, session);
 
 	// Capture A: immediate.
-	captureTab(tabId, windowId, 'A', function(dataURL) {
+	captureTab(tabId, windowId, 'A', function(dataURL, favIconUrl) {
 		if (dataURL && captureSessions.get(tabId) === session) {
 			session.captures.push({label: 'A', dataURL: dataURL});
+		}
+		if (favIconUrl && captureSessions.get(tabId) === session) {
+			session.favIconUrl = favIconUrl;
 		}
 	});
 
@@ -391,9 +480,12 @@ function startCaptureSession(tabId, windowId, url) {
 		if (captureSessions.get(tabId) !== session) {
 			return;
 		}
-		captureTab(tabId, windowId, 'B', function(dataURL) {
+		captureTab(tabId, windowId, 'B', function(dataURL, favIconUrl) {
 			if (dataURL && captureSessions.get(tabId) === session) {
 				session.captures.push({label: 'B', dataURL: dataURL});
+			}
+			if (favIconUrl && captureSessions.get(tabId) === session) {
+				session.favIconUrl = favIconUrl;
 			}
 		});
 	}, 500);
@@ -408,9 +500,12 @@ function startCaptureSession(tabId, windowId, url) {
 		if (!finalized && captureSessions.get(tabId) === session) {
 			finalized = true;
 			disarmNetworkIdle(tabId);
-			captureTab(tabId, windowId, 'C', function(dataURL) {
+			captureTab(tabId, windowId, 'C', function(dataURL, favIconUrl) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
+				}
+				if (favIconUrl && captureSessions.get(tabId) === session) {
+					session.favIconUrl = favIconUrl;
 				}
 				pickAndStore(tabId);
 			});
@@ -424,9 +519,12 @@ function startCaptureSession(tabId, windowId, url) {
 		}
 		if (elapsed <= 2000) {
 			// Network idle within 2s — take Capture C, then finalize.
-			captureTab(tabId, windowId, 'C', function(dataURL) {
+			captureTab(tabId, windowId, 'C', function(dataURL, favIconUrl) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
+				}
+				if (favIconUrl && captureSessions.get(tabId) === session) {
+					session.favIconUrl = favIconUrl;
 				}
 				if (!finalized && captureSessions.get(tabId) === session) {
 					finalized = true;
@@ -457,6 +555,7 @@ function pickAndStore(tabId) {
 	}
 
 	let url = session.url;
+	let favIconUrl = session.favIconUrl || null;
 	let captures = session.captures;
 	captureSessions.delete(tabId);
 
@@ -464,7 +563,15 @@ function pickAndStore(tabId) {
 	session.timers.forEach(function(t) { clearTimeout(t); });
 
 	// Check blankness of all captures in parallel, then pick the best.
-	Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })).then(function(blankResults) {
+	// Fetch the favicon in parallel so we don't add latency to the
+	// thumbnail finalisation.
+	Promise.all([
+		Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })),
+		fetchFaviconBlob(favIconUrl),
+	]).then(function(results) {
+		let blankResults = results[0];
+		let faviconBlob = results[1];
+
 		// Pick latest non-blank; fall back to latest overall.
 		let bestIndex = captures.length - 1; // default: latest
 		for (let i = captures.length - 1; i >= 0; i--) {
@@ -479,12 +586,16 @@ function pickAndStore(tabId) {
 		chrome.storage.local.get({'thumbnailSize': 600}, function(prefs) {
 			resizeThumbnail(best.dataURL, prefs.thumbnailSize).then(function(blob) {
 				let today = getTZDateString();
-				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
+				let record = {
 					url: url,
 					image: blob,
 					stored: today,
 					used: today,
-				});
+				};
+				if (faviconBlob) {
+					record.favicon = faviconBlob;
+				}
+				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
 			});
 		});
 	});

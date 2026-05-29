@@ -76,12 +76,16 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 
 		const result = await harness.fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
+		// New shape (Phase 4-5 follow-up): `backgroundPosition` is always
+		// present, defaulting to `center center` when the upstream record
+		// doesn't carry one. `solidColor` is omitted for image records.
 		expect(result[0]).toEqual({
 			title: 'Beach',
 			theme: 'light',
 			category: 'landscape',
 			imageUrl: MOZILLA_CDN_BASE + 'main-workspace/beach.avif',
 			attribution: 'Photo by Someone',
+			backgroundPosition: 'center center',
 		});
 	});
 

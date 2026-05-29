@@ -135,6 +135,42 @@ export async function waitForCondition(
 }
 
 /**
+ * Navigate to `url` and confirm the navigation committed — without trusting
+ * Puppeteer's goto event-wait.
+ *
+ * Puppeteer-BiDi subscribes to the navigation `load`/`domcontentloaded`
+ * event *at goto time*. A fast page (e.g. example.com) can fire that event
+ * before the subscription lands, so `goto({ waitUntil: 'load' })` hangs
+ * until timeout even though Firefox loaded the page fine. This manifested as
+ * an intermittent `Navigation timeout` that hit a different seed-page
+ * navigation each full-suite run.
+ *
+ * The fix: fire the navigation, ignore the (racy) event-wait outcome, then
+ * confirm via `page.url()` — frame-URL tracking is subscribed at page
+ * creation, so it doesn't race the navigation. Same catch-and-verify shape
+ * `openNewTab` already uses for `moz-extension://` pages.
+ */
+export async function navigateAndConfirm(
+	page: Page,
+	url: string,
+	opts: WaitForConditionOpts = {},
+): Promise<void> {
+	const { timeout = 30_000, interval = 200 } = opts;
+	await page.goto(url, { waitUntil: 'domcontentloaded', timeout }).catch(() => { /* race tolerated; verified below */ });
+	const target = url.replace(/\/+$/, '');
+	const deadline = Date.now() + timeout;
+	while (Date.now() < deadline) {
+		let current = '';
+		try { current = page.url(); } catch { /* transient during navigation */ }
+		if (current.replace(/\/+$/, '') === target) {
+			return;
+		}
+		await new Promise(r => setTimeout(r, interval));
+	}
+	throw new Error(`navigateAndConfirm: page never committed to ${url} (last: ${page.url()})`);
+}
+
+/**
  * Save a screenshot of `page` for debugging into the artifacts directory.
  * Filename is sanitised; directory is created on demand.
  */
