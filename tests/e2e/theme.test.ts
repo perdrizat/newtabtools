@@ -103,46 +103,4 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 			await page.close();
 		}
 	}, 90_000);
-
-	it('themeAuto checkbox toggles auto-theme behavior', async () => {
-		const page = await openNewTab(browser);
-		await waitForGridReady(page);
-
-		try {
-			await page.evaluate(() => (document.getElementById('options-toggle') as HTMLElement).click());
-			await new Promise(r => setTimeout(r, 500));
-
-			// Enable auto theme.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="themeAuto"]') as HTMLInputElement;
-				cb.checked = true;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-			await new Promise(r => setTimeout(r, 500));
-
-			// Verify the auto checkbox is reflected.
-			const autoChecked = await page.evaluate(() => {
-				return (document.querySelector('[name="themeAuto"]') as HTMLInputElement).checked;
-			});
-			expect(autoChecked).toBe(true);
-
-			// Disable auto theme.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="themeAuto"]') as HTMLInputElement;
-				cb.checked = false;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-			await new Promise(r => setTimeout(r, 300));
-
-			const autoUnchecked = await page.evaluate(() => {
-				return (document.querySelector('[name="themeAuto"]') as HTMLInputElement).checked;
-			});
-			expect(autoUnchecked).toBe(false);
-		} catch (e) {
-			await captureFailure(page, 'theme-auto');
-			throw e;
-		} finally {
-			await page.close();
-		}
-	}, 90_000);
 });

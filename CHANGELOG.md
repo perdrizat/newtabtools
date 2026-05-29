@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-29]
+
+### Changed
+
+- "System" theme now also adopts browser theme colors when the active Firefox theme declares any (collapses the old `themeAuto` toggle into `theme = 'system'`)
+- "Light"/"Dark" theme options now explicitly force the NTT palette, ignoring browser theme colors
+
+### Fixed
+
+- `updateThemeColours` no longer throws on Firefox's default theme (which returns `colors: null`) — now safely falls through to the NTT palette
+
+### Removed
+
+- `themeAuto` checkbox from options pane and `options_theme_auto` locale strings (en, en-GB); pref removed from prefs.js, parsePrefs allow-list, and backup/restore allow-list
+
+## [2026-05-28]
+
+### Added
+
+- NTT v2 Phase 2-2: status bar with keyboard hint pills (left) and live tile count + grid dimensions (right)
+- `_updateStatusBar()` + MutationObserver on `#newtab-grid` to keep the count in sync as tiles change
+
+### Changed
+
+- gapMap defaults updated to match design tokens: small=10px, medium=18px (matches `--ntt-gap` token default), large=28px
+- Grid `margin` pref now also scales status bar padding (medium/large)
+
+### Security
+
+- Bumped `web-ext` 10.1.0 → 10.3.0 to clear GHSA-ph9p-34f9-6g65 (tmp path traversal) and GHSA-w5hq-g745-h8pq (uuid bounds check) via transitive deps; `npm audit` now reports 0 vulnerabilities
+
 ## [2026-05-23]
 
 ### Added

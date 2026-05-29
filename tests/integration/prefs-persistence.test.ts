@@ -70,7 +70,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 
 		// Reset Prefs internal state to defaults
 		Prefs._theme = 'light';
-		Prefs._themeAuto = false;
 		Prefs._opacity = 80;
 		Prefs._rows = 3;
 		Prefs._columns = 3;
@@ -128,11 +127,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Prefs._theme).toBe('dark');
 		Prefs.parsePrefs({ theme: 'light' });
 		expect(Prefs._theme).toBe('light');
-	});
-
-	it('parsePrefs accepts valid themeAuto', () => {
-		Prefs.parsePrefs({ themeAuto: true });
-		expect(Prefs._themeAuto).toBe(true);
 	});
 
 	it('parsePrefs accepts valid opacity (0–100 integer)', () => {

@@ -72,7 +72,7 @@ async function readZip(file) {
 
 	let prefs = await getAsJSON('prefs.json');
 	if (prefs) {
-		let allowedKeys = ['theme', 'themeAuto', 'opacity', 'rows', 'columns',
+		let allowedKeys = ['theme', 'opacity', 'rows', 'columns',
 			'margin', 'spacing', 'titleSize', 'tileAspect', 'statType',
 			'titleBarWordmark', 'titleBarSearch', 'titleBarClock', 'titleBarStatus',
 			'locked', 'history', 'recent', 'blocked', 'filters', 'backgroundUrl'];
