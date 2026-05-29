@@ -32,24 +32,28 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			await new Promise(r => setTimeout(r, 500));
 
 			// Ensure history is enabled (filter button is only active when history is on).
+			// Ensure history is enabled (the historytiles-filter button is
+			// disabled when history is off).
+			await page.evaluate(() => { (window as any).Prefs.history = true; });
+			await new Promise(r => setTimeout(r, 300));
+
+			// Open the drawer's Advanced tab where the filter UI lives.
 			await page.evaluate(() => {
-				const cb = document.querySelector('[name="history"]') as HTMLInputElement;
-				if (!cb.checked) {
-					cb.checked = true;
-					cb.dispatchEvent(new Event('change', { bubbles: true }));
-				}
+				(window as any).newTabTools.openDrawer();
+				(window as any).newTabTools.switchDrawerTab('advanced');
 			});
 			await new Promise(r => setTimeout(r, 300));
 
-			// Click the filter button to show the filter panel.
+			// Populate the filter table.
 			await page.evaluate(() => {
 				document.getElementById('historytiles-filter')!.click();
 			});
 			await new Promise(r => setTimeout(r, 500));
 
-			// Verify the filter panel is open.
+			// Filter panel is part of the Advanced tab and is visible.
 			const filterVisible = await page.evaluate(() => {
-				return document.documentElement.getAttribute('options-extra') === 'filter';
+				const el = document.getElementById('options-filter') as HTMLElement;
+				return el && el.offsetParent !== null;
 			});
 			expect(filterVisible).toBe(true);
 

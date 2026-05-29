@@ -54,6 +54,9 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		const updateUI = extractMethod(source, 'updateUI');
 		const optionsOnChange = extractMethod(source, 'optionsOnChange');
 		const getThemedImageURL = extractMethod(source, 'getThemedImageURL');
+		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
+		const syncToggle = extractMethod(source, '_syncDrawerToggle');
+		const syncSlider = extractMethod(source, '_syncDrawerSlider');
 
 		globalThis.Prefs = {
 			theme: 'light', locked: false,
@@ -73,7 +76,7 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
+		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
 		vm.runInThisContext(code, { filename: 'layout-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -93,13 +96,16 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		Prefs.recent = true;
 		harness.lockedToggleButton = { style: {} };
 
-		// Default querySelector mock — returns an object with common properties
-		document.querySelector = vi.fn(() => ({
-			checked: false,
-			value: '',
-			style: {},
-			disabled: false,
-		})) as any;
+		// Default querySelector mock — returns an object with common properties.
+		// Drawer-specific selectors return null so `_syncDrawer*` helpers
+		// early-return (this suite tests the legacy form elements, not the
+		// new drawer atoms).
+		document.querySelector = vi.fn((sel: string) => {
+			if (typeof sel === 'string' && (sel.startsWith('.ntt-segmented') || sel.startsWith('.ntt-toggle') || sel.startsWith('.ntt-slider'))) {
+				return null;
+			}
+			return { checked: false, value: '', style: {}, disabled: false };
+		}) as any;
 		document.querySelectorAll = vi.fn(() => []) as any;
 		document.getElementById = vi.fn(() => ({ disabled: false })) as any;
 		document.documentElement.setAttribute = vi.fn();

@@ -123,7 +123,10 @@ describe('Statusbar — titleBarStatus pref', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
+		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
+		const syncToggle = extractMethod(source, '_syncDrawerToggle');
+		const syncSlider = extractMethod(source, '_syncDrawerSlider');
+		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'statusbar-pref-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -178,13 +181,21 @@ describe('Statusbar — gapMap defaults (Phase 2-2 §2.2)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
+		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
+		const syncToggle = extractMethod(source, '_syncDrawerToggle');
+		const syncSlider = extractMethod(source, '_syncDrawerSlider');
+		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'statusbar-gapmap-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
 
 	beforeEach(() => {
-		document.querySelector = vi.fn(() => ({ value: '', style: {}, classList: { remove: vi.fn(), add: vi.fn() } })) as any;
+		document.querySelector = vi.fn((sel: string) => {
+			if (typeof sel === 'string' && (sel.startsWith('.ntt-segmented') || sel.startsWith('.ntt-toggle') || sel.startsWith('.ntt-slider'))) {
+				return null;
+			}
+			return { value: '', style: {}, classList: { remove: vi.fn(), add: vi.fn() } };
+		}) as any;
 		document.querySelectorAll = vi.fn(() => []) as any;
 		document.getElementById = vi.fn(() => ({ disabled: false, hidden: false })) as any;
 		document.documentElement.setAttribute = vi.fn();

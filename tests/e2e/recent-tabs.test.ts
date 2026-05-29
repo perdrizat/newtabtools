@@ -67,15 +67,9 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 		await waitForGridReady(page);
 
 		try {
-			// Open settings and uncheck recent.
-			await page.evaluate(() => document.getElementById('options-toggle')!.click());
-			await new Promise(r => setTimeout(r, 500));
-
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="recent"]') as HTMLInputElement;
-				cb.checked = false;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
+			// Set Prefs.recent = false (the drawer segmented button is the new
+			// UI; here we drive the pref directly).
+			await page.evaluate(() => { (window as any).Prefs.recent = false; });
 			await new Promise(r => setTimeout(r, 500));
 
 			const listHidden = await page.evaluate(() => {
@@ -84,11 +78,7 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 			expect(listHidden).toBe(true);
 
 			// Re-enable.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="recent"]') as HTMLInputElement;
-				cb.checked = true;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
+			await page.evaluate(() => { (window as any).Prefs.recent = true; });
 		} catch (e) {
 			await captureFailure(page, 'recent-tabs-toggle');
 			throw e;

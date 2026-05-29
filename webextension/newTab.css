@@ -55,6 +55,281 @@ body, #background-fake {
 :root[options-hidden] #background-fake {
 	display: none;
 }
+/* DRAWER */
+#ntt-drawer {
+	flex: 0 0 0;
+	width: 0;
+	overflow: hidden;
+	background: var(--ntt-surface);
+	border-left: 1px solid var(--ntt-line);
+	display: flex;
+	flex-direction: column;
+	font-family: var(--ntt-font-ui);
+	color: var(--ntt-ink);
+	min-height: 0;
+	transition: flex-basis 220ms ease, width 220ms ease;
+}
+:root[drawer-open] #ntt-drawer {
+	flex: 0 0 360px;
+	width: 360px;
+}
+:root[theme="dark"] #ntt-drawer {
+	background: #1a1815;
+	box-shadow: -16px 0 32px rgba(0, 0, 0, 0.30);
+}
+:root:not([theme="dark"]) #ntt-drawer {
+	box-shadow: -12px 0 28px rgba(20, 15, 10, 0.06);
+}
+#ntt-drawer-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--ntt-line);
+	flex: 0 0 auto;
+}
+#ntt-drawer-title {
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+}
+#ntt-drawer-close {
+	margin-left: auto;
+	width: 24px;
+	height: 24px;
+	border-radius: 5px;
+	border: none;
+	background: transparent;
+	color: var(--ntt-mute);
+	cursor: pointer;
+}
+#ntt-drawer-close:hover {
+	background: var(--ntt-line-soft);
+}
+#ntt-drawer-tabs {
+	display: flex;
+	padding: 0 12px;
+	border-bottom: 1px solid var(--ntt-line);
+	gap: 2px;
+	flex: 0 0 auto;
+}
+#ntt-drawer-tabs button[role="tab"] {
+	padding: 10px 11px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--ntt-mute);
+	background: transparent;
+	border: none;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -1px;
+	cursor: pointer;
+	letter-spacing: -0.005em;
+	font-family: var(--ntt-font-ui);
+}
+#ntt-drawer-tabs button[role="tab"][data-active="true"] {
+	font-weight: 600;
+	color: var(--ntt-ink);
+	border-bottom-color: var(--ntt-accent, #c96442);
+}
+#ntt-drawer-body {
+	flex: 1;
+	overflow: auto;
+	padding: 16px 16px 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+#ntt-drawer-body > section[data-drawer-panel] {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+#ntt-drawer-body > section[hidden] {
+	display: none;
+}
+#ntt-drawer-footer {
+	display: flex;
+	align-items: center;
+	padding: 12px 16px;
+	border-top: 1px solid var(--ntt-line);
+	font-size: 10.5px;
+	color: var(--ntt-mute);
+	flex: 0 0 auto;
+}
+
+/* FORM ATOMS */
+.ntt-form-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.ntt-form-group-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+.ntt-form-group-label {
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	color: var(--ntt-mute);
+}
+.ntt-form-group-help {
+	font-size: 10.5px;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+}
+.ntt-segmented {
+	display: flex;
+	padding: 3px;
+	background: rgba(0, 0, 0, 0.045);
+	border-radius: 7px;
+	border: 1px solid var(--ntt-line);
+}
+:root[theme="dark"] .ntt-segmented {
+	background: rgba(255, 255, 255, 0.05);
+}
+.ntt-segmented button[role="radio"] {
+	flex: 1;
+	padding: 5px 8px;
+	text-align: center;
+	font-size: 11px;
+	font-weight: 500;
+	font-family: var(--ntt-font-mono);
+	color: var(--ntt-mute);
+	background: transparent;
+	border: none;
+	border-radius: 5px;
+	cursor: pointer;
+	letter-spacing: -0.005em;
+}
+.ntt-segmented button[role="radio"]:not([data-numeric="true"]) {
+	font-family: var(--ntt-font-ui);
+}
+.ntt-segmented button[role="radio"][aria-checked="true"] {
+	font-weight: 600;
+	color: var(--ntt-ink);
+	background: var(--ntt-surface);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+:root[theme="dark"] .ntt-segmented button[role="radio"][aria-checked="true"] {
+	background: #2a2620;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.ntt-grid-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.ntt-grid-row-x {
+	font-family: var(--ntt-font-mono);
+	color: var(--ntt-mute);
+	font-size: 14px;
+}
+.ntt-grid-row .ntt-segmented {
+	flex: 1;
+}
+.ntt-slider-snap {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.ntt-slider-head {
+	display: flex;
+	justify-content: space-between;
+	font-size: 11px;
+	color: var(--ntt-mute);
+}
+.ntt-slider-value {
+	color: var(--ntt-ink);
+	font-family: var(--ntt-font-mono);
+	font-weight: 600;
+}
+.ntt-slider-snap input[type="range"] {
+	width: 100%;
+	margin: 0;
+	accent-color: var(--ntt-accent, #c96442);
+}
+.ntt-toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 0;
+	cursor: pointer;
+	user-select: none;
+}
+.ntt-toggle-label-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	flex: 1;
+	min-width: 0;
+}
+.ntt-toggle-label {
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--ntt-ink);
+	letter-spacing: -0.005em;
+	flex: 1;
+}
+.ntt-toggle-sub {
+	font-size: 10.5px;
+	color: var(--ntt-mute);
+}
+.ntt-toggle-kbd {
+	font-size: 10px;
+	font-family: var(--ntt-font-mono);
+	padding: 1px 5px;
+	border-radius: 3px;
+	background: var(--ntt-line-soft);
+	color: var(--ntt-mute);
+	font-weight: 600;
+}
+.ntt-toggle {
+	width: 30px;
+	height: 18px;
+	border-radius: 9px;
+	background: rgba(0, 0, 0, 0.18);
+	position: relative;
+	flex: 0 0 auto;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	transition: background 0.15s;
+}
+:root[theme="dark"] .ntt-toggle {
+	background: rgba(255, 255, 255, 0.15);
+}
+.ntt-toggle[aria-checked="true"] {
+	background: var(--ntt-accent, #c96442);
+}
+.ntt-toggle::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+	transition: left 0.15s;
+}
+.ntt-toggle[aria-checked="true"]::after {
+	left: 14px;
+}
+.ntt-checkbox-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+}
+.ntt-radio-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
 input[type="button"] {
 	cursor: pointer;
 }
@@ -75,6 +350,16 @@ input[type="button"] {
 	font-size: smaller;
 	white-space: nowrap;
 	padding: 2px 5px;
+}
+/* `display: flex` (and friends) on ID-selectored titlebar elements outranks
+   the UA `[hidden] { display: none }` rule. Force `[hidden]` to hide for the
+   elements driven by titleBar* prefs. */
+#ntt-wordmark[hidden],
+#ntt-search[hidden],
+#ntt-clock[hidden],
+#ntt-statusbar[hidden],
+.ntt-titlebar-divider[hidden] {
+	display: none;
 }
 /* TITLEBAR */
 #ntt-titlebar {
@@ -674,16 +959,19 @@ svg {
 .newtab-site:hover .ntt-actions {
 	opacity: 1;
 }
-:root[locked="true"] .ntt-actions {
+:root[locked="true"] .ntt-actions,
+:root[tile-actions="false"] .ntt-actions {
 	display: none;
 }
 .ntt-action-btn svg {
 	display: inline-block;
 	position: static;
+	width: var(--ntt-action-icon-size, 16px);
+	height: var(--ntt-action-icon-size, 16px);
 }
 .ntt-action-btn {
-	width: 33px;
-	height: 33px;
+	width: var(--ntt-action-btn-size, 33px);
+	height: var(--ntt-action-btn-size, 33px);
 	border-radius: 7px;
 	background: rgba(255,255,255,0.92);
 	backdrop-filter: blur(8px);

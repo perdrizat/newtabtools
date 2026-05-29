@@ -135,6 +135,99 @@
 	"options_grid_spacing": {
 		"message": "Grid spacing"
 	},
+	"options_grid_header": {
+		"message": "Grid"
+	},
+	"options_grid_help": {
+		"message": "cols × rows"
+	},
+	"options_spacing_header": {
+		"message": "Spacing"
+	},
+	"options_spacing_help": {
+		"message": "gap & padding"
+	},
+	"options_spacing_gap": {
+		"message": "Tile gap"
+	},
+	"options_spacing_padding": {
+		"message": "Outer padding"
+	},
+	"options_spacing_radius": {
+		"message": "Corner radius"
+	},
+	"options_recent_header": {
+		"message": "Recently closed"
+	},
+	"options_recent_off": {
+		"message": "Off"
+	},
+	"options_recent_top": {
+		"message": "Top"
+	},
+	"options_titlebar_header": {
+		"message": "Title bar"
+	},
+	"options_titlebar_help": {
+		"message": "show / hide each"
+	},
+	"options_titlebar_wordmark": {
+		"message": "Wordmark"
+	},
+	"options_titlebar_search": {
+		"message": "Search"
+	},
+	"options_titlebar_clock": {
+		"message": "Clock + date"
+	},
+	"options_titlebar_status": {
+		"message": "Status bar (bottom)"
+	},
+	"options_tilechrome_header": {
+		"message": "Tile chrome"
+	},
+	"options_tilechrome_overlay": {
+		"message": "Bottom title overlay"
+	},
+	"options_tilechrome_overlay_sub": {
+		"message": "favicon + name shaded for readability"
+	},
+	"options_tilechrome_actions": {
+		"message": "Hover quick actions"
+	},
+	"options_tilechrome_actions_sub": {
+		"message": "open · refresh · pin · edit · remove"
+	},
+	"options_stat_header": {
+		"message": "Tile stat"
+	},
+	"options_stat_help": {
+		"message": "one per tile · breakout on hover"
+	},
+	"options_stat_none": {
+		"message": "None"
+	},
+	"options_stat_visits": {
+		"message": "Visits"
+	},
+	"options_stat_last": {
+		"message": "Last"
+	},
+	"options_stat_trend": {
+		"message": "Trend"
+	},
+	"options_stat_rank": {
+		"message": "Rank"
+	},
+	"options_stat_fresh": {
+		"message": "Fresh"
+	},
+	"options_actionsize_header": {
+		"message": "Action icon size"
+	},
+	"options_autosaved": {
+		"message": "Auto-saved"
+	},
 	"options_header": {
 		"message": "Options:"
 	},

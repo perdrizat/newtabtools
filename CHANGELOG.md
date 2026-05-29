@@ -8,17 +8,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2026-05-29]
 
+### Added
+
+- NTT v2 Phase 3-1: right-side configuration drawer with Tile / Layout / Appearance / Advanced tabs, replacing the centered options modal
+- Layout tab: cols × rows segmented controls (3-7 × 2-5), three S/M/L snap sliders for spacing / margin / corner radius, recently-closed Off/Top segmented, 4 title-bar toggle rows, tile-chrome toggles (overlay, hover actions), tile-stat segmented (6 options), action-icon-size S/M/L segmented
+- New prefs `actionIconSize` (`small`/`medium`/`large`, default `medium`), `tileActions` (boolean, default `true`), `tileRadius` (`small`/`medium`/`large`, default `medium`) — all added to backup/restore allow-list
+- CSS custom properties `--ntt-action-btn-size` (22/33/44px), `--ntt-action-icon-size` (11/16/22px), `--ntt-radius` (4/10/18px) driven by the new prefs
+- Drawer methods on `newTabTools`: `openDrawer`/`closeDrawer`/`toggleDrawer`/`switchDrawerTab`, plus `drawerOnClick`/`drawerOnChange` and `_syncDrawerSegmented`/`_syncDrawerToggle`/`_syncDrawerSlider` helpers
+- Auto-request of optional `history` permission when user picks a stat type that needs it (Visits / Last / Trend / Fresh); rank stat type works without the permission via tile cell index
+- Integration tests: `tests/integration/drawer.test.ts` (13 tests for open/close/toggle/switchTab), `tests/integration/drawer-layout.test.ts` (28 tests for Layout bindings, updateUI reflection, and 7 regression tests), `tests/integration/drawer-permissions.test.ts` (6 tests for gesture-safe permission request + stat chip rank wiring), `tests/integration/drawer-hidden-css.test.ts` (5 tests for `[hidden]` CSS overrides)
+- E2E tests: `tests/e2e/drawer.test.ts` (10 tests including realtime slider drag, wordmark hide, label-click delegation, rank chip render without permission)
+
 ### Changed
 
+- Cogwheel click now opens the drawer (`toggleDrawer`); context menu "Edit" jumps to the Tile tab via `openDrawer` + `switchDrawerTab('tile')`
+- Esc closes the drawer when open (previously closed the old modal)
+- Tile editing UI relocated as-is into the drawer's Tile panel; history/filter/export UI relocated into the Advanced panel; theme / opacity / tileAspect kept under the Appearance panel
+- Toggle rows are clickable anywhere on the row (label, kbd hint, or button), not just on the small toggle switch
 - "System" theme now also adopts browser theme colors when the active Firefox theme declares any (collapses the old `themeAuto` toggle into `theme = 'system'`)
 - "Light"/"Dark" theme options now explicitly force the NTT palette, ignoring browser theme colors
+- `settings-panel.test.ts` rewritten to test drawer open/close (was modal)
+- `layout-tuning.test.ts` drives `Prefs.titleSize`/`spacing`/`margin` directly (the old `<select>` form elements are gone)
+- `recent-tabs.test.ts` drives `Prefs.recent` directly (the old checkbox is gone)
+- `filter-cap.test.ts` opens drawer + switches to Advanced tab instead of asserting `options-extra` attribute
 
 ### Fixed
 
+- Spacing / margin / corner-radius sliders update the px value label and `--ntt-gap` / `--ntt-radius` CSS vars in realtime as the user drags (previously waited for chrome.storage round-trip and silently no-op'd because `Element.tagName` is lowercase in XHTML but uppercase in jsdom)
+- `<input type="range">` `input` events now drive the drawer change handler (was only listening for `change`, which only fires on slider release)
+- `#ntt-wordmark` / `#ntt-search` / `#ntt-clock` / `#ntt-statusbar` actually hide when their `titleBar*` pref is false — added `[hidden]` CSS overrides since `display: flex` on the ID selector previously outranked the UA `[hidden] { display: none }` rule
+- Rank stat chip renders the tile's 1-indexed position (passes `this.cell.index + 1` to `TileStats.compute`); rank previously fell through to the history-permission branch and returned null for every tile
+- `_ensureHistoryPermission` calls `chrome.permissions.request` synchronously from the click handler (Firefox loses the user-gesture context across async callbacks; the prior `permissions.contains` → callback → `permissions.request` chain silently failed to show the prompt)
 - `updateThemeColours` no longer throws on Firefox's default theme (which returns `colors: null`) — now safely falls through to the NTT palette
 
 ### Removed
 
+- Old `#options` modal markup and CSS scaffold (`#options-bg`, `#options-close`, `options-extra` flow)
+- `toggleOptions` / `hideOptions` / `showOptionsExtra` methods
+- The `options-backup-restore` button (backup/restore lives directly in the Advanced panel now)
 - `themeAuto` checkbox from options pane and `options_theme_auto` locale strings (en, en-GB); pref removed from prefs.js, parsePrefs allow-list, and backup/restore allow-list
 
 ## [2026-05-28]

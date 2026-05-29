@@ -128,9 +128,13 @@ describe('Tile redesign — CSS (newTab.css)', () => {
 		expect(css).toMatch(/\.newtab-site:hover\s+\.ntt-actions[^{]*\{[^}]*opacity:\s*1/);
 	});
 
-	it('.ntt-action-btn is 33x33px (medium size)', () => {
-		expect(css).toMatch(/\.ntt-action-btn\s*\{[^}]*width:\s*33px/);
-		expect(css).toMatch(/\.ntt-action-btn\s*\{[^}]*height:\s*33px/);
+	it('.ntt-action-btn is 33x33px (medium size, defaulted)', () => {
+		// Phase 3-1: button size is driven by --ntt-action-btn-size with a 33px
+		// fallback. Accept either the literal or the var-with-fallback form.
+		const widthRe = /\.ntt-action-btn\s*\{[^}]*width:\s*(?:33px|var\(--ntt-action-btn-size[^)]*33px\))/;
+		const heightRe = /\.ntt-action-btn\s*\{[^}]*height:\s*(?:33px|var\(--ntt-action-btn-size[^)]*33px\))/;
+		expect(css).toMatch(widthRe);
+		expect(css).toMatch(heightRe);
 	});
 
 	it('.ntt-action-btn has backdrop-filter blur', () => {

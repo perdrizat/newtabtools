@@ -19,6 +19,9 @@ var Prefs = {
 	_titleBarSearch: false,
 	_titleBarClock: true,
 	_titleBarStatus: true,
+	_actionIconSize: 'medium',
+	_tileActions: true,
+	_tileRadius: 'medium',
 	_locked: false,
 	_history: true,
 	_recent: true,
@@ -43,6 +46,9 @@ var Prefs = {
 			'titleBarSearch',
 			'titleBarClock',
 			'titleBarStatus',
+			'actionIconSize',
+			'tileActions',
+			'tileRadius',
 			'locked',
 			'history',
 			'recent',
@@ -108,6 +114,15 @@ var Prefs = {
 		if ('titleBarStatus' in prefs) {
 			this._titleBarStatus = prefs.titleBarStatus !== false;
 		}
+		if (['small', 'medium', 'large'].includes(prefs.actionIconSize)) {
+			this._actionIconSize = prefs.actionIconSize;
+		}
+		if ('tileActions' in prefs) {
+			this._tileActions = prefs.tileActions !== false;
+		}
+		if (['small', 'medium', 'large'].includes(prefs.tileRadius)) {
+			this._tileRadius = prefs.tileRadius;
+		}
 		if ('locked' in prefs) {
 			this._locked = prefs.locked === true;
 		}
@@ -155,7 +170,12 @@ var Prefs = {
 		if ('newTabTools' in window) {
 			newTabTools.updateUI(keys);
 			if (keys.includes('rows') || keys.includes('columns')) {
-				Grid.refresh().then(newTabTools.resizeOptionsThumbnail.bind(newTabTools));
+				Grid.refresh().then(() => {
+					if (document.documentElement.hasAttribute('drawer-open')
+						&& document.documentElement.getAttribute('drawer-tab') === 'tile') {
+						newTabTools.resizeOptionsThumbnail();
+					}
+				});
 			} else if (keys.includes('history')) {
 				Updater.updateGrid();
 			}

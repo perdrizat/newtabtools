@@ -828,7 +828,8 @@ Site.prototype = {
 		if (typeof TileStats === 'undefined') {
 			return;
 		}
-		TileStats.compute(this.url, statType).then(stat => {
+		let rank = this.cell ? this.cell.index + 1 : null;
+		TileStats.compute(this.url, statType, rank).then(stat => {
 			if (!stat) {
 				chip.textContent = '';
 				chip.removeAttribute('data-stat-fresh');

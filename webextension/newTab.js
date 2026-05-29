@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, Transformation, Updater */
+/* globals Background, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Transformation, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -148,9 +148,6 @@ var newTabTools = {
 		}
 		let {id, classList} = event.target;
 		switch (id) {
-		case 'options-close-button':
-			newTabTools.hideOptions();
-			break;
 		case 'options-pinURL-permissions':
 			chrome.permissions.request({permissions: ['bookmarks', 'history']}, (succeeded) => {
 				if (succeeded) {
@@ -218,10 +215,7 @@ var newTabTools = {
 					path.setAttribute('d', 'M1 1V' + (height + 1) + 'H' + (width + 1) + 'V1Z');
 					path.style.strokeDasharray = [halfLength, halfLength, halfLength, length].join(' ');
 
-					newTabTools.optionsPane.animate([
-						{'opacity': 1},
-						{'opacity': 0}
-					], {duration: 150, fill: 'both'}).onfinish = resolve;
+					setTimeout(resolve, 150);
 				});
 			}).then(() => {
 				return shouldUpdateGrid ? new Promise(resolve => {
@@ -247,10 +241,7 @@ var newTabTools = {
 						svg.style.display = null;
 						site.node.removeAttribute('highlighted');
 						Transformation.unfreezeSitePosition(site);
-						newTabTools.optionsPane.animate([
-							{'opacity': 0},
-							{'opacity': 1}
-						], {duration: 150, fill: 'both'}).onfinish = resolve;
+						setTimeout(resolve, 150);
 					};
 				});
 			}).catch(console.error);
@@ -333,7 +324,6 @@ var newTabTools = {
 			this.resetWallpaper();
 			break;
 		case 'historytiles-filter':
-			this.showOptionsExtra('filter');
 			this.fillFilterUI();
 			return;
 		case 'options-filter-set':
@@ -345,16 +335,13 @@ var newTabTools = {
 			this.optionsFilterHost.focus();
 			this.optionsFilterSet.disabled = true;
 			return;
-		case 'options-backup-restore':
-			this.showOptionsExtra('export');
-			return;
 		case 'options-backup':
 			chrome.permissions.request({permissions: ['downloads']}, function() {
 				chrome.runtime.sendMessage({name: 'Export:backup'});
 			});
 			return;
 		case 'options-restore':
-			let input = newTabTools.optionsPane.querySelector('#options-export input[type="file"]');
+			let input = document.getElementById('options-restore-file');
 			chrome.runtime.sendMessage({name: 'Import:restore', file: input.files[0]});
 			return;
 		}
@@ -437,7 +424,8 @@ var newTabTools = {
 				index += cell.childElementCount;
 			}
 
-			newTabTools.toggleOptions();
+			newTabTools.openDrawer();
+			newTabTools.switchDrawerTab('tile');
 			newTabTools.selectedSiteIndex = index;
 			break;
 
@@ -451,7 +439,7 @@ var newTabTools = {
 			site._newtabSite.block();
 			break;
 		case 'options':
-			newTabTools.toggleOptions();
+			newTabTools.toggleDrawer();
 			break;
 		}
 	},
@@ -793,11 +781,15 @@ var newTabTools = {
 		}
 
 		if (!keys || keys.includes('rows')) {
-			document.querySelector('[name="rows"]').value = Prefs.rows;
+			let el = document.querySelector('[name="rows"]');
+			if (el) { el.value = Prefs.rows; }
+			this._syncDrawerSegmented('rows', Prefs.rows);
 		}
 
 		if (!keys || keys.includes('columns')) {
-			document.querySelector('[name="columns"]').value = Prefs.columns;
+			let el = document.querySelector('[name="columns"]');
+			if (el) { el.value = Prefs.columns; }
+			this._syncDrawerSegmented('columns', Prefs.columns);
 		}
 
 		if (!keys || keys.includes('theme')) {
@@ -832,27 +824,58 @@ var newTabTools = {
 
 		if (!keys || keys.includes('titleSize')) {
 			let titleSize = Prefs.titleSize;
-			document.querySelector('[name="titleSize"]').value = titleSize;
+			let el = document.querySelector('[name="titleSize"]');
+			if (el) { el.value = titleSize; }
 			document.documentElement.setAttribute('titlesize', titleSize);
+			this._syncDrawerToggle('titleSize', titleSize !== 'hidden');
 		}
 
 		if (!keys || keys.includes('margin')) {
 			let margin = Prefs.margin;
-			document.querySelector('[name="margin"]').value = margin.join(' ');
+			let el = document.querySelector('[name="margin"]');
+			if (el) { el.value = margin.join(' '); }
 			setMargin('#newtab-margin-top', margin[0]);
 			setMargin('.newtab-margin-right', margin[1]);
 			setMargin('#newtab-margin-bottom', margin[2]);
 			setMargin('.newtab-margin-left', margin[3]);
 			setMargin('#ntt-titlebar', margin[3]);
 			setMargin('#ntt-statusbar', margin[3]);
+			this._syncDrawerSlider('margin', margin[0], { small: 10, medium: 18, large: 28 });
 		}
 
 		if (!keys || keys.includes('spacing')) {
 			let spacing = Prefs.spacing;
-			document.querySelector('[name="spacing"]').value = spacing;
+			let el = document.querySelector('[name="spacing"]');
+			if (el) { el.value = spacing; }
 			document.documentElement.setAttribute('spacing', spacing);
-			let gapMap = { small: '10px', medium: '18px', large: '28px' };
-			document.documentElement.style.setProperty('--ntt-gap', gapMap[spacing] || '18px');
+			let gapMap = { small: 10, medium: 18, large: 28 };
+			document.documentElement.style.setProperty('--ntt-gap', (gapMap[spacing] || 18) + 'px');
+			this._syncDrawerSlider('spacing', spacing, gapMap);
+		}
+
+		if (!keys || keys.includes('tileRadius')) {
+			let radiusMap = { small: 4, medium: 10, large: 18 };
+			let tileRadius = Prefs.tileRadius;
+			document.documentElement.style.setProperty('--ntt-radius', (radiusMap[tileRadius] || 10) + 'px');
+			this._syncDrawerSlider('tileRadius', tileRadius, radiusMap);
+		}
+
+		if (!keys || keys.includes('actionIconSize')) {
+			let actionMap = { small: [22, 11], medium: [33, 16], large: [44, 22] };
+			let size = Prefs.actionIconSize;
+			let [btn, icon] = actionMap[size] || actionMap.medium;
+			document.documentElement.style.setProperty('--ntt-action-btn-size', btn + 'px');
+			document.documentElement.style.setProperty('--ntt-action-icon-size', icon + 'px');
+			this._syncDrawerSegmented('actionIconSize', size);
+		}
+
+		if (!keys || keys.includes('tileActions')) {
+			document.documentElement.setAttribute('tile-actions', Prefs.tileActions ? 'true' : 'false');
+			this._syncDrawerToggle('tileActions', Prefs.tileActions);
+		}
+
+		if (!keys || keys.includes('statType')) {
+			this._syncDrawerSegmented('statType', Prefs.statType);
 		}
 
 		if (!keys || keys.includes('tileAspect')) {
@@ -879,7 +902,9 @@ var newTabTools = {
 
 		if (!keys || keys.includes('recent')) {
 			let recent = Prefs.recent;
-			document.querySelector('[name="recent"]').checked = recent;
+			let el = document.querySelector('[name="recent"]');
+			if (el) { el.checked = recent; }
+			this._syncDrawerSegmented('recent', recent);
 			this.refreshRecent();
 		}
 
@@ -888,18 +913,22 @@ var newTabTools = {
 			let divider = document.querySelector('.ntt-titlebar-divider');
 			if (el) { el.hidden = !Prefs.titleBarWordmark; }
 			if (divider) { divider.hidden = !Prefs.titleBarWordmark; }
+			this._syncDrawerToggle('titleBarWordmark', Prefs.titleBarWordmark);
 		}
 		if (!keys || keys.includes('titleBarSearch')) {
 			let el = document.getElementById('ntt-search');
 			if (el) { el.hidden = !Prefs.titleBarSearch; }
+			this._syncDrawerToggle('titleBarSearch', Prefs.titleBarSearch);
 		}
 		if (!keys || keys.includes('titleBarClock')) {
 			let el = document.getElementById('ntt-clock');
 			if (el) { el.hidden = !Prefs.titleBarClock; }
+			this._syncDrawerToggle('titleBarClock', Prefs.titleBarClock);
 		}
 		if (!keys || keys.includes('titleBarStatus')) {
 			let el = document.getElementById('ntt-statusbar');
 			if (el) { el.hidden = !Prefs.titleBarStatus; }
+			this._syncDrawerToggle('titleBarStatus', Prefs.titleBarStatus);
 		}
 
 		if (!keys || keys.includes('theme')) {
@@ -922,7 +951,8 @@ var newTabTools = {
 			requestAnimationFrame(Grid.cacheCellPositions);
 		}
 
-		if (!document.documentElement.hasAttribute('options-hidden')) {
+		if (document.documentElement.hasAttribute('drawer-open')
+			&& document.documentElement.getAttribute('drawer-tab') === 'tile') {
 			this.resizeOptionsThumbnail();
 		}
 	},
@@ -1200,23 +1230,182 @@ var newTabTools = {
 			this.resetBgColourButton.disabled = !backgroundColor;
 		this.setTitleInput.value = site.title || site.url;
 	},
-	toggleOptions() {
-		if (document.documentElement.hasAttribute('options-hidden')) {
-			document.documentElement.removeAttribute('options-hidden');
-			this.selectedSiteIndex = 0;
-			this.resizeOptionsThumbnail();
-			this.pinURLInput.focus();
-			requestAnimationFrame(() => {
-				this.siteURL.style.lineHeight = this.editSiteTitleRow.getBoundingClientRect().height + 'px';
-			});
-		} else {
-			this.hideOptions();
+	drawerOnClick(event) {
+		let target = event.target;
+
+		// Segmented button click: <button role="radio" data-value="X"> inside
+		// `.ntt-segmented[data-pref]`.
+		let segmented = target.closest && target.closest('.ntt-segmented');
+		if (segmented && target.hasAttribute && target.hasAttribute('data-value')) {
+			let pref = segmented.dataset.pref;
+			let raw = target.dataset.value;
+			if (pref === 'rows' || pref === 'columns') {
+				Prefs[pref] = parseInt(raw, 10);
+			} else if (raw === 'true' || raw === 'false') {
+				Prefs[pref] = raw === 'true';
+			} else {
+				Prefs[pref] = raw;
+			}
+			// Stats other than `none` and `rank` need the optional `history`
+			// permission. Request it now (we are in a user-gesture handler).
+			if (pref === 'statType' && raw !== 'none' && raw !== 'rank') {
+				this._ensureHistoryPermission();
+			}
+			return;
+		}
+
+		// Toggle row: a click anywhere inside `.ntt-toggle-row[data-pref]`
+		// (button, label, kbd hint) flips the bound pref.
+		let toggleRow = target.closest && target.closest('.ntt-toggle-row[data-pref]');
+		if (toggleRow) {
+			let pref = toggleRow.dataset.pref;
+			if (pref === 'titleSize') {
+				Prefs.titleSize = Prefs.titleSize === 'hidden' ? 'small' : 'hidden';
+			} else {
+				Prefs[pref] = !Prefs[pref];
+			}
+			return;
+		}
+
+		// Drawer tab button.
+		if (target.dataset && target.dataset.drawerTab) {
+			this.switchDrawerTab(target.dataset.drawerTab);
+			return;
+		}
+
+		// Close button.
+		if (target.id === 'ntt-drawer-close' || (target.closest && target.closest('#ntt-drawer-close'))) {
+			this.closeDrawer();
+			return;
 		}
 	},
-	hideOptions() {
-		document.documentElement.setAttribute('options-hidden', 'true');
-		newTabTools.pinURLAutocomplete.hidden = true;
-		this.showOptionsExtra();
+	drawerOnChange(event) {
+		let target = event.target;
+		// `tagName` is lowercase in XHTML and uppercase in HTML; compare via
+		// `target.type` instead since `type === 'range'` is unambiguous.
+		if (target.type === 'range' && target.dataset && target.dataset.pref) {
+			let pref = target.dataset.pref;
+			let idx = parseInt(target.value, 10);
+			let value = ['small', 'medium', 'large'][idx];
+			if (!value) {
+				return;
+			}
+			// Realtime label feedback — update the px display in the
+			// slider head before the chrome.storage round-trip lands.
+			let pxMaps = {
+				spacing: { small: 10, medium: 18, large: 28 },
+				margin: { small: 10, medium: 18, large: 28 },
+				tileRadius: { small: 4, medium: 10, large: 18 },
+			};
+			let wrap = target.closest('.ntt-slider-snap');
+			let label = wrap && wrap.querySelector('.ntt-slider-value');
+			if (label && pxMaps[pref]) {
+				label.textContent = pxMaps[pref][value] + 'px';
+			}
+			if (pref === 'margin') {
+				Prefs.margin = [value, value, value, value];
+			} else {
+				Prefs[pref] = value;
+			}
+			return;
+		}
+		// Fall through to legacy form handling for relocated <select>, <input>
+		// (theme radios, opacity range, tileAspect select, checkboxes).
+		this.optionsOnChange(event);
+	},
+	_syncDrawerSegmented(pref, value) {
+		let group = document.querySelector(`.ntt-segmented[data-pref="${pref}"]`);
+		if (!group || typeof group.querySelectorAll !== 'function') {
+			return;
+		}
+		let str = String(value);
+		for (let btn of group.querySelectorAll('[data-value]')) {
+			btn.setAttribute('aria-checked', btn.dataset.value === str ? 'true' : 'false');
+		}
+	},
+	_syncDrawerToggle(pref, value) {
+		let toggle = document.querySelector(`.ntt-toggle[data-pref="${pref}"]`);
+		if (!toggle || typeof toggle.setAttribute !== 'function') {
+			return;
+		}
+		toggle.setAttribute('aria-checked', value ? 'true' : 'false');
+	},
+	_syncDrawerSlider(pref, value, pxMap) {
+		let wrap = document.querySelector(`.ntt-slider-snap[data-pref="${pref}"]`);
+		if (!wrap || typeof wrap.querySelector !== 'function') {
+			return;
+		}
+		let idx = ['small', 'medium', 'large'].indexOf(value);
+		if (idx < 0) {
+			return;
+		}
+		let range = wrap.querySelector('input[type="range"]');
+		if (range) {
+			range.value = String(idx);
+		}
+		let label = wrap.querySelector('.ntt-slider-value');
+		if (label) {
+			label.textContent = pxMap[value] + 'px';
+		}
+	},
+	_ensureHistoryPermission() {
+		if (typeof chrome === 'undefined' || !chrome.permissions) {
+			return;
+		}
+		// Firefox loses the user-gesture context across async callbacks, so
+		// we must call `request` synchronously from the click handler. The
+		// request itself short-circuits when the permission is already
+		// granted (`accepted` will be true with no prompt shown).
+		chrome.permissions.request({ permissions: ['history'] }, accepted => {
+			if (!accepted) {
+				return;
+			}
+			if (typeof TileStats !== 'undefined') {
+				TileStats._hasHistoryPermission = true;
+			}
+			if ('Grid' in window) {
+				for (let site of Grid.sites) {
+					if (site && typeof site._renderStatChip === 'function') {
+						site._renderStatChip();
+					}
+				}
+			}
+		});
+	},
+	openDrawer() {
+		document.documentElement.setAttribute('drawer-open', '');
+		let drawer = document.getElementById('ntt-drawer');
+		if (drawer) {
+			drawer.setAttribute('aria-hidden', 'false');
+			drawer.focus();
+		}
+	},
+	closeDrawer() {
+		document.documentElement.removeAttribute('drawer-open');
+		let drawer = document.getElementById('ntt-drawer');
+		if (drawer) {
+			drawer.setAttribute('aria-hidden', 'true');
+		}
+	},
+	toggleDrawer() {
+		if (document.documentElement.hasAttribute('drawer-open')) {
+			this.closeDrawer();
+		} else {
+			this.openDrawer();
+		}
+	},
+	switchDrawerTab(name) {
+		let target = document.querySelector(`[data-drawer-tab="${name}"]`);
+		if (!target) {
+			return;
+		}
+		for (let tab of document.querySelectorAll('[data-drawer-tab]')) {
+			tab.dataset.active = String(tab.dataset.drawerTab === name);
+		}
+		for (let panel of document.querySelectorAll('[data-drawer-panel]')) {
+			panel.hidden = panel.dataset.drawerPanel !== name;
+		}
+		document.documentElement.setAttribute('drawer-tab', name);
 	},
 	resizeOptionsThumbnail() {
 		let node = Grid.node.querySelector('.newtab-thumbnail');
@@ -1273,18 +1462,6 @@ var newTabTools = {
 		}
 		grid.style.setProperty('--cell-width', dims.cellWidth + 'px');
 		grid.style.setProperty('--cell-height', dims.cellHeight + 'px');
-	},
-	showOptionsExtra(which) {
-		if (!which) {
-			document.documentElement.removeAttribute('options-extra');
-		} else if (!document.documentElement.hasAttribute('options-extra')) {
-			document.documentElement.setAttribute('options-extra', which);
-			return;
-		}
-
-		for (let oe of newTabTools.optionsPane.querySelectorAll('.options-extra')) {
-			oe.style.display = (oe.id == 'options-' + which) ? 'block' : null;
-		}
 	},
 	async fillFilterUI(highlightHost) {
 		let pinned = Grid.sites.filter(s => s && 'position' in s.link).reduce((carry, s) => {
@@ -1460,8 +1637,7 @@ var newTabTools = {
 		'removeBackgroundButton': 'options-bg-remove',
 		'recentList': 'newtab-recent',
 		'recentListOuter': 'newtab-recent-outer',
-		'optionsBackground': 'options-bg',
-		'optionsPane': 'options',
+		'drawerEl': 'ntt-drawer',
 		'optionsFilter': 'options-filter',
 		'optionsFilterHost': 'options-filter-host',
 		'optionsFilterHostAutocomplete': 'host-autocomplete',
@@ -1480,9 +1656,9 @@ var newTabTools = {
 
 	function keyUpHandler(event) {
 		if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(event.key) > -1) {
-			newTabTools.optionsOnChange(event);
+			newTabTools.drawerOnChange(event);
 		} else if (event.key == 'Escape') {
-			newTabTools.hideOptions();
+			newTabTools.closeDrawer();
 		}
 	}
 
@@ -1490,21 +1666,30 @@ var newTabTools = {
 		Prefs.locked = !Prefs.locked;
 		this.blur();
 	});
-	newTabTools.optionsToggleButton.addEventListener('click', newTabTools.toggleOptions.bind(newTabTools));
-	newTabTools.optionsBackground.addEventListener('click', newTabTools.hideOptions.bind(newTabTools));
+	newTabTools.optionsToggleButton.addEventListener('click', newTabTools.toggleDrawer.bind(newTabTools));
 	newTabTools.pinURLInput.addEventListener('input', newTabTools.autocomplete.bind(newTabTools));
-	newTabTools.optionsPane.addEventListener('click', newTabTools.optionsOnClick.bind(newTabTools));
-	newTabTools.optionsPane.addEventListener('change', newTabTools.optionsOnChange.bind(newTabTools));
-	newTabTools.optionsPane.addEventListener('transitionend', function() {
-		let extra = document.documentElement.getAttribute('options-extra');
-		if (extra) {
-			newTabTools.showOptionsExtra(extra);
+	newTabTools.drawerEl.addEventListener('click', function(event) {
+		// Per-tile editing controls (arrows, set-url, set-title, etc.) live
+		// inside the Tile panel and are handled by `optionsOnClick`. Form
+		// atoms (segmented buttons, toggles, tab buttons) are handled by
+		// `drawerOnClick`. They check disjoint sets of targets so order is
+		// safe.
+		newTabTools.drawerOnClick(event);
+		newTabTools.optionsOnClick(event);
+	});
+	newTabTools.drawerEl.addEventListener('change', newTabTools.drawerOnChange.bind(newTabTools));
+	// Range inputs fire `input` continuously during drag; `change` only on
+	// release. Realtime drawer feedback (gap / padding / radius sliders)
+	// needs the `input` events too.
+	newTabTools.drawerEl.addEventListener('input', function(event) {
+		if (event.target.type === 'range' && event.target.dataset && event.target.dataset.pref) {
+			newTabTools.drawerOnChange(event);
 		}
 	});
-	for (let c of newTabTools.optionsPane.querySelectorAll('select, input[type="range"]')) {
+	for (let c of newTabTools.drawerEl.querySelectorAll('select, input[type="range"]')) {
 		c.addEventListener('keyup', keyUpHandler);
 	}
-	for (let c of newTabTools.optionsPane.querySelectorAll('input[type="file"]')) {
+	for (let c of newTabTools.drawerEl.querySelectorAll('input[type="file"]')) {
 		c.addEventListener('change', function() {
 			c.nextElementSibling.disabled = !c.files.length;
 		});
@@ -1546,10 +1731,10 @@ var newTabTools = {
 		if (event.key == 'Escape') {
 			if (!document.getElementById('wallpaper-picker').hidden) {
 				newTabTools.closeWallpaperPicker();
-			} else if (newTabTools.pinURLAutocomplete.hidden) {
-				newTabTools.hideOptions();
-			} else {
+			} else if (!newTabTools.pinURLAutocomplete.hidden) {
 				newTabTools.pinURLAutocomplete.hidden = true;
+			} else if (document.documentElement.hasAttribute('drawer-open')) {
+				newTabTools.closeDrawer();
 			}
 		} else if (document.activeElement == newTabTools.pinURLInput) {
 			let current = newTabTools.pinURLAutocomplete.querySelector('li.current');

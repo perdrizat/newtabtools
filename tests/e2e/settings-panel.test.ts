@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
 import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.ts';
 
-describe('E2E Smoke: Settings panel opens and closes', () => {
+describe('E2E Smoke: Settings drawer opens and closes', () => {
 	let browser: Browser;
 	let page: Page;
 
@@ -22,50 +22,41 @@ describe('E2E Smoke: Settings panel opens and closes', () => {
 		}
 	});
 
-	it('opens the settings panel when the toggle is clicked', async () => {
-		// The extension page starts with options-hidden="true" on <html>
-		const hiddenBefore = await page.evaluate(() =>
-			document.documentElement.hasAttribute('options-hidden')
+	it('opens the drawer when the cogwheel is clicked', async () => {
+		const openBefore = await page.evaluate(() =>
+			document.documentElement.hasAttribute('drawer-open')
 		);
-		expect(hiddenBefore).toBe(true);
+		expect(openBefore).toBe(false);
 
-		// Click the settings toggle button
 		await page.evaluate(() => {
 			document.getElementById('options-toggle')?.click();
 		});
-		await new Promise((r) => setTimeout(r, 500));
+		await new Promise((r) => setTimeout(r, 400));
 
-		// The options-hidden attribute should now be removed
-		const hiddenAfterClick = await page.evaluate(() =>
-			document.documentElement.hasAttribute('options-hidden')
+		const openAfter = await page.evaluate(() =>
+			document.documentElement.hasAttribute('drawer-open')
 		);
-		expect(hiddenAfterClick).toBe(false);
+		expect(openAfter).toBe(true);
 
-		// The #options panel should be visible
-		const optionsVisible = await page.evaluate(() => {
-			const options = document.getElementById('options');
-			if (!options) {return false;}
-			const style = window.getComputedStyle(options);
-			return style.display !== 'none';
+		const drawerVisible = await page.evaluate(() => {
+			const d = document.getElementById('ntt-drawer') as HTMLElement;
+			return d && d.getBoundingClientRect().width > 50;
 		});
-		expect(optionsVisible).toBe(true);
+		expect(drawerVisible).toBe(true);
 	});
 
-	it('closes the settings panel when Escape is pressed', async () => {
-		// Panel should be open from the previous test
+	it('closes the drawer when Escape is pressed', async () => {
 		const openBefore = await page.evaluate(() =>
-			!document.documentElement.hasAttribute('options-hidden')
+			document.documentElement.hasAttribute('drawer-open')
 		);
 		expect(openBefore).toBe(true);
 
-		// Press Escape
 		await page.keyboard.press('Escape');
-		await new Promise((r) => setTimeout(r, 500));
+		await new Promise((r) => setTimeout(r, 400));
 
-		// The options-hidden attribute should be restored
-		const hiddenAfterEscape = await page.evaluate(() =>
-			document.documentElement.hasAttribute('options-hidden')
+		const openAfter = await page.evaluate(() =>
+			document.documentElement.hasAttribute('drawer-open')
 		);
-		expect(hiddenAfterEscape).toBe(true);
+		expect(openAfter).toBe(false);
 	});
 });
