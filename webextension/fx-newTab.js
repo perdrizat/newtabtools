@@ -655,6 +655,12 @@ Cell.prototype = {
 	}
 };
 
+// Fallback glyph for tiles/recent-cards with no thumbnail or favicon. This is
+// deliberately a SINGLE uppercase letter (the host's first character), matching
+// how Firefox and Chrome render fallback favicons. Multi-letter initials were
+// considered for the v2 redesign and declined: deriving good 2-letter initials
+// from a bare domain is heuristic and reads worse than one strong letter. Keep
+// it single-letter — `.ntt-logo-glyph` is sized for exactly one character.
 function siteGlyph(url) {
 	try {
 		let hostname = new URL(url).hostname.replace(/^www\./, '');

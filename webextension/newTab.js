@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, Blocked, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
+/* globals AwesomeBar, Background, Blocked, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -956,11 +956,6 @@ var newTabTools = {
 			if (el) { el.hidden = !Prefs.titleBarSearch; }
 			this._syncDrawerToggle('titleBarSearch', Prefs.titleBarSearch);
 		}
-		if (!keys || keys.includes('titleBarStatus')) {
-			let el = document.getElementById('ntt-statusbar');
-			if (el) { el.hidden = !Prefs.titleBarStatus; }
-			this._syncDrawerToggle('titleBarStatus', Prefs.titleBarStatus);
-		}
 
 		// Spacing/margin change the titlebar padding, and the search toggle
 		// changes which slots are present — both re-flow the recent row.
@@ -1783,6 +1778,9 @@ var newTabTools = {
 			// Everything is loaded. Initialize the New Tab Page.
 			Page.init();
 			newTabTools._initTitlebar();
+			if (typeof AwesomeBar !== 'undefined') {
+				AwesomeBar.init();
+			}
 			newTabTools._initStatusBar();
 			newTabTools._initAutoSaveIndicator();
 			newTabTools.updateUI();

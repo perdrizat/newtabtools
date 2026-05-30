@@ -104,3 +104,39 @@ describe('siteHue + siteBrandColor', () => {
 		expect(siteBrandColor(undefined)).toBe('#666');
 	});
 });
+
+describe('siteGlyph — single-letter fallback (Phase 4-5 typography, by decision)', () => {
+	let siteGlyph: (url: string) => string;
+
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading top-level helper for behavioral test
+		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const match = source.match(/^function\s+siteGlyph\([\s\S]*?\n\}/m);
+		if (!match) {
+			throw new Error('siteGlyph not found in fx-newTab.js');
+		}
+		const ctx = vm.createContext({ URL });
+		vm.runInContext(`${match[0]}\nglobalThis._siteGlyph = siteGlyph;`, ctx);
+		siteGlyph = (ctx as any)._siteGlyph;
+	});
+
+	it('returns exactly one uppercase character for a normal host', () => {
+		const g = siteGlyph('https://github.com/');
+		expect(g).toBe('G');
+		expect(g).toHaveLength(1);
+	});
+
+	it('is single-letter even for compound / multi-label hosts (no initials)', () => {
+		// "git-scm.com" must NOT become "GS"/"GC" — one strong letter only.
+		expect(siteGlyph('https://git-scm.com/')).toBe('G');
+		expect(siteGlyph('https://news.ycombinator.com/')).toBe('N');
+	});
+
+	it('strips a leading www. before taking the first letter', () => {
+		expect(siteGlyph('https://www.example.com/')).toBe('E');
+	});
+
+	it('falls back to a neutral dot for an unparseable URL', () => {
+		expect(siteGlyph('not a url')).toBe('·');
+	});
+});

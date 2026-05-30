@@ -621,6 +621,11 @@ input[type="button"] {
 	box-shadow: 0 1px 2px rgba(20,15,10,.03);
 	cursor: text;
 	box-sizing: border-box;
+	/* Positioning context for the awesome-bar dropdown. */
+	position: relative;
+}
+#ntt-search[hidden] {
+	display: none;
 }
 :root[theme="dark"] #ntt-search {
 	background: rgba(255,255,255,.04);
@@ -653,6 +658,90 @@ input[type="button"] {
 	font-weight: 600;
 	font-family: var(--ntt-font-mono);
 	flex: 0 0 auto;
+}
+/* AWESOME BAR — search dropdown anchored under the search box, expanding from
+ * its right edge so a wide panel never overflows the viewport. */
+#ntt-awesomebar {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	width: 520px;
+	max-width: min(520px, calc(100vw - 60px));
+	max-height: 60vh;
+	overflow-y: auto;
+	padding: 6px;
+	background: var(--ntt-surface);
+	border: 1px solid var(--ntt-line);
+	border-radius: 12px;
+	box-shadow: 0 16px 40px rgba(20, 15, 10, 0.16), 0 0 0 1px var(--ntt-line-soft);
+	cursor: default;
+	z-index: 50;
+	font-family: var(--ntt-font-ui);
+}
+#ntt-awesomebar[hidden] {
+	display: none;
+}
+:root[theme="dark"] #ntt-awesomebar {
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--ntt-line-soft);
+}
+.ntt-awesomebar-section {
+	padding: 8px 10px 4px;
+	font-size: 9.5px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+}
+.ntt-awesomebar-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px;
+	border-radius: 7px;
+	cursor: pointer;
+}
+.ntt-awesomebar-row svg {
+	flex: 0 0 auto;
+	color: var(--ntt-mute);
+}
+.ntt-awesomebar-row.selected {
+	background: var(--ntt-surface-soft);
+}
+.ntt-awesomebar-row.top.selected,
+.ntt-awesomebar-row.top {
+	background: color-mix(in srgb, var(--ntt-accent) 12%, transparent);
+}
+.ntt-awesomebar-row.top svg {
+	color: var(--ntt-accent);
+}
+.ntt-awesomebar-text {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	flex: 1;
+}
+.ntt-awesomebar-title {
+	font-size: 13px;
+	color: var(--ntt-ink);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ntt-awesomebar-url {
+	font-size: 11px;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Dim + blur the grid while the awesome bar is open so focus is on results. */
+:root[awesomebar-open] #newtab-horizontal-margin {
+	filter: blur(0.5px);
+	opacity: 0.45;
+	transition: opacity 120ms ease, filter 120ms ease;
 }
 /* Recent-tabs cards occupy the left of the bar. The container is a GREEDY flex
  * child (`flex: 1 1 0`): the browser sizes it to exactly the room left after
@@ -830,17 +919,31 @@ input[type="button"] {
 	font-family: var(--ntt-font-mono);
 	flex: 0 0 auto;
 }
-/* UNDO — lives in the status bar (centre slot) and only shows after a tile
- * is removed; otherwise collapses so the hints/summary keep their ends. */
+/* UNDO — a floating toast pinned to the bottom-centre of the viewport. Only
+ * shows after a tile is removed (UndoDialog clears `undo-disabled`); otherwise
+ * it collapses out of the layout. Detached from the retired status bar so it
+ * survives the bar being hidden. */
 #newtab-undo-container {
+	position: fixed;
+	bottom: 24px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 100;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 4px;
-	color: var(--ntt-mute);
+	padding: 9px 12px;
+	background: var(--ntt-surface);
+	border-radius: 9px;
+	box-shadow: 0 0 0 1px var(--ntt-line-soft), 0 6px 24px rgba(20, 15, 10, 0.14);
+	color: var(--ntt-ink);
 	font-family: var(--ntt-font-mono);
-	font-size: 10.5px;
+	font-size: 11px;
 	transition: opacity 200ms, display 0s 200ms;
+}
+:root[theme="dark"] #newtab-undo-container {
+	box-shadow: 0 0 0 1px var(--ntt-line-soft), 0 6px 24px rgba(0, 0, 0, 0.4);
 }
 #newtab-undo-container[undo-disabled] {
 	opacity: 0;

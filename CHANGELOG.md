@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-30] — NTT v2 Phase 4: status bar removed + awesome bar
+
+### Added
+
+- **Awesome bar (Phase 4-3).** The titlebar search box is now a working search dropdown: press `/` anywhere (preempting Firefox Quick Find) or click it, type, and pick from your tiles, bookmarks, and history, plus a "search the web" entry that uses your default engine. Up/Down to navigate, Enter to open (Cmd/Ctrl+Enter for a new tab), Esc to dismiss; the grid dims while it's open. Search is on by default (`titleBarSearch`); bookmarks/history results are best-effort behind the optional permissions. Adds the `search` permission.
+
+### Changed
+
+- Search box (`titleBarSearch`) now defaults **on** so the awesome bar is available out of the box.
+
+### Removed
+
+- **Bottom status bar (Phase 4-0).** Retired to align with the current Firefox new tab layout — the keyboard-hint pills + tile-count no longer render, the "Status bar (bottom)" drawer toggle and the `titleBarStatus` pref are gone. The removed-tile undo notice it used to host is now a standalone floating toast, so tile-removal undo still works.
+
 ## [2026-05-30] — NTT v2 titlebar: inline recently-closed + reflow fix
 
 ### Changed

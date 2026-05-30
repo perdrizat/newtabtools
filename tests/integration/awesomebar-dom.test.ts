@@ -1,0 +1,177 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/**
+ * Phase 4-3 — Awesome bar DOM/browser wiring. Loads the real awesomebar.js into
+ * the jsdom global scope and exercises init → render → keyboard-nav → activate
+ * with mocked WebExtension APIs. (The pure result model is covered in
+ * awesomebar.test.ts; live `/` interception + real search in the E2E tier.)
+ */
+
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import vm from 'node:vm';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const AB_PATH = path.resolve(__dirname, '../../webextension/awesomebar.js');
+
+function loadAwesomeBar() {
+	// eslint-disable-next-line ntt/no-source-grep -- loading module into jsdom global for behavioral test
+	const source = fs.readFileSync(AB_PATH, 'utf8');
+	vm.runInThisContext(source, { filename: 'awesomebar.js' });
+	return (globalThis as any).AwesomeBar;
+}
+
+describe('AwesomeBar — DOM wiring', () => {
+	let AwesomeBar: any;
+	let tabsUpdate: any;
+	let tabsCreate: any;
+	let searchSearch: any;
+
+	beforeAll(() => {
+		AwesomeBar = loadAwesomeBar();
+		(globalThis as any).NttIcons = {
+			create: () => document.createElementNS('http://www.w3.org/1999/xhtml', 'span'),
+		};
+		(globalThis as any).newTabTools = {
+			isValidURL: (u: string) => { try { return ['http:', 'https:'].includes(new URL(u).protocol); } catch { return false; } },
+		};
+	});
+
+	beforeEach(() => {
+		document.documentElement.removeAttribute('awesomebar-open');
+		document.body.innerHTML = `
+			<div id="ntt-search">
+				<input id="ntt-search-input" type="text" />
+			</div>
+		`;
+		(globalThis as any).Grid = { sites: [{ url: 'https://github.com/', title: 'GitHub' }] };
+		(globalThis as any).Prefs = { titleBarSearch: true };
+		tabsUpdate = vi.fn();
+		tabsCreate = vi.fn();
+		searchSearch = vi.fn();
+		(globalThis as any).chrome = {
+			tabs: { update: tabsUpdate, create: tabsCreate },
+			bookmarks: { search: (_q: string, cb: (r: unknown[]) => void) => cb([]) },
+			history: { search: (_o: unknown, cb: (r: unknown[]) => void) => cb([]) },
+			permissions: { contains: (_p: unknown, cb: (g: boolean) => void) => cb(true) },
+		};
+		(globalThis as any).browser = { search: { search: searchSearch } };
+
+		// Reset module instance state between tests.
+		AwesomeBar.dropdown = undefined;
+		AwesomeBar._results = [];
+		AwesomeBar._index = -1;
+		AwesomeBar._permChecked = false;
+		AwesomeBar.init();
+	});
+
+	function render(query: string) {
+		const results = AwesomeBar.buildResults(query, {
+			tiles: [{ url: 'https://github.com/', title: 'GitHub' }],
+			bookmarks: [{ url: 'https://gitlab.com/', title: 'GitLab' }],
+			history: [{ url: 'https://git-scm.com/', title: 'Git SCM' }],
+		});
+		AwesomeBar._render(results);
+		return results;
+	}
+
+	it('init creates the dropdown inside the search box, hidden', () => {
+		const dd = document.getElementById('ntt-awesomebar');
+		expect(dd).not.toBeNull();
+		expect(dd!.parentElement!.id).toBe('ntt-search');
+		expect((dd as HTMLElement).hidden).toBe(true);
+	});
+
+	it('render builds section headers + rows and opens the panel', () => {
+		render('git');
+		const dd = document.getElementById('ntt-awesomebar')!;
+		expect(dd.hidden).toBe(false);
+		expect(document.documentElement.hasAttribute('awesomebar-open')).toBe(true);
+		const sections = [...dd.querySelectorAll('.ntt-awesomebar-section')].map(s => s.textContent);
+		expect(sections).toContain('Top match');
+		expect(sections).toContain('Search the web');
+		expect(dd.querySelectorAll('.ntt-awesomebar-row').length).toBeGreaterThan(1);
+	});
+
+	it('the first row is selected on render', () => {
+		render('git');
+		const selected = document.querySelectorAll('#ntt-awesomebar .ntt-awesomebar-row.selected');
+		expect(selected).toHaveLength(1);
+		expect((selected[0] as HTMLElement).dataset.index).toBe('0');
+	});
+
+	it('ArrowDown moves the selection to the next row', () => {
+		render('git');
+		AwesomeBar.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+		const selected = document.querySelector('#ntt-awesomebar .ntt-awesomebar-row.selected') as HTMLElement;
+		expect(selected.dataset.index).toBe('1');
+	});
+
+	it('Enter on a URL result opens it in the current tab', () => {
+		render('git'); // index 0 = top match = github tile
+		AwesomeBar.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		expect(tabsUpdate).toHaveBeenCalledWith({ url: 'https://github.com/' });
+		expect(tabsCreate).not.toHaveBeenCalled();
+	});
+
+	it('Cmd/Ctrl+Enter opens the result in a new tab', () => {
+		render('git');
+		AwesomeBar.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true }));
+		expect(tabsCreate).toHaveBeenCalledWith({ url: 'https://github.com/' });
+	});
+
+	it('activating the web entry searches the default engine', () => {
+		render('hello world');
+		// Select the last row (the web entry) and hit Enter.
+		const rows = document.querySelectorAll('#ntt-awesomebar .ntt-awesomebar-row');
+		AwesomeBar._select(rows.length - 1);
+		AwesomeBar.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		expect(searchSearch).toHaveBeenCalledWith(expect.objectContaining({ query: 'hello world', disposition: 'CURRENT_TAB' }));
+	});
+
+	it('Escape clears the input and closes the panel', () => {
+		render('git');
+		AwesomeBar.input.value = 'git';
+		AwesomeBar.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+		expect(AwesomeBar.input.value).toBe('');
+		expect(document.getElementById('ntt-awesomebar')!.hidden).toBe(true);
+		expect(document.documentElement.hasAttribute('awesomebar-open')).toBe(false);
+	});
+
+	it('"/" from elsewhere focuses the search input and is prevented', () => {
+		// Focus something that is not an input.
+		const grid = document.createElement('div');
+		document.body.appendChild(grid);
+		grid.tabIndex = -1;
+		grid.focus();
+		const ev = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+		document.dispatchEvent(ev);
+		expect(document.activeElement).toBe(AwesomeBar.input);
+		expect(ev.defaultPrevented).toBe(true);
+	});
+
+	it('"/" while typing in an input is ignored (not hijacked)', () => {
+		AwesomeBar.input.focus();
+		const ev = new KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+		document.dispatchEvent(ev);
+		// Already in the search input → handler must not preventDefault.
+		expect(ev.defaultPrevented).toBe(false);
+	});
+
+	it('_query wires the three sources through buildResults into the DOM', async () => {
+		(globalThis as any).chrome.bookmarks.search = (_q: string, cb: (r: unknown[]) => void) =>
+			cb([{ url: 'https://gitlab.com/', title: 'GitLab' }]);
+		(globalThis as any).chrome.history.search = (_o: unknown, cb: (r: unknown[]) => void) =>
+			cb([{ url: 'https://git-scm.com/', title: 'Git SCM' }]);
+		AwesomeBar._query('git');
+		await new Promise(r => setTimeout(r, 0));
+		const urls = [...document.querySelectorAll('#ntt-awesomebar .ntt-awesomebar-url')].map(u => u.textContent);
+		expect(urls).toContain('https://github.com/'); // tile
+		expect(urls).toContain('https://gitlab.com/');  // bookmark
+		expect(urls).toContain('https://git-scm.com/'); // history
+	});
+});

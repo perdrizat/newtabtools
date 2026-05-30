@@ -41,6 +41,7 @@
 		"<all_urls>",
 		"idle",
 		"menus",
+		"search",
 		"sessions",
 		"storage",
 		"tabs",

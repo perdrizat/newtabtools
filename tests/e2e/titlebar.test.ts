@@ -131,24 +131,24 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 		}
 	});
 
-	it('search is hidden by default', async () => {
+	it('search is shown by default (titleBarSearch defaults on for the awesome bar)', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			const hidden = await waitForCondition(
+			const shown = await waitForCondition(
 				page,
 				() => {
 					const el = document.getElementById('ntt-search');
 					if (!el) { return false; }
-					return el.hidden;
+					return el.hidden === false ? true : false;
 				},
 				[],
-				{ timeout: 10_000, message: 'Search element not found' }
+				{ timeout: 10_000, message: 'Search box not visible by default' }
 			);
-			expect(hidden).toBe(true);
+			expect(shown).toBe(true);
 		} catch (e) {
-			await captureFailure(page, 'titlebar-search-hidden');
+			await captureFailure(page, 'titlebar-search-shown');
 			throw e;
 		} finally {
 			await page.close();

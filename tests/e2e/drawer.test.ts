@@ -210,25 +210,25 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		await new Promise(r => setTimeout(r, 200));
 
 		try {
-			const before = await page.evaluate(() => (window as any).Prefs.titleBarStatus);
+			const before = await page.evaluate(() => (window as any).Prefs.titleBarSearch);
 			await page.evaluate(() => {
-				const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarStatus"] .ntt-toggle-label') as HTMLElement;
+				const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarSearch"] .ntt-toggle-label') as HTMLElement;
 				label.click();
 			});
 			await new Promise(r => setTimeout(r, 400));
 
-			const after = await page.evaluate(() => (window as any).Prefs.titleBarStatus);
+			const after = await page.evaluate(() => (window as any).Prefs.titleBarSearch);
 			expect(after).toBe(!before);
 
-			// And #ntt-statusbar should actually be hidden / shown to match.
-			const statusVisible = await page.evaluate(() => {
-				const el = document.getElementById('ntt-statusbar') as HTMLElement;
-				return el.offsetWidth > 0;
+			// And #ntt-search should actually be hidden / shown to match.
+			const searchHidden = await page.evaluate(() => {
+				const el = document.getElementById('ntt-search') as HTMLElement;
+				return el.hidden;
 			});
-			expect(statusVisible).toBe(after);
+			expect(searchHidden).toBe(!after);
 		} finally {
 			await page.evaluate(() => {
-				(window as any).Prefs.titleBarStatus = true;
+				(window as any).Prefs.titleBarSearch = true;
 				(window as any).newTabTools.closeDrawer();
 			});
 		}

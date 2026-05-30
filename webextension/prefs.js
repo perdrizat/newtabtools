@@ -15,8 +15,7 @@ var Prefs = {
 	_titleSize: 'small',
 	_tileAspect: 'fill',
 	_statType: 'none',
-	_titleBarSearch: false,
-	_titleBarStatus: true,
+	_titleBarSearch: true,
 	_actionIconSize: 'medium',
 	_tileActions: true,
 	_tileRadius: 'medium',
@@ -43,7 +42,6 @@ var Prefs = {
 			'tileAspect',
 			'statType',
 			'titleBarSearch',
-			'titleBarStatus',
 			'actionIconSize',
 			'tileActions',
 			'tileRadius',
@@ -104,9 +102,6 @@ var Prefs = {
 		}
 		if ('titleBarSearch' in prefs) {
 			this._titleBarSearch = prefs.titleBarSearch !== false;
-		}
-		if ('titleBarStatus' in prefs) {
-			this._titleBarStatus = prefs.titleBarStatus !== false;
 		}
 		if (['small', 'medium', 'large'].includes(prefs.actionIconSize)) {
 			this._actionIconSize = prefs.actionIconSize;

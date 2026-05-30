@@ -98,65 +98,11 @@ describe('Statusbar — _updateStatusBar', () => {
 	});
 });
 
-describe('Statusbar — titleBarStatus pref', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const updateUI = extractMethod(source, 'updateUI');
-
-		(globalThis as any).Prefs = {
-			theme: 'light', locked: false,
-			rows: 3, columns: 3, opacity: 80,
-			margin: ['small', 'small', 'small', 'small'],
-			spacing: 'small', titleSize: 'small', tileAspect: 'fill',
-			history: true, recent: true,
-			titleBarSearch: false,
-			titleBarStatus: true,
-		};
-		(globalThis as any).browser = {
-			theme: {
-				getCurrent: vi.fn().mockResolvedValue({ colors: {} }),
-				onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
-			},
-			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
-		};
-
-		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
-		const syncToggle = extractMethod(source, '_syncDrawerToggle');
-		const syncSlider = extractMethod(source, '_syncDrawerSlider');
-		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
-		vm.runInThisContext(code, { filename: 'statusbar-pref-harness.js' });
-		harness = (globalThis as any).newTabTools;
-	});
-
-	beforeEach(() => {
-		document.body.innerHTML = `
-			<div id="ntt-statusbar"></div>
-		`;
-		(globalThis as any).Prefs.titleBarStatus = true;
-		document.documentElement.hasAttribute = vi.fn(() => true);
-	});
-
-	afterEach(() => {
-		document.body.innerHTML = '';
-	});
-
-	it('hides statusbar when titleBarStatus is false', () => {
-		(globalThis as any).Prefs.titleBarStatus = false;
-		harness.updateUI(['titleBarStatus']);
-		expect(document.getElementById('ntt-statusbar')!.hidden).toBe(true);
-	});
-
-	it('shows statusbar when titleBarStatus is true', () => {
-		(globalThis as any).Prefs.titleBarStatus = true;
-		// Start hidden to verify show path
-		document.getElementById('ntt-statusbar')!.hidden = true;
-		harness.updateUI(['titleBarStatus']);
-		expect(document.getElementById('ntt-statusbar')!.hidden).toBe(false);
-	});
-});
+// NB: the `titleBarStatus` pref + its updateUI show/hide branch were removed in
+// Phase 4-0 (the status bar is retired and ships `hidden`). Its old describe
+// block is gone; statusbar-removed.test.ts pins that removal. `_updateStatusBar`
+// itself still exists (writes the count into the hidden bar) and is covered
+// above.
 
 describe('Statusbar — gapMap defaults (Phase 2-2 §2.2)', () => {
 	let harness: any;

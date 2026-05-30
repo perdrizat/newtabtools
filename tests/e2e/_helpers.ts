@@ -314,7 +314,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
 				theme: 'system', opacity: 80,
 				titleSize: 'small', tileAspect: 'fill', spacing: 'small',
 				margin: ['small', 'small', 'small', 'small'],
-				history: true, recent: true,
+				history: true, recent: true, titleBarSearch: true,
 			}, () => {
 				// Fence: chrome.storage serialises operations, so this
 				// get callback fires after all pending sets complete.

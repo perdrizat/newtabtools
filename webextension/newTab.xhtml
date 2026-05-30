@@ -47,7 +47,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				<div class="newtab-side-margin newtab-margin-left"></div>
 				<div class="newtab-side-margin newtab-margin-right"></div>
 			</div>
-			<div id="ntt-statusbar">
+			<div id="ntt-statusbar" hidden="">
 				<div id="ntt-statusbar-hints">
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">1-9</span><span>open tile</span></span>
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">↑↓←→</span><span>navigate</span></span>
@@ -57,15 +57,17 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">⌘ K</span><span>commands</span></span>
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">?</span><span>all keys</span></span>
 				</div>
-				<div id="newtab-undo-container" undo-disabled="true">
-					<label id="newtab-undo-label" data-message="newtab_undo_removedLabel"></label>
-					<button id="newtab-undo-button" tabindex="-1" data-message="newtab_undo_undoButton"></button>
-					<button id="newtab-undo-restore-button" tabindex="-1" data-message="newtab_undo_restoreButton"></button>
-					<button id="newtab-undo-close-button" class="close-button" tabindex="-1" data-title="newtab_undo_closeTooltip"></button>
-				</div>
 				<div id="ntt-statusbar-summary">
 					<span id="ntt-statusbar-tilecount"></span>
 				</div>
+			</div>
+			<!-- Removed-tile undo toast — a floating notice (not part of the
+			     retired status bar) so tile-removal undo keeps working. -->
+			<div id="newtab-undo-container" undo-disabled="true">
+				<label id="newtab-undo-label" data-message="newtab_undo_removedLabel"></label>
+				<button id="newtab-undo-button" tabindex="-1" data-message="newtab_undo_undoButton"></button>
+				<button id="newtab-undo-restore-button" tabindex="-1" data-message="newtab_undo_restoreButton"></button>
+				<button id="newtab-undo-close-button" class="close-button" tabindex="-1" data-title="newtab_undo_closeTooltip"></button>
 			</div>
 		</div>
 	</div>
@@ -295,11 +297,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					</div>
 					<div class="ntt-toggle-row" data-pref="titleBarSearch">
 						<span class="ntt-toggle-label"><span data-message="options_titlebar_search"></span> <span class="ntt-toggle-kbd">/</span></span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarSearch" aria-checked="false"></button>
-					</div>
-					<div class="ntt-toggle-row" data-pref="titleBarStatus">
-						<span class="ntt-toggle-label"><span data-message="options_titlebar_status"></span> <span class="ntt-toggle-kbd">?</span></span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarStatus" aria-checked="true"></button>
+						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarSearch" aria-checked="true"></button>
 					</div>
 				</div>
 				<div class="ntt-form-group" id="options-bg-group">
@@ -449,6 +447,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	<script type="text/javascript" src="stats.js"></script>
 	<script type="text/javascript" src="tiles-shim.js"></script>
 	<script type="text/javascript" src="prefs.js"></script>
+	<script type="text/javascript" src="awesomebar.js"></script>
 	<script type="text/javascript" src="newTab.js"></script>
 	<script type="text/javascript" src="fx-newTab.js"></script>
 </body>

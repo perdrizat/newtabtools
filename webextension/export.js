@@ -74,7 +74,7 @@ async function readZip(file) {
 	if (prefs) {
 		let allowedKeys = ['theme', 'opacity', 'rows', 'columns',
 			'margin', 'spacing', 'titleSize', 'tileAspect', 'statType',
-			'titleBarSearch', 'titleBarStatus',
+			'titleBarSearch',
 			'actionIconSize', 'tileActions', 'tileRadius',
 			'locked', 'history', 'recent', 'blocked', 'filters',
 			'backgroundUrl', 'backgroundPosition', 'backgroundColor'];

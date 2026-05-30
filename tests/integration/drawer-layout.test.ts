@@ -73,7 +73,6 @@ const PANEL_HTML = `
 		<div class="ntt-form-group">
 			<div class="ntt-toggle-row" data-pref="recent"><span class="ntt-toggle-label">Recently closed</span><button type="button" role="switch" class="ntt-toggle" data-pref="recent" aria-checked="true"></button></div>
 			<div class="ntt-toggle-row" data-pref="titleBarSearch"><span class="ntt-toggle-label">Search <span class="ntt-toggle-kbd">/</span></span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarSearch" aria-checked="false"></button></div>
-			<div class="ntt-toggle-row" data-pref="titleBarStatus"><span class="ntt-toggle-label">Status <span class="ntt-toggle-kbd">?</span></span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarStatus" aria-checked="true"></button></div>
 		</div>
 		<div class="ntt-form-group">
 			<div class="ntt-toggle-row" data-pref="titleSize"><button type="button" role="switch" class="ntt-toggle" data-pref="titleSize" aria-checked="true"></button></div>
@@ -173,9 +172,9 @@ describe('Drawer Layout tab — drawerOnClick (Phase 3-1)', () => {
 		// We started by only handling clicks where target == .ntt-toggle.
 		// In practice users click the row label, so the handler must delegate
 		// via `.closest(".ntt-toggle-row[data-pref]")`.
-		const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarStatus"] .ntt-toggle-label') as HTMLElement;
+		const label = document.querySelector('.ntt-toggle-row[data-pref="recent"] .ntt-toggle-label') as HTMLElement;
 		harness.drawerOnClick({ target: label });
-		expect((globalThis as any).Prefs.titleBarStatus).toBe(false);
+		expect((globalThis as any).Prefs.recent).toBe(false);
 	});
 
 	it('regression: clicking the kbd hint inside a toggle row label still flips the pref', () => {
@@ -369,7 +368,6 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 			statType: 'visits', actionIconSize: 'large',
 			history: true, recent: false,
 			titleBarSearch: true,
-			titleBarStatus: false,
 		};
 		document.documentElement.removeAttribute('drawer-open');
 		document.documentElement.removeAttribute('locked');
@@ -395,9 +393,8 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 		expect(label.textContent).toContain('28');
 	});
 
-	it('reflects titleBar toggle states via aria-checked', () => {
-		harness.updateUI(['titleBarStatus', 'titleBarSearch']);
-		expect((document.querySelector('.ntt-toggle[data-pref="titleBarStatus"]') as HTMLElement).getAttribute('aria-checked')).toBe('false');
+	it('reflects titleBarSearch toggle state via aria-checked', () => {
+		harness.updateUI(['titleBarSearch']);
 		expect((document.querySelector('.ntt-toggle[data-pref="titleBarSearch"]') as HTMLElement).getAttribute('aria-checked')).toBe('true');
 	});
 
