@@ -947,26 +947,14 @@ var newTabTools = {
 			let recent = Prefs.recent;
 			let el = document.querySelector('[name="recent"]');
 			if (el) { el.checked = recent; }
-			this._syncDrawerSegmented('recent', recent);
+			this._syncDrawerToggle('recent', recent);
 			this.refreshRecent();
 		}
 
-		if (!keys || keys.includes('titleBarWordmark')) {
-			let el = document.getElementById('ntt-wordmark');
-			let divider = document.querySelector('.ntt-titlebar-divider');
-			if (el) { el.hidden = !Prefs.titleBarWordmark; }
-			if (divider) { divider.hidden = !Prefs.titleBarWordmark; }
-			this._syncDrawerToggle('titleBarWordmark', Prefs.titleBarWordmark);
-		}
 		if (!keys || keys.includes('titleBarSearch')) {
 			let el = document.getElementById('ntt-search');
 			if (el) { el.hidden = !Prefs.titleBarSearch; }
 			this._syncDrawerToggle('titleBarSearch', Prefs.titleBarSearch);
-		}
-		if (!keys || keys.includes('titleBarClock')) {
-			let el = document.getElementById('ntt-clock');
-			if (el) { el.hidden = !Prefs.titleBarClock; }
-			this._syncDrawerToggle('titleBarClock', Prefs.titleBarClock);
 		}
 		if (!keys || keys.includes('titleBarStatus')) {
 			let el = document.getElementById('ntt-statusbar');
@@ -974,8 +962,11 @@ var newTabTools = {
 			this._syncDrawerToggle('titleBarStatus', Prefs.titleBarStatus);
 		}
 
-		if (!keys || keys.includes('theme')) {
-			this._updateThemeToggleIcon();
+		// Spacing/margin change the titlebar padding, and the search toggle
+		// changes which slots are present — both re-flow the recent row.
+		if (!keys || keys.includes('spacing') || keys.includes('margin')
+			|| keys.includes('titleBarSearch')) {
+			this.refreshRecent();
 		}
 
 		if (!keys || keys.includes('rows') || keys.includes('columns')) {
@@ -999,60 +990,84 @@ var newTabTools = {
 			this.resizeOptionsThumbnail();
 		}
 	},
-	_formatTime(date) {
-		let h = date.getHours();
-		let m = date.getMinutes();
-		return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-	},
-	_formatDate(date) {
-		let days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-		let months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-		return days[date.getDay()] + ' · ' + months[date.getMonth()] + ' ' + date.getDate();
-	},
-	_updateClock() {
-		let timeEl = document.getElementById('ntt-clock-time');
-		let dateEl = document.getElementById('ntt-clock-date');
-		if (timeEl && dateEl) {
-			let now = new Date();
-			timeEl.textContent = this._formatTime(now);
-			dateEl.textContent = this._formatDate(now);
-		}
-	},
 	_initTitlebar() {
 		let searchEl = document.getElementById('ntt-search');
 		if (searchEl) {
 			let icon = NttIcons.create('search', 14);
 			searchEl.insertBefore(icon, searchEl.firstChild);
 		}
-
-		let themeBtn = document.getElementById('ntt-theme-toggle');
-		if (themeBtn) {
-			this._updateThemeToggleIcon();
-			themeBtn.addEventListener('click', () => {
-				let current = Prefs.theme;
-				if (current === 'system') {
-					Prefs.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
-				} else {
-					Prefs.theme = current === 'dark' ? 'light' : 'dark';
+		this._layoutTitlebar();
+		// Re-flow the recently-closed row whenever the space available to it
+		// actually changes — window resize, spacing / outer-padding changes,
+		// the search toggle (hiding the search box widens the row), and the
+		// config-drawer push-layout (which animates over ~220ms). The recent
+		// container is a greedy flex child, so observing ITS size captures all
+		// of those in one signal. A ResizeObserver tracks the settled width
+		// continuously, which is far more robust than a one-shot post-transition
+		// timer: that timer could fire mid-animation, cap the card count against
+		// a transient narrow width, and then never recover once the width
+		// settled (the reported "drawer collapses the row and closing it doesn't
+		// restore" bug). Re-flowing only changes the cards' width, not the
+		// container's, so this never feeds back into itself.
+		let recent = document.getElementById('ntt-titlebar-recent');
+		if (recent && typeof ResizeObserver !== 'undefined') {
+			let scheduled = false;
+			this._titlebarResizeObserver = new ResizeObserver(() => {
+				if (scheduled) {
+					return;
 				}
+				scheduled = true;
+				requestAnimationFrame(() => {
+					scheduled = false;
+					this.refreshRecent();
+				});
 			});
+			this._titlebarResizeObserver.observe(recent);
 		}
-
-		this._updateClock();
-		this._clockInterval = setInterval(() => this._updateClock(), 60000);
+		// A web-font swap changes the masthead's width and thus the room left
+		// for cards; re-flow once fonts settle so the first paint isn't off by
+		// a card.
+		if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+			document.fonts.ready.then(() => this.refreshRecent());
+		}
 	},
-	_updateThemeToggleIcon() {
-		let btn = document.getElementById('ntt-theme-toggle');
-		if (!btn) {
-			return;
+	/**
+	 * Measure the greedy recently-closed card container and set `--ntt-slot-w`
+	 * so the cards shrink to fill it edge-to-edge (see computeTitlebarSlots).
+	 * Stashes the recent-card cap on `this._recentCardCount` for refreshRecent.
+	 * Returns the slot descriptor so callers can chain.
+	 */
+	_layoutTitlebar() {
+		let titlebar = document.getElementById('ntt-titlebar');
+		let recent = document.getElementById('ntt-titlebar-recent');
+		if (!titlebar || !recent) {
+			this._recentCardCount = 0;
+			return { cardCount: 0, slotWidth: 186 };
 		}
-		while (btn.firstChild) {
-			btn.firstChild.remove();
+		// The recent-cards container is a greedy flex child, so the browser has
+		// already sized it to exactly the room left after the fixed search box
+		// and the content-width masthead — whether the search box is shown,
+		// whether the config drawer is open, and at any window width. We just
+		// read that settled width. It must be laid out (not display:none) to
+		// report a real width AND to keep pinning the masthead right, so the
+		// container is always visible — when there are no cards it is simply an
+		// empty spacer.
+		recent.hidden = false;
+		let cs = window.getComputedStyle(titlebar);
+		let gap = parseFloat(cs.columnGap || cs.gap) || 10;
+		let cardSpace = recent.clientWidth;
+		if (!cardSpace || cardSpace < 0) {
+			cardSpace = 0;
 		}
-		let effectiveTheme = Prefs.theme === 'system'
-			? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-			: Prefs.theme;
-		btn.appendChild(NttIcons.create(effectiveTheme === 'dark' ? 'sun' : 'moon', 14));
+		let slots = this.computeTitlebarSlots(cardSpace, gap, 186);
+		// `recent` pref off → never show cards (the empty greedy container still
+		// acts as the spacer that pins the masthead right).
+		if (typeof Prefs !== 'undefined' && !Prefs.recent) {
+			slots.cardCount = 0;
+		}
+		titlebar.style.setProperty('--ntt-slot-w', slots.slotWidth + 'px');
+		this._recentCardCount = slots.cardCount;
+		return slots;
 	},
 	_updateStatusBar() {
 		let countEl = document.getElementById('ntt-statusbar-tilecount');
@@ -1097,16 +1112,25 @@ var newTabTools = {
 		return days + 'd';
 	},
 	refreshRecent() {
-		if (!Prefs.recent) {
-			this.recentList.hidden = true;
+		// Re-flow the titlebar slots first so `_recentCardCount` reflects the
+		// current width before we decide how many cards to render.
+		let slots = this._layoutTitlebar();
+		let cap = slots ? slots.cardCount : 0;
+		let strip = this.recentList;
+		if (!strip) {
+			return;
+		}
+
+		if (!Prefs.recent || cap <= 0) {
+			// No cards to show, but keep the (empty) container laid out: it is
+			// the greedy spacer that pins the masthead to the right edge.
+			for (let element of strip.querySelectorAll('.ntt-recent-card')) {
+				strip.removeChild(element);
+			}
 			return;
 		}
 
 		chrome.sessions.getRecentlyClosed(undoItems => {
-			let strip = this.recentList.querySelector('#newtab-recent-strip');
-			if (!strip) {
-				strip = this.recentList;
-			}
 			let added = 0;
 
 			for (let element of strip.querySelectorAll('.ntt-recent-card')) {
@@ -1129,7 +1153,7 @@ var newTabTools = {
 			let seen = new Set();
 
 			for (let item of undoItems) {
-				if (added >= 10) {
+				if (added >= cap) {
 					break;
 				}
 				if (!item.tab || item.tab.incognito) {
@@ -1202,7 +1226,7 @@ var newTabTools = {
 				strip.appendChild(card);
 				added++;
 			}
-			this.recentList.hidden = !added;
+			strip.hidden = !added;
 		});
 	},
 	trimRecent() {
@@ -1529,13 +1553,17 @@ var newTabTools = {
 		this._refreshGridPositionsAfterDrawerTransition();
 	},
 	_refreshGridPositionsAfterDrawerTransition() {
-		// The drawer's flex-basis/width animates over 220ms. The grid
-		// reflows during that animation but no resize event fires, so any
-		// cached cell positions go stale. Re-cache once the transition
-		// has settled. (Drag.start also re-caches defensively.)
-		if (typeof Grid !== 'undefined' && typeof Grid.cacheCellPositions === 'function') {
-			setTimeout(() => Grid.cacheCellPositions(), 240);
-		}
+		// The drawer's flex-basis/width animates over 220ms. The grid and the
+		// titlebar reflow during that animation but no resize event fires, so
+		// cached cell positions go stale and the titlebar slot width no longer
+		// matches the narrower content area. Re-cache + re-flow the recent row
+		// once the transition has settled. (Drag.start also re-caches.)
+		setTimeout(() => {
+			if (typeof Grid !== 'undefined' && typeof Grid.cacheCellPositions === 'function') {
+				Grid.cacheCellPositions();
+			}
+			this.refreshRecent();
+		}, 240);
 	},
 	toggleDrawer() {
 		if (document.documentElement.hasAttribute('drawer-open')) {
@@ -1593,6 +1621,36 @@ var newTabTools = {
 			this.siteThumbnail.style.width = 120 * ratio + 'px';
 			this.siteThumbnail.style.height = '120px';
 		}
+	},
+	computeTitlebarSlots(cardSpace, gap, full = 186) {
+		// `cardSpace` is the measured inner width of the recently-closed cards'
+		// flex container (a greedy `flex: 1 1 0` child). It already excludes the
+		// fixed search box, the content-width masthead and their gaps, so the
+		// only job here is: how many cards fit, and how wide is each?
+		//
+		// Pick the SMALLEST card count whose common width — when the cards are
+		// stretched to fill `cardSpace` with their internal gaps — stays at or
+		// below `full`, then shrink that width down so the row fills the
+		// container edge-to-edge (never grown above `full`). Reading a settled
+		// integer `clientWidth` is far more stable than the old approach of
+		// hand-subtracting a `getBoundingClientRect()` masthead measurement,
+		// which jittered mid drawer-transition and left the row stuck at one
+		// card until a reload.
+		if (!cardSpace || cardSpace <= 0) {
+			return { cardCount: 0, slotWidth: full };
+		}
+		let cardCount = Math.ceil((cardSpace + gap) / (full + gap));
+		if (cardCount < 1) {
+			cardCount = 1;
+		}
+		let slotWidth = Math.floor((cardSpace - (cardCount - 1) * gap) / cardCount);
+		if (slotWidth > full) {
+			slotWidth = full;
+		}
+		if (slotWidth < 1) {
+			slotWidth = 1;
+		}
+		return { cardCount, slotWidth };
 	},
 	computeCellDimensions(gridWidth, gridHeight, rows, cols, gap, aspect) {
 		if (aspect == null) {
@@ -1842,8 +1900,7 @@ var newTabTools = {
 		'setTitleInput': 'options-title-input',
 		'setTitleButton': 'options-title-set',
 		'removeBackgroundButton': 'options-bg-remove',
-		'recentList': 'newtab-recent',
-		'recentListOuter': 'newtab-recent-outer',
+		'recentList': 'ntt-titlebar-recent',
 		'drawerEl': 'ntt-drawer',
 		'optionsFilter': 'options-filter',
 		'optionsFilterHost': 'options-filter-host',

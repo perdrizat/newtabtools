@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-30] — NTT v2 titlebar: inline recently-closed + reflow fix
+
+### Changed
+
+- **Titlebar redesign — recently-closed inline.** The titlebar reads left→right: the recently-closed cards, then a fixed-width search box, then a single **masthead** box at the right end combining the brand wordmark with the lock + cogwheel controls. The cards live in a greedy flex container (`flex: 1 1 0`) the browser sizes to the leftover room, which also acts as the spacer pinning the masthead right; `_layoutTitlebar` reads that container's width and `computeTitlebarSlots` shrinks the cards to fill it edge-to-edge (capped at the 186px default) via `--ntt-slot-w`. Re-flows on resize, spacing/margin changes, the search toggle, and config-drawer open/close.
+- The masthead, search box, and recent cards share one box treatment (surface fill, rounded, 38 px tall, subtle 1px line shadow, dark-mode adaptive).
+- Two-line wordmark lockup — "New Tab" in the recent-card title style over "Powertools" in the recent-card URL style (small monospace mute), sized so the masthead matches the recent-card height.
+- Captured favicons in the tile overlay badge are pinned to a uniform 16 px square (`.ntt-favicon img`) instead of the source image's natural size.
+- Moved the "Recently closed" control into the Page tab's Title Bar group as a plain on/off toggle above Search (was an Off/Top segmented control in the Advanced tab).
+
+### Removed
+
+- Titlebar clock (and the `titleBarClock` pref/toggle + locale string) and the titlebar theme toggle — theme is still switchable via the Page-tab theme cards. The separate recently-closed strip above the grid is gone (cards live in the titlebar); the removed-tile undo notice moved into the status bar.
+- The "NTT Logo" titlebar toggle (`titleBarWordmark` pref + locale string): the brand wordmark is now always shown in the masthead.
+
+### Fixed
+
+- Recently-closed titlebar cards now reflow reliably on config-drawer open/close, window resize and the search toggle — the count is read from the greedy card container's settled `clientWidth` instead of a `getBoundingClientRect` masthead measurement that jittered mid-transition and stuck the row at one card until reload.
+
 ## [2026-05-29] — NTT v2 Phase 3 (config drawer) + Phase 4-5 (favicons & tile visuals)
 
 ### Added

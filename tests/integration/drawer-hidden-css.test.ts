@@ -33,12 +33,14 @@ describe('Titlebar [hidden] overrides — display:none must win over display:fle
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});
 
+	// `#ntt-titlebar-recent` is intentionally absent: it is the greedy spacer
+	// that pins the masthead to the right edge, so it must stay laid out even
+	// when it holds no cards — refreshRecent empties it rather than hiding it,
+	// so it has no `[hidden]` override on purpose.
 	const elements = [
 		'#ntt-wordmark',
 		'#ntt-search',
-		'#ntt-clock',
 		'#ntt-statusbar',
-		'.ntt-titlebar-divider',
 	];
 
 	for (const sel of elements) {

@@ -112,8 +112,8 @@ describe('Statusbar — titleBarStatus pref', () => {
 			margin: ['small', 'small', 'small', 'small'],
 			spacing: 'small', titleSize: 'small', tileAspect: 'fill',
 			history: true, recent: true,
-			titleBarWordmark: true, titleBarSearch: false,
-			titleBarClock: true, titleBarStatus: true,
+			titleBarSearch: false,
+			titleBarStatus: true,
 		};
 		(globalThis as any).browser = {
 			theme: {

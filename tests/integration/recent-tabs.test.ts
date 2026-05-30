@@ -70,7 +70,11 @@ describe('Recently-closed tabs — newTab.js', () => {
 			onChanged: { addListener: vi.fn() },
 		} as any;
 
-		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, recentListOuter: null };`;
+		// `_layoutTitlebar` is the source of the card cap; stub it so these
+		// behavioural tests control how many cards refreshRecent may render
+		// (default 10, matching the old hard cap). The real slot-sizing math
+		// is covered by titlebar-slots.test.ts.
+		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`;
 		vm.runInThisContext(code, { filename: 'recent-tabs-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -80,22 +84,17 @@ describe('Recently-closed tabs — newTab.js', () => {
 		Prefs.recent = true;
 		appendedCards = [];
 
-		strip = {
+		// The recently-closed cards now render directly into the titlebar
+		// container (#ntt-titlebar-recent), so the strip *is* recentList.
+		recentList = {
+			hidden: false,
 			querySelectorAll: vi.fn(() => []),
 			removeChild: vi.fn(),
 			appendChild: vi.fn((el: any) => { appendedCards.push(el); return el; }),
 		};
-
-		recentList = {
-			hidden: false,
-			querySelector: vi.fn((sel: string) => {
-				if (sel === '#newtab-recent-strip') {
-					return strip;
-				}
-				return null;
-			}),
-		};
+		strip = recentList;
 		harness.recentList = recentList;
+		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
 
 		document.createElementNS = vi.fn(() => makeMockElement()) as any;
 
@@ -114,7 +113,10 @@ describe('Recently-closed tabs — newTab.js', () => {
 	it('hides recent list when Prefs.recent is false', () => {
 		Prefs.recent = false;
 		harness.refreshRecent();
-		expect(recentList.hidden).toBe(true);
+		// The container is no longer display:none'd — it stays laid out as the
+		// empty greedy spacer that pins the masthead to the right edge; it just
+		// holds no cards when recent is off.
+		expect(recentList.hidden).toBe(false);
 		expect(chrome.sessions.getRecentlyClosed).not.toHaveBeenCalled();
 	});
 
@@ -421,15 +423,40 @@ describe('Recently-closed tabs — newTab.js', () => {
 		expect(age._children[0].textContent).toBe('2d');
 	});
 
-	// ==================== max items cap ====================
+	// ==================== card cap from _layoutTitlebar ====================
 
-	it('shows at most 10 cards even when more sessions available', () => {
+	it('renders at most _layoutTitlebar().cardCount cards', () => {
+		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
 		const items = Array.from({ length: 15 }, (_, i) => ({
 			tab: { url: `https://site${i}.com`, title: `Site ${i}`, sessionId: `s${i}`, favIconUrl: null, incognito: false },
 		}));
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
 		harness.refreshRecent();
 		expect(appendedCards).toHaveLength(10);
+	});
+
+	it('shrinks the card count to the titlebar cap on a narrower window', () => {
+		harness._layoutResult = { cardCount: 3, slotWidth: 150, searchWidth: 150 };
+		const items = Array.from({ length: 15 }, (_, i) => ({
+			tab: { url: `https://site${i}.com`, title: `Site ${i}`, sessionId: `s${i}`, favIconUrl: null, incognito: false },
+		}));
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(3);
+	});
+
+	it('renders no cards and stays hidden when the cap is 0 (narrow window)', () => {
+		harness._layoutResult = { cardCount: 0, slotWidth: 140, searchWidth: 400 };
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(0);
+		// Container stays laid out as the empty greedy spacer (pins masthead right).
+		expect(recentList.hidden).toBe(false);
+		// Cap 0 short-circuits before querying sessions.
+		expect(chrome.sessions.getRecentlyClosed).not.toHaveBeenCalled();
 	});
 
 	// ==================== skip URLs already in tiles ====================
@@ -495,15 +522,15 @@ describe('Recently-closed cards — CSS (newTab.css)', () => {
 		expect(cardRule![0]).toMatch(/border-radius:\s*7px/);
 	});
 
-	it('.ntt-recent-card is a fixed-width flex row', () => {
+	it('.ntt-recent-card width tracks the JS-computed slot variable', () => {
 		const cardRule = css.match(/\.ntt-recent-card\s*\{[^}]*\}/s);
 		expect(cardRule).toBeTruthy();
 		expect(cardRule![0]).toMatch(/display:\s*flex/);
-		expect(cardRule![0]).toMatch(/width:\s*186px/);
+		expect(cardRule![0]).toMatch(/width:\s*var\(--ntt-slot-w/);
 	});
 
-	it('#newtab-recent-strip is a horizontal flex container with grid-spacing gap', () => {
-		const stripRule = css.match(/#newtab-recent-strip\s*\{[^}]*\}/s);
+	it('#ntt-titlebar-recent is a horizontal flex container with grid-spacing gap', () => {
+		const stripRule = css.match(/#ntt-titlebar-recent\s*\{[^}]*\}/s);
 		expect(stripRule).toBeTruthy();
 		expect(stripRule![0]).toMatch(/display:\s*flex/);
 		expect(stripRule![0]).toMatch(/gap:\s*var\(--ntt-gap/);

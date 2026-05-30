@@ -507,41 +507,24 @@ input[type="button"] {
    elements driven by titleBar* prefs. */
 #ntt-wordmark[hidden],
 #ntt-search[hidden],
-#ntt-clock[hidden],
-#ntt-statusbar[hidden],
-.ntt-titlebar-divider[hidden] {
+#ntt-statusbar[hidden] {
 	display: none;
 }
 /* TITLEBAR
- * Layout rules (Phase 3 reshuffle):
- *   - #ntt-wordmark stays left-aligned (flex 0 auto, no margin tricks)
- *   - #ntt-clock + #ntt-titlebar-buttons stay right-aligned. The right-side
- *     cluster is pinned by `margin-left: auto` on #ntt-clock, which absorbs
- *     leftover space no matter which siblings are visible.
- *   - #ntt-search centers itself in the leftover space via `margin: 0 auto`
- *     (works in combination with the clock's auto-margin: the three autos
- *     share space and search lands roughly in the middle).
- *   - When the wordmark is hidden, search snaps to the left edge instead of
- *     trying to center against nothing. Conditional via `:has()` (Firefox
- *     ESR 128+). */
+ * One row, left→right: [recent cards] [search] [masthead]
+ *   - recent cards: a greedy `flex: 1 1 0` container that absorbs all slack and
+ *     pins the masthead to the right edge; cards shrink to fill it via the
+ *     JS-set `--ntt-slot-w` (see `_layoutTitlebar` / computeTitlebarSlots).
+ *   - search: fixed width (kept out of the measurement to avoid feedback).
+ *   - masthead: content-width box (wordmark + lock + cogwheel).
+ * `--ntt-gap` separates them. */
 #ntt-titlebar {
 	display: flex;
 	align-items: center;
-	gap: 18px;
+	gap: var(--ntt-gap, 10px);
 	padding: 30px 30px 0;
 	margin-bottom: var(--ntt-gap, 10px);
 	font-family: var(--ntt-font-ui);
-}
-#ntt-titlebar > #ntt-clock {
-	margin-left: auto;
-}
-/* When the clock is hidden, the right-side cluster collapses unless the
- * buttons group itself takes over the auto-margin. */
-#ntt-titlebar > #ntt-clock[hidden] + #ntt-titlebar-buttons {
-	margin-left: auto;
-}
-#ntt-titlebar:has(#ntt-wordmark[hidden]) #ntt-search {
-	margin: 0;
 }
 #ntt-titlebar.medium {
 	padding: 60px 60px 0;
@@ -549,11 +532,32 @@ input[type="button"] {
 #ntt-titlebar.large {
 	padding: 120px 120px 0;
 }
-#ntt-wordmark {
+/* The masthead is the single box at the right end of the bar: the brand
+ * wordmark plus the lock + cogwheel controls. It carries the recently-closed
+ * card's box treatment (surface fill, rounded, 1px line shadow, dark-adaptive)
+ * and is pinned to the right; `height: 38px` keeps it level with the search
+ * box and the recent cards. */
+#ntt-masthead {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	flex: 0 0 auto;
+	height: 38px;
+	box-sizing: border-box;
+	padding: 0 6px 0 10px;
+	background: var(--ntt-surface);
+	border-radius: 7px;
+	box-shadow: 0 0 0 1px var(--ntt-line-soft), 0 1px 2px rgba(20,15,10,0.03);
+}
+:root[theme="dark"] #ntt-masthead {
+	box-shadow: 0 0 0 1px var(--ntt-line-soft);
+}
+#ntt-wordmark {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	overflow: hidden;
+	min-width: 0;
 }
 #ntt-wordmark-icon {
 	width: 22px;
@@ -574,33 +578,41 @@ input[type="button"] {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
-	line-height: 1;
+	line-height: 1.15;
+	min-width: 0;
+	overflow: hidden;
 }
+/* Line 1 "New Tab" uses the recent-card title style; line 2 "Powertools" uses
+ * the recent-card URL style (smaller mono mute) so the two-line lockup fits a
+ * 38px box, matching the recently-closed cards. */
 #ntt-wordmark-name {
-	font-size: 13.5px;
+	font-size: 11.5px;
 	font-weight: 600;
 	color: var(--ntt-ink);
-	letter-spacing: -0.012em;
+	letter-spacing: -0.005em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
-#ntt-wordmark-version {
-	font-size: 9.5px;
+#ntt-wordmark-name2 {
+	font-size: 10px;
 	color: var(--ntt-mute);
 	font-family: var(--ntt-font-mono);
-	letter-spacing: 0.04em;
-	margin-top: 1px;
-}
-.ntt-titlebar-divider {
-	width: 1px;
-	height: 22px;
-	background: var(--ntt-line);
-	flex: 0 0 auto;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 #ntt-search {
-	flex: 1;
+	/* Fixed width so it never feeds back into the greedy recent container's
+	 * measurement (a search width that tracked the shrinking card slot would
+	 * make `recent.clientWidth`, and thus the card count, oscillate across
+	 * reflows). The recent container to its left absorbs all slack and pushes
+	 * search + masthead to the right edge — no auto-margin needed. */
+	flex: 0 0 186px;
+	width: 186px;
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	max-width: 440px;
 	height: 38px;
 	padding: 0 12px 0 14px;
 	background: var(--ntt-surface);
@@ -608,7 +620,7 @@ input[type="button"] {
 	border-radius: 9px;
 	box-shadow: 0 1px 2px rgba(20,15,10,.03);
 	cursor: text;
-	margin: 0 auto;
+	box-sizing: border-box;
 }
 :root[theme="dark"] #ntt-search {
 	background: rgba(255,255,255,.04);
@@ -642,29 +654,32 @@ input[type="button"] {
 	font-family: var(--ntt-font-mono);
 	flex: 0 0 auto;
 }
-#ntt-clock {
+/* Recent-tabs cards occupy the left of the bar. The container is a GREEDY flex
+ * child (`flex: 1 1 0`): the browser sizes it to exactly the room left after
+ * the fixed search box and the content-width masthead, so it doubles as the
+ * spacer that pushes search + masthead to the right edge — no auto-margins
+ * needed. `_layoutTitlebar()` reads its settled `clientWidth` to decide how
+ * many cards fit (far more stable than hand-measuring the masthead, whose rect
+ * jitters mid drawer-transition). The container clips any overflow; the cap
+ * means clipping is rarely hit. */
+#ntt-titlebar-recent {
+	/* Intentionally NOT hidden via [hidden] — this is the greedy spacer that
+	 * pins the masthead to the right edge, so it must stay laid out even when
+	 * it holds no cards (recent pref off, or an empty session store). The
+	 * cards themselves are added/removed by refreshRecent; an empty container
+	 * is simply blank space. */
 	display: flex;
-	flex-direction: column;
-	align-items: flex-end;
-	gap: 0;
-	line-height: 1;
-	flex: 0 0 auto;
+	align-items: center;
+	gap: var(--ntt-gap, 10px);
+	overflow: hidden;
+	flex: 1 1 0;
+	min-width: 0;
 }
-#ntt-clock-time {
-	font-size: 15px;
-	font-weight: 500;
-	color: var(--ntt-ink);
-	letter-spacing: -0.012em;
-	font-variant-numeric: tabular-nums;
-}
-#ntt-clock-date {
-	font-size: 10.5px;
-	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
-	margin-top: 2px;
-}
+/* Buttons live inside the masthead now — a transparent sub-group, no box of
+ * their own. */
 #ntt-titlebar-buttons {
 	display: flex;
+	align-items: center;
 	gap: 2px;
 	flex: 0 0 auto;
 }
@@ -744,38 +759,12 @@ input[type="button"] {
 	text-shadow: 0 0 3px var(--contrast-transp), 0 0 5px var(--contrast-transp);
 	--shadow-opaque: 0 0 3px var(--contrast-opaque), 0 0 5px var(--contrast-opaque);
 }
-/* RECENT TABS */
-#newtab-recent-outer,
-#newtab-undo-container,
-#options-toggle {
-	margin-top: -1px;
-	margin-bottom: 3px;
-}
-:root[spacing="medium"] #newtab-margin-top:is(.medium, .large) :is(#newtab-recent-outer, #newtab-undo-container, #options-toggle) {
-	margin-top: 0;
-	margin-bottom: 8px;
-}
-:root[spacing="large"] #newtab-margin-top:is(.medium, .large) :is(#newtab-recent-outer, #newtab-undo-container, #options-toggle) {
-	margin-top: 0;
-	margin-bottom: 18px;
-}
-
-#newtab-recent-outer {
-	flex: 1;
-	min-width: 0;
-	overflow: hidden;
-}
-#newtab-recent {
-	margin-bottom: var(--ntt-gap, 10px);
-}
-#newtab-recent-strip {
-	display: flex;
-	gap: var(--ntt-gap, 10px);
-	overflow: hidden;
-}
+/* RECENT TABS — cards are titlebar slots; width tracks the JS-computed slot. */
 .ntt-recent-card {
-	flex: 0 0 auto;
-	width: 186px;
+	flex: 0 0 var(--ntt-slot-w, 186px);
+	width: var(--ntt-slot-w, 186px);
+	height: 38px;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	gap: 9px;
@@ -841,14 +830,16 @@ input[type="button"] {
 	font-family: var(--ntt-font-mono);
 	flex: 0 0 auto;
 }
-/* UNDO */
+/* UNDO — lives in the status bar (centre slot) and only shows after a tile
+ * is removed; otherwise collapses so the hints/summary keep their ends. */
 #newtab-undo-container {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-inline-start: 1em;
-	line-height: 28px;
-	color: var(--fore-opaque);
+	gap: 4px;
+	color: var(--ntt-mute);
+	font-family: var(--ntt-font-mono);
+	font-size: 10.5px;
 	transition: opacity 200ms, display 0s 200ms;
 }
 #newtab-undo-container[undo-disabled] {
@@ -1152,6 +1143,15 @@ svg {
 	font-family: var(--ntt-font-ui);
 	color: #fff;
 	box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+/* Captured favicons are dropped in as <img>; pin them to the same square
+ * footprint as the letter-glyph fallback so they don't render at the
+ * source image's natural (varying) pixel size. */
+.ntt-favicon img {
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
+	object-fit: contain;
 }
 .newtab-title {
 	flex: 1;

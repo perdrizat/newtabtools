@@ -186,30 +186,19 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		});
 	}, 60_000);
 
-	it('regression: toggling titleBarWordmark actually hides #ntt-wordmark (CSS [hidden] override)', async () => {
-		// `#ntt-wordmark { display: flex }` (ID selector) outranks the UA
-		// `[hidden] { display: none }` rule. Without the explicit override
-		// in newTab.css the toggle flipped the pref but the wordmark stayed
-		// visible.
-		try {
-			// Baseline: wordmark visible at default.
-			const visibleBefore = await page.evaluate(() => {
-				const el = document.getElementById('ntt-wordmark') as HTMLElement;
-				return el.offsetWidth > 0;
-			});
-			expect(visibleBefore).toBe(true);
-
-			await page.evaluate(() => { (window as any).Prefs.titleBarWordmark = false; });
-			await new Promise(r => setTimeout(r, 400));
-
-			const visibleAfter = await page.evaluate(() => {
-				const el = document.getElementById('ntt-wordmark') as HTMLElement;
-				return el.offsetWidth > 0;
-			});
-			expect(visibleAfter).toBe(false);
-		} finally {
-			await page.evaluate(() => { (window as any).Prefs.titleBarWordmark = true; });
-		}
+	it('the brand wordmark is always shown inside the masthead (NTT-logo toggle removed)', async () => {
+		// The titleBarWordmark toggle was removed; the wordmark now lives
+		// permanently in the right-end masthead box.
+		const result = await page.evaluate(() => {
+			const mast = document.getElementById('ntt-masthead');
+			const wm = document.getElementById('ntt-wordmark') as HTMLElement;
+			return {
+				inMasthead: !!(mast && mast.querySelector('#ntt-wordmark')),
+				visible: !!wm && wm.offsetWidth > 0,
+			};
+		});
+		expect(result.inMasthead).toBe(true);
+		expect(result.visible).toBe(true);
 	}, 30_000);
 
 	it('regression: clicking the toggle row label flips the pref (delegation, not direct button click)', async () => {
@@ -221,25 +210,25 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		await new Promise(r => setTimeout(r, 200));
 
 		try {
-			const before = await page.evaluate(() => (window as any).Prefs.titleBarClock);
+			const before = await page.evaluate(() => (window as any).Prefs.titleBarStatus);
 			await page.evaluate(() => {
-				const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarClock"] .ntt-toggle-label') as HTMLElement;
+				const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarStatus"] .ntt-toggle-label') as HTMLElement;
 				label.click();
 			});
 			await new Promise(r => setTimeout(r, 400));
 
-			const after = await page.evaluate(() => (window as any).Prefs.titleBarClock);
+			const after = await page.evaluate(() => (window as any).Prefs.titleBarStatus);
 			expect(after).toBe(!before);
 
-			// And #ntt-clock should actually be hidden / shown to match.
-			const clockVisible = await page.evaluate(() => {
-				const el = document.getElementById('ntt-clock') as HTMLElement;
+			// And #ntt-statusbar should actually be hidden / shown to match.
+			const statusVisible = await page.evaluate(() => {
+				const el = document.getElementById('ntt-statusbar') as HTMLElement;
 				return el.offsetWidth > 0;
 			});
-			expect(clockVisible).toBe(after);
+			expect(statusVisible).toBe(after);
 		} finally {
 			await page.evaluate(() => {
-				(window as any).Prefs.titleBarClock = true;
+				(window as any).Prefs.titleBarStatus = true;
 				(window as any).newTabTools.closeDrawer();
 			});
 		}

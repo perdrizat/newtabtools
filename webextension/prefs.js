@@ -15,9 +15,7 @@ var Prefs = {
 	_titleSize: 'small',
 	_tileAspect: 'fill',
 	_statType: 'none',
-	_titleBarWordmark: true,
 	_titleBarSearch: false,
-	_titleBarClock: true,
 	_titleBarStatus: true,
 	_actionIconSize: 'medium',
 	_tileActions: true,
@@ -44,9 +42,7 @@ var Prefs = {
 			'titleSize',
 			'tileAspect',
 			'statType',
-			'titleBarWordmark',
 			'titleBarSearch',
-			'titleBarClock',
 			'titleBarStatus',
 			'actionIconSize',
 			'tileActions',
@@ -106,14 +102,8 @@ var Prefs = {
 		if (['none', 'visits', 'last', 'trend', 'rank', 'fresh'].includes(prefs.statType)) {
 			this._statType = prefs.statType;
 		}
-		if ('titleBarWordmark' in prefs) {
-			this._titleBarWordmark = prefs.titleBarWordmark !== false;
-		}
 		if ('titleBarSearch' in prefs) {
 			this._titleBarSearch = prefs.titleBarSearch !== false;
-		}
-		if ('titleBarClock' in prefs) {
-			this._titleBarClock = prefs.titleBarClock !== false;
 		}
 		if ('titleBarStatus' in prefs) {
 			this._titleBarStatus = prefs.titleBarStatus !== false;

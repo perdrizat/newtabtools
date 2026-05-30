@@ -54,7 +54,7 @@ describe('Theme pref accepts the "contrast" enum value (Phase 3-2)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading prefs.parsePrefs for behavioral test
 		const source = fs.readFileSync(PREFS_PATH, 'utf8');
 		const parsePrefsFn = extractMethod(source, 'parsePrefs');
-		const code = `var _prefsHarness = { _theme: 'system', _opacity: 80, _rows: 3, _columns: 3, _margin: ['small','small','small','small'], _spacing: 'small', _titleSize: 'small', _tileAspect: 'fill', _statType: 'none', _titleBarWordmark: true, _titleBarSearch: false, _titleBarClock: true, _titleBarStatus: true, _actionIconSize: 'medium', _tileActions: true, _tileRadius: 'medium', _locked: false, _history: true, _recent: true, _thumbnailSize: 600, _backgroundUrl: '', _version: -1, ${parsePrefsFn} };`;
+		const code = `var _prefsHarness = { _theme: 'system', _opacity: 80, _rows: 3, _columns: 3, _margin: ['small','small','small','small'], _spacing: 'small', _titleSize: 'small', _tileAspect: 'fill', _statType: 'none', _titleBarSearch: false, _titleBarStatus: true, _actionIconSize: 'medium', _tileActions: true, _tileRadius: 'medium', _locked: false, _history: true, _recent: true, _thumbnailSize: 600, _backgroundUrl: '', _version: -1, ${parsePrefsFn} };`;
 		// Stub Blocked / Filters that parsePrefs references.
 		(globalThis as any).Blocked = { _list: [] };
 		(globalThis as any).Filters = { _list: {} };
@@ -178,8 +178,7 @@ describe('Drawer Appearance tab — updateUI reflects active theme card (Phase 3
 			tileRadius: 'medium', tileActions: true,
 			statType: 'none', actionIconSize: 'medium',
 			history: true, recent: true,
-			titleBarWordmark: true, titleBarSearch: false,
-			titleBarClock: true, titleBarStatus: true,
+			titleBarSearch: false, titleBarStatus: true,
 		};
 	});
 

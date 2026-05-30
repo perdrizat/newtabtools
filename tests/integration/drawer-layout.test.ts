@@ -71,15 +71,8 @@ const PANEL_HTML = `
 			</div>
 		</div>
 		<div class="ntt-form-group">
-			<div class="ntt-segmented" role="radiogroup" data-pref="recent">
-				<button type="button" role="radio" data-value="false">Off</button>
-				<button type="button" role="radio" data-value="true">Top</button>
-			</div>
-		</div>
-		<div class="ntt-form-group">
-			<div class="ntt-toggle-row" data-pref="titleBarWordmark"><span class="ntt-toggle-label">Wordmark</span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarWordmark" aria-checked="true"></button></div>
+			<div class="ntt-toggle-row" data-pref="recent"><span class="ntt-toggle-label">Recently closed</span><button type="button" role="switch" class="ntt-toggle" data-pref="recent" aria-checked="true"></button></div>
 			<div class="ntt-toggle-row" data-pref="titleBarSearch"><span class="ntt-toggle-label">Search <span class="ntt-toggle-kbd">/</span></span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarSearch" aria-checked="false"></button></div>
-			<div class="ntt-toggle-row" data-pref="titleBarClock"><span class="ntt-toggle-label">Clock</span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarClock" aria-checked="true"></button></div>
 			<div class="ntt-toggle-row" data-pref="titleBarStatus"><span class="ntt-toggle-label">Status <span class="ntt-toggle-kbd">?</span></span><button type="button" role="switch" class="ntt-toggle" data-pref="titleBarStatus" aria-checked="true"></button></div>
 		</div>
 		<div class="ntt-form-group">
@@ -126,8 +119,8 @@ describe('Drawer Layout tab — drawerOnClick (Phase 3-1)', () => {
 			spacing: 'small', margin: ['small', 'small', 'small', 'small'],
 			tileRadius: 'medium',
 			recent: true, history: true,
-			titleBarWordmark: true, titleBarSearch: false,
-			titleBarClock: true, titleBarStatus: true,
+			titleBarSearch: false,
+			titleBarStatus: true,
 			titleSize: 'small', tileActions: true,
 			statType: 'none', actionIconSize: 'medium',
 		};
@@ -145,9 +138,11 @@ describe('Drawer Layout tab — drawerOnClick (Phase 3-1)', () => {
 		expect((globalThis as any).Prefs.statType).toBe('visits');
 	});
 
-	it('clicking a recent segmented button writes the boolean', () => {
-		const btn = document.querySelector('.ntt-segmented[data-pref="recent"] [data-value="false"]') as HTMLElement;
-		harness.drawerOnClick({ target: btn });
+	it('clicking the recent toggle flips the boolean pref', () => {
+		// recent starts true (Prefs.recent = true in beforeEach); the toggle now
+		// lives in the Title Bar group as a plain on/off switch.
+		const toggle = document.querySelector('.ntt-toggle[data-pref="recent"]') as HTMLElement;
+		harness.drawerOnClick({ target: toggle });
 		expect((globalThis as any).Prefs.recent).toBe(false);
 	});
 
@@ -178,9 +173,9 @@ describe('Drawer Layout tab — drawerOnClick (Phase 3-1)', () => {
 		// We started by only handling clicks where target == .ntt-toggle.
 		// In practice users click the row label, so the handler must delegate
 		// via `.closest(".ntt-toggle-row[data-pref]")`.
-		const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarWordmark"] .ntt-toggle-label') as HTMLElement;
+		const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarStatus"] .ntt-toggle-label') as HTMLElement;
 		harness.drawerOnClick({ target: label });
-		expect((globalThis as any).Prefs.titleBarWordmark).toBe(false);
+		expect((globalThis as any).Prefs.titleBarStatus).toBe(false);
 	});
 
 	it('regression: clicking the kbd hint inside a toggle row label still flips the pref', () => {
@@ -373,8 +368,8 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 			tileRadius: 'small', tileActions: false,
 			statType: 'visits', actionIconSize: 'large',
 			history: true, recent: false,
-			titleBarWordmark: false, titleBarSearch: true,
-			titleBarClock: true, titleBarStatus: true,
+			titleBarSearch: true,
+			titleBarStatus: false,
 		};
 		document.documentElement.removeAttribute('drawer-open');
 		document.documentElement.removeAttribute('locked');
@@ -401,8 +396,8 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 	});
 
 	it('reflects titleBar toggle states via aria-checked', () => {
-		harness.updateUI(['titleBarWordmark', 'titleBarSearch']);
-		expect((document.querySelector('.ntt-toggle[data-pref="titleBarWordmark"]') as HTMLElement).getAttribute('aria-checked')).toBe('false');
+		harness.updateUI(['titleBarStatus', 'titleBarSearch']);
+		expect((document.querySelector('.ntt-toggle[data-pref="titleBarStatus"]') as HTMLElement).getAttribute('aria-checked')).toBe('false');
 		expect((document.querySelector('.ntt-toggle[data-pref="titleBarSearch"]') as HTMLElement).getAttribute('aria-checked')).toBe('true');
 	});
 
@@ -415,12 +410,14 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 		expect((document.querySelector('.ntt-toggle[data-pref="titleSize"]') as HTMLElement).getAttribute('aria-checked')).toBe('true');
 	});
 
-	it('reflects recent boolean on the segmented control', () => {
+	it('reflects recent boolean on the toggle switch', () => {
+		(globalThis as any).Prefs.recent = true;
 		harness.updateUI(['recent']);
-		const off = document.querySelector('.ntt-segmented[data-pref="recent"] [data-value="false"]') as HTMLElement;
-		const on = document.querySelector('.ntt-segmented[data-pref="recent"] [data-value="true"]') as HTMLElement;
-		expect(off.getAttribute('aria-checked')).toBe('true');
-		expect(on.getAttribute('aria-checked')).toBe('false');
+		const toggle = document.querySelector('.ntt-toggle[data-pref="recent"]') as HTMLElement;
+		expect(toggle.getAttribute('aria-checked')).toBe('true');
+		(globalThis as any).Prefs.recent = false;
+		harness.updateUI(['recent']);
+		expect(toggle.getAttribute('aria-checked')).toBe('false');
 	});
 
 	it('reflects statType and actionIconSize on the segmented controls', () => {

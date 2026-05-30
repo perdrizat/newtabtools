@@ -156,14 +156,8 @@
 	"options_spacing_radius": {
 		"message": "Corner radius"
 	},
-	"options_recent_header": {
+	"options_titlebar_recent": {
 		"message": "Recently closed"
-	},
-	"options_recent_off": {
-		"message": "Off"
-	},
-	"options_recent_top": {
-		"message": "Top"
 	},
 	"options_titlebar_header": {
 		"message": "Title bar"
@@ -171,14 +165,8 @@
 	"options_titlebar_help": {
 		"message": "show / hide each"
 	},
-	"options_titlebar_wordmark": {
-		"message": "NTT Logo"
-	},
 	"options_titlebar_search": {
 		"message": "Search"
-	},
-	"options_titlebar_clock": {
-		"message": "Clock + date"
 	},
 	"options_titlebar_status": {
 		"message": "Status bar (bottom)"

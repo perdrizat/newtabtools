@@ -3,19 +3,17 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Regression tests for titlebar layout invariants. The recent restructure
- * moved the cogwheel + lock-toggle into `#ntt-titlebar-buttons` and
- * introduced a set of rules that must hold for the alignment to behave:
+ * Regression tests for titlebar layout invariants. The inline-recent redesign
+ * lays the titlebar out left→right as: [recent cards] [search] [masthead].
  *
- *   1. `#ntt-clock` must own `margin-left: auto` so it (and the buttons
- *      group after it) always stick to the right edge, regardless of which
- *      siblings are visible.
- *   2. When the clock is hidden, the buttons group must take over the
- *      auto-margin — otherwise the cogwheel + lock-toggle collapse left.
- *   3. When the wordmark is hidden, the search bar must snap to the left
- *      edge instead of trying to centre itself against nothing.
- *   4. The titlebar must NOT carry a bottom border anymore (separator was
- *      dropped in favour of just `margin-bottom: var(--ntt-gap)`).
+ *   1. the recent cards live in #ntt-titlebar-recent, a greedy `flex: 1 1 0`
+ *      container that absorbs all slack and pins the masthead to the right.
+ *   2. the search box is a fixed-width box (decoupled from the card slot so the
+ *      card-count measurement can't feed back into itself).
+ *   3. the masthead (#ntt-masthead) is a content-width box holding the wordmark
+ *      plus the lock + cogwheel buttons.
+ *   4. slots are separated by the tile gap (`gap: var(--ntt-gap)`).
+ *   5. the titlebar carries no bottom border (margin-bottom only).
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -34,27 +32,55 @@ describe('Titlebar layout invariants — CSS rules', () => {
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});
 
-	it('clock owns the right-side auto-margin (`#ntt-clock { margin-left: auto }`)', () => {
-		expect(css).toMatch(/#ntt-titlebar\s*>\s*#ntt-clock\s*\{[^}]*margin-left:\s*auto/);
+	// Anchor to start-of-line so we match the standalone rule, not the
+	// dark-mode `:root[theme="dark"] #ntt-…` override that shares the selector.
+	it('the logo + buttons live in one content-width masthead box', () => {
+		// The two former half-cells are combined into #ntt-masthead, which
+		// hugs its content (flex 0 0 auto) rather than occupying fixed slots.
+		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m);
+		expect(masthead).not.toBeNull();
+		expect(masthead![0]).toMatch(/flex:\s*0\s+0\s+auto/);
 	});
 
-	it('buttons group takes over the auto-margin when the clock is hidden (sibling rule)', () => {
-		// `#ntt-clock[hidden] + #ntt-titlebar-buttons` selects the buttons
-		// group only when clock is hidden — keeps cogwheel/lock-toggle
-		// right-aligned even with no clock between them and the wordmark.
-		expect(css).toMatch(/#ntt-titlebar\s*>\s*#ntt-clock\[hidden\]\s*\+\s*#ntt-titlebar-buttons\s*\{[^}]*margin-left:\s*auto/);
+	it('search is a fixed-width box, decoupled from the card slot to avoid measurement feedback', () => {
+		const search = css.match(/#ntt-search\s*\{[^}]*\}/s);
+		expect(search![0]).toMatch(/flex:\s*0 0 186px/);
+		expect(search![0]).not.toMatch(/var\(--ntt-search-w/);
 	});
 
-	it('search snaps to the left when the wordmark is hidden (via :has)', () => {
-		// `margin: 0 auto` on search centres it when the wordmark is
-		// visible. With the wordmark hidden there's nothing to centre
-		// against — the rule must reset to `margin: 0` so search sits at
-		// the left edge.
-		expect(css).toMatch(/#ntt-titlebar:has\(#ntt-wordmark\[hidden\]\)\s+#ntt-search\s*\{[^}]*margin:\s*0/);
+	it('recent cards live in #ntt-titlebar-recent between search and buttons', () => {
+		expect(css).toMatch(/#ntt-titlebar-recent\s*\{/);
 	});
 
-	it('search has the centring auto-margin by default', () => {
-		expect(css).toMatch(/#ntt-search\s*\{[^}]*margin:\s*0\s+auto/);
+	it('masthead is pinned to the right edge by the greedy recent container', () => {
+		// Keeps the brand + controls box at the right even when the row
+		// under-fills (search hidden by default, or fewer recent tabs). It is
+		// pinned right by the greedy recent-cards container, not an auto-margin.
+		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m);
+		expect(masthead![0]).not.toMatch(/margin-left:\s*auto/);
+		const recent = css.match(/#ntt-titlebar-recent\s*\{[^}]*\}/s);
+		expect(recent![0]).toMatch(/flex:\s*1 1 0/);
+	});
+
+	it('masthead carries the recent-card box visuals (surface bg + line shadow)', () => {
+		// The combined box reads as the same boxes as the recently-closed
+		// cards / search bar: surface fill, rounded, subtle 1px line shadow.
+		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m)![0];
+		expect(masthead).toMatch(/background:\s*var\(--ntt-surface/);
+		expect(masthead).toMatch(/box-shadow:[^;]*var\(--ntt-line-soft/);
+		expect(masthead).toMatch(/border-radius:/);
+		expect(masthead).toMatch(/height:\s*38px/);
+	});
+
+	it('Powertools (wordmark line 2) uses the recent-card URL font (small mono mute)', () => {
+		const name2 = css.match(/^#ntt-wordmark-name2\s*\{[^}]*\}/m)![0];
+		expect(name2).toMatch(/font-size:\s*10px/);
+		expect(name2).toMatch(/font-family:\s*var\(--ntt-font-mono/);
+		expect(name2).toMatch(/color:\s*var\(--ntt-mute/);
+	});
+
+	it('titlebar separates slots by the tile gap (`gap: var(--ntt-gap)`)', () => {
+		expect(css).toMatch(/^#ntt-titlebar\s*\{[^}]*gap:\s*var\(--ntt-gap/m);
 	});
 
 	it('the titlebar does NOT carry a `border-bottom` (separator dropped)', () => {

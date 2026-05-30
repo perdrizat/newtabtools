@@ -15,41 +15,27 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	<div id="newtab-scrollbox" tabindex="0">
 		<div id="newtab-vertical-margin">
 			<div id="ntt-titlebar">
-				<div id="ntt-wordmark">
-					<div id="ntt-wordmark-icon">N</div>
-					<div id="ntt-wordmark-text">
-						<span id="ntt-wordmark-name">New Tab Tools</span>
-						<span id="ntt-wordmark-version">v2.0 · powertools</span>
-					</div>
-				</div>
-				<div class="ntt-titlebar-divider"></div>
+				<div id="ntt-titlebar-recent" hidden=""></div>
 				<div id="ntt-search">
 					<input id="ntt-search-input" type="text" placeholder="Search the web, jump to a tile, or paste a URL…" autocomplete="off" />
 					<span class="ntt-search-kbd">/</span>
 				</div>
-				<div id="ntt-clock">
-					<span id="ntt-clock-time"></span>
-					<span id="ntt-clock-date"></span>
-				</div>
-				<div id="ntt-titlebar-buttons">
-					<button id="ntt-theme-toggle" type="button"></button>
-					<input id="locked-toggle" type="button" data-title="options_locked" />
-					<input id="options-toggle" type="button" data-title="options_button" />
+				<div id="ntt-masthead">
+					<div id="ntt-wordmark">
+						<div id="ntt-wordmark-icon">N</div>
+						<div id="ntt-wordmark-text">
+							<span id="ntt-wordmark-name">New Tab</span>
+							<span id="ntt-wordmark-name2">Powertools</span>
+						</div>
+					</div>
+					<div id="ntt-titlebar-buttons">
+						<input id="locked-toggle" type="button" data-title="options_locked" />
+						<input id="options-toggle" type="button" data-title="options_button" />
+					</div>
 				</div>
 			</div>
 			<div id="newtab-margin-top">
 				<div class="newtab-side-margin newtab-margin-left"></div>
-				<div id="newtab-recent-outer">
-					<div id="newtab-recent" hidden="">
-						<div id="newtab-recent-strip"></div>
-					</div>
-				</div>
-				<div id="newtab-undo-container" undo-disabled="true">
-					<label id="newtab-undo-label" data-message="newtab_undo_removedLabel"></label>
-					<button id="newtab-undo-button" tabindex="-1" data-message="newtab_undo_undoButton"></button>
-					<button id="newtab-undo-restore-button" tabindex="-1" data-message="newtab_undo_restoreButton"></button>
-					<button id="newtab-undo-close-button" class="close-button" tabindex="-1" data-title="newtab_undo_closeTooltip"></button>
-				</div>
 				<div class="newtab-side-margin newtab-margin-right"></div>
 			</div>
 			<div id="newtab-horizontal-margin">
@@ -70,6 +56,12 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">c</span><span>config</span></span>
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">⌘ K</span><span>commands</span></span>
 					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">?</span><span>all keys</span></span>
+				</div>
+				<div id="newtab-undo-container" undo-disabled="true">
+					<label id="newtab-undo-label" data-message="newtab_undo_removedLabel"></label>
+					<button id="newtab-undo-button" tabindex="-1" data-message="newtab_undo_undoButton"></button>
+					<button id="newtab-undo-restore-button" tabindex="-1" data-message="newtab_undo_restoreButton"></button>
+					<button id="newtab-undo-close-button" class="close-button" tabindex="-1" data-title="newtab_undo_closeTooltip"></button>
 				</div>
 				<div id="ntt-statusbar-summary">
 					<span id="ntt-statusbar-tilecount"></span>
@@ -297,17 +289,13 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<span class="ntt-form-group-label" data-message="options_titlebar_header"></span>
 						<span class="ntt-form-group-help" data-message="options_titlebar_help"></span>
 					</div>
-					<div class="ntt-toggle-row" data-pref="titleBarWordmark">
-						<span class="ntt-toggle-label" data-message="options_titlebar_wordmark"></span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarWordmark" aria-checked="true"></button>
+					<div class="ntt-toggle-row" data-pref="recent">
+						<span class="ntt-toggle-label"><span data-message="options_titlebar_recent"></span></span>
+						<button type="button" role="switch" class="ntt-toggle" data-pref="recent" aria-checked="true"></button>
 					</div>
 					<div class="ntt-toggle-row" data-pref="titleBarSearch">
 						<span class="ntt-toggle-label"><span data-message="options_titlebar_search"></span> <span class="ntt-toggle-kbd">/</span></span>
 						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarSearch" aria-checked="false"></button>
-					</div>
-					<div class="ntt-toggle-row" data-pref="titleBarClock">
-						<span class="ntt-toggle-label" data-message="options_titlebar_clock"></span>
-						<button type="button" role="switch" class="ntt-toggle" data-pref="titleBarClock" aria-checked="true"></button>
 					</div>
 					<div class="ntt-toggle-row" data-pref="titleBarStatus">
 						<span class="ntt-toggle-label"><span data-message="options_titlebar_status"></span> <span class="ntt-toggle-kbd">?</span></span>
@@ -331,15 +319,6 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				</div>
 			</section>
 			<section data-drawer-panel="advanced" hidden="">
-				<div class="ntt-form-group" data-group="recent">
-					<div class="ntt-form-group-head">
-						<span class="ntt-form-group-label" data-message="options_recent_header"></span>
-					</div>
-					<div class="ntt-segmented" role="radiogroup" data-pref="recent">
-						<button type="button" role="radio" data-value="false" data-message="options_recent_off"></button>
-						<button type="button" role="radio" data-value="true" data-message="options_recent_top"></button>
-					</div>
-				</div>
 				<div class="ntt-form-group">
 					<label class="ntt-checkbox-row">
 						<input type="checkbox" name="history" data-label="options_historytiles" />

@@ -7,8 +7,28 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-	navigateAndConfirm,
 } from './_helpers.ts';
+
+/**
+ * E2E for the recently-closed-tabs row in the titlebar.
+ *
+ * Both cases stub `chrome.sessions.getRecentlyClosed` so the rendered cards are
+ * deterministic. In the full suite the REAL recently-closed list is dominated
+ * by the many `moz-extension://` new-tab pages prior test files open (which
+ * `refreshRecent` skips) plus other entries competing against the width-derived
+ * card cap, so a specific seeded URL is not reliably among the rendered cards —
+ * and actually closing a real tab adds network/contention flakiness without
+ * adding assurance (we never assert against the real entry). Firefox's session
+ * plumbing is platform behaviour we trust; here we assert NTT's render / link /
+ * toggle behaviour against a known stubbed entry. Every predicate nudges
+ * `refreshRecent` so the assertion never races the container's layout settle or
+ * a pending requestAnimationFrame re-flow.
+ */
+
+const STUB_ITEMS = `[
+	{ tab: { url: 'https://recent-a.example/', title: 'Recent A', sessionId: 'ra', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) } },
+	{ tab: { url: 'https://recent-b.example/', title: 'Recent B', sessionId: 'rb', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) } }
+]`;
 
 describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 	let browser: Browser;
@@ -24,37 +44,35 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 		}
 	});
 
-	it('recently-closed list is visible and close a tab to populate it', async () => {
-		// First, open a tab to a known URL and close it to seed the session list.
-		const seedPage = await browser.newPage();
-		await navigateAndConfirm(seedPage, 'https://example.com/', { timeout: 30_000 });
-		await seedPage.close();
-
-		// Now open the new tab page — recent list should show the closed tab.
+	it('renders a recently-closed tab as a card linking to it', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			// Enable Prefs.recent if not already (it's true by default).
-			// Wait for the recently-closed row to appear with at least one item.
-			const hasRecentItem = await waitForCondition(
+			await page.evaluate(`(() => {
+				const items = ${STUB_ITEMS};
+				chrome.sessions.getRecentlyClosed = (cb) => cb(items);
+			})()`);
+
+			await waitForCondition(
 				page,
 				() => {
-					const list = document.getElementById('newtab-recent');
-					if (!list || list.hidden) {return false;}
+					const list = document.getElementById('ntt-titlebar-recent');
+					if (!list) { return false; }
+					(window as any).Prefs.recent = true;
+					(window as any).newTabTools.refreshRecent();
 					return list.querySelectorAll('a.ntt-recent-card').length > 0;
 				},
 				[],
 				{ timeout: 10_000, message: 'Recently-closed list did not show any items' }
 			);
-			expect(hasRecentItem).toBeTruthy();
 
-			// Verify the recently-closed row contains a link to the closed tab.
+			// The rendered card links to the closed tab.
 			const recentUrls = await page.evaluate(() => {
-				const list = document.getElementById('newtab-recent');
+				const list = document.getElementById('ntt-titlebar-recent');
 				return [...list!.querySelectorAll('a.ntt-recent-card')].map(a => (a as HTMLAnchorElement).href);
 			});
-			expect(recentUrls.some(u => u.includes('example.com'))).toBe(true);
+			expect(recentUrls.some(u => u.includes('recent-a.example'))).toBe(true);
 		} catch (e) {
 			await captureFailure(page, 'recent-tabs');
 			throw e;
@@ -63,23 +81,62 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 		}
 	}, 90_000);
 
-	it('recently-closed row can be hidden via Prefs.recent toggle', async () => {
+	it('Prefs.recent toggle empties / repopulates the row (container stays laid out)', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			// Set Prefs.recent = false (the drawer segmented button is the new
-			// UI; here we drive the pref directly).
-			await page.evaluate(() => { (window as any).Prefs.recent = false; });
-			await new Promise(r => setTimeout(r, 500));
+			await page.evaluate(`(() => {
+				const items = ${STUB_ITEMS};
+				chrome.sessions.getRecentlyClosed = (cb) => cb(items);
+			})()`);
 
-			const listHidden = await page.evaluate(() => {
-				return document.getElementById('newtab-recent')!.hidden;
-			});
-			expect(listHidden).toBe(true);
+			// Recent ON → at least one card renders.
+			await waitForCondition(
+				page,
+				() => {
+					(window as any).Prefs.recent = true;
+					(window as any).newTabTools.refreshRecent();
+					return document.querySelectorAll('#ntt-titlebar-recent .ntt-recent-card').length > 0;
+				},
+				[],
+				{ timeout: 10_000, message: 'cards did not render with recent ON' }
+			);
 
-			// Re-enable.
-			await page.evaluate(() => { (window as any).Prefs.recent = true; });
+			// Recent OFF → no cards, but the container stays laid out: it is the
+			// greedy spacer that pins the masthead to the right edge, so it must
+			// NOT be display:none'd (the reflow redesign deliberately dropped the
+			// old `[hidden]` behaviour).
+			await waitForCondition(
+				page,
+				() => {
+					(window as any).Prefs.recent = false;
+					(window as any).newTabTools.refreshRecent();
+					return document.querySelectorAll('#ntt-titlebar-recent .ntt-recent-card').length === 0;
+				},
+				[],
+				{ timeout: 10_000, message: 'cards did not clear with recent OFF' }
+			);
+			const offDisplay = await page.evaluate(
+				() => getComputedStyle(document.getElementById('ntt-titlebar-recent')!).display
+			);
+			expect(offDisplay).not.toBe('none');
+
+			// Re-enable → cards come back.
+			await waitForCondition(
+				page,
+				() => {
+					(window as any).Prefs.recent = true;
+					(window as any).newTabTools.refreshRecent();
+					return document.querySelectorAll('#ntt-titlebar-recent .ntt-recent-card').length > 0;
+				},
+				[],
+				{ timeout: 10_000, message: 'cards did not return when recent re-enabled' }
+			);
+			const reonCards = await page.evaluate(
+				() => document.querySelectorAll('#ntt-titlebar-recent .ntt-recent-card').length
+			);
+			expect(reonCards).toBeGreaterThan(0);
 		} catch (e) {
 			await captureFailure(page, 'recent-tabs-toggle');
 			throw e;

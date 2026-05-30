@@ -9,7 +9,7 @@ import {
 	resetTestState,
 } from './_helpers.ts';
 
-describe('E2E: Titlebar', () => {
+describe('E2E: Titlebar (inline-recent slot layout)', () => {
 	let browser: Browser;
 
 	beforeAll(async () => {
@@ -23,7 +23,7 @@ describe('E2E: Titlebar', () => {
 		}
 	});
 
-	it('renders #ntt-titlebar with all child elements', async () => {
+	it('renders #ntt-titlebar with wordmark, search, recent container, and buttons', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -33,15 +33,19 @@ describe('E2E: Titlebar', () => {
 				() => {
 					const bar = document.getElementById('ntt-titlebar');
 					if (!bar) { return false; }
-					const wordmark = !!document.getElementById('ntt-wordmark');
+					const mast = document.getElementById('ntt-masthead');
+					const wordmark = !!(mast && mast.querySelector('#ntt-wordmark'));
 					const search = !!document.getElementById('ntt-search');
-					const clock = !!document.getElementById('ntt-clock');
-					const buttons = !!document.getElementById('ntt-titlebar-buttons');
-					if (wordmark && search && clock && buttons) { return true; }
-					return JSON.stringify({ wordmark, search, clock, buttons });
+					const recent = !!document.getElementById('ntt-titlebar-recent');
+					const buttons = !!(mast && mast.querySelector('#ntt-titlebar-buttons'));
+					// Clock + theme toggle were removed in the inline-recent redesign.
+					const noClock = !document.getElementById('ntt-clock');
+					const noTheme = !document.getElementById('ntt-theme-toggle');
+					if (wordmark && search && recent && buttons && noClock && noTheme) { return true; }
+					return JSON.stringify({ wordmark, search, recent, buttons, noClock, noTheme });
 				},
 				[],
-				{ timeout: 10_000, message: 'Titlebar elements not found' }
+				{ timeout: 10_000, message: 'Titlebar elements not as expected' }
 			);
 			expect(result).toBe(true);
 		} catch (e) {
@@ -52,10 +56,7 @@ describe('E2E: Titlebar', () => {
 		}
 	});
 
-	it('titlebar has no bottom border (separator dropped — tile-gap spacing only)', async () => {
-		// Phase 3 reshuffle: the underline between titlebar and the grid
-		// was dropped; vertical separation comes from `margin-bottom:
-		// var(--ntt-gap)` instead.
+	it('titlebar has no bottom border (tile-gap spacing only)', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -73,25 +74,30 @@ describe('E2E: Titlebar', () => {
 		}
 	});
 
-	it('clock shows current time in HH:MM format', async () => {
+	it('_layoutTitlebar sets the slot-width custom property', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
 		try {
-			const time = await waitForCondition(
+			// The redesign shrinks the recent cards to fill the greedy container
+			// via `--ntt-slot-w`; the search box is a fixed-width box (no
+			// `--ntt-search-w` var any more).
+			const slot = await waitForCondition(
 				page,
 				() => {
-					const el = document.getElementById('ntt-clock-time');
-					if (!el) { return false; }
-					const text = el.textContent || '';
-					return /^\d{2}:\d{2}$/.test(text) ? text : false;
+					const bar = document.getElementById('ntt-titlebar') as HTMLElement;
+					if (!bar) { return false; }
+					const s = bar.style.getPropertyValue('--ntt-slot-w');
+					return s ? s : false;
 				},
 				[],
-				{ timeout: 10_000, message: 'Clock time not in HH:MM format' }
-			);
-			expect(time).toMatch(/^\d{2}:\d{2}$/);
+				{ timeout: 10_000, message: 'Slot-width custom property not set' }
+			) as string;
+			expect(slot).toMatch(/^\d+px$/);
+			// Cards never exceed the 186px default width.
+			expect(parseInt(slot)).toBeLessThanOrEqual(186);
 		} catch (e) {
-			await captureFailure(page, 'titlebar-clock');
+			await captureFailure(page, 'titlebar-slot-vars');
 			throw e;
 		} finally {
 			await page.close();
@@ -109,12 +115,14 @@ describe('E2E: Titlebar', () => {
 					const el = document.getElementById('ntt-wordmark');
 					if (!el) { return false; }
 					const t = el.textContent || '';
-					return t.includes('New Tab Tools') ? t : false;
+					// Two-line wordmark: "New Tab" / "Powertools".
+					return (t.includes('New Tab') && t.includes('Powertools')) ? t : false;
 				},
 				[],
 				{ timeout: 10_000, message: 'Wordmark text not found' }
 			);
-			expect(text).toContain('New Tab Tools');
+			expect(text).toContain('New Tab');
+			expect(text).toContain('Powertools');
 		} catch (e) {
 			await captureFailure(page, 'titlebar-wordmark');
 			throw e;
@@ -147,88 +155,38 @@ describe('E2E: Titlebar', () => {
 		}
 	});
 
-	it('theme toggle button exists with sun or moon icon', async () => {
-		const page = await openNewTab(browser);
-		await waitForGridReady(page);
-
-		try {
-			const hasSvg = await waitForCondition(
-				page,
-				() => {
-					const btn = document.getElementById('ntt-theme-toggle');
-					if (!btn) { return false; }
-					return !!btn.querySelector('svg');
-				},
-				[],
-				{ timeout: 10_000, message: 'Theme toggle SVG not found' }
-			);
-			expect(hasSvg).toBe(true);
-		} catch (e) {
-			await captureFailure(page, 'titlebar-theme-toggle');
-			throw e;
-		} finally {
-			await page.close();
-		}
-	});
-
-	// --- Regressions from the Phase 3 reshuffle ---
-
-	it('regression: cogwheel + lock-toggle stay at the right edge when the clock is hidden', async () => {
-		// `margin-left: auto` on #ntt-clock used to be the only way the
-		// right cluster reached the right edge. Hiding the clock collapsed
-		// the cogwheel + lock-toggle against the wordmark. The sibling
-		// rule `#ntt-clock[hidden] + #ntt-titlebar-buttons` now picks up
-		// the auto-margin in that case.
-		const page = await openNewTab(browser);
-		await waitForGridReady(page);
-		try {
-			const result = await page.evaluate(() => {
-				(window as any).Prefs.titleBarClock = false;
-				return new Promise<{ buttonsRight: number; titlebarRight: number }>(resolve => {
-					setTimeout(() => {
-						const tb = document.getElementById('ntt-titlebar') as HTMLElement;
-						const btns = document.getElementById('ntt-titlebar-buttons') as HTMLElement;
-						resolve({
-							buttonsRight: btns.getBoundingClientRect().right,
-							titlebarRight: tb.getBoundingClientRect().right,
-						});
-					}, 300);
-				});
-			});
-			// Buttons cluster's right edge sits close to the titlebar's
-			// right edge (allowing for ~30-60px of titlebar padding).
-			expect(result.titlebarRight - result.buttonsRight).toBeLessThan(70);
-		} catch (e) {
-			await captureFailure(page, 'titlebar-buttons-right');
-			throw e;
-		} finally {
-			await page.evaluate(() => { (window as any).Prefs.titleBarClock = true; });
-			await page.close();
-		}
-	}, 30_000);
-
-	it('regression: clock stays at the right edge with search hidden (default state)', async () => {
-		// Default profile: titleBarSearch=false. Clock has its own
-		// `margin-left: auto` and must reach the right edge with no
-		// search bar in between to soak up the space.
+	it('buttons cell (lock + cogwheel) sits at the right edge of the titlebar', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 		try {
 			const result = await page.evaluate(() => {
 				const tb = document.getElementById('ntt-titlebar') as HTMLElement;
-				const clock = document.getElementById('ntt-clock') as HTMLElement;
+				const mast = document.getElementById('ntt-masthead') as HTMLElement;
+				const recent = document.getElementById('ntt-titlebar-recent') as HTMLElement;
+				const cs = getComputedStyle(tb);
+				const padR = parseFloat(cs.paddingRight) || 0;
+				const rcs = recent ? getComputedStyle(recent) : null;
 				return {
-					clockRight: clock.getBoundingClientRect().right,
-					titlebarRight: tb.getBoundingClientRect().right,
-					searchHidden: (document.getElementById('ntt-search') as HTMLElement).hidden,
+					gap: tb.getBoundingClientRect().right - mast.getBoundingClientRect().right - padR,
+					hasWordmark: !!mast.querySelector('#ntt-wordmark'),
+					buttonCount: mast.querySelectorAll('#ntt-titlebar-buttons input, #ntt-titlebar-buttons button').length,
+					tbWidth: Math.round(tb.getBoundingClientRect().width),
+					recentWidth: recent ? Math.round(recent.getBoundingClientRect().width) : -1,
+					mastWidth: Math.round(mast.getBoundingClientRect().width),
+					recentFlex: rcs ? rcs.flexGrow + '/' + rcs.flexShrink + '/' + rcs.flexBasis : 'n/a',
+					tbDisplay: cs.display,
 				};
 			});
-			expect(result.searchHidden).toBe(true);
-			// Clock right edge within ~150px of titlebar right edge — the
-			// three 32px buttons + 2px gaps + 30px padding sit between.
-			expect(result.titlebarRight - result.clockRight).toBeLessThan(150);
+			// The masthead's right edge hugs the titlebar content edge.
+			expect(
+				Math.abs(result.gap),
+				`masthead not flush right — ${JSON.stringify(result)}`
+			).toBeLessThan(4);
+			// Combined box holds the wordmark + lock + cogwheel (theme removed).
+			expect(result.hasWordmark).toBe(true);
+			expect(result.buttonCount).toBe(2);
 		} catch (e) {
-			await captureFailure(page, 'titlebar-clock-right-search-hidden');
+			await captureFailure(page, 'titlebar-buttons-right');
 			throw e;
 		} finally {
 			await page.close();

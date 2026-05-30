@@ -245,7 +245,13 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			const actions = await waitForCondition(
 				page,
 				() => {
-					const btns = document.querySelectorAll('.ntt-action-btn');
+					// Scope to a SINGLE tile's action row — a page-wide
+					// `.ntt-action-btn` query returns N×5 buttons when more
+					// than one tile is present (test-isolation races), which
+					// made the strict `toEqual` assertion intermittently fail.
+					const row = document.querySelector('.ntt-actions');
+					if (!row) { return false; }
+					const btns = row.querySelectorAll('.ntt-action-btn');
 					if (btns.length < 5) {return false;}
 					return Array.from(btns).map(b => b.getAttribute('data-action'));
 				},
