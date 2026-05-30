@@ -3,6 +3,8 @@
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. Think of it as **PowerTools for your browser**—extending the new tab experience in creative ways, much like Microsoft PowerToys does for Windows.
 
 > **Status: preparing for AMO publication.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. The codebase migration (cherry-pick + reference rewrite) is complete — all 22 features characterized, tested, and working, all 7 security findings resolved. Next step is AMO publication (pending contact with the original maintainer about a possible handover). MV3 migration follows; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) for the plan.
+>
+> **In progress — the "NTT v2" redesign.** The UI is being reworked to sit closer to the current Firefox new tab page in layout and behaviour while keeping NTT's power-user controls: a single titlebar row (recently-closed cards · search · brand/controls masthead), a slide-in **configuration drawer** (Tile / Page / Advanced tabs) replacing the old options modal, a **theme system** (system / light / dark / high-contrast), **real favicons** on tiles, and a bottom **status bar**. The feature list below still describes some of the pre-v2 UI; it will be refreshed as the redesign lands.
 
 ## Main features
 
@@ -13,7 +15,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - **Pixel-level layout control.** Pick exact rows and columns, lock a tile aspect ratio (16:9, 4:3, 1:1, 3:4 portrait, or fill-viewport), tune foreground opacity, tile title size, page margins, and grid spacing — then lock the grid so you don't reorder it by accident. None of these knobs are exposed in Firefox's native page.
 - **Top sites that aren't dominated by one domain.** Cap how many tiles a single host can take (with subdomain wildcards like `.example.com`), hide auto-generated history tiles entirely, or pull pin suggestions from your open tabs, bookmarks, and history via autocomplete. Native Firefox enforces a hard "one tile per domain" rule and offers no autocomplete in its Add Shortcut form.
 - **Per-tile personalization.** Set a custom background color per tile (native supports a custom *image* but not a *color*), edit titles and URLs, manually upload a thumbnail when auto-capture isn't an option (login walls, dark pages, sites you haven't visited yet).
-- **Recovery and portability.** A dedicated row of recently closed tabs sits below the grid for one-click restore — Firefox's native "Recent activity" surfaces visited pages and bookmarks, but not closed-tab session restore. Export your tiles, thumbnails, and settings to a single backup file and restore on another machine, no Firefox Sync required.
+- **Recovery and portability.** A row of recently closed tabs lives in the titlebar for one-click restore — Firefox's native "Recent activity" surfaces visited pages and bookmarks, but not closed-tab session restore. Export your tiles, thumbnails, and settings to a single backup file and restore on another machine, no Firefox Sync required.
 
 ## What's in this repo
 
@@ -34,13 +36,16 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - [x] Forked the repository; test infrastructure green in CI.
 - [x] Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md)).
 - [x] Security: all 7 findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved. [Post-takeover code review](audit/2026-05-11-code-review.md) completed.
-- [x] Test-first characterization sweep: 313 integration + 38 E2E tests across all 22 features.
+- [x] Test-first characterization sweep across all 22 features (the suite has since grown to ~825 unit/integration tests in 46 files plus 110 E2E tests in 27 files, run on every change).
 - [x] Codebase migration complete (see [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md)). Auto-thumbnail rewritten, drop sweep done, all features working.
 **Next:**
 - [ ] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Fallback: publish as a new extension under a new ID.
 - [ ] First release on AMO.
 - [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 - [ ] Open the issue tracker for new bug reports.
+
+**In progress:**
+- [ ] "NTT v2" UI redesign — align the layout and interactions with the current Firefox new tab page (titlebar with inline recently-closed cards, configuration drawer, theme system, on-tile favicons, status bar) while preserving NTT's power-user controls.
 
 ## For developers
  
