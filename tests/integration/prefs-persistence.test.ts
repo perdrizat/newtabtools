@@ -89,9 +89,14 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 
 	// ==================== Prefs.init ====================
 
-	it('init removes toolbarIcon from storage', async () => {
-		await Prefs.init();
-		expect(chrome.storage.local.remove).toHaveBeenCalledWith(['toolbarIcon']);
+	it('init prunes toolbarIcon and the removed titlebar pref keys from storage (Phase 5-4)', () => {
+		// titleBarClock / titleBarWordmark / titleBarStatus were dropped during
+		// the v2 titlebar work + Phase 4-0; their stale values may linger in a
+		// user's storage. Prune them on init so they don't ride along in backups.
+		Prefs.init();
+		expect(chrome.storage.local.remove).toHaveBeenCalledWith(
+			expect.arrayContaining(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']),
+		);
 	});
 
 	it('init reads prefs from chrome.storage.local', async () => {
@@ -272,6 +277,16 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		// that restore writes raw prefs to storage, so unknown keys end up
 		// persisted even though parsePrefs doesn't read them.
 		expect((Prefs as any)._unknownKey).toBeUndefined();
+	});
+
+	it('parsePrefs ignores the removed titlebar pref keys without error (Phase 5-4)', () => {
+		// An old backup / storage may still carry these; parsePrefs must not
+		// resurrect them, and other valid keys in the same payload still apply.
+		Prefs.parsePrefs({ titleBarClock: false, titleBarWordmark: false, titleBarStatus: false, rows: 6 });
+		expect(Prefs._rows).toBe(6);
+		expect((Prefs as any)._titleBarClock).toBeUndefined();
+		expect((Prefs as any)._titleBarWordmark).toBeUndefined();
+		expect((Prefs as any)._titleBarStatus).toBeUndefined();
 	});
 
 	// ==================== parsePrefs — Blocked and Filters ====================

@@ -29,7 +29,10 @@ var Prefs = {
 	_version: -1,
 
 	init() {
-		chrome.storage.local.remove(['toolbarIcon']);
+		// Prune keys for features removed during the v2 redesign so they don't
+		// linger in storage or ride along in backups. `parsePrefs` already
+		// ignores unknown keys, so this is housekeeping, not correctness.
+		chrome.storage.local.remove(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']);
 
 		let names = [
 			'theme',

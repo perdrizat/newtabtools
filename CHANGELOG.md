@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-05-31] — NTT v2 Phase 5: cleanup & consolidation
+
+### Removed
+
+- **Phase 5 cleanup.** Deleted the retired bottom status bar outright (markup, CSS, and JS — 4-0 had only hidden it) and removed the dead `#options` settings-modal CSS left over from the Phase 3 drawer migration. On startup, stale pref keys from removed features (`titleBarClock`, `titleBarWordmark`, `titleBarStatus`) are pruned from storage so they don't ride along in backups.
+
+### Changed
+
+- **Phase 5 cleanup.** Consolidated the drawer's legacy `<fieldset>` / `<legend>` / `<p>` markup (Pin URL, per-tile editor, history filter, Backup & Restore, Reset) onto the `.ntt-form-group` primitives used elsewhere, so all three tabs share one type scale. No behavior change.
+
 ## [2026-05-30] — NTT v2 Phase 4: status bar removed + awesome bar
 
 ### Added

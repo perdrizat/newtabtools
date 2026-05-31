@@ -5,14 +5,13 @@
 /**
  * Font-size scoping inside the config drawer.
  *
- * The Advanced tab (and a few legacy items still living in the Tile tab —
- * the Pin URL fieldset, the per-tile editor's `#options-tile`) is built out
- * of raw `<fieldset>` / `<legend>` / `<p>` / `<label>` / `<a>` / `<table>`
- * markup. Without scoped overrides those elements fall back to the page
- * default (~13-16 px), which makes the Advanced tab look visibly bigger
- * than the Page tab (where every label sits on `.ntt-form-group-label` at
- * 10.5 px). The drawer enforces its own scale via `#ntt-drawer-body …`
- * rules so the three tabs match.
+ * Phase 5-3 consolidated the legacy `<fieldset>` / `<legend>` markup into
+ * `.ntt-form-group` primitives, so section headers now ride on
+ * `.ntt-form-group-label` and the `<legend>` override is gone. A few raw body
+ * elements remain — the Pin-URL permission `<p>`, the per-tile editor
+ * `<label>`s, the GitHub `<a>`, and the history-filter `<table>` — which still
+ * need the drawer's 11.5 px scale (vs. the page default ~13-16 px) so the
+ * three tabs match.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -39,13 +38,8 @@ describe('drawer font-size scoping — newTab.css', () => {
 		return css.substring(braceStart + 1, braceEnd);
 	}
 
-	it('scopes <legend> in the drawer body to the form-group-label scale (10.5 px, uppercase)', () => {
-		// Legend is the section header inside fieldsets — Pin URL, Tile editor,
-		// History filter, Backup & Restore, Reset. It should match the
-		// `.ntt-form-group-label` look so headers don't jump between tabs.
-		const body = ruleBody('#ntt-drawer-body legend');
-		expect(body).toMatch(/font-size:\s*10\.5px/);
-		expect(body).toMatch(/text-transform:\s*uppercase/);
+	it('no longer ships a <legend> override (legends consolidated into .ntt-form-group, Phase 5-3)', () => {
+		expect(css).not.toMatch(/#ntt-drawer-body legend\s*\{/);
 	});
 
 	it('scopes <p> in the drawer body to 11.5 px', () => {

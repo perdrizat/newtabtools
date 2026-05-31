@@ -47,22 +47,8 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				<div class="newtab-side-margin newtab-margin-left"></div>
 				<div class="newtab-side-margin newtab-margin-right"></div>
 			</div>
-			<div id="ntt-statusbar" hidden="">
-				<div id="ntt-statusbar-hints">
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">1-9</span><span>open tile</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">↑↓←→</span><span>navigate</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">/</span><span>search</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">z</span><span>zen</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">c</span><span>config</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">⌘ K</span><span>commands</span></span>
-					<span class="ntt-statusbar-hint"><span class="ntt-statusbar-kbd">?</span><span>all keys</span></span>
-				</div>
-				<div id="ntt-statusbar-summary">
-					<span id="ntt-statusbar-tilecount"></span>
-				</div>
-			</div>
-			<!-- Removed-tile undo toast — a floating notice (not part of the
-			     retired status bar) so tile-removal undo keeps working. -->
+			<!-- Removed-tile undo toast — a floating notice (the bottom status
+			     bar was retired in Phase 4-0/5-1) so tile-removal undo works. -->
 			<div id="newtab-undo-container" undo-disabled="true">
 				<label id="newtab-undo-label" data-message="newtab_undo_removedLabel"></label>
 				<button id="newtab-undo-button" tabindex="-1" data-message="newtab_undo_undoButton"></button>
@@ -83,8 +69,10 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 		</nav>
 		<div id="ntt-drawer-body">
 			<section data-drawer-panel="tile" hidden="">
-				<fieldset>
-					<legend data-message="pin_url_header"></legend>
+				<div class="ntt-form-group">
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="pin_url_header"></span>
+					</div>
 					<div class="options-row">
 						<input id="options-pinURL-input" type="url" required="true" autocomplete="off" data-placeholder="pin_url_placeholder" />
 						<button id="options-pinURL" data-message="pin_url_button"></button>
@@ -108,11 +96,13 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 							</li>
 						</template>
 					</div>
-				</fieldset>
+				</div>
 				<div class="ntt-empty-state" data-tile-empty="" data-message="tile_empty_state"></div>
 				<div id="options-tile">
-					<fieldset>
-						<legend data-message="tile_header"></legend>
+					<div class="ntt-form-group">
+						<div class="ntt-form-group-head">
+							<span class="ntt-form-group-label" data-message="tile_header"></span>
+						</div>
 						<div id="options-thumbnail-wrap" class="options-row">
 							<div id="options-thumbnail" class="newtab-thumbnail"></div>
 						</div>
@@ -144,7 +134,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 							<input id="options-title-input" data-placeholder="tile_title_placeholder" />
 							<button id="options-title-set" data-message="tile_title_set"></button>
 						</div>
-					</fieldset>
+					</div>
 				</div>
 				<hr class="ntt-drawer-divider" />
 				<div class="ntt-form-group" data-group="aspect">
@@ -324,8 +314,9 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					</label>
 				</div>
 				<div class="ntt-form-group" id="options-filter">
-					<fieldset>
-						<legend data-message="filter_title"></legend>
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="filter_title"></span>
+					</div>
 						<table>
 							<thead>
 								<tr>
@@ -368,32 +359,31 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 								</tr>
 							</template>
 						</table>
-					</fieldset>
 				</div>
 				<div class="ntt-form-group" id="options-export">
-					<fieldset>
-						<legend data-message="backup_restore_header"></legend>
-						<p data-message="backup_description"></p>
-						<div class="options-row">
-							<button id="options-backup" data-message="backup_button"></button>
-						</div>
-						<p data-message="restore_description" style="margin-top: 1em;"></p>
-						<p data-message="restore_warning" style="font-style: italic;"></p>
-						<div class="options-row">
-							<input id="options-restore-file" type="file" accept="application/zip" />
-							<button id="options-restore" disabled="" data-message="restore_button"></button>
-						</div>
-					</fieldset>
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="backup_restore_header"></span>
+					</div>
+					<div class="ntt-form-group-help" data-message="backup_description"></div>
+					<div class="options-row">
+						<button id="options-backup" data-message="backup_button"></button>
+					</div>
+					<div class="ntt-form-group-help" data-message="restore_description"></div>
+					<div class="ntt-form-group-help" data-message="restore_warning" style="font-style: italic;"></div>
+					<div class="options-row">
+						<input id="options-restore-file" type="file" accept="application/zip" />
+						<button id="options-restore" disabled="" data-message="restore_button"></button>
+					</div>
 				</div>
 				<div class="ntt-form-group" id="options-reset-group">
-					<fieldset>
-						<legend data-message="reset_header"></legend>
-						<p data-message="reset_description"></p>
-						<p data-message="reset_warning" style="font-style: italic;"></p>
-						<div class="options-row">
-							<button id="options-reset-all" data-message="reset_button"></button>
-						</div>
-					</fieldset>
+					<div class="ntt-form-group-head">
+						<span class="ntt-form-group-label" data-message="reset_header"></span>
+					</div>
+					<div class="ntt-form-group-help" data-message="reset_description"></div>
+					<div class="ntt-form-group-help" data-message="reset_warning" style="font-style: italic;"></div>
+					<div class="options-row">
+						<button id="options-reset-all" data-message="reset_button"></button>
+					</div>
 				</div>
 				<div>
 					<a href="https://github.com/perdrizat/newtabtools" data-message="github"></a>

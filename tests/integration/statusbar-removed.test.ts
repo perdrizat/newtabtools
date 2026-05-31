@@ -53,29 +53,23 @@ describe('Phase 4-0 — status bar retired from the chrome', () => {
 		/* eslint-enable ntt/no-source-grep */
 	});
 
-	it('#ntt-statusbar ships hidden (never renders)', () => {
-		expect(xhtml).toMatch(/<div id="ntt-statusbar" hidden/);
+	it('the #ntt-statusbar markup is removed entirely (Phase 5-1)', () => {
+		expect(xhtml).not.toMatch(/id="ntt-statusbar"/);
+		expect(xhtml).not.toMatch(/ntt-statusbar-hints|ntt-statusbar-kbd|ntt-statusbar-summary|ntt-statusbar-tilecount/);
+	});
+
+	it('the status-bar CSS is removed (no #ntt-statusbar / .ntt-statusbar-* rules)', () => {
+		expect(css).not.toMatch(/#ntt-statusbar/);
+		expect(css).not.toMatch(/\.ntt-statusbar-/);
 	});
 
 	it('the drawer no longer offers a Status bar (titleBarStatus) toggle', () => {
 		expect(xhtml).not.toMatch(/data-pref="titleBarStatus"/);
 	});
 
-	it('the removed-tile undo notice lives OUTSIDE the status bar', () => {
-		// The undo container must not be a descendant of #ntt-statusbar, or
-		// hiding the bar would hide the undo toast too. Assert it appears after
-		// the status bar's closing position rather than nested within it.
-		const statusOpen = xhtml.indexOf('<div id="ntt-statusbar"');
-		const statusClose = xhtml.indexOf('</div>', xhtml.indexOf('ntt-statusbar-summary'));
-		const undoIdx = xhtml.indexOf('id="newtab-undo-container"');
-		expect(undoIdx).toBeGreaterThan(-1);
-		// Undo container is not between the status-bar open tag and the point
-		// where its inner content closes.
-		const insideStatus = undoIdx > statusOpen && undoIdx < statusClose;
-		expect(insideStatus).toBe(false);
-	});
-
-	it('the undo toast is positioned (fixed/absolute), not an inline status-bar cell', () => {
+	it('the removed-tile undo notice survives as a standalone floating toast', () => {
+		// The undo container is independent of the (now-deleted) status bar.
+		expect(xhtml).toMatch(/id="newtab-undo-container"/);
 		const rule = css.match(/#newtab-undo-container\s*\{[^}]*\}/);
 		expect(rule).not.toBeNull();
 		expect(rule![0]).toMatch(/position:\s*(fixed|absolute)/);
@@ -101,10 +95,14 @@ describe('Phase 4-0 — titleBarStatus pref removed', () => {
 		expect(parsePrefs._titleBarStatus).toBeUndefined();
 	});
 
-	it('prefs.js source no longer references titleBarStatus', () => {
+	it('prefs.js no longer manages titleBarStatus (no schema field or parse branch)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural: schema/names/parse all dropped
 		const source = fs.readFileSync(PREFS_PATH, 'utf8');
-		expect(source).not.toMatch(/titleBarStatus/);
+		// The pref is gone from the schema and parser…
+		expect(source).not.toMatch(/_titleBarStatus/);
+		expect(source).not.toMatch(/this\._titleBarStatus\s*=/);
+		// …though Phase 5-4 deliberately lists it in the init storage-prune
+		// `remove([...])` call, so a bare substring match is intentionally not used.
 	});
 });
 

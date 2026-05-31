@@ -36,11 +36,11 @@ describe('Titlebar [hidden] overrides — display:none must win over display:fle
 	// `#ntt-titlebar-recent` is intentionally absent: it is the greedy spacer
 	// that pins the masthead to the right edge, so it must stay laid out even
 	// when it holds no cards — refreshRecent empties it rather than hiding it,
-	// so it has no `[hidden]` override on purpose.
+	// so it has no `[hidden]` override on purpose. `#ntt-statusbar` is also
+	// absent — the status bar was deleted in Phase 5-1.
 	const elements = [
 		'#ntt-wordmark',
 		'#ntt-search',
-		'#ntt-statusbar',
 	];
 
 	for (const sel of elements) {

@@ -880,7 +880,6 @@ var newTabTools = {
 			setMargin('#newtab-margin-bottom', margin[2]);
 			setMargin('.newtab-margin-left', margin[3]);
 			setMargin('#ntt-titlebar', margin[3]);
-			setMargin('#ntt-statusbar', margin[3]);
 			this._syncDrawerSlider('margin', margin[0], { small: 10, medium: 18, large: 28 });
 		}
 
@@ -962,10 +961,6 @@ var newTabTools = {
 		if (!keys || keys.includes('spacing') || keys.includes('margin')
 			|| keys.includes('titleBarSearch')) {
 			this.refreshRecent();
-		}
-
-		if (!keys || keys.includes('rows') || keys.includes('columns')) {
-			this._updateStatusBar();
 		}
 
 		if (keys && keys.includes('statType') && 'Grid' in window) {
@@ -1063,29 +1058,6 @@ var newTabTools = {
 		titlebar.style.setProperty('--ntt-slot-w', slots.slotWidth + 'px');
 		this._recentCardCount = slots.cardCount;
 		return slots;
-	},
-	_updateStatusBar() {
-		let countEl = document.getElementById('ntt-statusbar-tilecount');
-		if (!countEl) {
-			return;
-		}
-		let count = 0;
-		if (typeof Grid !== 'undefined' && Grid && Grid.sites) {
-			for (let s of Grid.sites) {
-				if (s) { count++; }
-			}
-		}
-		let rows = (typeof Prefs !== 'undefined' && Prefs.rows) || 0;
-		let cols = (typeof Prefs !== 'undefined' && Prefs.columns) || 0;
-		countEl.textContent = count + ' tile' + (count == 1 ? '' : 's') + ' · ' + rows + '×' + cols;
-	},
-	_initStatusBar() {
-		this._updateStatusBar();
-		let grid = document.getElementById('newtab-grid');
-		if (grid && typeof MutationObserver !== 'undefined') {
-			this._statusBarObserver = new MutationObserver(() => this._updateStatusBar());
-			this._statusBarObserver.observe(grid, { childList: true, subtree: true });
-		}
 	},
 	_formatAge(lastModified) {
 		if (!lastModified) {
@@ -1781,7 +1753,6 @@ var newTabTools = {
 			if (typeof AwesomeBar !== 'undefined') {
 				AwesomeBar.init();
 			}
-			newTabTools._initStatusBar();
 			newTabTools._initAutoSaveIndicator();
 			newTabTools.updateUI();
 			newTabTools.refreshBackgroundImage();

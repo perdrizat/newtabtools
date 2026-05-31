@@ -11,7 +11,7 @@
  * a fake Grid.sites array and verifies the right-aligned summary text.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -34,75 +34,11 @@ function extractMethod(source: string, methodName: string): string {
 	throw new Error('Unbalanced braces');
 }
 
-describe('Statusbar — _updateStatusBar', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const _updateStatusBar = extractMethod(source, '_updateStatusBar');
-
-		const code = `var _statusbarHarness = { ${_updateStatusBar} };`;
-		vm.runInThisContext(code, { filename: 'statusbar-harness.js' });
-		harness = (globalThis as any)._statusbarHarness;
-	});
-
-	beforeEach(() => {
-		document.body.innerHTML = `
-			<div id="ntt-statusbar">
-				<div id="ntt-statusbar-hints"></div>
-				<div id="ntt-statusbar-summary">
-					<span id="ntt-statusbar-tilecount"></span>
-				</div>
-			</div>
-		`;
-		(globalThis as any).Prefs = { rows: 3, columns: 3 };
-	});
-
-	afterEach(() => {
-		document.body.innerHTML = '';
-		delete (globalThis as any).Grid;
-		delete (globalThis as any).Prefs;
-	});
-
-	it('writes "N tiles · RxC" with non-null site count', () => {
-		(globalThis as any).Grid = { sites: [
-			{ url: 'a' }, { url: 'b' }, null, { url: 'c' }, null, null, null, null, null,
-		] };
-		harness._updateStatusBar();
-		const text = document.getElementById('ntt-statusbar-tilecount')!.textContent || '';
-		expect(text).toContain('3 tiles');
-		expect(text).toContain('3×3');
-	});
-
-	it('counts zero tiles when sites array is empty', () => {
-		(globalThis as any).Grid = { sites: [null, null, null, null] };
-		(globalThis as any).Prefs = { rows: 2, columns: 2 };
-		harness._updateStatusBar();
-		const text = document.getElementById('ntt-statusbar-tilecount')!.textContent || '';
-		expect(text).toContain('0 tiles');
-		expect(text).toContain('2×2');
-	});
-
-	it('reflects current grid dimensions', () => {
-		(globalThis as any).Grid = { sites: [{ url: 'a' }] };
-		(globalThis as any).Prefs = { rows: 4, columns: 6 };
-		harness._updateStatusBar();
-		const text = document.getElementById('ntt-statusbar-tilecount')!.textContent || '';
-		expect(text).toContain('4×6');
-	});
-
-	it('does not throw when Grid is undefined', () => {
-		(globalThis as any).Grid = undefined;
-		expect(() => harness._updateStatusBar()).not.toThrow();
-	});
-});
-
-// NB: the `titleBarStatus` pref + its updateUI show/hide branch were removed in
-// Phase 4-0 (the status bar is retired and ships `hidden`). Its old describe
-// block is gone; statusbar-removed.test.ts pins that removal. `_updateStatusBar`
-// itself still exists (writes the count into the hidden bar) and is covered
-// above.
+// NB: the bottom status bar was retired — Phase 4-0 hid it, Phase 5-1 deleted
+// it — so `_updateStatusBar`/`_initStatusBar`, the `titleBarStatus` pref, and
+// the updateUI show/hide + count branches are all gone (removal pinned by
+// statusbar-removed.test.ts). The only status-bar-era logic left is the
+// spacing → `--ntt-gap` mapping in updateUI, covered below.
 
 describe('Statusbar — gapMap defaults (Phase 2-2 §2.2)', () => {
 	let harness: any;

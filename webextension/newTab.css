@@ -163,20 +163,12 @@ body, #background-fake {
 #ntt-drawer-body > section[hidden] {
 	display: none;
 }
-/* Scope the legacy `<fieldset>` / `<legend>` / `<p>` / `<label>` / `<a>` /
- * `<table>` markup that survives inside the drawer (Pin URL, per-tile
- * editor, History filter, Backup & Restore, Reset, About link) so the
- * three tabs land on the same scale as the `.ntt-form-group-*` primitives
- * used elsewhere. Without these overrides those elements inherit the page
- * default (~13-16 px) and make the Advanced tab look visibly bigger. */
-#ntt-drawer-body legend {
-	font-size: 10.5px;
-	font-weight: 700;
-	letter-spacing: 0.10em;
-	text-transform: uppercase;
-	color: var(--ntt-mute);
-	padding: 0;
-}
+/* Section headers in the drawer now ride on `.ntt-form-group-label` (Phase 5-3
+ * consolidated the legacy `<fieldset>`/`<legend>` markup into `.ntt-form-group`
+ * primitives), so no `<legend>` override is needed. A few raw body elements do
+ * remain — the Pin-URL permission `<p>`, the per-tile editor `<label>`s, the
+ * GitHub `<a>`, and the history-filter `<table>` — so keep them on the drawer's
+ * 11.5 px scale rather than the page default (~13-16 px). */
 #ntt-drawer-body p,
 #ntt-drawer-body label,
 #ntt-drawer-body a,
@@ -506,8 +498,7 @@ input[type="button"] {
    the UA `[hidden] { display: none }` rule. Force `[hidden]` to hide for the
    elements driven by titleBar* prefs. */
 #ntt-wordmark[hidden],
-#ntt-search[hidden],
-#ntt-statusbar[hidden] {
+#ntt-search[hidden] {
 	display: none;
 }
 /* TITLEBAR
@@ -793,50 +784,6 @@ input[type="button"] {
 	pointer-events: none;
 }
 
-/* STATUSBAR */
-#ntt-statusbar {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 14px;
-	padding: 10px 30px 14px;
-	margin-top: var(--ntt-gap, 18px);
-	border-top: 1px solid var(--ntt-line-soft);
-	font-family: var(--ntt-font-mono);
-	font-size: 10.5px;
-	color: var(--ntt-mute);
-}
-#ntt-statusbar.medium {
-	padding-left: 60px;
-	padding-right: 60px;
-}
-#ntt-statusbar.large {
-	padding-left: 120px;
-	padding-right: 120px;
-}
-#ntt-statusbar-hints {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 14px;
-}
-.ntt-statusbar-hint {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-}
-.ntt-statusbar-kbd {
-	padding: 1px 5px;
-	border-radius: 3px;
-	background: var(--ntt-kbd-bg);
-	color: var(--ntt-kbd-ink);
-	font-weight: 600;
-}
-#ntt-statusbar-summary {
-	display: flex;
-	gap: 14px;
-	align-items: center;
-	flex: 0 0 auto;
-}
 
 /* SCROLLBOX */
 #newtab-scrollbox {
@@ -1409,82 +1356,9 @@ svg {
 	background-color: var(--ntt-line-soft);
 	border-color: var(--ntt-line);
 }
-:root[options-hidden] #options,
-:root[options-hidden] #options-bg,
-:root:not([options-hidden]) #options-toggle,
-:root:not([options-hidden]) #locked-toggle {
-	visibility: hidden;
-}
-:root:not([options-hidden]) #newtab-margin-top,
-:root:not([options-hidden]) #newtab-margin-bottom,
-:root:not([options-hidden]) .newtab-site {
-	filter: blur(1px);
-}
-#options-bg {
-	position: fixed;
-	top: 0;
-	right: 0;
-	bottom: 0;
-	left: 0;
-	background-color: rgba(0, 0, 0, 0.5);
-}
-#options {
-	background-color: var(--page-background);
-	border: 1px solid #b2aeaa;
-	position: fixed;
-	top: 2em;
-	left: 50%;
-	margin-left: calc(-376px - 2em);
-	width: calc(752px + 4em);
-	padding: 1em;
-	box-sizing: border-box;
-	box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.5);
-	font-size: 12px;
-	color: var(--fore-opaque);
-}
-:root[options-extra] #options {
-	margin-left: calc(-551px - 3em);
-	width: calc(1102px + 6em);
-	transition: margin-left 500ms, width 500ms;
-}
-#options-close {
-	position: absolute;
-	top: 0.5em;
-	right: 0.5em;
-	line-height: 0;
-	z-index: 1;
-}
-#options-inner {
-	display: flex;
-}
 #options-tile {
 	width: 100%;
 	box-sizing: border-box;
-}
-#options-page {
-	width: 100%;
-	display: flex;
-	flex-direction: column;
-}
-#options fieldset {
-	margin: 0;
-	border: none;
-}
-#options legend {
-	margin: 0;
-	font-weight: bold;
-}
-#options button:not(.arrow) {
-	min-width: 0;
-	margin-inline-start: 0;
-	margin-inline-end: 0;
-	padding: 0 2px;
-}
-#options input,
-#options button:not(.arrow),
-#options select {
-	font-size: 12px;
-	margin: 0;
 }
 .options-row-label {
 	display: block;
@@ -1511,48 +1385,17 @@ svg {
 .spacer {
 	flex: 1;
 }
-#options input[type="file"],
 #options-pinURL-input,
 #options-url-input,
 #options-title-input {
 	width: 0;
 	min-width: 0;
 	flex: 1;
-}#options input[type="range"] {
-  background-color: transparent;
-}
-
-#options input[type="range"]::-moz-range-track {
-  background-color: ThreeDLightShadow;
-}
-#options :user-invalid {
-	box-shadow: 0 0 1.5px #ff0000;
 }
 #options-thumbnail-wrap {
 	padding: 0 1em;
 	display: flex;
 	align-items: center;
-}
-button.arrow {
-	background-color: transparent;
-	background-image: url("images/arrow-light.svg");
-	width: 30px;
-	height: 30px;
-	margin: 0;
-	padding: 0;
-	appearance: none;
-	border: none;
-	cursor: pointer;
-}
-#options-previous-row-tile {
-	margin-top: -1.5em;
-	transform: rotate(90deg);
-}
-#options-next-tile {
-	transform: scalex(-1);
-}
-#options-next-row-tile {
-	transform: rotate(-90deg);
 }
 #options-thumbnail {
 	margin: 0 auto;
@@ -1588,36 +1431,11 @@ table {
 	width: 100%;
 	border-collapse: collapse;
 }
-#options-page tr {
-	height: 31px;
-}
-#options-page th {
-	white-space: nowrap;
-}
-#options-page th, #options-page td {
-	text-align: left;
-	font-weight: normal;
-	margin: 0;
-	padding: 2px 5px;
-	line-height: 27px;
-	vertical-align: middle;
-}
-#options-page td > label + label {
-	margin-inline-start: 1em;
-}
-#options input[type="checkbox"],
-#options input[type="radio"] {
-	margin-inline-end: 4px;
-	vertical-align: middle;
-}
 input[type="range"] {
 	width: 200px;
 }
 input[type="number"] {
 	width: 4em;
-}
-#options #historytiles-filter {
-	margin-inline-start: 20px;
 }
 a {
 	color: LinkText;
@@ -1810,9 +1628,4 @@ li.pinned .autocomplete-icon {
 .wallpaper-thumb[selected] {
 	border-color: #0a84ff;
 	box-shadow: 0 0 0 1px #0a84ff;
-}
-/* BACKUP/RESTORE */
-#options p {
-	margin: 0.5em 0;
-	line-height: 1.5;
 }
