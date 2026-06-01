@@ -64,17 +64,20 @@ describe('background.js — favicon capture + storage wiring', () => {
 		expect(assignments.length).toBeGreaterThanOrEqual(3);
 	});
 
-	it('fetchFaviconBlob exists and caps at 64 KB', () => {
+	it('fetchFaviconBlob exists and caps cached data: favicons at 64 KB', () => {
 		// Cap is important: some sites ship huge SVG favicons that would
 		// bloat the IDB store. 64 KB comfortably fits a PNG/ICO favicon.
 		expect(source).toMatch(/function\s+fetchFaviconBlob/);
 		expect(source).toMatch(/64\s*\*\s*1024/);
 	});
 
-	it('pickAndStore writes the favicon Blob to the thumbnails row when present', () => {
-		// Wires the fetchFaviconBlob result into the put() record.
+	it('pickAndStore caches a data: favicon Blob, or stores a remote favicon URL string (§1.1)', () => {
+		// data: favicons → decoded Blob in `record.favicon`; remote favicons →
+		// `record.faviconUrl` string for the page to render live via <img>
+		// (no fetch; see audit/2026-05-31-csp-tightening.md).
 		expect(source).toMatch(/fetchFaviconBlob\(favIconUrl\)/);
 		expect(source).toMatch(/record\.favicon\s*=\s*faviconBlob/);
+		expect(source).toMatch(/record\.faviconUrl\s*=\s*favIconUrl/);
 	});
 
 	it('Thumbnails.getFavicons message handler walks the store and returns a Map', () => {
@@ -242,6 +245,16 @@ describe('Site.applyFavicon — DOM swap', () => {
 		expect(img).not.toBeNull();
 		expect(img.src).toBe('blob:fake-url');
 		expect(img.getAttribute('alt')).toBe('');
+	});
+
+	it('§1.1: a string favicon URL is used directly as <img src> (no object URL)', () => {
+		const site = buildSite();
+		harness.applyFavicon.call(site, 'https://example.com/favicon.ico');
+		const img = site.node.querySelector('img.ntt-logo-favicon') as HTMLImageElement;
+		expect(img).not.toBeNull();
+		expect(img.getAttribute('src')).toBe('https://example.com/favicon.ico');
+		// A remote URL must NOT be wrapped in an object URL.
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
 	});
 
 	it('no-ops when the site is already showing a real screenshot (no fallback in DOM)', () => {

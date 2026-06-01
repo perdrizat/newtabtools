@@ -97,15 +97,17 @@ describe('fetchFaviconBlob — data: URL handling (CSP-safe)', () => {
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
-	it('routes http:/https: URLs through fetch()', async () => {
-		fetchSpy.mockResolvedValueOnce({
-			ok: true,
-			blob: () => Promise.resolve(new Blob(['x'], { type: 'image/png' })),
-		});
-		const blob = await fetchFaviconBlob('https://example.com/favicon.ico');
-		expect(fetchSpy).toHaveBeenCalledTimes(1);
-		expect(fetchSpy).toHaveBeenCalledWith('https://example.com/favicon.ico');
-		expect(blob).toBeInstanceOf(Blob);
+	it('does NOT fetch http:/https: URLs — returns null so the page renders them live (§1.1)', async () => {
+		// The remote-fetch branch was removed when the connect-src https:
+		// wildcard was dropped (audit/2026-05-31-csp-tightening.md). Remote
+		// favicons are no longer cached as Blobs; the page renders them via a
+		// live <img src> instead. So fetchFaviconBlob must NOT call fetch and
+		// returns null for http(s): URLs.
+		const httpsBlob = await fetchFaviconBlob('https://example.com/favicon.ico');
+		expect(httpsBlob).toBeNull();
+		const httpBlob = await fetchFaviconBlob('http://example.com/favicon.ico');
+		expect(httpBlob).toBeNull();
+		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
 	it('returns null for malformed data: URLs (no comma)', async () => {
@@ -129,15 +131,16 @@ describe('fetchFaviconBlob — data: URL handling (CSP-safe)', () => {
 	});
 });
 
-describe('manifest CSP — connect-src permits third-party HTTPS for favicon fetch', () => {
-	// `tab.favIconUrl` for most real sites is a plain `https://…/favicon.ico`.
-	// The manifest CSP used to read `connect-src 'self' https://firefox.settings…`
-	// which blocked every other host — so the data-URL branch above was only
-	// half the bug. With `connect-src https:` added, third-party favicons go
-	// through the normal fetch path; <all_urls> already grants the host
-	// permission, so this is just unblocking the redundant CSP.
+describe('manifest CSP — favicons via img-src, NOT a connect-src wildcard (§1.1)', () => {
+	// Remote favicons render as live <img src="https://…/favicon.ico">, governed
+	// by `img-src https:` (paint-only). The earlier `connect-src https:` wildcard
+	// (any-HTTPS read access) was removed — see audit/2026-05-31-csp-tightening.md.
 
 	let manifest: { content_security_policy: string };
+
+	function connectSrc(csp: string): string {
+		return (csp.match(/connect-src[^;]*/) || [''])[0];
+	}
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSP guard
@@ -148,13 +151,22 @@ describe('manifest CSP — connect-src permits third-party HTTPS for favicon fet
 		manifest = JSON.parse(raw);
 	});
 
-	it('connect-src includes the https: scheme', () => {
-		const csp = manifest.content_security_policy;
-		expect(csp).toMatch(/connect-src[^;]*\bhttps:/);
+	it('connect-src does NOT carry a bare https: wildcard', () => {
+		// The directive may still name a specific https host (firefox.settings…),
+		// but must not contain the standalone `https:` token.
+		const directive = connectSrc(manifest.content_security_policy);
+		expect(directive).not.toMatch(/(^|\s)https:(\s|$)/);
 	});
 
-	it('connect-src still includes self', () => {
+	it('connect-src still includes self and the named Mozilla settings host', () => {
+		const directive = connectSrc(manifest.content_security_policy);
+		expect(directive).toMatch(/'self'/);
+		expect(directive).toMatch(/https:\/\/firefox\.settings\.services\.mozilla\.com/);
+	});
+
+	it('img-src carries https: so remote favicons can be painted via <img>', () => {
 		const csp = manifest.content_security_policy;
-		expect(csp).toMatch(/connect-src[^;]*'self'/);
+		const imgSrc = (csp.match(/img-src[^;]*/) || [''])[0];
+		expect(imgSrc).toMatch(/(^|\s)https:(\s|$)/);
 	});
 });

@@ -68,6 +68,20 @@ web-ext build --source-dir webextension/
 - Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
 - After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 
+### Security-boundary changes require explicit acknowledgement
+
+The following classes of change loosen a security boundary and **must** be called out in either an `audit/` doc or the PR/commit description before merging:
+
+- **CSP changes** in `webextension/manifest.json` — any directive widening, including adding wildcards like `https:` or `*` to `connect-src`, `img-src`, `style-src`, etc.
+- **New required permissions** in `webextension/manifest.json` (`permissions` array). Optional permissions are fine; promoting optional → required is a boundary change.
+- **Allow-list additions** in `webextension/export.js` (the restore allow-list grows).
+- **Removing URL/protocol validation** anywhere (`isValidURL`, the `safeProtocols` allow-list in `export.js`, the `safeHexColor` / `safeBackgroundUrl` regexes, etc.).
+- **Adding `style.X = template + userInput + template`** patterns where the template includes CSS that consumes URLs (`url(...)`, `background`, `background-image`, etc.). Always prefer `style.setProperty('--var', validatedValue)` over interpolating into a shorthand.
+
+For each, the commit message or PR description must state: (a) what boundary moved, (b) why the previous boundary was inadequate, (c) the new threat model, (d) what compensating control (if any) replaces the removed defence-in-depth. The test suite cannot detect a *widened* CSP (it permits more, not less), so this is a human-review gate.
+
+Precedent: the 2026-05-04 audit's tightened CSP was silently widened to `connect-src https:` in a Phase 3/4 feature commit and only caught in the 2026-05-31 review (then reverted — see [`audit/2026-05-31-csp-tightening.md`](audit/2026-05-31-csp-tightening.md)). The checklist above would have caught it at commit time.
+
 ### AI Coding Assistants
 
 Contributions generated with the help of AI are welcome but must follow the standard development process. The test harness with unit tests and E2E tests MUST be used extensively to validate AI generated code. These are the important guardrails to ensure agentic compliance with the project's code quality standards.

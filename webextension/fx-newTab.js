@@ -1030,12 +1030,14 @@ Site.prototype = {
 	/**
 	 * Swap the letter glyph inside the existing logo-fallback for a real
 	 * favicon `<img>`. Called from `newTabTools.getFavicons` once the
-	 * background returns a cached favicon blob for this site's URL.
-	 * Safe to call even if the fallback has since been replaced by a
+	 * background returns a favicon for this site's URL — either a cached
+	 * `data:`-favicon Blob (turned into an object URL) or a remote favicon URL
+	 * string (used directly as the `<img src>`, governed by `img-src https:`,
+	 * no fetch). Safe to call even if the fallback has since been replaced by a
 	 * screenshot — guards on the glyph element's presence.
 	 */
-	applyFavicon(blob) {
-		if (!blob) {
+	applyFavicon(favicon) {
+		if (!favicon) {
 			return;
 		}
 		// Two render targets: the big centred glyph that shows only when no
@@ -1048,17 +1050,25 @@ Site.prototype = {
 		if (!fallback && !badge) {
 			return;
 		}
-		if (this._faviconObjectURL) {
-			URL.revokeObjectURL(this._faviconObjectURL);
+		// A Blob (cached data: favicon) becomes an object URL we own + revoke;
+		// a string is a remote favicon URL we point <img> at directly.
+		let src;
+		if (typeof favicon === 'string') {
+			src = favicon;
+		} else {
+			if (this._faviconObjectURL) {
+				URL.revokeObjectURL(this._faviconObjectURL);
+			}
+			this._faviconObjectURL = URL.createObjectURL(favicon);
+			src = this._faviconObjectURL;
 		}
-		this._faviconObjectURL = URL.createObjectURL(blob);
 
 		if (fallback) {
 			let glyph = fallback.querySelector('.ntt-logo-glyph');
 			if (glyph) {
 				let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
 				img.className = 'ntt-logo-favicon';
-				img.src = this._faviconObjectURL;
+				img.src = src;
 				img.alt = '';
 				fallback.replaceChild(img, glyph);
 			}
@@ -1067,7 +1077,7 @@ Site.prototype = {
 			badge.textContent = '';
 			badge.style.backgroundColor = '#fff';
 			let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
-			img.src = this._faviconObjectURL;
+			img.src = src;
 			img.alt = '';
 			badge.appendChild(img);
 		}

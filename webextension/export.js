@@ -84,6 +84,19 @@ async function readZip(file) {
 				filtered[k] = prefs[k];
 			}
 		}
+		// `backgroundUrl` is interpolated into `style.backgroundImage` =
+		// `url("…")` at render (newTab.js). Validate it at this data boundary:
+		// the empty string (the "no wallpaper" default) is fine; otherwise only
+		// the Firefox wallpaper CDN is allowed, and the whole string must match
+		// (no trailing `") ; background: url(…)` CSS-injection payload).
+		// Anything else is dropped rather than stored.
+		if ('backgroundUrl' in filtered) {
+			let safeBackgroundUrl = /^https:\/\/firefox-settings-attachments\.cdn\.mozilla\.net\/[^"'()\s]*$/;
+			if (filtered.backgroundUrl !== '' &&
+				(typeof filtered.backgroundUrl !== 'string' || !safeBackgroundUrl.test(filtered.backgroundUrl))) {
+				delete filtered.backgroundUrl;
+			}
+		}
 		await chrome.storage.local.set(filtered);
 	}
 

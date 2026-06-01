@@ -985,7 +985,14 @@ input[type="button"] {
 	grid-template-rows: repeat(var(--ntt-rows, 3), 1fr);
 	gap: var(--ntt-gap);
 	flex: 5;
-	min-width: 600px;
+	/* `min(600px, 100%)` keeps the 600px floor on roomy viewports but lets the
+	 * grid shrink below it when the container is narrow — e.g. a 768px window
+	 * with the 360px config drawer open, where a hard 600px floor forced a
+	 * horizontal scrollbar (review §2.1). A small residual overflow from the
+	 * fixed side-margin columns can still occur in that narrow+drawer-open
+	 * corner; accepted as cosmetic (the drawer is a transient state and NTT
+	 * targets larger viewports) rather than reworking the margin model. */
+	min-width: min(600px, 100%);
 	min-height: 400px;
 	transition: 100ms ease-out;
 	transition-property: opacity;

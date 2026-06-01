@@ -369,6 +369,55 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			expect(storedPrefs.tileAspect).toBe('16-9');
 		});
 
+		it('drops a non-CDN backgroundUrl pref at restore (§1.2 fix)', async () => {
+			// backgroundUrl is interpolated into `style.backgroundImage` =
+			// `url("…")` at render. The img-src CSP blocks loads from arbitrary
+			// origins, but per the project's data-boundary pattern the value is
+			// also validated at restore: only the Firefox wallpaper CDN passes.
+			const prefs = {
+				theme: 'dark',
+				backgroundUrl: 'https://attacker.example/x.png',
+			};
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.theme).toBe('dark');
+			// Untrusted origin → dropped, never stored.
+			expect(storedPrefs).not.toHaveProperty('backgroundUrl');
+		});
+
+		it('also drops a CSS-injection backgroundUrl payload at restore (§1.2 fix)', async () => {
+			const prefs = {
+				backgroundUrl: 'https://firefox-settings-attachments.cdn.mozilla.net/a.png") ; background: url(http://attacker.example/x',
+			};
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			// The trailing junk breaks the strict CDN match → dropped.
+			expect(storedPrefs).not.toHaveProperty('backgroundUrl');
+		});
+
+		it('preserves a valid Firefox-CDN backgroundUrl at restore (§1.2 fix)', async () => {
+			const url = 'https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/newtab-wallpapers-v2/abc.avif';
+			const prefs = { backgroundUrl: url };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.backgroundUrl).toBe(url);
+		});
+
 		it('sanitizes malicious backgroundColor in restored tiles (§1.1 fix)', async () => {
 			const tiles = [
 				{ id: 4, url: 'https://legit.com', title: 'Evil BG', position: 0,

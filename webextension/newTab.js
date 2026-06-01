@@ -1129,6 +1129,14 @@ var newTabTools = {
 				if (item.tab.url && item.tab.url.startsWith('moz-extension://')) {
 					continue;
 				}
+				// Validate the tab URL's protocol before it becomes `card.href`.
+				// Middle-click / Ctrl+click bypass the onclick restore handler and
+				// navigate the href directly, so a `javascript:`/`data:` session
+				// URL must be filtered at this data boundary (mirrors the
+				// favIconUrl validation below).
+				if (!newTabTools.isValidURL(item.tab.url)) {
+					continue;
+				}
 				if (tileURLs.has(item.tab.url)) {
 					continue;
 				}
@@ -1208,9 +1216,18 @@ var newTabTools = {
 		}
 		// The page-side `Tiles` (tiles-shim.js) is just an IPC façade — no
 		// `.clear()` method exists. Route through the background which owns
-		// the IDB transaction.
+		// the IDB transaction. Clear the Thumbnails store (captured screenshots
+		// + cached favicons of every visited site) and the Background store
+		// (uploaded wallpaper) too — a factory reset must not leave a user's
+		// browsing imagery on disk.
 		await new Promise(resolve => {
 			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
+		});
+		await new Promise(resolve => {
+			chrome.runtime.sendMessage({ name: 'Thumbnails.clear' }, () => resolve());
+		});
+		await new Promise(resolve => {
+			chrome.runtime.sendMessage({ name: 'Background.setBackground', file: null }, () => resolve());
 		});
 		// Blocked + Filters live inside chrome.storage.local, so clearing
 		// it wipes them along with prefs. We zero the in-memory copies too
@@ -1833,9 +1850,13 @@ var newTabTools = {
 				if (!s || !s.applyFavicon) {
 					return;
 				}
-				let blob = favicons.get(s.link.url);
-				if (blob) {
-					s.applyFavicon(blob);
+				let favicon = favicons.get(s.link.url);
+				// A Blob is a cached data: favicon; a string is a remote favicon
+				// URL — validate it (https/http only) before it becomes an <img src>.
+				if (favicon instanceof Blob) {
+					s.applyFavicon(favicon);
+				} else if (typeof favicon === 'string' && newTabTools.isValidURL(favicon)) {
+					s.applyFavicon(favicon);
 				}
 			});
 		});

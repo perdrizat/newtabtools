@@ -3,19 +3,19 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Regression test: real favicons land in IDB for third-party HTTPS sites.
+ * Regression test: real favicons reach the tile for third-party HTTPS sites.
  *
- * The fix in Phase 4-5 stored `tab.favIconUrl` content as a Blob in the
- * `thumbnails` IDB row. The original implementation only handled the
- * fetch() failure mode for `data:` URLs (blocked by manifest CSP
- * `connect-src`). The same `connect-src 'self' https://firefox.settings…`
- * also blocks fetch to arbitrary third-party HTTPS hosts, so favicons from
- * sites like heise.de (`https://www.heise.de/favicon.ico`) and TechCrunch
- * never made it into IDB either — they hit the same CSP wall, just under a
- * different scheme.
+ * Under the §1.1 model (audit/2026-05-31-csp-tightening.md) the capture
+ * pipeline records a favicon per visited site: a `data:` favicon is decoded +
+ * cached as a Blob, while a remote `http(s):` favicon is stored as its URL
+ * string and rendered live via `<img>` (no fetch — the `connect-src https:`
+ * wildcard was removed; `img-src https:` governs the paint). heise.de
+ * (`https://www.heise.de/favicon.ico`) and TechCrunch serve remote favicons,
+ * so they arrive as URL strings.
  *
  * This test pins both URLs, navigates to each so the capture pipeline runs,
- * and asserts that the favicon Blob is stored and non-empty in IDB.
+ * asserts a favicon (Blob or URL string) is recorded, then reloads and asserts
+ * the tile's overlay badge ends up with an `<img>`.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -88,19 +88,29 @@ describe('E2E: real favicons for third-party HTTPS sites', () => {
 				}
 			}
 
-			// Now query the background's `Thumbnails.getFavicons` and assert
-			// both URLs come back with a non-empty Blob.
+			// Query the background's `Thumbnails.getFavicons`. Under the §1.1
+			// model (audit/2026-05-31-csp-tightening.md) a favicon comes back
+			// EITHER as a Blob (a `data:` favicon, decoded + cached) OR as a
+			// remote URL string (rendered live via <img>, no fetch). heise.de /
+			// techcrunch.com serve `https://…/favicon.ico`, so they arrive as
+			// URL strings. Accept either shape and require it to be present.
 			const result = await waitForCondition(
 				page,
 				(...args: unknown[]) => {
 					const urls = args[0] as string[];
 					return new Promise(resolve => {
-						chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: Map<string, Blob>) => {
+						chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: Map<string, unknown>) => {
 							if (!response || response.size < urls.length) { resolve(null); return; }
-							const out: Record<string, { size: number; type: string } | null> = {};
+							const out: Record<string, { kind: string; detail: string } | null> = {};
 							for (const u of urls) {
-								const blob = response.get(u);
-								out[u] = blob ? { size: blob.size, type: blob.type } : null;
+								const v = response.get(u);
+								if (v instanceof Blob) {
+									out[u] = { kind: 'blob', detail: `${v.size}` };
+								} else if (typeof v === 'string') {
+									out[u] = { kind: 'url', detail: v };
+								} else {
+									out[u] = null;
+								}
 							}
 							resolve(out);
 						});
@@ -108,15 +118,20 @@ describe('E2E: real favicons for third-party HTTPS sites', () => {
 				},
 				[[HEISE, TECHCRUNCH]],
 				{ timeout: 20_000, message: 'No favicons stored in IDB for one or both sites' }
-			) as Record<string, { size: number; type: string } | null>;
+			) as Record<string, { kind: string; detail: string } | null>;
 
-			expect(result[HEISE]).not.toBeNull();
-			expect(result[HEISE]!.size).toBeGreaterThan(0);
-			expect(result[HEISE]!.size).toBeLessThanOrEqual(64 * 1024);
-
-			expect(result[TECHCRUNCH]).not.toBeNull();
-			expect(result[TECHCRUNCH]!.size).toBeGreaterThan(0);
-			expect(result[TECHCRUNCH]!.size).toBeLessThanOrEqual(64 * 1024);
+			for (const site of [HEISE, TECHCRUNCH]) {
+				expect(result[site]).not.toBeNull();
+				if (result[site]!.kind === 'blob') {
+					// data: favicon — cached Blob, capped at 64 KB.
+					expect(Number(result[site]!.detail)).toBeGreaterThan(0);
+					expect(Number(result[site]!.detail)).toBeLessThanOrEqual(64 * 1024);
+				} else {
+					// remote favicon — an https URL string for live <img>.
+					expect(result[site]!.kind).toBe('url');
+					expect(result[site]!.detail).toMatch(/^https?:\/\//);
+				}
+			}
 
 			// Reload so the new tab page picks up the just-stored favicons via
 			// `getThumbnails → getFavicons`. The visible smoke test is that

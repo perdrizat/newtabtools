@@ -174,4 +174,30 @@ describe('AwesomeBar — DOM wiring', () => {
 		expect(urls).toContain('https://gitlab.com/');  // bookmark
 		expect(urls).toContain('https://git-scm.com/'); // history
 	});
+
+	it('preventive (review §3): renders attacker-controlled title/URL as text, never as HTML', () => {
+		// Bookmark/history titles + URLs are attacker-influenced (a user can be
+		// tricked into bookmarking a page with a crafted title). The renderer
+		// must use textContent, not innerHTML — this pins that so a future
+		// "improvement" to a template literal / innerHTML is caught.
+		const evilTitle = '<img src=x onerror=alert(1)>';
+		const evilUrl = 'https://evil.example/<script>alert(2)</script>';
+		const results = AwesomeBar.buildResults('evil', {
+			tiles: [{ url: evilUrl, title: evilTitle }],
+			bookmarks: [],
+			history: [],
+		});
+		AwesomeBar._render(results);
+		const dd = document.getElementById('ntt-awesomebar')!;
+		// No injected elements: the payload must not have become real nodes.
+		expect(dd.querySelector('img')).toBeNull();
+		expect(dd.querySelector('script')).toBeNull();
+		// The strings survive verbatim as text content.
+		const titleEl = dd.querySelector('.ntt-awesomebar-title') as HTMLElement;
+		expect(titleEl.textContent).toBe(evilTitle);
+		expect(titleEl.querySelector('*')).toBeNull();
+		const urlEl = dd.querySelector('.ntt-awesomebar-url') as HTMLElement;
+		expect(urlEl.textContent).toBe(evilUrl);
+		expect(urlEl.querySelector('*')).toBeNull();
+	});
 });

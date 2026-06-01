@@ -199,16 +199,21 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return false;
 
 	case 'Thumbnails.getFavicons':
-		// Walk the thumbnails store and return a `url -> Blob` map for any
-		// requested URL that has a `favicon` field. Mirrors the shape of
-		// `Thumbnails.get`.
+		// Walk the thumbnails store and return a `url -> (Blob | string)` map.
+		// A cached `data:` favicon comes back as a `favicon` Blob; a remote
+		// favicon comes back as its `faviconUrl` string for the page to render
+		// live via <img>. The page-side handler distinguishes the two.
 		let faviconMap = new Map();
 		db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
 			let cursor = this.result;
 			if (cursor) {
 				let row = cursor.value;
-				if (message.urls.includes(row.url) && row.favicon) {
-					faviconMap.set(row.url, row.favicon);
+				if (message.urls.includes(row.url)) {
+					if (row.favicon) {
+						faviconMap.set(row.url, row.favicon);
+					} else if (row.faviconUrl) {
+						faviconMap.set(row.url, row.faviconUrl);
+					}
 				}
 				cursor.continue();
 			} else {
@@ -220,6 +225,17 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	case 'Thumbnails.delete':
 		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
+
+	case 'Thumbnails.clear':
+		// Wipe every stored screenshot + cached favicon. Used by the drawer's
+		// "Reset all settings" so a factory reset doesn't leave captured images
+		// of visited sites on disk.
+		waitForDB().then(function() {
+			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').clear().onsuccess = function() {
+				sendResponse();
+			};
+		});
+		return true;
 
 	case 'Export:backup':
 		makeZip().then(sendResponse);
@@ -324,10 +340,11 @@ function captureTab(tabId, windowId, label, callback) {
 
 /**
  * Decode a `data:` URL into a Blob without going through `fetch`.
- * The manifest CSP includes `connect-src 'self' https://firefox.settings…`
- * which blocks `fetch('data:…')`. Many sites (Mozilla properties, Wikipedia,
- * SPAs) inline their favicon as a data URL, so we have to decode in-process.
- * Returns `null` for malformed input.
+ * The manifest CSP is `connect-src 'self' https://firefox.settings.services.mozilla.com`
+ * (no wildcard — see audit/2026-05-31-csp-tightening.md), which blocks
+ * `fetch('data:…')`. Many sites (Mozilla properties, Wikipedia, SPAs) inline
+ * their favicon as a data URL, so we decode in-process. Returns `null` for
+ * malformed input.
  */
 function dataURLtoBlob(dataURL) {
 	let m = /^data:([^,;]*)(;base64)?,(.*)$/.exec(dataURL);
@@ -351,39 +368,27 @@ function dataURLtoBlob(dataURL) {
 }
 
 /**
- * Fetch a favicon URL and return a Blob. Resolves to `null` if the URL is
- * empty, unfetchable, or the response can't be turned into a Blob.
- * Caps the result at ~64 KB so we don't bloat the IDB store with massive
- * SVG favicons.
+ * Turn a tab's `favIconUrl` into a cached favicon Blob, or `null`.
  *
- * `data:` URLs are decoded in-process (see `dataURLtoBlob`) because the
- * manifest CSP blocks `fetch()` on them.
+ * Only `data:` URLs are cached here: they're decoded in-process (see
+ * `dataURLtoBlob`), capped at ~64 KB so we don't bloat the IDB store. Remote
+ * `http(s):` favicons are deliberately NOT fetched — that required a
+ * `connect-src https:` wildcard in the manifest CSP (any-HTTPS read access),
+ * which the 2026-05-31 review flagged. Instead they render live on the page as
+ * `<img src="https://…/favicon.ico">`, governed by `img-src https:` (paint-only,
+ * can't exfiltrate). See `audit/2026-05-31-csp-tightening.md`. So this returns
+ * null for non-`data:` URLs and the page falls back to a live <img> via the
+ * stored `favIconUrl` string.
  */
 function fetchFaviconBlob(favIconUrl) {
-	if (!favIconUrl) {
+	if (!favIconUrl || !favIconUrl.startsWith('data:')) {
 		return Promise.resolve(null);
 	}
-	if (favIconUrl.startsWith('data:')) {
-		let blob = dataURLtoBlob(favIconUrl);
-		if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
-			return Promise.resolve(null);
-		}
-		return Promise.resolve(blob);
+	let blob = dataURLtoBlob(favIconUrl);
+	if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
+		return Promise.resolve(null);
 	}
-	return fetch(favIconUrl)
-		.then(function(r) {
-			if (!r.ok) {
-				return null;
-			}
-			return r.blob();
-		})
-		.then(function(blob) {
-			if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
-				return null;
-			}
-			return blob;
-		})
-		.catch(function() { return null; });
+	return Promise.resolve(blob);
 }
 
 /**
@@ -593,7 +598,12 @@ function pickAndStore(tabId) {
 					used: today,
 				};
 				if (faviconBlob) {
+					// data: favicon, decoded + cached as a Blob (offline-capable).
 					record.favicon = faviconBlob;
+				} else if (favIconUrl && /^https?:\/\//.test(favIconUrl)) {
+					// Remote favicon: store the URL so the page can render it
+					// live via <img> (no fetch / no connect-src wildcard).
+					record.faviconUrl = favIconUrl;
 				}
 				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
 			});

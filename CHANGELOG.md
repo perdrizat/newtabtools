@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-01] — NTT v2 Phase 5 security remediation
+
+### Security
+
+- Removed the `connect-src https:` wildcard from the CSP — favicons now render as live `<img src=favIconUrl>` under `img-src https:` (paint-only, no fetch channel); only `data:` favicons are still cached in IDB.
+- Validate `backgroundUrl` against the Mozilla CDN allow-list regex on backup restore, dropping anything else.
+- Filter recently-closed tab URLs through `isValidURL` so only `ftp:`/`http:`/`https:` protocols render.
+- "Reset everything" now also clears the Thumbnails and Background IndexedDB stores.
+
+### Added
+
+- `audit/2026-05-31-csp-tightening.md` documenting the wildcard removal, the favicon `<img>` threat model, and the empirical disproof of the `page-icon:` approach.
+- CONTRIBUTING "Security-boundary changes require explicit acknowledgement" checklist (CSP/permission/allow-list/validation changes).
+- Awesome-bar XSS regression test pinning attacker-controlled title/URL to `textContent`.
+
+### Fixed
+
+- Grid `min-width` clamped to `min(600px, 100%)` so the drawer no longer forces horizontal overflow at narrow widths.
+
 ## [2026-05-31] — NTT v2 Phase 5: cleanup & consolidation
 
 ### Removed

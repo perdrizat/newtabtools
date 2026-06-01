@@ -101,6 +101,22 @@ describe('resetAllSettings — destructive factory reset', () => {
 		expect(tilesClear).toHaveBeenCalledTimes(1);
 	});
 
+	it('§1.4: also clears the Thumbnails + Background IDB stores (no leftover imagery)', async () => {
+		window.confirm = vi.fn().mockReturnValue(true);
+		await harness.resetAllSettings();
+		const send = (globalThis as any).chrome.runtime.sendMessage;
+		// Captured screenshots + cached favicons.
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'Thumbnails.clear' }),
+			expect.any(Function)
+		);
+		// Uploaded wallpaper blob — setBackground(null) clears the store.
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'Background.setBackground', file: null }),
+			expect.any(Function)
+		);
+	});
+
 	it('clears in-memory Blocked + Filters, then chrome.storage.local, then reloads', async () => {
 		window.confirm = vi.fn().mockReturnValue(true);
 		await harness.resetAllSettings();

