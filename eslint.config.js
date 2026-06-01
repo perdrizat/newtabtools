@@ -143,7 +143,7 @@ export default [
 		// evaluate() blocks that run in the browser, plus Puppeteer's
 		// own browser-like API. nttGlobals covers extension-specific
 		// objects (Prefs, Grid, Tiles, etc.) referenced in page.evaluate().
-		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs'],
+		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs', 'tests/uat/**/*.mjs'],
 		languageOptions: {
 			ecmaVersion: 2022,
 			sourceType: 'module',

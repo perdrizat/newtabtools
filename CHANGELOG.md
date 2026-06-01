@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-01] — UAT tier scaffolding & doc refresh
+
+### Added
+
+- UAT tier prototypes under `tests/uat/_tools/`: `mcp-server.mjs` (MCP browser-control over Selenium + release Firefox), `mcp-smoke.mjs`, `browser-smoke.mjs`, `fallback-cli.mjs`, `mcp-config.json`, plus `tests/uat/README.md`.
+- Checked-in UAT fixture `tests/uat/newtabtools_knowngood.zip` (`fixtureVersion: 1`; `.gitignore` negation since `*.zip` is globally ignored).
+- `selenium-webdriver` devDependency for the UAT browser path.
+
+### Changed
+
+- Refreshed `README.md` to reflect the shipped NTT v2 UI (status bar removed; awesome bar added) and updated test-suite counts.
+- Re-planned the UAT tier (`UAT_PLAN.md`) onto Selenium + geckodriver + release-channel Firefox (prototype-validated); E2E stays on ESR + Puppeteer-BiDi.
+- Chose the UAT agent↔browser bridge: MCP server with **Option C** screenshots (take→disk path, read→inline on demand) over eager-inline MCP and CLI-over-Bash; documented in `UAT_PLAN.md`.
+- UAT tooling writes build artifacts and screenshots to the git-ignored `tests/uat/artifacts/` — no `/tmp` dependency.
+- Documented UAT dev-environment setup (release Firefox + geckodriver + deps) in `TESTING.md`, recorded the decision to keep UAT out of push/PR CI, and reconciled the `UAT_PLAN.md` fixture description (9 tiles at positions 0–8) to the actual fixture.
+
 ## [2026-06-01] — NTT v2 Phase 5 security remediation
 
 ### Security
@@ -20,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `audit/2026-05-31-csp-tightening.md` documenting the wildcard removal, the favicon `<img>` threat model, and the empirical disproof of the `page-icon:` approach.
 - CONTRIBUTING "Security-boundary changes require explicit acknowledgement" checklist (CSP/permission/allow-list/validation changes).
 - Awesome-bar XSS regression test pinning attacker-controlled title/URL to `textContent`.
+- Generalized CSP regression guard (`tests/unit/manifest.test.ts`): fails the build if any of `default-src`/`script-src`/`style-src`/`connect-src` carries an `http:`/`https:`/`ws:`/`wss:` scheme wildcard or a bare `*`.
 
 ### Fixed
 

@@ -1,6 +1,8 @@
 *.crx
 *.xpi
 *.zip
+# UAT fixture — checked in despite *.zip (it's the test contract)
+!tests/uat/newtabtools_knowngood.zip
 webextension/_locales/values
 webextension/_locales/xyz
 CLAUDE.md
@@ -11,6 +13,7 @@ test-results/
 .github/logs/
 tests/e2e/test-profile/
 tests/e2e/_artifacts/
+tests/uat/artifacts/
 .vitest-cache/
 *.Zone.Identifier
 .DS_Store

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "ntt-uat": {
+      "command": "node",
+      "args": ["./tests/uat/_tools/mcp-server.mjs"],
+      "env": {
+        "EXTENSION_XPI": "${EXTENSION_XPI}",
+        "FIREFOX_BIN": "${FIREFOX_BIN}",
+        "ARTIFACTS_DIR": "${ARTIFACTS_DIR}",
+        "NTT_UAT_UUID": "e1a2b3c4-d5e6-4789-9abc-def012345678"
+      }
+    }
+  }
+}
