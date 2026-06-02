@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-02b] — AMO submission readiness
+
+### Changed
+
+- Manifest forward-port for AMO submission: `applications` → `browser_specific_settings` (MV3-compatible key name); `strict_min_version` 128 → 140 (ESR 128 EOL'd 2025-09; ESR 140 is current and supports `data_collection_permissions`).
+- `webextension/newTab.js:799` — `browser.extension.getURL` → `browser.runtime.getURL` (the `extension` namespace is MV3-removed).
+
+### Added
+
+- `browser_specific_settings.gecko.data_collection_permissions: { required: ["none"] }` — Mozilla's built-in data-consent declaration. Accurate for NTT: tile/thumbnail data lives in local IndexedDB; the only outbound connection is the Mozilla wallpapers service; no telemetry, no third-party endpoints.
+- `tests/unit/manifest.test.ts` — regression guard asserting the data-consent declaration stays `["none"]` and the legacy `applications` key stays absent.
+- `pnpm verify` script — runs `lint && typecheck && lint:webext && test:fast && build` in one command. Faster feedback loop than `pre_commit_check.sh` + manual gate-by-gate runs; E2E intentionally excluded (separate `pnpm test:e2e` for the heavier ~11-minute gate).
+
+### Known accepted
+
+- `web-ext lint` warning `KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION` — `data_collection_permissions` was added to Firefox-for-Android in version 142, our overall `strict_min_version` is 140 (desktop ESR). NTT can't run on Firefox-Android anyway (no `chrome_url_overrides.newtab` surface on Android Firefox UI). AMO accepts (0 errors). Not worth carrying an empty `gecko_android` block to silence.
+
 ## [2026-06-02] — Fork identity, pnpm migration, build pipeline
 
 ### Changed

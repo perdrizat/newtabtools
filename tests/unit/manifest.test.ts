@@ -134,9 +134,25 @@ describe('manifest.json — security configuration', () => {
 	});
 
 	describe('Minimum version', () => {
-		it('requires at least Firefox ESR 128', () => {
-			const minVersion = parseFloat(manifest.applications.gecko.strict_min_version);
-			expect(minVersion).toBeGreaterThanOrEqual(128);
+		it('requires at least Firefox ESR 140 (current ESR, supports browser_specific_settings.gecko.data_collection_permissions)', () => {
+			const minVersion = parseFloat(manifest.browser_specific_settings.gecko.strict_min_version);
+			expect(minVersion).toBeGreaterThanOrEqual(140);
+		});
+	});
+
+	describe('AMO submission requirements (browser_specific_settings)', () => {
+		it('uses the MV3-compatible "browser_specific_settings" key (not legacy "applications")', () => {
+			expect(manifest.browser_specific_settings).toBeDefined();
+			expect((manifest as any).applications).toBeUndefined();
+		});
+
+		it('declares no user-data collection (Mozilla built-in data consent)', () => {
+			// NTT processes tile/thumbnail data locally in IndexedDB and never
+			// transmits user data off-device. The single outbound connect is to
+			// the Mozilla wallpapers service. AMO requires an explicit "none"
+			// attestation in lieu of any data-collection categories.
+			expect(manifest.browser_specific_settings.gecko.data_collection_permissions)
+				.toEqual({ required: ['none'] });
 		});
 	});
 

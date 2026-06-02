@@ -796,7 +796,7 @@ var newTabTools = {
 		}
 
 		try {
-			let request = await fetch(browser.extension.getURL(`images/${name}-${effectiveTheme}.svg`));
+			let request = await fetch(browser.runtime.getURL(`images/${name}-${effectiveTheme}.svg`));
 			let content = await request.text();
 			content = content.replaceAll('#fff', fore);
 			content = content.replaceAll('#1f364c', back);

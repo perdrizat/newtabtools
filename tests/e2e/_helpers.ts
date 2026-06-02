@@ -18,7 +18,7 @@ export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
 // eslint-disable-next-line ntt/no-source-grep -- loading manifest for extension ID
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
-export const EXTENSION_ID: string = manifest.applications.gecko.id;
+export const EXTENSION_ID: string = manifest.browser_specific_settings.gecko.id;
 
 const verboseEnabled = !!process.env.E2E_VERBOSE;
 function verbose(...args: unknown[]) {
