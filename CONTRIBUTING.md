@@ -25,7 +25,7 @@ All development on this project is test-driven. Before writing any code, please 
 
 1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js and Firefox ESR.
 2.  **TDD:** We follow a strict red/green TDD workflow. Unit and Integration tests run on every save; E2E tests run at feature completion.
-3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`npm run dev`, `npm run test:fast`, etc.).
+3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`pnpm dev`, `pnpm test:fast`, etc.). This project uses **pnpm** as the package manager (enforced by a `preinstall` guard so the `minimum-release-age` supply-chain rule in `.npmrc` actually applies).
 
 ### Build
 
@@ -33,7 +33,7 @@ Currently, there is no build step for the Firefox-only MV2 extension. You can ru
 
 ```bash
 # Run the extension locally
-npm run dev
+pnpm dev
 ```
 
 ### Deploy
@@ -58,15 +58,15 @@ web-ext build --source-dir webextension/
 
 ### After Finishing Feature Work
 
-- **Always run E2E tests** with `npm run test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script handles the full Firefox ESR lifecycle (launch, port wait, test run, cleanup) automatically.
+- **Always run E2E tests** with `pnpm test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script handles the full Firefox ESR lifecycle (launch, port wait, test run, cleanup) automatically.
 - **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox ESR with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
 
 ### Before Committing
 
-- **Run `npm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**
+- **Run `pnpm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**
 - If your new tests use `fs.readFileSync` on files under `webextension/`, the ESLint rule `ntt/no-source-grep` will flag it — add a disable comment with justification if the check is purely structural.
 - Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
-- After changing `package.json` or `package-lock.json`, run `npm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
+- After changing `package.json` or `pnpm-lock.yaml`, run `pnpm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 
 ### Security-boundary changes require explicit acknowledgement
 
@@ -88,7 +88,7 @@ Contributions generated with the help of AI are welcome but must follow the stan
 
 - **Human Accountability:** The human submitter is responsible for reviewing all AI-generated code, ensuring license compliance, and taking full responsibility for the contribution. AI agents MUST NOT add `Signed-off-by` tags.
 - **Attribution:** Mentioning AI assistance in commit messages is optional.
-- **Supply-chain guardrails:** When AI-assisted contributions touch `package.json`, `package-lock.json`, or build/test scripts, the human submitter is specifically responsible for: pinned versions on new deps (no `^` / `~`); diffing the lockfile to spot unexpected new transitive deps and source-URL changes on existing ones; reading any `postinstall` scripts before installing; cross-checking new dep names against npm registry stats (download volume, last publish date, listed maintainers) to catch typo-squats. The `min-release-age=7` setting in `.npmrc` is the floor, not a substitute for review.
+- **Supply-chain guardrails:** When AI-assisted contributions touch `package.json`, `pnpm-lock.yaml`, or build/test scripts, the human submitter is specifically responsible for: pinned versions on new deps (no `^` / `~`); diffing the lockfile to spot unexpected new transitive deps and source-URL changes on existing ones; reading any `postinstall` scripts before installing; cross-checking new dep names against npm registry stats (download volume, last publish date, listed maintainers) to catch typo-squats. The `minimum-release-age=604800` (7 days) setting in `.npmrc` — enforced because the project pins pnpm via `packageManager` and rejects npm/yarn in `scripts/check-pnpm.js` — is the floor, not a substitute for review.
 
 ### Key Files
 

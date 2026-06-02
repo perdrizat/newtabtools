@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-02] — Fork identity, pnpm migration, build pipeline
+
+### Changed
+
+- **Fork identity.** Extension ID changed from `newtabtools@darktrojan.net` to `newtabtools@symlink.ch` (new AMO listing). Updated in 6 places: `webextension/manifest.json`, two integration tests, three UAT tools. `package.json` `author` set to `"Markus Perdrizat"` (was empty).
+- **Version reset to semver: `92.1` → `1.0.0`** in `webextension/manifest.json`. The 92.x line was Geoff's own incremental scheme inherited from upstream; restarting the line as `1.0.0` aligns with `package.json`'s already-existing `1.0.0` and gives a clean semver trail under the new AMO ID. Going forward, manifest and package versions bump together.
+
+### Added
+
+- `pnpm build` script in `package.json` — wraps `web-ext build` and writes the unsigned `.xpi` to `dist/` (the canonical build output, shared between UAT installation and AMO release upload). Replaces the previous long `web-ext build …` command in docs.
+- UAT tools (`browser-smoke.mjs`, `mcp-server.mjs`, `fallback-cli.mjs`) now resolve the `.xpi` from a separate `XPI_DIR` (default `dist/`), while still writing their own evidence (screenshots, scenario reports) to `ARTIFACTS_DIR` (default `tests/uat/artifacts/`). Both env vars are overridable.
+- `.gitignore` ignores `dist/`.
+- **Package manager: npm → pnpm.** `.npmrc` adds `minimum-release-age=604800` (the 7-day supply-chain guard that `CONTRIBUTING.md` previously claimed but did not enforce — npm has no equivalent setting). Pinned via `packageManager: pnpm@10.0.0` in `package.json`; `scripts/check-pnpm.js` rejects `npm install`/`yarn install` so the guard can't be silently bypassed.
+- `package.json` adds `engines` (Node ≥ 22, pnpm ≥ 10) and `preinstall` hook; `.node-version` (= 22) lets fnm/nvm pick the right Node automatically.
+- `selenium-webdriver` pinned to exact `4.44.0` (was `^4.44.0`, violated the project's exact-pin rule).
+- `.github/workflows/ci.yml` switched to `pnpm/action-setup@v4` + `pnpm install --frozen-lockfile`; Node now read from `.node-version`.
+- Docs swept for `npm` → `pnpm` commands: `CONTRIBUTING.md`, `TESTING.md`, `UAT_PLAN.md`, `tests/uat/README.md`.
+
+### Fixed
+
+- `CONTRIBUTING.md` no longer claims `min-release-age=7` exists in `.npmrc` — the setting is now real (`minimum-release-age=604800`, pnpm-native) and the doc references the correct name + value + enforcement mechanism.
+
 ## [2026-06-01] — UAT tier scaffolding & doc refresh
 
 ### Added

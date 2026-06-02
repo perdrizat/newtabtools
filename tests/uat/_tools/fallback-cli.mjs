@@ -24,18 +24,21 @@ import { Builder } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// XPI_DIR = canonical build output. ART_DIR = UAT evidence (daemon file, etc.).
+const XPI_DIR = process.env.XPI_DIR || path.resolve(__dirname, '../../../dist');
 const ART_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const DAEMON_FILE = `${ART_DIR}/uat-cli-daemon.json`;
-const ADDON_ID = 'newtabtools@darktrojan.net';
+const ADDON_ID = 'newtabtools@symlink.ch';
 const UUID = 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
 
 function newestXpi() {
-	const f = fs.readdirSync(ART_DIR)
+	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
+	const f = fs.readdirSync(XPI_DIR)
 		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
-		.map(n => path.join(ART_DIR, n))
+		.map(n => path.join(XPI_DIR, n))
 		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!f.length) { throw new Error(`No xpi/zip in ${ART_DIR}`); }
+	if (!f.length) { throw new Error(`No xpi/zip in ${XPI_DIR} — run \`pnpm build\` first.`); }
 	return f[0];
 }
 

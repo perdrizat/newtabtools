@@ -29,7 +29,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
 
-const EXTENSION_ID = 'newtabtools@darktrojan.net';
+const EXTENSION_ID = 'newtabtools@symlink.ch';
 
 // ---------------------------------------------------------------------------
 // Mock helpers

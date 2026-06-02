@@ -17,11 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Version is read from package.json's `packageManager` field.
+          run_install: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version-file: '.node-version'
+          cache: 'pnpm'
 
       - name: Install Firefox ESR
         run: |
@@ -36,31 +42,31 @@ jobs:
           sudo apt-get update && sudo apt-get install -y firefox-esr
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Dependency audit
         # Per audit/2026-05-04-security-review.md §2.7. Establishes a
         # baseline before more deps land in Phase 0/1. Fails on high or
         # critical advisories so a new vulnerable dep can't be merged
-        # silently. `--omit=dev` would narrow to runtime deps if needed,
+        # silently. `--prod` would narrow to runtime deps if needed,
         # but we currently have no runtime deps (the extension itself
         # has no node deps), so all advisories are dev-stack.
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Type check
-        run: npm run typecheck
+        run: pnpm typecheck
 
       - name: Web-ext Lint
-        run: npm run lint:webext
+        run: pnpm lint:webext
 
       - name: Unit & Integration tests
-        run: npm run test:fast
+        run: pnpm test:fast
 
       - name: E2E tests (Puppeteer + BiDi)
-        run: npm run test:e2e
+        run: pnpm test:e2e
         env:
           E2E_VERBOSE: 1
 

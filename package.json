@@ -4,8 +4,15 @@
   "private": true,
   "type": "module",
   "description": "A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. PowerTools for your New Tab page.",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
   "scripts": {
+    "preinstall": "node scripts/check-pnpm.js",
     "dev": "web-ext run --source-dir webextension/",
+    "build": "web-ext build --source-dir webextension/ --artifacts-dir dist --overwrite-dest",
     "lint": "eslint webextension/ tests/",
     "lint:webext": "web-ext lint --source-dir webextension/",
     "typecheck": "tsc --noEmit",
@@ -13,15 +20,15 @@
     "test:integration": "vitest run --project fast tests/integration",
     "test:fast": "vitest run --project fast",
     "test:e2e": "tests/e2e/run_esr_tests.sh",
-    "test": "npm run test:fast && npm run test:e2e",
-    "update-zip": "VER=$(node -p \"require('@zip.js/zip.js/package.json').version\") && printf '/*\\n * @zip.js/zip.js v%s — zip-core.min.js\\n * Source: https://github.com/gildas-lormeau/zip.js\\n * License: BSD-3-Clause\\n * Installed as devDependency; copied via: npm run update-zip\\n */\\n' \"$VER\" | cat - node_modules/@zip.js/zip.js/dist/zip-core.min.js > webextension/lib/zip.js"
+    "test": "pnpm test:fast && pnpm test:e2e",
+    "update-zip": "VER=$(node -p \"require('@zip.js/zip.js/package.json').version\") && printf '/*\\n * @zip.js/zip.js v%s — zip-core.min.js\\n * Source: https://github.com/gildas-lormeau/zip.js\\n * License: BSD-3-Clause\\n * Installed as devDependency; copied via: pnpm update-zip\\n */\\n' \"$VER\" | cat - node_modules/@zip.js/zip.js/dist/zip-core.min.js > webextension/lib/zip.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/perdrizat/newtabtools.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "Markus Perdrizat",
   "license": "MPL-2.0",
   "bugs": {
     "url": "https://github.com/perdrizat/newtabtools/issues"
@@ -39,7 +46,7 @@
     "jest-webextension-mock": "4.1.1",
     "jsdom": "29.1.1",
     "puppeteer-core": "24.42.0",
-    "selenium-webdriver": "^4.44.0",
+    "selenium-webdriver": "4.44.0",
     "typescript": "6.0.3",
     "vitest": "4.1.5",
     "web-ext": "10.3.0"

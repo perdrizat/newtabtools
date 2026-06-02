@@ -2,7 +2,7 @@
 
 A new test tier above E2E: an LLM agent walks through scenarios, judges whether things look and work correctly, and produces a human-reviewable report. Replaces the manual pre-release QA pass with an automated one that runs the same scenarios faster, generates evidence artifacts, and catches the bug class structural tests miss (occlusion, contrast, layering, "looks broken to a user").
 
-This plan uses **Claude Code in headless mode** (not the Claude API) as the agent driver, with **our own MCP server** wrapping a **Selenium + geckodriver** setup driving **Firefox (release channel)** for browser control. The scenarios are plain English. The whole tier is opt-in (`npm run test:uat`), gated on a separate model budget, and never blocks PR merges.
+This plan uses **Claude Code in headless mode** (not the Claude API) as the agent driver, with **our own MCP server** wrapping a **Selenium + geckodriver** setup driving **Firefox (release channel)** for browser control. The scenarios are plain English. The whole tier is opt-in (`pnpm test:uat`), gated on a separate model budget, and never blocks PR merges.
 
 > **UAT and E2E use different browser stacks — deliberately.** E2E stays on **Firefox ESR via `web-ext` + Puppeteer-over-WebDriver-BiDi** (real min-version build, native unsigned sideload, deterministic-assertion tests). UAT runs on **release-channel Firefox via Selenium + geckodriver**, because UAT's job is "does this look right *to a user*," and most users are on release, not ESR. UAT's bug class (occlusion / contrast / layout) is the least build-sensitive thing we test, so running it on a *newer, more user-representative* Gecko is a feature, not a risk — and it gives a free differential signal (a UAT finding that doesn't reproduce on the ESR E2E rig is a candidate version-specific issue). This split was validated by a working prototype (now `tests/uat/_tools/browser-smoke.mjs`); see the 2026-06-01 revision under Spike outcome.
 
@@ -12,7 +12,7 @@ This plan uses **Claude Code in headless mode** (not the Claude API) as the agen
 2. Stay in the existing repo conventions: TypeScript runner, artifacts under `tests/uat/artifacts/`. Browser control is **Selenium + geckodriver against release-channel Firefox** (not the E2E tier's ESR/BiDi stack — see the note above).
 3. Use the developer's existing Claude Code subscription rather than provisioning a separate Anthropic API key.
 4. Produce structured JSON reports + annotated screenshots as artifacts. Treat results as "investigate" not "build pass/fail."
-5. Work on any contributor's machine without manual setup beyond `npm install` + a one-time `claude /login`. The harness checks its own prerequisites and either auto-installs them or prints precise next-step instructions.
+5. Work on any contributor's machine without manual setup beyond `pnpm install` + a one-time `claude /login`. The harness checks its own prerequisites and either auto-installs them or prints precise next-step instructions.
 6. Run every scenario against the **same known-good starting state** — a checked-in NTT backup zip — so findings reflect the code change, not profile drift.
 
 ## Non-goals
@@ -86,7 +86,7 @@ If the MCP wrapper hits an unexpected wall (stdio framing, protocol drift, etc.)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  npm run test:uat                                                │
+│  pnpm test:uat                                                   │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
                          ▼
@@ -102,7 +102,7 @@ If the MCP wrapper hits an unexpected wall (stdio framing, protocol drift, etc.)
 │  - tsx resolvable                                                │
 │  - known-good fixture present at tests/uat/                      │
 │      newtabtools_knowngood.zip                                   │
-│  Auto-installs npm deps via `npm install`; for the rest, prints  │
+│  Auto-installs node deps via `pnpm install`; for the rest, prints │
 │  copy-pastable fix instructions and exits non-zero.              │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
@@ -215,24 +215,24 @@ Add to `.gitignore`: `tests/uat/artifacts/`. The fixture itself is checked in.
 
 ### 3. Preflight (`tests/uat/preflight.ts`)
 
-Runs at the very start of `npm run test:uat`. Hard requirement: a contributor can clone the repo on a clean machine, run `npm install && npm run test:uat`, and either the run starts or they're told exactly what to do next.
+Runs at the very start of `pnpm test:uat`. Hard requirement: a contributor can clone the repo on a clean machine, run `pnpm install && pnpm test:uat`, and either the run starts or they're told exactly what to do next.
 
 **Checks (in order; fail-fast):**
 
 | # | Check | If missing |
 |---|---|---|
 | 1 | Node version meets `package.json` `engines` floor | Print upgrade instructions; exit 1 |
-| 2 | `node_modules/@modelcontextprotocol/sdk` + `selenium-webdriver` exist at their pinned versions | Auto-run `npm install`; if still missing, exit 1 |
+| 2 | `node_modules/@modelcontextprotocol/sdk` + `selenium-webdriver` exist at their pinned versions | Auto-run `pnpm install`; if still missing, exit 1 |
 | 3 | **release Firefox** resolvable (`firefox` on PATH or `$FIREFOX_BIN`) | Print install instructions; exit 1 |
 | 4 | `geckodriver` available (on PATH, or Selenium Manager can auto-fetch — probe network) | Print install link / Selenium Manager note; exit 1 |
-| 5 | `web-ext` resolvable (used to package the `.xpi`, already a devDep) | Auto-run `npm install`; if still missing, exit 1 |
+| 5 | `web-ext` resolvable (used to package the `.xpi`, already a devDep) | Auto-run `pnpm install`; if still missing, exit 1 |
 | 6 | `claude` CLI on PATH | Print install link (`https://docs.claude.com/claude-code`); exit 1 |
 | 7 | `claude` is authenticated | Run `claude -p "ping"` with a 10s timeout; if it errors or asks for login, instruct `claude /login` and exit 1 |
-| 8 | `tsx` resolvable | Re-run `npm install`; if still missing, exit 1 |
+| 8 | `tsx` resolvable | Re-run `pnpm install`; if still missing, exit 1 |
 | 9 | `tests/uat/newtabtools_knowngood.zip` exists and is non-empty | Print location and regeneration steps from `tests/uat/README.md`; exit 1 |
 
 **Modes:**
-- Default: check + auto-install where safe (npm deps only). Refuse to touch system packages (Firefox, geckodriver) — print instructions instead.
+- Default: check + auto-install where safe (node deps via `pnpm install` only). Refuse to touch system packages (Firefox, geckodriver) — print instructions instead.
 - `--check-only`: don't install anything, just report. Useful for CI debugging.
 - `--verbose`: log each probe with timing.
 
@@ -388,7 +388,7 @@ Responsibilities:
 
 - Run `preflight.ts` first. Abort on non-zero exit.
 - Parse CLI args: `--scenario <id>` (default: all), `--model <name>` (default: sonnet).
-- Package the extension once: `web-ext build --source-dir webextension/ --artifacts-dir <tmp> --overwrite-dest` → an `.xpi`/`.zip`; record the path as `EXTENSION_XPI`. The runner does **not** launch a browser — the MCP server does that via Selenium, per scenario.
+- Package the extension once: `pnpm build` → writes the `.xpi`/`.zip` to `dist/` (canonical output, shared with AMO release). The MCP server's `XPI_DIR` env var defaults to `dist/`; the runner doesn't need to pass `EXTENSION_XPI` explicitly unless it wants to test a non-default artifact. The runner does **not** launch a browser — the MCP server does that via Selenium, per scenario.
 - Generate the per-run `mcp-config.json` pointing Claude at our MCP server (`tests/uat/_tools/mcp-server.mjs`), passing `EXTENSION_XPI`, `FIREFOX_BIN`, `ARTIFACTS_DIR`, and the pinned UUID via env.
 - For each scenario file:
   - Create `artifacts/<scenario-id>/<ISO-timestamp>/` directory.
@@ -462,7 +462,7 @@ Measure the wire payloads any time with `tests/uat/_tools/mcp-smoke.mjs` (after 
 
 | Run mode | Frequency | Cost per run | Monthly |
 |---|---|---|---|
-| Local on-demand (`npm run test:uat`) | a few per phase | covered by CC subscription | n/a |
+| Local on-demand (`pnpm test:uat`) | a few per phase | covered by CC subscription | n/a |
 | Pre-AMO release | every 2 weeks | covered by CC subscription | n/a |
 
 Subscription mode only for the initial implementation. The runner does not read `ANTHROPIC_API_KEY`. CI nightly + API mode are deliberately deferred until the manual workflow proves value.
@@ -482,7 +482,7 @@ Outcome documented in §"Spike outcome" above. Decision: roll-your-own MCP, with
 - Create `tests/uat/` with the directory layout above.
 - Add `tests/uat/artifacts/` to `.gitignore`. The fixture stays committed.
 - Add `"test:uat": "tsx tests/uat/runner.ts"` to `package.json` scripts.
-- Add `tsx`, `@modelcontextprotocol/sdk@<pinned>`, and `selenium-webdriver@<pinned>` as devDependencies (no `^`); run `npm audit`. (geckodriver is provisioned by Selenium Manager or installed onto PATH — a system dep, not an npm one.)
+- Add `tsx`, `@modelcontextprotocol/sdk@<pinned>`, and `selenium-webdriver@<pinned>` as devDependencies (no `^`); run `pnpm audit`. (geckodriver is provisioned by Selenium Manager or installed onto PATH — a system dep, not a node one.)
 - Write `tests/uat/preflight.ts` with the checks listed in §3 (release Firefox + geckodriver + the fixture-presence check).
 - Stub `runner.ts` with a hello-world that runs preflight, then spawns `claude -p "say hi"` and writes the response to an artifact.
 - Verify on a clean checkout (or via a fresh `git clean -xdf` if you're willing). Preflight should either pass or print actionable instructions.
@@ -522,7 +522,7 @@ This is the scenario that has to catch the motivating bug.
 ### Step 6 — Document in TESTING.md and CONTRIBUTING.md (30 min)
 
 - TESTING.md UAT tier section already added (forward-looking). Expand once Steps 1-5 land.
-- Add to `CONTRIBUTING.md`'s "Before Committing" section: "For changes that affect the UI, run `npm run test:uat` and review the summary before requesting review."
+- Add to `CONTRIBUTING.md`'s "Before Committing" section: "For changes that affect the UI, run `pnpm test:uat` and review the summary before requesting review."
 - `tests/uat/README.md`: how to run, how to add a scenario, how to debug artifacts, the Step 0 spike result (linked from here), the pinned `@modelcontextprotocol/sdk` version with refresh notes, the fixture description + regeneration steps + `fixtureVersion`, a troubleshooting section keyed by preflight failure messages.
 
 ---
@@ -546,7 +546,7 @@ The remaining gating point is Step 3 — if the agent can't reliably flag the mo
 
 ## Risks & open questions
 
-1. **MCP SDK release drift.** `@modelcontextprotocol/sdk` is at v1.29.x and still evolving. Mitigation: pinned dep, lockfile review on upgrade, `npm audit --audit-level=high` is already in CI. Tested CC + SDK versions recorded in `tests/uat/README.md`.
+1. **MCP SDK release drift.** `@modelcontextprotocol/sdk` is at v1.29.x and still evolving. Mitigation: pinned dep, lockfile review on upgrade, `pnpm audit --audit-level=high` is already in CI. Tested CC + SDK versions recorded in `tests/uat/README.md`.
 2. **Skill prompt non-determinism.** Same scenario may produce different findings across runs. Mitigation: run each scenario 2-3x during initial calibration, tune the criteria language until findings stabilize. Document the prompt-tuning process in `tests/uat/README.md` so it's repeatable.
 3. **Hallucinated findings.** The agent may flag non-issues or miss real ones. Mitigation: screenshots are ground truth — they're saved as artifacts so the developer can spot-check disagreements. The verdict is "investigate" not "fail" — humans always look at the summary before releasing.
 4. **Cost runaway.** Easy to leave the runner running in a loop. Mitigation: hard-cap `--max-turns 50` in the runner, log a warning if any scenario hits the cap, never schedule on PR merge or commit push.
@@ -564,7 +564,7 @@ The remaining gating point is Step 3 — if the agent can't reliably flag the mo
 
 ## Definition of done
 
-- `npm run test:uat` runs five scenarios end-to-end against a live **release-channel Firefox** (Selenium + geckodriver) with the extension temporarily installed, on a freshly-cloned working tree after `npm install` and a one-time `claude /login`.
+- `pnpm test:uat` runs five scenarios end-to-end against a live **release-channel Firefox** (Selenium + geckodriver) with the extension temporarily installed, on a freshly-cloned working tree after `pnpm install` and a one-time `claude /login`.
 - The preflight either passes or prints a precise, copy-pastable fix for any failed check, including the fixture-presence check.
 - Each scenario's preamble successfully restores the known-good fixture; the agent verifies the populated grid before executing scenario-specific steps.
 - Each scenario produces `report.json`, `transcript.jsonl`, and per-step screenshots under `artifacts/`.

@@ -27,31 +27,36 @@ These tools must be present on your host machine to develop and test this extens
 
 | Tool | Version | Why | How to verify |
 |---|---|---|---|
-| **Node.js** | 20 LTS or 22 LTS | Runs Vitest, Puppeteer, web-ext | `node --version` |
-| **npm** | bundled with Node | Package manager | `npm --version` |
+| **Node.js** | 22 LTS (or newer; see `.node-version`) | Runs Vitest, Puppeteer, web-ext | `node --version` |
+| **pnpm** | 10.x (auto-installed by corepack from `packageManager` in `package.json`) | Package manager — required (npm/yarn are blocked by `scripts/check-pnpm.js`) | `pnpm --version` |
 | **Firefox ESR** | latest | Canonical **E2E** target | `firefox-esr --version` |
 | **`web-ext` CLI** | latest | Mozilla's dev tool | `web-ext --version` |
 | **Firefox (release)** | latest | **UAT tier** target (release channel) | `firefox --version` |
 | **geckodriver** | latest | **UAT tier** Selenium driver (auto-fetched by Selenium Manager on first run) | `geckodriver --version` |
 | **Claude Code CLI** | latest | **UAT tier** agent driver (`claude -p`) | `claude --version` |
 
-> The bottom three are **only** needed to run `npm run test:uat` (pre-release tier). The Unit/Integration/E2E tiers don't require them, and CI doesn't install them. The npm packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `npm install`. Setup details under "Installing the UAT tooling" below.
+> The bottom three are **only** needed to run `pnpm test:uat` (pre-release tier). The Unit/Integration/E2E tiers don't require them, and CI doesn't install them. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing the UAT tooling" below.
 
 ### Installing Node.js and dependencies
 
-We recommend using a version manager like [`nvm`](https://github.com/nvm-sh/nvm) or [`fnm`](https://github.com/Schniz/fnm) to manage Node.js versions.
+We recommend using a version manager like [`fnm`](https://github.com/Schniz/fnm) or [`nvm`](https://github.com/nvm-sh/nvm) to manage Node.js versions. Both honor the `.node-version` file in the repo root.
 
 ```bash
-# 1. Install Node.js 20 LTS (using nvm as an example)
-nvm install 20
-nvm use 20
+# 1. Install Node (the version comes from .node-version — currently 22)
+fnm install   # or: nvm install
+fnm use       # or: nvm use
 
-# 2. Verify installation
-node --version # should be v20.x.x
-npm --version  # should be v10.x.x
+# 2. Activate corepack and the pinned pnpm version (from package.json)
+corepack enable
+corepack prepare pnpm@10.0.0 --activate  # adjust to whatever `packageManager` says
 
-# 3. Install project dependencies
-npm install
+# 3. Verify
+node --version    # >= v22
+pnpm --version    # >= v10
+
+# 4. Install project dependencies (the .npmrc minimum-release-age=604800 guard
+#    refuses any package version less than 7 days old)
+pnpm install
 ```
 
 ### Installing Firefox ESR (Ubuntu/WSL)
@@ -77,7 +82,7 @@ sudo apt update && sudo apt install firefox-esr
 
 ### Installing the UAT tooling (release Firefox + geckodriver)
 
-Only needed for the **UAT tier** (`npm run test:uat`, pre-release). UAT runs on **release-channel Firefox** via Selenium + geckodriver — deliberately a different stack from E2E's `firefox-esr` + `web-ext` + BiDi (rationale in [`UAT_PLAN.md`](UAT_PLAN.md)). Release Firefox and ESR coexist fine; the UAT tools point at the release binary explicitly.
+Only needed for the **UAT tier** (`pnpm test:uat`, pre-release). UAT runs on **release-channel Firefox** via Selenium + geckodriver — deliberately a different stack from E2E's `firefox-esr` + `web-ext` + BiDi (rationale in [`UAT_PLAN.md`](UAT_PLAN.md)). Release Firefox and ESR coexist fine; the UAT tools point at the release binary explicitly.
 
 ```bash
 # 1. Release-channel Firefox. The Mozilla APT repo (added above for ESR) also
@@ -93,9 +98,9 @@ sudo apt install firefox
 #    grab the linux64 build from https://github.com/mozilla/geckodriver/releases
 #    and put `geckodriver` on PATH.
 
-# 3. npm devDependencies (pinned, per CONTRIBUTING supply-chain guardrails):
-npm install   # brings in selenium-webdriver; add @modelcontextprotocol/sdk when wiring the MCP server
-npm audit
+# 3. devDependencies (pinned, per CONTRIBUTING supply-chain guardrails):
+pnpm install   # brings in selenium-webdriver; add @modelcontextprotocol/sdk when wiring the MCP server
+pnpm audit
 
 # 4. Claude Code CLI (the agent driver) — install per https://docs.claude.com/claude-code
 #    and authenticate once:
@@ -105,12 +110,12 @@ claude /login
 **Verify the UAT browser path** (no MCP/SDK needed — this just proves Selenium can drive release Firefox with the extension):
 
 ```bash
-npx web-ext build --source-dir webextension/ --artifacts-dir tests/uat/artifacts --overwrite-dest
+pnpm build
 FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
 # expect: "new-tab grid rendered" + a screenshot under tests/uat/artifacts/
 ```
 
-Build artifacts and screenshots live under `tests/uat/artifacts/` (git-ignored). Nothing the UAT tier writes touches `/tmp`. See [`tests/uat/README.md`](tests/uat/README.md) for the full tool inventory and the `mcp-smoke.mjs` payload check.
+The .xpi lives under `dist/` (git-ignored — the canonical build output, same artifact UAT installs and AMO uploads consume). UAT-specific evidence (screenshots, scenario reports) lives under `tests/uat/artifacts/` (also git-ignored). Nothing the UAT tier writes touches `/tmp`. See [`tests/uat/README.md`](tests/uat/README.md) for the full tool inventory and the `mcp-smoke.mjs` payload check.
 
 ### Continuous Integration (GitHub Actions)
 
@@ -130,7 +135,7 @@ Once your environment is set up:
    ```bash
    git clone git@github.com:perdrizat/newtabtools.git
    cd newtabtools
-   npm install
+   pnpm install
    ```
 
 2. **Verify Firefox ESR is reachable:**
@@ -140,12 +145,14 @@ Once your environment is set up:
    ```
    On WSL/Linux, the test orchestrator calls `firefox-esr` by name, so the binary must be on `PATH`. If your distro names the package differently (e.g. `firefox` on Arch), symlink or alias as `firefox-esr`.
 
+   *Note:* The clone snippet above uses `pnpm install` — see the package-manager note in "Installing Node.js and dependencies" above for the corepack one-time setup.
+
 3. **Manual development:**
    There are two ways to load the extension for interactive testing:
 
    **Option A: Automatic (web-ext)**
    ```bash
-   npm run dev
+   pnpm dev
    ```
    This is the fastest way to confirm the extension wires together cleanly. It launches a temporary Firefox instance with the extension pre-loaded. The profile is discarded on exit.
 
@@ -164,14 +171,14 @@ These commands are the primary interface for development. Run them from the proj
 
 | Command | Action | Tier |
 |---|---|---|
-| `npm run dev` | Launch extension in a temporary Firefox profile | Interactive Dev |
-| `npm run lint` | Run ESLint (checks both production JS and test TS) | Quality |
-| `npm run lint:webext` | Run `web-ext lint` (Mozilla policy check) | Quality |
-| `npm run typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
-| `npm run test:fast` | Run Unit + Integration tests | TDD Loop |
-| `npm run test:e2e` | Run full E2E suite against Firefox ESR | Validation |
-| `npm test` | Run all tests (Fast + E2E) | Pre-commit |
-| `npm run test:uat` *(planned)* | Run LLM-driven user acceptance scenarios against release-channel Firefox | UAT (pre-release) |
+| `pnpm dev` | Launch extension in a temporary Firefox profile | Interactive Dev |
+| `pnpm lint` | Run ESLint (checks both production JS and test TS) | Quality |
+| `pnpm lint:webext` | Run `web-ext lint` (Mozilla policy check) | Quality |
+| `pnpm typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
+| `pnpm test:fast` | Run Unit + Integration tests | TDD Loop |
+| `pnpm test:e2e` | Run full E2E suite against Firefox ESR | Validation |
+| `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
+| `pnpm test:uat` *(planned)* | Run LLM-driven user acceptance scenarios against release-channel Firefox | UAT (pre-release) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 
@@ -194,13 +201,13 @@ The manifest holds `<all_urls>` in `permissions`. Avoid exercising it in tests; 
 
 ## Repository Layout (test infrastructure)
 
-The files below make up the test scaffold. A new maintainer should not need to recreate any of them — `npm install` against `package.json` plus the configs below is the entire setup.
+The files below make up the test scaffold. A new maintainer should not need to recreate any of them — `pnpm install` against `package.json` plus the configs below is the entire setup.
 
 | File | Purpose |
 |---|---|
-| [`package.json`](package.json) | `"type": "module"` (tests are ESM); pinned dev deps; npm scripts for `dev`, `lint`, `lint:webext`, `test:unit`, `test:integration`, `test:fast`, `test:e2e`, `test`. |
+| [`package.json`](package.json) | `"type": "module"` (tests are ESM); pinned dev deps; `packageManager: pnpm@10.x`; `engines.node >=22`; `preinstall` runs `scripts/check-pnpm.js`; package scripts for `dev`, `lint`, `lint:webext`, `test:unit`, `test:integration`, `test:fast`, `test:e2e`, `test`. |
 | [`package-lock.json`](package-lock.json) | **Tracked**. Reproducible installs across machines and CI. |
-| [`.npmrc`](.npmrc) | `min-release-age=7` — refuses to install npm packages published in the last 7 days as supply-chain hygiene. |
+| [`.npmrc`](.npmrc) | `minimum-release-age=604800` (7 days, pnpm-native) — refuses to install package versions less than 7 days old as supply-chain hygiene. Enforced because the project pins pnpm via `packageManager` and rejects npm/yarn in `scripts/check-pnpm.js`. Also `engine-strict=true`, `auto-install-peers=true`. |
 | [`vitest.config.js`](vitest.config.js) | Vitest with two `projects`: `fast` (jsdom env, includes Unit + Integration) and `e2e` (node env, `fileParallelism: false`, 60-second test timeout, includes `tests/e2e/**/*.test.js`). |
 | [`tests/setup.js`](tests/setup.js) | Sets `globalThis.jest = vi`, then `await import('jest-webextension-mock')`. The shim is required because the mock library was written for Jest and references a `jest` global at module load. |
 | [`eslint.config.js`](eslint.config.js) | Flat config (ESLint v10+). Top-level `ignores` list the vendored zip.js files (`webextension/lib/{deflate,inflate,z-worker,zip}.js`). Two file-glob blocks: `webextension/**/*.js` as **script-mode** (legacy `<script>`-loaded code) and `webextension/lib/**/*.js` as **module-mode** (extracted ES modules — where new pure-logic code goes). `no-unused-vars` set to `caughtErrors: 'none'` so legacy `} catch (ex) {}` blocks don't flag. |
@@ -213,14 +220,14 @@ The files below make up the test scaffold. A new maintainer should not need to r
 
 Testing has three deterministic tiers plus a fourth judgment-based tier (planned), each with its own directory, runner setup, and cadence:
 
-| Tier | Directory | Runs in | npm script | When to run |
+| Tier | Directory | Runs in | Script | When to run |
 |---|---|---|---|---|
-| **Unit** | `tests/unit/` | Vitest + jsdom | `npm run test:unit` | On every save during TDD |
-| **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `npm run test:integration` | On every save during TDD |
-| **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR via WebDriver BiDi | `npm run test:e2e` | At feature completion and pre-commit |
-| **UAT** *(planned)* | `tests/uat/` | Claude Code (headless) + our MCP server + Selenium + release-channel Firefox | `npm run test:uat` | Pre-release only; never on PR/CI |
+| **Unit** | `tests/unit/` | Vitest + jsdom | `pnpm test:unit` | On every save during TDD |
+| **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `pnpm test:integration` | On every save during TDD |
+| **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR via WebDriver BiDi | `pnpm test:e2e` | At feature completion and pre-commit |
+| **UAT** *(planned)* | `tests/uat/` | Claude Code (headless) + our MCP server + Selenium + release-channel Firefox | `pnpm test:uat` | Pre-release only; never on PR/CI |
 
-`npm run test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
+`pnpm test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
 
 ### Unit tests (`tests/unit/`)
 
@@ -248,7 +255,7 @@ E2E tests exercise the extension from the user's perspective in a real Firefox E
 - **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox ESR launched by `web-ext run`. (Playwright was tried and rejected — its patched-Firefox design cannot drive system ESR. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
 - **Location:** `tests/e2e/*.test.js` (matching the Unit/Integration naming).
 - **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) launches Firefox ESR with `--remote-debugging-port=9222`, waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
-- **How to run:** Always use `npm run test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox ESR with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `npm run test:e2e -- tests/e2e/my-test.test.js`.
+- **How to run:** Always use `pnpm test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox ESR with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `pnpm test:e2e tests/e2e/my-test.test.js`.
 - **When to run:**
   1. Once at the end of every completed feature.
   2. Always as part of the "prepare for commit" workflow.
@@ -346,8 +353,8 @@ For every task (feature or bug fix):
 2. Pick the test tier where you can write a *meaningful failing test first*. This depends on whether the code already exists:
    - **For new code:** start with a Unit test for the smallest pure function that expresses the new behaviour. Watch it fail. Implement the function. When you wire it to the UI or a `browser.*` API, add an Integration test for that wiring.
    - **For legacy code** (e.g. anything in `newTab.js`, where logic, DOM, and APIs are mixed): **do not refactor as a prerequisite to testing.** Start with an Integration test that mocks `browser.*` at the API seam and pins down the function's *current* behaviour — a *characterization test* in Michael Feathers' sense. Watch it pass against today's code. Then write a failing test for the new behaviour or fix, implement it, and only refactor under green. Backfill Unit tests for any pure-logic helpers you extract during the refactor.
-3. Run Unit + Integration (`npm run test:fast`). Confirm green.
-4. **Once the feature is complete:** run E2E (`npm run test:e2e`). Confirm green.
+3. Run Unit + Integration (`pnpm test:fast`). Confirm green.
+4. **Once the feature is complete:** run E2E (`pnpm test:e2e`). Confirm green.
 5. Update [`CHANGELOG.md`](CHANGELOG.md) under `[Unreleased]` per global instructions.
 6. Run `pre_commit_check.sh` and the prepare-for-commit workflow (which re-runs E2E).
 

@@ -5,7 +5,7 @@
 // opens the new-tab page, and screenshots it. Use this to verify the browser
 // half is healthy independently of the MCP/agent layer.
 //
-//   npx web-ext build --source-dir webextension/ --artifacts-dir tests/uat/artifacts --overwrite-dest
+//   pnpm build
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
 //   # optional explicit xpi: node tests/uat/_tools/browser-smoke.mjs /path/to.xpi
 
@@ -16,19 +16,23 @@ import { Builder, By, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// XPI_DIR holds the canonical build output (.xpi) — same artifact UAT and AMO
+// release consume. ART_DIR holds UAT-specific evidence (screenshots, reports).
+const XPI_DIR = process.env.XPI_DIR || path.resolve(__dirname, '../../../dist');
 const ART_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
-const ADDON_ID = 'newtabtools@darktrojan.net';
+const ADDON_ID = 'newtabtools@symlink.ch';
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
 const SHOT = `${ART_DIR}/browser-smoke.png`;
 
 function resolveXpi() {
 	if (process.argv[2]) { return process.argv[2]; }
-	const xpis = fs.readdirSync(ART_DIR)
+	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
+	const xpis = fs.readdirSync(XPI_DIR)
 		.filter(f => f.endsWith('.xpi') || f.endsWith('.zip'))
-		.map(f => path.join(ART_DIR, f))
+		.map(f => path.join(XPI_DIR, f))
 		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (xpis.length === 0) { throw new Error(`No .xpi/.zip in ${ART_DIR} — run the web-ext build command in the header first.`); }
+	if (xpis.length === 0) { throw new Error(`No .xpi/.zip in ${XPI_DIR} — run \`pnpm build\` first.`); }
 	return xpis[0];
 }
 

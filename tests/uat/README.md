@@ -30,13 +30,13 @@ Still to build (see UAT_PLAN.md Steps 1–6): `preflight.ts`, `runner.ts`,
 ## Run the smokes
 
 ```bash
-# build the unsigned extension package once (into the gitignored artifacts dir)
-npx web-ext build --source-dir webextension/ --artifacts-dir tests/uat/artifacts --overwrite-dest
+# build the unsigned extension package once (writes the .xpi to ./dist/, gitignored)
+pnpm build
 
 # browser path only (no SDK needed):
 FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
 
-# full MCP path + payload measurement (after `npm i -D @modelcontextprotocol/sdk`):
+# full MCP path + payload measurement (after `pnpm add -D @modelcontextprotocol/sdk@<pinned>`):
 FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
 ```
 
@@ -62,5 +62,9 @@ Bump `fixtureVersion` and update the hash here on every regeneration (a schema
 change — new prefs key or tile field — invalidates the comparison baseline that
 scenarios assume).
 
-> `artifacts/` is git-ignored. Pinned dependency versions and a troubleshooting
-> section (keyed to preflight failure messages) get added here as the tier is built out.
+> The .xpi the tools install lives under `dist/` (canonical build output, shared with AMO
+> release; written by `pnpm build`). UAT-specific evidence (screenshots, scenario reports)
+> lives under `tests/uat/artifacts/`. Both are git-ignored. Override resolution via
+> `XPI_DIR=` (where the tools look for the .xpi) or `EXTENSION_XPI=` (explicit path).
+> Pinned dependency versions and a troubleshooting section (keyed to preflight failure
+> messages) get added here as the tier is built out.

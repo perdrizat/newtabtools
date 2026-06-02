@@ -14,6 +14,7 @@ test-results/
 tests/e2e/test-profile/
 tests/e2e/_artifacts/
 tests/uat/artifacts/
+dist/
 .vitest-cache/
 *.Zone.Identifier
 .DS_Store

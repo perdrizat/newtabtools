@@ -25,18 +25,23 @@ import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// XPI_DIR holds the canonical build output (.xpi). ARTIFACTS_DIR holds
+// UAT-specific evidence (screenshots written by browser_take_screenshot,
+// scenario reports, etc.).
+const XPI_DIR = process.env.XPI_DIR || path.resolve(__dirname, '../../../dist');
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const ADDON_ID = 'newtabtools@darktrojan.net';
+const ADDON_ID = 'newtabtools@symlink.ch';
 const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
 
 function resolveXpi() {
 	if (process.env.EXTENSION_XPI) { return process.env.EXTENSION_XPI; }
-	const f = fs.readdirSync(ARTIFACTS_DIR)
+	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
+	const f = fs.readdirSync(XPI_DIR)
 		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
-		.map(n => path.join(ARTIFACTS_DIR, n))
+		.map(n => path.join(XPI_DIR, n))
 		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!f.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${ARTIFACTS_DIR}`); }
+	if (!f.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${XPI_DIR}`); }
 	return f[0];
 }
 
