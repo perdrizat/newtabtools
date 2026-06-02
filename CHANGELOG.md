@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-06-02
+
+### Added
+
+- About section in the advanced drawer panel: brand + dynamic version string (read at load time from `chrome.runtime.getManifest().version`), tagline, lineage note, and a link row to GitHub, the hosted `PRIVACY.md`, and the hosted `LICENSE`. Replaces the prior bare GitHub-only link. Five new `options_about_*` locale keys in en; other locales fall back per existing convention. Surfaces the version where bug reports need it; first concrete render target for UAT pilot scenario 01.
+- `@modelcontextprotocol/sdk@1.29.0` pinned in `package.json` devDependencies. Recorded in `tests/uat/README.md` Dependencies section. Required by the upcoming UAT runner.
+- `scripts/sync-version.mjs` — propagates `package.json` version into `webextension/manifest.json` so a single `pnpm version <bump>` is the canonical bump command. Wired into `pnpm build` as a prebuild step.
+- `tests/integration/about-section.test.ts` and `tests/integration/sync-version.test.ts` — regression guards for the About markup / render path and for version drift between `package.json` and `manifest.json`.
+- `tests/uat/_tools/preflight.mjs` — UAT environment validator. Seven checks (Node ≥ 22, pnpm ≥ 10, Firefox release on PATH or `$FIREFOX_BIN`, built `.xpi` matching current manifest version, UAT fixture sha256 matches recorded value, `claude` CLI present, `@modelcontextprotocol/sdk` resolvable). Runs all checks, exits 1 on any fail. Will be invoked by the upcoming `runner.mjs` before spawning the Claude agent.
+
+### Fixed
+
+- `tests/uat/README.md` — recorded fixture `sha256` refreshed from stale `7f36e54…` to current `f184515…`. The prior value pre-dated a fixture regeneration that didn't refresh the doc; content shape unchanged (verified by inspection of `prefs.json` + `tiles.json`).
+
+### Changed
+
+- Version bumped to **1.0.1** (was 1.0.0). First post-1.0 release: brings the About section, the version-sync tooling, and the UAT SDK pin. No user-facing functionality changes beyond the About surface.
+
 ## [2026-06-02c] — AMO listing prep, week 1 (copy + licenses)
 
 ### Changed

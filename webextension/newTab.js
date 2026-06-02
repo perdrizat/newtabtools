@@ -1762,6 +1762,9 @@ var newTabTools = {
 		document.querySelectorAll('[data-label]').forEach(n => {
 			n.parentNode.insertBefore(document.createTextNode(newTabTools.getString(n.dataset.label)), n.nextSibling);
 		});
+		document.querySelectorAll('[data-version-slot]').forEach(n => {
+			n.textContent = chrome.runtime.getManifest().version;
+		});
 
 		Prefs.init().then(() => {
 			// Everything is loaded. Initialize the New Tab Page.

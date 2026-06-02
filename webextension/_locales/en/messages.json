@@ -308,6 +308,21 @@
 	"options_theme_system": {
 		"message": "System"
 	},
+	"options_about_header": {
+		"message": "About"
+	},
+	"options_about_lineage": {
+		"message": "A continuation of New Tab Tools by Geoff Lankow."
+	},
+	"options_about_license": {
+		"message": "License (MPL-2.0)"
+	},
+	"options_about_privacy": {
+		"message": "Privacy Policy"
+	},
+	"options_about_tagline": {
+		"message": "A configurable new tab page for Firefox."
+	},
 	"options_thumb_titlesize": {
 		"message": "Tile title size"
 	},

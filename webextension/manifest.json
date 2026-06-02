@@ -1,7 +1,7 @@
 {
 	"name": "__MSG_extensionName__",
 	"description": "__MSG_extensionDescription__",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"icons": {
 		"48": "images/icon.svg"
 	},
@@ -10,7 +10,9 @@
 			"id": "newtabtools@symlink.ch",
 			"strict_min_version": "140.0",
 			"data_collection_permissions": {
-				"required": ["none"]
+				"required": [
+					"none"
+				]
 			}
 		}
 	},

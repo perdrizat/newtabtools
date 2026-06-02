@@ -42,16 +42,15 @@ FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
 
 ## Dependencies
 
-- `selenium-webdriver` (pin exact, per CONTRIBUTING supply-chain guardrails).
-- `@modelcontextprotocol/sdk` — **not yet installed**; pin exact when added and
-  record the version + date here.
+- `selenium-webdriver@4.44.0` (pinned per CONTRIBUTING supply-chain guardrails).
+- `@modelcontextprotocol/sdk@1.29.0` (pinned 2026-06-02). Selected because it was the npm `dist-tags.latest` at pinning time, well past the `.npmrc` `minimum-release-age=604800` (7-day) supply-chain floor. Bump cadence: review on each UAT-runner change that touches MCP tool schemas.
 - geckodriver — provisioned by Selenium Manager on first run, or installed onto PATH.
 - release Firefox — on PATH or via `$FIREFOX_BIN`.
 
 ## fixtureVersion
 
 **`fixtureVersion: 1`** — `newtabtools_knowngood.zip` (checked in; ~2.1 MB).
-`sha256: 7f36e5410182f95e6cc4a9023361968694b9ff882dbdc38dbbcf683cd56fa8e6`.
+`sha256: f184515d564694d020cc0431f576a645b57bb9ae86040672c405760675ac0103` (verified 2026-06-02; the prior recorded hash `7f36e54…` had drifted from a fixture regeneration that didn't refresh this doc — content shape unchanged per `prefs.json` + `tiles.json` inspection).
 
 Contents: `prefs.json` (4×4 grid, medium spacing/title/margin, opacity 80, system
 theme + auto-follow, `tileAspect: fill`, recent + history on, Mozilla-CDN

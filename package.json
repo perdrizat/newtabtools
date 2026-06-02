@@ -1,6 +1,6 @@
 {
   "name": "newtabtools",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. PowerTools for your New Tab page.",
@@ -12,7 +12,7 @@
   "scripts": {
     "preinstall": "node scripts/check-pnpm.js",
     "dev": "web-ext run --source-dir webextension/",
-    "build": "web-ext build --source-dir webextension/ --artifacts-dir dist --overwrite-dest",
+    "build": "node scripts/sync-version.mjs && web-ext build --source-dir webextension/ --artifacts-dir dist --overwrite-dest",
     "lint": "eslint webextension/ tests/",
     "lint:webext": "web-ext lint --source-dir webextension/",
     "typecheck": "tsc --noEmit",
@@ -37,6 +37,7 @@
   "homepage": "https://github.com/perdrizat/newtabtools#readme",
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@types/firefox-webext-browser": "143.0.0",
     "@types/node": "20.19.39",
     "@typescript-eslint/eslint-plugin": "8.59.1",
