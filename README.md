@@ -1,8 +1,8 @@
-# New Tab PowerTools
+# NewTab PowerTools
 
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. Think of it as **PowerTools for your browser**—extending the new tab experience in creative ways, much like Microsoft PowerToys does for Windows.
 
-> **Status: preparing for AMO publication.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. The codebase migration (cherry-pick + reference rewrite) is complete — all 22 features characterized, tested, and working, all 7 security findings resolved. Next step is AMO publication (pending contact with the original maintainer about a possible handover). MV3 migration follows; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) for the plan.
+> **Status: preparing for AMO publication.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. The codebase migration (cherry-pick + reference rewrite) is complete — all 22 features characterized, tested, and working, all 7 security findings resolved. The fork ships under the AMO ID `newtabtools@symlink.ch` (new listing, version 1.0.0); listing copy, privacy policy, MPL-2.0 `LICENSE`, and reviewer-facing submission notes are in place (`docs/amo-listing.md`, `PRIVACY.md`, `LICENSE`, `docs/amo-submission-notes.md`). Screenshots and the actual Developer Hub submission are the remaining steps. MV3 migration follows; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) for the plan.
 >
 > **The "NTT v2" redesign has landed.** The UI was reworked to sit closer to the current Firefox new tab page in layout and behaviour while keeping NTT's power-user controls: a single titlebar row (recently-closed cards · search · brand/controls masthead), a slide-in **configuration drawer** (Tile / Page / Advanced tabs) replacing the old options modal, an **awesome bar** that searches your tiles, bookmarks, and history (and the default engine) from the titlebar, a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. The feature list below reflects the v2 UI.
 
@@ -40,14 +40,16 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - [x] Codebase migration complete (see [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md)). Auto-thumbnail rewritten, drop sweep done, all features working.
 - [x] **"NTT v2" UI redesign** — titlebar with inline recently-closed cards, the awesome bar, the configuration drawer, the theme system, and on-tile favicons all shipped, each phase gated on the full E2E suite.
 **Next:**
-- [ ] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Fallback: publish as a new extension under a new ID.
+- [x] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Email sent; fork proceeding under new ID in parallel.
+- [x] AMO listing copy + privacy policy + MPL-2.0 LICENSE + reviewer submission notes (`docs/amo-listing.md`, `PRIVACY.md`, `LICENSE`, `docs/amo-submission-notes.md`).
+- [ ] Capture marketing screenshots (5) from a clean Firefox profile loaded with the `tests/uat/newtabtools_knowngood.zip` fixture. See `docs/amo-listing.md` "Screenshots checklist".
 - [ ] First release on AMO.
-- [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 - [ ] Open the issue tracker for new bug reports.
+- [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 
 ## For developers
  
-If you want to contribute to the New Tab PowerTools, please read the **[Contributing Guide](CONTRIBUTING.md)** first. 
+If you want to contribute to NewTab PowerTools, please read the **[Contributing Guide](CONTRIBUTING.md)** first. 
 
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:
 - **[Environment Setup](TESTING.md#environment-setup):** Installing Node.js and Firefox ESR.

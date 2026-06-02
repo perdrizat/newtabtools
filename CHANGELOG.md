@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-02c] — AMO listing prep, week 1 (copy + licenses)
+
+### Changed
+
+- `extensionName` renamed to "NewTab PowerTools" across all 20 locales that had the key (en + 19 non-en). `zh-CN` falls back to en automatically (it didn't have the key). Brand name kept in English across locales — convention for product names (PowerToys, GitHub, Microsoft all do this).
+- `extensionDescription` (en only) rewritten to reflect the NTT v2 UI: "A configurable new tab page for Firefox. Auto-captures tile thumbnails of pages you visit, with full layout control and a recently-closed tabs row." Other locales' outdated translations remain (Firefox falls back to the locale's translation if present, en if not — both paths work).
+
+### Added
+
+- `PRIVACY.md` at repo root — privacy policy explaining local-only processing, the single outbound destination (Mozilla wallpapers service), retention/uninstall behavior. AMO listing's Privacy Policy URL will point here.
+- `LICENSE` at repo root — full canonical MPL-2.0 text from mozilla.org. Manifest already declared MPL-2.0; this file makes it visible in GitHub's UI and to reviewers.
+- `docs/amo-submission-notes.md` — reviewer-facing notes for AMO submission. Covers source-disclosure for the vendored minified `lib/zip.js` (BSD-3-Clause, `@zip.js/zip.js` v2.8.26), `<all_urls>` permission justification (lifted from `audit/2026-05-04-security-review.md` §2.6 + commit `da13254`), per-permission rationale, and project lineage. Paste into AMO Developer Hub's reviewer-notes field at submission.
+- `docs/amo-listing.md` — canonical AMO listing copy (name, summary, long-description HTML, category, tags, support/privacy/homepage URLs, screenshots placeholder). Edit here first, then paste into Developer Hub.
+- New `webextension/images/icon.svg` — NTPT wordmark (NT row 1, PT row 2) on terracotta `#c96442` background, cream `#faf8f4` letters. Matches the v2 design palette (`webextension/tokens.css`). Replaces the inherited gradient cog icon from upstream — the rebrand identity is now consistent across the new-tab UI, the addons manager, and AMO surfaces. Marked as a placeholder for the eventual designer pass.
+
+### Fixed
+
+- `README.md` — title and inline branding aligned to the canonical CamelCase brand "NewTab PowerTools" (was "New Tab PowerTools" spaced); status paragraph updated to reflect what Week 1 AMO prep landed and what remains (screenshots + Developer Hub submission); "Next:" checklist re-ordered to put screenshots and AMO submission ahead of MV3 migration.
+
 ## [2026-06-02b] — AMO submission readiness
 
 ### Changed

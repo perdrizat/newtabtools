@@ -67,10 +67,10 @@
 		"message": "You will need to restart New Tab Tools (or just restart Firefox) for these changes to have an effect."
 	},
 	"extensionDescription": {
-		"message": "Customizes the new tab page. You can add more tiles, or a background image. And you can set new tile images and titles."
+		"message": "A configurable new tab page for Firefox. Auto-captures tile thumbnails of pages you visit, with full layout control and a recently-closed tabs row."
 	},
 	"extensionName": {
-		"message": "New Tab Tools"
+		"message": "NewTab PowerTools"
 	},
 	"filter_button": {
 		"message": "Filter…"
