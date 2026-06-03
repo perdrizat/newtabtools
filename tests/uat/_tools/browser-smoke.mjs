@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Standalone browser-path smoke (no MCP, no SDK needed) — promoted from the
-// validated prototype. Launches release Firefox via Selenium + geckodriver,
-// installs the unsigned extension temporarily, pins the moz-extension UUID,
-// opens the new-tab page, and screenshots it. Use this to verify the browser
-// half is healthy independently of the MCP/agent layer.
+// Standalone browser-path smoke (no MCP, no SDK needed). Launches release
+// Firefox via Selenium + geckodriver, installs the unsigned extension
+// temporarily, pins the moz-extension UUID, opens the new-tab page, and
+// screenshots it. Use this to verify the browser half is healthy independently
+// of the MCP/agent layer.
 //
 //   pnpm build
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs

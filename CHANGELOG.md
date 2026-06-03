@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-03]
+
+### Added
+
+- UAT (LLM-driven user-acceptance) test tier completed and runnable via `pnpm test:uat` (opt-in; separate from E2E). New `pnpm test:uat` script. Components under `tests/uat/`:
+
+### Fixed
+
+- Restore is now atomic (`webextension/export.js`): `readZip` parses all backup JSON up front, so a malformed backup aborts before any state is written — previously prefs were applied first and a `tiles.json` parse error then left a half-applied state (new grid, zero tiles) with no error surfaced. `webextension/background.js` `Import:restore` now reports `{ok:true}` / `{ok:false,error}` instead of swallowing the rejection. New tests in `backup-restore.test.ts` + `background-messages.test.ts`.
+
 ## [1.0.1] — 2026-06-02
 
 ### Added

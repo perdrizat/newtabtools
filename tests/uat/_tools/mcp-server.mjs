@@ -1,19 +1,27 @@
 #!/usr/bin/env node
-// NTT UAT — MCP browser-control server (Selenium + geckodriver + release Firefox).
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+// NTT UAT — MCP browser-control server (thin client).
 //
-// SCREENSHOT STRATEGY = Option C (see UAT_PLAN.md "Decided 2026-06-01"):
-//   browser_take_screenshot  -> writes a PNG to disk, returns the PATH only
-//                               (no image enters the model context).
-//   browser_read_screenshot  -> loads a saved PNG INLINE on demand, so the
-//                               agent pays the ~1.2k image-token cost only for
-//                               the shots it actually needs to judge.
+// A stdio MCP server that owns no browser state: it forwards each browser_* tool
+// call to the long-lived browser daemon (browser-daemon.mjs) over its localhost
+// HTTP API. The daemon holds the one warm Firefox session for the whole run;
+// Claude spawns a fresh, cheap copy of this server per scenario (via
+// mcp-config.json), and they all attach to that same browser.
 //
-// The server process holds ONE Selenium driver for the whole agent session —
-// it IS the browser daemon, so there is no separate launch script.
+// Screenshots are disk-backed and read on demand to keep image-token cost
+// proportional to what the agent actually judges:
+//   browser_take_screenshot  -> daemon writes a PNG to disk (into this agent's
+//                               ARTIFACTS_DIR), returns the PATH only.
+//   browser_read_screenshot  -> reads a saved PNG INLINE from local disk on
+//                               demand (~1.2k image tokens per shot viewed).
 //
-// Run standalone (after `npm i -D @modelcontextprotocol/sdk`):
-//   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-server.mjs
-// Normally spawned by the runner via mcp-config.json (env injected).
+// Env:
+//   UAT_DAEMON_PORT  daemon port (default 9876; must match the running daemon)
+//   ARTIFACTS_DIR    where screenshots are written/read for THIS scenario
+//   UAT_SHOT_PREFIX  filename prefix the runner sets, prepended to shot names
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,39 +29,27 @@ import { fileURLToPath } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { Builder, By } from 'selenium-webdriver';
-import firefox from 'selenium-webdriver/firefox.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// XPI_DIR holds the canonical build output (.xpi). ARTIFACTS_DIR holds
-// UAT-specific evidence (screenshots written by browser_take_screenshot,
-// scenario reports, etc.).
-const XPI_DIR = process.env.XPI_DIR || path.resolve(__dirname, '../../../dist');
+const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
+const BASE = `http://127.0.0.1:${PORT}`;
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
-const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const ADDON_ID = 'newtabtools@symlink.ch';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
+// Set by the runner: `<run-stamp>-<scenario>`. Prepended to the agent's shot
+// name so files sort in capture order across the run and never collide between
+// runs (e.g. 20260603-071342-restore-dogfood-01-grid.png). Falls back to no
+// prefix when run outside the runner (e.g. mcp-smoke).
+const SHOT_PREFIX = process.env.UAT_SHOT_PREFIX || '';
+const shotFile = name => (SHOT_PREFIX ? `${SHOT_PREFIX}-${name}` : name);
 
-function resolveXpi() {
-	if (process.env.EXTENSION_XPI) { return process.env.EXTENSION_XPI; }
-	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
-	const f = fs.readdirSync(XPI_DIR)
-		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
-		.map(n => path.join(XPI_DIR, n))
-		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!f.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${XPI_DIR}`); }
-	return f[0];
-}
-
-async function makeDriver() {
-	const opts = new firefox.Options();
-	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
-	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
-	opts.addArguments('-headless');
-	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
-	await driver.installAddon(resolveXpi(), true); // temporary = unsigned OK on release
-	await driver.get(NEWTAB_URL);
-	return driver;
+async function daemon(endpoint, body) {
+	const res = await fetch(`${BASE}${endpoint}`, {
+		method: body === undefined ? 'GET' : 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: body === undefined ? undefined : JSON.stringify(body),
+	});
+	const json = await res.json();
+	if (!res.ok) { throw new Error(json.error || `daemon ${endpoint} -> ${res.status}`); }
+	return json;
 }
 
 const TOOLS = [
@@ -65,8 +61,7 @@ const TOOLS = [
 	{ name: 'browser_read_screenshot', description: 'Load a previously-captured screenshot inline so you can judge it. Read only the ones you need.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
 ];
 
-const driver = await makeDriver();
-const server = new Server({ name: 'ntt-uat', version: '0.1.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'ntt-uat', version: '0.2.0' }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
@@ -74,30 +69,31 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 	const { name, arguments: a = {} } = req.params;
 	try {
 		if (name === 'browser_navigate') {
-			await driver.get(a.url);
+			await daemon('/navigate', { url: a.url });
 			return { content: [{ type: 'text', text: `navigated to ${a.url}` }] };
 		}
 		if (name === 'browser_click') {
-			await driver.findElement(By.css(a.selector)).click();
+			await daemon('/click', { selector: a.selector });
 			return { content: [{ type: 'text', text: `clicked ${a.selector}` }] };
 		}
 		if (name === 'browser_evaluate') {
-			const value = await driver.executeScript(a.script);
+			const { value } = await daemon('/evaluate', { script: a.script });
 			return { content: [{ type: 'text', text: JSON.stringify(value) }] };
 		}
 		if (name === 'browser_file_upload') {
-			await driver.findElement(By.css(a.selector)).sendKeys(a.path);
+			await daemon('/file_upload', { selector: a.selector, path: a.path });
 			return { content: [{ type: 'text', text: `uploaded ${a.path}` }] };
 		}
 		if (name === 'browser_take_screenshot') {
-			const data = await driver.takeScreenshot();
-			fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
-			const p = path.join(ARTIFACTS_DIR, `${a.name}.png`);
-			fs.writeFileSync(p, data, 'base64');
-			return { content: [{ type: 'text', text: JSON.stringify({ saved: p, bytes: fs.statSync(p).size }) }] };
+			// Tell the daemon to write into THIS agent's per-scenario dir, under
+			// the timestamped, capture-ordered filename.
+			const out = await daemon('/screenshot', { name: shotFile(a.name), dir: ARTIFACTS_DIR });
+			return { content: [{ type: 'text', text: JSON.stringify(out) }] };
 		}
 		if (name === 'browser_read_screenshot') {
-			const p = path.join(ARTIFACTS_DIR, `${a.name}.png`);
+			// Daemon and this process share the filesystem; read locally. Same
+			// prefix as take_screenshot so the agent still refers to its own name.
+			const p = path.join(ARTIFACTS_DIR, `${shotFile(a.name)}.png`);
 			const data = fs.readFileSync(p).toString('base64');
 			return { content: [{ type: 'image', data, mimeType: 'image/png' }] };
 		}
@@ -106,8 +102,5 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 		return { content: [{ type: 'text', text: `error in ${name}: ${e.message}` }], isError: true };
 	}
 });
-
-process.on('SIGTERM', () => { void driver.quit(); });
-process.on('SIGINT', () => { void driver.quit(); });
 
 await server.connect(new StdioServerTransport());

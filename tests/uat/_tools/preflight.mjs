@@ -14,6 +14,7 @@
  */
 
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -26,7 +27,7 @@ const require = createRequire(import.meta.url);
 
 // SHA-256 of tests/uat/newtabtools_knowngood.zip — bump when fixtureVersion
 // changes. Source of truth: tests/uat/README.md "fixtureVersion" section.
-const FIXTURE_SHA256 = 'f184515d564694d020cc0431f576a645b57bb9ae86040672c405760675ac0103';
+const FIXTURE_SHA256 = '07e89b741dcc388eaa209740265698c46a1e09eb274e873e97750bf411339348';
 
 let failed = false;
 let warned = false;
@@ -139,6 +140,27 @@ console.log();
 		ok('@modelcontextprotocol/sdk', 'resolvable');
 	} catch {
 		fail('@modelcontextprotocol/sdk', 'not resolvable — run `pnpm install`');
+	}
+}
+
+// 8. browser-daemon port is free (and not colliding with E2E's 9222)
+{
+	const E2E_PORT = 9222; // tests/e2e/run_esr_tests.sh
+	const port = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
+	if (port === E2E_PORT) {
+		fail('UAT daemon port', `${port} collides with E2E's port ${E2E_PORT} — pick another via $UAT_DAEMON_PORT`);
+	} else {
+		const free = await new Promise((resolve) => {
+			const probe = net.createServer();
+			probe.once('error', () => resolve(false));
+			probe.once('listening', () => probe.close(() => resolve(true)));
+			probe.listen(port, '127.0.0.1');
+		});
+		if (free) {
+			ok('UAT daemon port', `${port} free`);
+		} else {
+			fail('UAT daemon port', `${port} already in use — stop the other process or set $UAT_DAEMON_PORT`);
+		}
 	}
 }
 

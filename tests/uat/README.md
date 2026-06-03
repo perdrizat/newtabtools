@@ -2,30 +2,57 @@
 
 LLM-driven user-acceptance testing. Full design + rationale: [`../../UAT_PLAN.md`](../../UAT_PLAN.md).
 
-**Backend:** Selenium + geckodriver driving **release-channel Firefox**, with the
-unsigned extension installed temporarily (`installAddon(xpi, true)`) and the
-`moz-extension://` UUID pinned via a pre-seeded pref. (E2E is unrelated — it
-stays on Firefox ESR + Puppeteer-BiDi.)
+**Browser:** a long-lived daemon (`_tools/browser-daemon.mjs`) holds one Selenium
++ geckodriver session driving **release-channel Firefox** for the whole run, with
+the unsigned extension installed temporarily (`installAddon(xpi, true)`) and the
+`moz-extension://` UUID pinned via a pre-seeded pref. It seeds history with a
+fixed set of URLs at startup and exposes a localhost HTTP API on port **9876**
+(`$UAT_DAEMON_PORT`; ≠ E2E's 9222). (E2E is unrelated — it stays on Firefox ESR +
+Puppeteer-BiDi.)
 
-**Agent bridge:** a small MCP server (`_tools/mcp-server.mjs`) that holds the
-Selenium session and exposes `browser_*` tools. Screenshot strategy is **Option
-C** (decided 2026-06-01, see UAT_PLAN.md): `browser_take_screenshot` writes a PNG
-to disk and returns the *path*; `browser_read_screenshot` pulls one *inline on
-demand* — so the agent pays the image-token cost only for shots it must judge.
+**Agent bridge:** a thin MCP server (`_tools/mcp-server.mjs`) Claude spawns per
+scenario that forwards each `browser_*` tool call to the daemon — it holds no
+browser state, so many cheap per-scenario MCP processes share the one warm
+browser. Screenshots are disk-backed and read on demand: `browser_take_screenshot`
+writes a PNG and returns the *path*; `browser_read_screenshot` pulls one *inline*
+only when the agent must judge it, so image-token cost tracks what's judged.
 
-## What's here now (prototype stage)
+## What's here
 
 | File | Purpose | Needs SDK? |
 |---|---|---|
-| `_tools/mcp-server.mjs` | the MCP browser-control server (Option C) | yes |
-| `_tools/mcp-smoke.mjs` | drives the server, prints payload sizes | yes |
-| `_tools/mcp-config.json` | config Claude reads to spawn the server | — |
+| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox + history seed + HTTP API) | no |
+| `_tools/mcp-server.mjs` | thin MCP→HTTP client to the daemon | yes |
+| `_tools/mcp-config.json` | config Claude reads to spawn the MCP server | — |
+| `_tools/daemon-smoke.mjs` | daemon HTTP-API contract smoke | no |
+| `_tools/mcp-smoke.mjs` | full MCP path; prints payload sizes | yes |
 | `_tools/browser-smoke.mjs` | standalone browser-path check (no MCP) | no |
-| `_tools/fallback-cli.mjs` | Plan-B reference: CLI-over-Bash + daemon (rejected; kept for reference) | no |
+| `_tools/fallback-cli.mjs` | reference fallback (CLI-over-Bash); not used by the harness | no |
+| `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox, .xpi, fixture sha, claude CLI, SDK, daemon port) | no |
+| `_tools/runner.mjs` | orchestrator: ensure skill symlink → preflight → start daemon → per-scenario `claude -p` → reset between → aggregated report | yes |
+| `scenarios/*.md` | the scenarios the runner walks | — |
+| `uat-scenario.md` | the agent skill prompt (see "Skill" below) | — |
 
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
-Still to build (see UAT_PLAN.md Steps 1–6): `preflight.ts`, `runner.ts`,
-`scenarios/*.md`, and `.claude/skills/uat-scenario.md`.
+
+Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 01-restore-dogfood`.
+
+## Skill
+
+The agent skill prompt is tracked here as `uat-scenario.md`, so it lives with the
+rest of the tier. Claude Code loads skills from `.claude/skills/`, so the runner
+keeps a symlink `.claude/skills/uat-scenario.md → ../../tests/uat/uat-scenario.md`
+and recreates it at the start of every run if it's missing (e.g. a fresh clone).
+`.claude/` itself stays git-ignored.
+
+## Artifacts
+
+Each run writes one flat, timestamped directory `artifacts/<YYYYMMDD-HHMMSS>/`
+(git-ignored). Everything for the run lands there together — `report.json`
+(aggregate), `daemon.log`, and per-scenario `<stamp>-<scenario>-{report.json,
+summary.md,agent.log}` plus screenshots `<stamp>-<scenario>-<shot>.png`. The
+shared prefix makes screenshots sort in capture order, so opening the first in an
+image viewer and paging forward walks the run. Runs never overwrite each other.
 
 ## Run the smokes
 
@@ -36,7 +63,10 @@ pnpm build
 # browser path only (no SDK needed):
 FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
 
-# full MCP path + payload measurement (after `pnpm add -D @modelcontextprotocol/sdk@<pinned>`):
+# daemon HTTP-API contract (no SDK needed):
+FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/daemon-smoke.mjs
+
+# full MCP path + payload measurement:
 FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
 ```
 
@@ -49,17 +79,21 @@ FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
 
 ## fixtureVersion
 
-**`fixtureVersion: 1`** — `newtabtools_knowngood.zip` (checked in; ~2.1 MB).
-`sha256: f184515d564694d020cc0431f576a645b57bb9ae86040672c405760675ac0103` (verified 2026-06-02; the prior recorded hash `7f36e54…` had drifted from a fixture regeneration that didn't refresh this doc — content shape unchanged per `prefs.json` + `tiles.json` inspection).
+**`fixtureVersion: 2`** — `newtabtools_knowngood.zip` (checked in; ~0.9 MB).
+`sha256: 07e89b741dcc388eaa209740265698c46a1e09eb274e873e97750bf411339348`.
 
 Contents: `prefs.json` (4×4 grid, medium spacing/title/margin, opacity 80, system
 theme + auto-follow, `tileAspect: fill`, recent + history on, Mozilla-CDN
-wallpaper, populated blocklist), `tiles.json` (9 tiles at **positions 0–8**;
-ids 1/2/4/8/9 carry thumbnails), and `tileImages/{1,2,4,8,9}.png`.
+wallpaper), `tiles.json` (9 tiles at **positions 0–8**, ids 1–9), and
+`tileImages/{1,2}.png` (only ids 1 and 2 carry stored thumbnails; the rest use
+the favicon/letter fallback). A restore of this fixture yields a 16-cell (4×4)
+grid with 9 populated `.newtab-site` tiles, rendered live.
 
-Bump `fixtureVersion` and update the hash here on every regeneration (a schema
-change — new prefs key or tile field — invalidates the comparison baseline that
-scenarios assume).
+The fixture is the test contract — `preflight.mjs` checks its sha256 against the
+value above. It must be valid JSON (a malformed backup is dropped by `readZip`).
+On any regeneration, bump `fixtureVersion`, update the hash here and in
+`preflight.mjs`, and keep it under 5 MB. A schema change (new prefs key or tile
+field) invalidates the comparison baseline scenarios assume.
 
 > The .xpi the tools install lives under `dist/` (canonical build output, shared with AMO
 > release; written by `pnpm build`). UAT-specific evidence (screenshots, scenario reports)

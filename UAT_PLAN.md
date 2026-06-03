@@ -2,14 +2,14 @@
 
 A new test tier above E2E: an LLM agent walks through scenarios, judges whether things look and work correctly, and produces a human-reviewable report. Replaces the manual pre-release QA pass with an automated one that runs the same scenarios faster, generates evidence artifacts, and catches the bug class structural tests miss (occlusion, contrast, layering, "looks broken to a user").
 
-This plan uses **Claude Code in headless mode** (not the Claude API) as the agent driver, with **our own MCP server** wrapping a **Selenium + geckodriver** setup driving **Firefox (release channel)** for browser control. The scenarios are plain English. The whole tier is opt-in (`pnpm test:uat`), gated on a separate model budget, and never blocks PR merges.
+This plan uses **Claude Code in headless mode** (not the Claude API) as the agent driver. Browser control is split in two: a **long-lived browser daemon** (`browser-daemon.mjs`) owns one **Selenium + geckodriver** session driving **Firefox (release channel)** for the whole run, and **our own thin MCP server** forwards the agent's tool calls to it over a localhost HTTP API. The scenarios are plain English. The whole tier is opt-in (`pnpm test:uat`), gated on a separate model budget, and never blocks PR merges. (The daemon split landed in B7 — see "Revised 2026-06-02" under Spike outcome.)
 
 > **UAT and E2E use different browser stacks — deliberately.** E2E stays on **Firefox ESR via `web-ext` + Puppeteer-over-WebDriver-BiDi** (real min-version build, native unsigned sideload, deterministic-assertion tests). UAT runs on **release-channel Firefox via Selenium + geckodriver**, because UAT's job is "does this look right *to a user*," and most users are on release, not ESR. UAT's bug class (occlusion / contrast / layout) is the least build-sensitive thing we test, so running it on a *newer, more user-representative* Gecko is a feature, not a risk — and it gives a free differential signal (a UAT finding that doesn't reproduce on the ESR E2E rig is a candidate version-specific issue). This split was validated by a working prototype (now `tests/uat/_tools/browser-smoke.mjs`); see the 2026-06-01 revision under Spike outcome.
 
 ## Goals
 
 1. Catch user-visible regressions (the "thumbnails occluded by overlay" bug class) before AMO releases without writing more pixel-fragile tests.
-2. Stay in the existing repo conventions: TypeScript runner, artifacts under `tests/uat/artifacts/`. Browser control is **Selenium + geckodriver against release-channel Firefox** (not the E2E tier's ESR/BiDi stack — see the note above).
+2. Stay in the existing repo conventions: ESM Node (`.mjs`) tooling, artifacts under `tests/uat/artifacts/`. Browser control is **Selenium + geckodriver against release-channel Firefox** (not the E2E tier's ESR/BiDi stack — see the note above), held by a long-lived daemon.
 3. Use the developer's existing Claude Code subscription rather than provisioning a separate Anthropic API key.
 4. Produce structured JSON reports + annotated screenshots as artifacts. Treat results as "investigate" not "build pass/fail."
 5. Work on any contributor's machine without manual setup beyond `pnpm install` + a one-time `claude /login`. The harness checks its own prerequisites and either auto-installs them or prints precise next-step instructions.
@@ -76,6 +76,22 @@ A second prototype round compared three ways for the agent to receive screenshot
 
 **Prototypes (in `tests/uat/_tools/`):** `mcp-server.mjs` (C), `mcp-smoke.mjs` (payload measurement), `browser-smoke.mjs` (browser path, no SDK), `fallback-cli.mjs` (B, kept as the Plan-B reference). `mcp-smoke.mjs` prints the wire payloads — fixed schema overhead, the tiny disk-path result, and an on-demand inline read — so the token model stays honest once `@modelcontextprotocol/sdk` is installed.
 
+### Revised 2026-06-02: long-lived browser daemon + thin MCP client (B7)
+
+The earlier design folded the browser into the MCP server — "one server process IS the browser daemon" — so each `claude -p` scenario launched its own Firefox, installed the extension, and (later) would have seeded history, paying that cost once **per scenario**. Two requirements made that untenable and drove a split:
+
+1. **History-seeded environment.** Scenarios need NTT's history-backed features (recent tiles, autocomplete) to have real data to render against. Seeding nine real URLs by navigation takes seconds-to-minutes; paying it per scenario is wasteful and, on slow links, prohibitive.
+2. **Browser persistence across scenarios.** Keeping one warm Firefox for the whole run (instead of relaunch-per-scenario) is both faster and the established pattern (browserless / Playwright `launch-server` / Selenium Grid all separate the browser runtime from the client).
+
+So the browser runtime is now a **separate long-lived process** from the agent's MCP context:
+
+- **`browser-daemon.mjs`** — a standalone Node process that owns the single Selenium + release-Firefox session for the entire run. At startup it installs the extension, **seeds history with 9 URLs**, then exposes a localhost HTTP API (`/navigate`, `/click`, `/evaluate`, `/file_upload`, `/screenshot`, `/reset_extension`, `/health`) on **port 9876** (`$UAT_DAEMON_PORT`; deliberately ≠ E2E's 9222). Logs to `tests/uat/artifacts/daemon.log`.
+- **`mcp-server.mjs`** is now a **thin MCP→HTTP client**: it forwards each `browser_*` tool call to the daemon. The MCP tool surface is unchanged, so the skill and scenarios don't know the swap happened. Claude still spawns a fresh (cheap) MCP-server process per scenario, but they all attach to the *same* warm browser.
+- **`runner.mjs`** owns the daemon lifecycle: spawn → poll `/health` → run scenarios → stop in a `finally` (even on error). Between scenarios it calls `/reset_extension`, which drives the extension's **own built-in reset** (verifying the grid returns to the default 9-cell state) and then **restores the fixture** (verifying 16 cells + 9 tiles render live) — so every reset is itself a reset+restore regression check. History is **not** reset; it's the seeded environment.
+- **Daemon lifecycle is per UAT run, not persistent.** A selective single-scenario run (`pnpm test:uat 01-restore-dogfood`) still auto-starts and auto-stops the daemon.
+
+This supersedes, for the live architecture, the "no separate launch script" property claimed in the 2026-06-01 screenshot decision: there now **is** a separate launch (the daemon), spawned and torn down by the runner rather than by Claude. The Option-C screenshot contract is unchanged — the daemon writes the PNG to the per-scenario `ARTIFACTS_DIR` the MCP client passes it, and `browser_read_screenshot` reads it back inline on demand.
+
 ### Fallback (Plan B): single CLI + Bash
 
 If the MCP wrapper hits an unexpected wall (stdio framing, protocol drift, etc.), pivot to the single-CLI route. ~50 LOC more, loses screenshot ergonomics and allowlist precision, but reuses everything else (Firefox launch lifecycle, helpers, fixture).
@@ -86,76 +102,82 @@ If the MCP wrapper hits an unexpected wall (stdio framing, protocol drift, etc.)
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  pnpm test:uat                                                   │
+│  pnpm test:uat  [optional: <scenario-slug> ... to run a subset]  │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  preflight.ts                                                    │
-│  - node version meets engines floor                              │
-│  - @modelcontextprotocol/sdk + selenium-webdriver resolved at    │
-│    their pinned versions                                         │
-│  - release Firefox on PATH (or pointed at by $FIREFOX_BIN)       │
-│  - geckodriver resolvable (Selenium Manager auto-fetch OR PATH)  │
-│  - web-ext available (used to package the .xpi, already devDep)  │
-│  - claude binary present and authenticated                       │
-│  - tsx resolvable                                                │
-│  - known-good fixture present at tests/uat/                      │
-│      newtabtools_knowngood.zip                                   │
-│  Auto-installs node deps via `pnpm install`; for the rest, prints │
-│  copy-pastable fix instructions and exits non-zero.              │
+│  preflight.mjs  (8 checks; fail-fast, exit 1 on any [fail])      │
+│  Node ≥22 · pnpm ≥10 · release Firefox (PATH/$FIREFOX_BIN) ·     │
+│  built .xpi/.zip in dist/ matching manifest version ·            │
+│  fixture sha256 matches recorded value · claude CLI present ·    │
+│  @modelcontextprotocol/sdk resolvable ·                          │
+│  UAT daemon port free (9876/$UAT_DAEMON_PORT, ≠ E2E's 9222)      │
 └────────────────────────┬─────────────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  tests/uat/runner.ts                                             │
-│  - packages the extension once: web-ext build → EXTENSION_XPI    │
-│    (does NOT launch a browser — the MCP server owns that)        │
-│  - for each scenarios/*.md:                                      │
-│      spawns: claude -p --output-format=stream-json \             │
-│               --mcp-config <config> \                            │
-│               --allowedTools "mcp__ntt-uat__*" \                 │
-│               < skill-prompt + scenario-body                     │
-│      env: NEWTAB_URL (pinned moz-extension URL), ARTIFACTS_DIR,  │
-│           KNOWN_GOOD_ZIP, EXTENSION_XPI, FIREFOX_BIN             │
-│      captures: streamed JSON events, screenshots, final report   │
-│      writes: artifacts/<scenario-id>/<timestamp>/*               │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │
-                         ▼
+│  tests/uat/_tools/runner.mjs                                     │
+│  1. spawn browser-daemon.mjs; poll /health until ready           │
+│  2. for each scenarios/*.md (or the selected subset):            │
+│       spawn: claude -p --mcp-config <config>                     │
+│              --allowedTools <6 browser_* tools + Write>           │
+│              --max-turns 50   < prologue + scenario-body          │
+│       env: UAT_DAEMON_PORT, ARTIFACTS_DIR=<run dir> (flat),     │
+│            UAT_SHOT_PREFIX=<stamp>-<scenario>                    │
+│       agent writes <prefix>-report.json/-summary.md; runner     │
+│       writes <prefix>-agent.log; print screenshot names         │
+│       between scenarios: POST /reset_extension (state reset)     │
+│  3. stop the daemon in a finally (even on error)                 │
+│  4. write artifacts/report.json (per-scenario pass + timings)    │
+└───────────┬───────────────────────────────────────┬─────────────┘
+            │ spawns per scenario                     │ HTTP (lifecycle)
+            ▼                                         │
+┌────────────────────────────────────────────┐       │
+│  Claude Code (headless, per scenario)       │       │
+│  - skill: .claude/skills/uat-scenario.md    │       │
+│  - standard preamble: open drawer → Advanced│       │
+│    → restore fixture → wait .newtab-site==9 │       │
+│  - then scenario steps; writes report.json  │       │
+│    + summary.md via Write                    │       │
+│  - tools: browser_navigate/click/evaluate/  │       │
+│    file_upload/take_screenshot/read_screenshot      │
+└───────────┬─────────────────────────────────┘       │
+            │ stdio (MCP)                              │
+            ▼                                         │
+┌────────────────────────────────────────────┐       │
+│  mcp-server.mjs  (thin MCP→HTTP client)     │       │
+│  - @modelcontextprotocol/sdk Server (stdio) │       │
+│  - forwards each browser_* call to the      │       │
+│    daemon's HTTP API; no Selenium here      │       │
+│  - take_screenshot: tells daemon to write   │       │
+│    PNG into this scenario's ARTIFACTS_DIR   │       │
+│  - read_screenshot: reads that PNG inline   │       │
+│    on demand (Option C)                      │       │
+└───────────┬─────────────────────────────────┘       │
+            │ HTTP  (POST /navigate /click /evaluate   │
+            │        /file_upload /screenshot          │
+            ▼        /reset_extension · GET /health)    ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  Claude Code (headless, autonomous)                              │
-│  - loaded skill: .claude/skills/uat-scenario.md                  │
-│  - per-scenario preamble: open NTT, verify load, open settings,  │
-│    restore from $KNOWN_GOOD_ZIP, verify tiles present, reload    │
-│  - then: execute scenario-specific steps                         │
-│  - tools (via our MCP server below): browser_navigate,           │
-│    browser_click, browser_hover, browser_file_upload,            │
-│    browser_take_screenshot, browser_snapshot, browser_evaluate   │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │  stdio (spawned by Claude)
-                         ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  tests/uat/_tools/mcp-server.mjs (our own ~120 LOC)              │
-│  - @modelcontextprotocol/sdk Server over stdio                   │
+│  tests/uat/_tools/browser-daemon.mjs  (long-lived, 1 per run)    │
 │  - on start: Selenium launches release Firefox via geckodriver,  │
-│    pre-seeds the extensions.webextensions.uuids pref to PIN the  │
-│    moz-extension UUID, then installAddon(EXTENSION_XPI, true)    │
-│    (temporary = unsigned OK on release)                          │
-│  - exposes browser_* tools backed by Selenium WebDriver          │
-│  - screenshots: take_screenshot -> disk (path); read_screenshot  │
-│    -> inline on demand (Option C; see decision below)            │
-│  - on stop: driver.quit() (geckodriver tears Firefox down clean) │
+│    pins extensions.webextensions.uuids, installAddon(xpi, true), │
+│    SEEDS HISTORY with 9 URLs, opens newTab.xhtml                  │
+│  - HTTP API on 127.0.0.1:9876 ($UAT_DAEMON_PORT); daemon.log     │
+│  - /reset_extension: built-in reset (→9 cells, verified) then    │
+│    fixture restore (→16 cells, 9 tiles live, verified)           │
+│  - on SIGTERM: driver.quit() (geckodriver tears Firefox down)    │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 Why these pieces:
 
-- **Claude Code headless mode** (`claude -p`) runs the agent loop, handles auth via the developer's subscription, supports streamed JSON output for the runner to consume.
-- **Our own MCP server** (`tests/uat/_tools/mcp-server.mjs`) bridges Claude's MCP tool calls to a Selenium WebDriver session. Custom rather than off-the-shelf because the off-the-shelf Selenium MCP servers don't expose `installAddon` (extension loading), and the Playwright MCP/CLI can't load a Firefox extension at all (see Spike outcome above). Selenium owns the browser lifecycle, so there is no separate launch script to manage.
-- **Skill** (`.claude/skills/uat-scenario.md`) bundles the system prompt, output-format contract, allowed tools, and the per-scenario restore preamble — so each scenario file stays short and focused on the user flow being tested.
-- **Preflight** is a separate Node script the runner invokes before doing anything else. Contributors run on different infra (WSL, native Linux, macOS); the most common failure mode for an LLM-driven tier is "the prereq I assumed exists doesn't" — surfaced opaquely deep inside a tool call.
-- **Known-good zip fixture** is a checked-in NTT backup containing 4×4 grid prefs and 9 representative tiles (some with thumbnails). Every scenario starts from this state, so findings reflect the code change, not profile drift — and the restore flow itself is dogfooded on every run.
+- **Claude Code headless mode** (`claude -p`) runs the agent loop and handles auth via the developer's subscription. The runner keys off the process exit code per scenario; the agent itself writes `report.json` + `summary.md` via the `Write` tool.
+- **Browser daemon** (`tests/uat/_tools/browser-daemon.mjs`) owns the one Selenium + release-Firefox session for the whole run, so launch + extension-install + history-seed is paid once, not per scenario. It exposes a localhost HTTP API and lives and dies with the run (started/stopped by the runner).
+- **Thin MCP server** (`tests/uat/_tools/mcp-server.mjs`) bridges Claude's MCP tool calls to the daemon's HTTP API. Custom rather than off-the-shelf because off-the-shelf Selenium MCP servers don't expose `installAddon`, and Playwright MCP/CLI can't load a Firefox extension at all (see Spike outcome). It holds no browser state — many cheap per-scenario MCP processes share the one warm browser.
+- **Skill** (`.claude/skills/uat-scenario.md`) bundles the agent instructions, allowed tools, the standard restore preamble, the assertion vocabulary, and the `report.json` / `summary.md` contract — so each scenario file stays short.
+- **Preflight** is a separate Node script the runner invokes first. Contributors run on different infra (WSL, native Linux, macOS); the most common failure mode for an LLM-driven tier is "the prereq I assumed exists doesn't" — surfaced opaquely deep inside a tool call. Check #8 (daemon port free) also guards against an E2E/UAT port collision.
+- **Known-good zip fixture** is a checked-in NTT backup containing 4×4 grid prefs and 9 representative tiles. Every scenario starts from this state (restored by the preamble, and re-established by `/reset_extension` between scenarios), so findings reflect the code change, not profile drift — and the restore flow itself is dogfooded on every run.
 
 ---
 
@@ -163,11 +185,13 @@ Why these pieces:
 
 ### 1. Known-good fixture (`tests/uat/newtabtools_knowngood.zip`)
 
-A checked-in NTT backup zip used as the starting state for every UAT scenario. Contents:
+A checked-in NTT backup zip used as the starting state for every UAT scenario. **fixtureVersion 2** (see `tests/uat/README.md` for the recorded `sha256`). Contents:
 
-- `prefs.json` — 4×4 grid, medium spacing/title/margin, opacity 80, system theme with auto-follow, `tileAspect: fill`, recently-closed on, history-tiles on, a populated blocklist, a wallpaper URL from Mozilla's CDN.
+- `prefs.json` — 4×4 grid, medium spacing/title/margin, opacity 80, system theme with auto-follow, `tileAspect: fill`, recently-closed on, history-tiles on, a wallpaper URL from Mozilla's CDN.
 - `tiles.json` — 9 tiles at **positions 0–8** (the remaining cells 9–15 of the 4×4 grid are empty, so trailing-gap layout is exercised). URLs point at real Swiss news / shopping / finance sites — the agent must never navigate to them; tiles are rendered, not visited.
-- `tileImages/*.png` — 5 thumbnails (tile ids 1, 2, 4, 8, 9), ~400KB each, real captures of the live pages; the other 4 tiles render via the favicon/letter fallback.
+- `tileImages/{1,2}.png` — 2 stored thumbnails (tile ids 1 and 2), real captures of the live pages; the other 7 tiles render via the favicon/letter fallback.
+
+> **fixtureVersion 2 (2026-06-02):** v1's `tiles.json` carried trailing commas (invalid JSON) on tile ids 4/8/9, so restoring it parsed prefs but silently dropped all 9 tiles. v2 is canonical valid JSON. This also exposed and fixed a real code bug — `readZip` was non-atomic (applied prefs before parsing tiles, so a bad backup half-applied) — now fixed in `webextension/export.js`; see `tests/integration/backup-restore.test.ts`.
 
 Why this shape:
 - **4×4 grid with 9 tiles (0–8 filled, 9–15 empty)** stresses trailing-gap rendering, drag-reorder, hover overlap.
@@ -178,260 +202,178 @@ Why this shape:
 **Rules for the fixture:**
 - It is part of the test contract. Don't regenerate it on a whim — every change invalidates the comparison baseline that scenarios assume.
 - When the schema changes (new prefs key, new tile field), regenerate the fixture and bump a `fixtureVersion` line in `tests/uat/README.md`. The Skill prompt references this version so the agent can flag obviously-stale fixtures.
-- Keep it under 5MB. Current size: ~2.1MB.
+- Keep it under 5MB. Current size: ~0.9MB.
 - Never put credentials, tokens, or personal browsing data in the fixture. The current contents are public site URLs and screenshots of public pages.
 
 ### 2. Directory layout
 
 ```
 tests/uat/
-  newtabtools_knowngood.zip      # the fixture (checked in)
+  newtabtools_knowngood.zip      # the fixture (checked in; fixtureVersion 2)
   scenarios/
-    01-fresh-install.md
-    02-tile-hover.md
-    03-dark-theme.md
-    04-pin-toggle.md
-    05-locked-state.md
-    # later phases:
-    # 06-drawer-open.md
-    # 07-zen-mode.md
+    01-restore-dogfood.md        # C1 — gating scenario (restore preamble + verify) [built]
+    # later: 02-restore-and-verify.md (C2, comprehensive), then tile-hover / theme / etc.
   _tools/
-    mcp-config.json              # config Claude reads to spawn the MCP server   [built]
-    mcp-server.mjs               # our MCP server (Option C), spawned per scenario [built]
-    mcp-smoke.mjs                # smoke + payload-measurement client             [built]
-    browser-smoke.mjs            # standalone browser-path check (no MCP/SDK)     [built]
-    fallback-cli.mjs             # Plan-B reference (CLI-over-Bash; rejected)      [built]
-    skill-loader.ts              # reads .claude/skills/uat-scenario.md           [todo]
-  preflight.ts                   # prerequisite check + auto-install where possible [todo]
-  runner.ts                      # orchestrator (TypeScript, run via tsx)          [todo]
-  README.md                      # how to run, add scenarios, debug artifacts     [built]
-  artifacts/                     # gitignored — per-run output
+    browser-daemon.mjs           # long-lived browser host (Selenium+FF, HTTP API)  [built]
+    mcp-server.mjs               # thin MCP→HTTP client to the daemon (Option C)     [built]
+    mcp-config.json              # config Claude reads to spawn the MCP server       [built]
+    mcp-smoke.mjs                # full MCP-path smoke + payload measurement          [built]
+    daemon-smoke.mjs             # daemon HTTP-API contract smoke                     [built]
+    browser-smoke.mjs            # standalone browser-path check (no MCP/SDK)         [built]
+    fallback-cli.mjs             # Plan-B reference (CLI-over-Bash; rejected)         [built]
+    preflight.mjs                # prerequisite checks (8; incl. daemon port)         [built]
+    runner.mjs                   # orchestrator + daemon lifecycle (ESM Node)         [built]
+    # (no skill-loader — Claude Code auto-loads .claude/skills/uat-scenario.md natively)
+  README.md                      # how to run, add scenarios, debug artifacts        [built]
+  artifacts/                     # gitignored
+    20260603-072202/             #   one flat dir per run (YYYYMMDD-HHMMSS):
+      report.json                #     aggregate run report
+      daemon.log                 #     daemon's log for the run
+      20260603-072202-restore-dogfood-report.json   # per-scenario (prefixed)
+      20260603-072202-restore-dogfood-summary.md
+      20260603-072202-restore-dogfood-agent.log
+      20260603-072202-restore-dogfood-01-grid.png   # screenshots (prefixed, sort in order)
 .claude/
   skills/
-    uat-scenario.md              # the agent skill
+    uat-scenario.md              # the agent skill (checked in via .gitignore exception)
 ```
+
+Note: `preflight.mjs` and `runner.mjs` live under `_tools/` (not directly in `tests/uat/`).
 
 Add to `.gitignore`: `tests/uat/artifacts/`. The fixture itself is checked in.
 
-### 3. Preflight (`tests/uat/preflight.ts`)
+### 3. Preflight (`tests/uat/_tools/preflight.mjs`)
 
 Runs at the very start of `pnpm test:uat`. Hard requirement: a contributor can clone the repo on a clean machine, run `pnpm install && pnpm test:uat`, and either the run starts or they're told exactly what to do next.
 
-**Checks (in order; fail-fast):**
+**Checks (in order; runs all, exits 1 if any failed):**
 
 | # | Check | If missing |
 |---|---|---|
-| 1 | Node version meets `package.json` `engines` floor | Print upgrade instructions; exit 1 |
-| 2 | `node_modules/@modelcontextprotocol/sdk` + `selenium-webdriver` exist at their pinned versions | Auto-run `pnpm install`; if still missing, exit 1 |
-| 3 | **release Firefox** resolvable (`firefox` on PATH or `$FIREFOX_BIN`) | Print install instructions; exit 1 |
-| 4 | `geckodriver` available (on PATH, or Selenium Manager can auto-fetch — probe network) | Print install link / Selenium Manager note; exit 1 |
-| 5 | `web-ext` resolvable (used to package the `.xpi`, already a devDep) | Auto-run `pnpm install`; if still missing, exit 1 |
-| 6 | `claude` CLI on PATH | Print install link (`https://docs.claude.com/claude-code`); exit 1 |
-| 7 | `claude` is authenticated | Run `claude -p "ping"` with a 10s timeout; if it errors or asks for login, instruct `claude /login` and exit 1 |
-| 8 | `tsx` resolvable | Re-run `pnpm install`; if still missing, exit 1 |
-| 9 | `tests/uat/newtabtools_knowngood.zip` exists and is non-empty | Print location and regeneration steps from `tests/uat/README.md`; exit 1 |
+| 1 | Node ≥ 22 (`.node-version` / `engines`) | Print upgrade instructions (fnm/nvm); fail |
+| 2 | pnpm ≥ 10 | Print `corepack prepare pnpm@10 --activate`; fail |
+| 3 | **release Firefox** resolvable (`firefox` on PATH or `$FIREFOX_BIN`) | Print install instructions; fail |
+| 4 | Built `.xpi`/`.zip` in `dist/` matching the current manifest version | Print `pnpm build`; warn if stale, fail if absent |
+| 5 | Fixture `tests/uat/newtabtools_knowngood.zip` sha256 matches the recorded value | Print regeneration / hash-bump note; fail on mismatch |
+| 6 | `claude` CLI on PATH | Print install link (`https://docs.claude.com/claude-code`); fail |
+| 7 | `@modelcontextprotocol/sdk` resolvable from the tool dir | Print `pnpm install`; fail |
+| 8 | **UAT daemon port free** (`$UAT_DAEMON_PORT` or 9876) | Fail if in use; hard-fail if set to E2E's 9222 (collision guard) |
 
-**Modes:**
-- Default: check + auto-install where safe (node deps via `pnpm install` only). Refuse to touch system packages (Firefox, geckodriver) — print instructions instead.
-- `--check-only`: don't install anything, just report. Useful for CI debugging.
-- `--verbose`: log each probe with timing.
+**Output format:** one line per check, `[ok]` / `[warn]` / `[fail]` + actionable detail (mirrors `pre_commit_check.sh`). Warnings don't fail the run; any `[fail]` exits 1 with a summary. No emoji.
 
-**Output format:** one line per check, `[OK]` / `[FIX]` / `[FAIL]`. End-of-run summary names the first failure and points at `tests/uat/README.md#troubleshooting`. No emoji.
-
-The preflight is the first thing `runner.ts` does — failure aborts before Firefox is launched, before any model tokens are spent.
+The preflight does **not** auto-install or touch system packages — it diagnoses and prints the exact fix. It's the first thing `runner.mjs` does; failure aborts before the daemon spawns Firefox, before any model tokens are spent. (geckodriver is provisioned by Selenium Manager on first daemon run, or installed onto PATH — a system dep, not checked here.)
 
 ### 4. Scenario file format
 
-Plain markdown. The runner concatenates this with the skill prompt and pipes to Claude Code via stdin. One scenario per file.
+Plain markdown, one scenario per file. The runner injects a short prologue (slug + artifacts dir) above the scenario body and pipes the whole thing to `claude -p` via stdin; the agent interprets it through the `uat-scenario` skill. The **slug is the filename** (`01-restore-dogfood.md` → `01-restore-dogfood`) — no `id` frontmatter. Sections are prose, not a fixed schema:
 
 ```markdown
----
-id: 02-tile-hover
-title: Tile hover action row does not occlude content
-phase: 1
-# Optional: opt out of the standard restore preamble. Use only when the
-# scenario itself is testing the restore flow or a clean-state edge case.
-# setup: skip-restore
----
+# C1 — Restore dogfood
 
-## Steps
-1. Take a screenshot of the resting state of the grid.
-2. Hover over the tile in position 5 (the QoQa tile).
-3. Take a screenshot of the hover state.
+**Goal:** <one line — what this scenario proves.>
 
-## What to judge
-- In the resting state: every tile thumbnail must be fully visible. No overlay,
-  action row, or other element may be covering more than 30% of any thumbnail.
-- In the hover state: the hover action row (5 buttons, top-right) must appear
-  on the hovered tile, and must NOT cover the tile title at the bottom.
-- The pin stripe (if pinned) must remain visible at the top in both states.
-- Positions 9–15 are empty in the fixture (9 tiles in a 4×4 grid) — trailing
-  gaps there are expected and not a finding.
+Follow the **standard preamble** from the `uat-scenario` skill (open drawer →
+Advanced → restore the fixture → wait for the tiles). [Or: "Skip the preamble"
+for a scenario that tests a clean/pre-restore state.]
+
+## Verify (structural — browser_evaluate)
+- <assertion expressible as a JS expression returning a primitive, e.g.
+  `document.querySelectorAll('.newtab-site').length === 9`>
+- <assertion on tile content, e.g. a .newtab-title contains "finews.ch">
+
+## Evidence
+- Take a screenshot named `<name>` of <state>.
+
+## Visual judgment
+- Read the `<name>` screenshot inline and judge: <criterion in plain language —
+  occlusion / contrast / layering / layout breaks>. State pass/fail conditions.
 
 ## Output
-Return the structured findings JSON as specified in the skill prompt.
+- report.json (the assertions + visual verdict) and summary.md (one paragraph).
 ```
 
 **Rules:**
 - "What to judge" is fully self-contained in language. No references to design files or reference images.
-- Every scenario starts from the known-good fixture state restored by the preamble. Scenarios that *do* want to start clean (e.g. an empty-state scenario) set `setup: skip-restore` in the frontmatter.
-- Tile references use the fixture's positions (e.g. "the tile at position 5") rather than CSS selectors that may drift.
+- Every scenario starts from the known-good fixture state restored by the preamble. A scenario testing a clean/pre-restore state says "skip the preamble" in its body.
+- **Assert on `.newtab-site` (populated tiles) or tile content, never on raw `.newtab-cell` count** — a default profile already shows 9 empty cells (3×3), so cell count alone doesn't prove a restore. After the fixture restore there are 16 cells (4×4) and 9 `.newtab-site` tiles.
+- Tile references use the fixture's positions / titles rather than CSS selectors that may drift.
 
 ### 5. Skill definition (`.claude/skills/uat-scenario.md`)
 
-```markdown
----
-name: uat-scenario
-description: Execute a NTT user acceptance scenario and report findings.
-allowed-tools:
-  - mcp__ntt-uat__browser_navigate
-  - mcp__ntt-uat__browser_click
-  - mcp__ntt-uat__browser_hover
-  - mcp__ntt-uat__browser_type
-  - mcp__ntt-uat__browser_press_key
-  - mcp__ntt-uat__browser_take_screenshot
-  - mcp__ntt-uat__browser_read_screenshot
-  - mcp__ntt-uat__browser_snapshot
-  - mcp__ntt-uat__browser_evaluate
-  - mcp__ntt-uat__browser_file_upload
----
+The built skill is `.claude/skills/uat-scenario.md` (the file is the source of truth; checked in via the `.gitignore` `!.claude/skills/` exception). Summary of its actual contract:
 
-You are running a User Acceptance Test scenario for the New Tab Tools Firefox
-extension. The user will provide a scenario describing steps and what to judge.
+**Frontmatter** — `name: uat-scenario`, and `allowed-tools` listing exactly the six MCP browser tools plus `Write`:
+`mcp__ntt-uat__browser_{navigate,click,evaluate,file_upload,take_screenshot,read_screenshot}` + `Write`. (No `browser_hover/type/press_key/snapshot` — those were aspirational; the implemented tool surface is the six above.)
 
-## Per-scenario preamble (always run, unless frontmatter sets setup: skip-restore)
+**Standard preamble** (run unless the scenario says "skip the preamble"), using the **current NTT v2 selectors**:
+1. `browser_navigate` to the extension's `newTab.xhtml`.
+2. Click `#options-toggle` (opens the config drawer).
+3. Click `[data-drawer-tab="advanced"]` (the Advanced panel).
+4. `browser_file_upload` the fixture into `#options-restore-file` (absolute path computed from the artifacts dir).
+5. Click `#options-restore`.
+6. Poll until `document.querySelectorAll('.newtab-site').length === 9` (tiles render **live**, no reload). The skill explicitly warns: assert on `.newtab-site` (or tile content), **not** `.newtab-cell` count — a default profile shows 9 empty cells, and the fixture's 4×4 grid has 16 cells of which 9 are populated.
 
-Before executing the scenario's own Steps section, perform this preamble. It
-puts the extension into a known-good state so judgments reflect the code
-under test, not profile drift.
+A failed preamble step is recorded as a critical assertion and stops the scenario (a broken restore is itself a finding).
 
-1. Navigate to $NEWTAB_URL. Take a "00-loaded.png" screenshot. Confirm the NTT
-   new-tab page rendered (look for `#newtab-scrollbox`). If it didn't load,
-   record a critical finding and stop — there is no point continuing.
-2. Open Settings via the gear icon (`#options-toggle`).
-3. Click the "Backup / Restore" entry (`#options-backup-restore`).
-4. Use browser_file_upload to upload $KNOWN_GOOD_ZIP into the restore file
-   input (`#options-restore-file`).
-5. Click the "Restore" button (`#options-restore`).
-6. Wait until the grid repopulates. The fixture defines 9 tiles at positions
-   0–8 (cells 9–15 of the 4×4 grid stay empty); confirm at least one tile is
-   present before continuing.
-7. Close the settings panel. Reload the new-tab page so the restored prefs
-   apply (theme, wallpaper, grid dimensions). Take a "01-restored.png"
-   screenshot.
+**Assertion vocabulary** — structural (`browser_evaluate` → primitive), evidence-only (`browser_take_screenshot`, not read back), visual judgment (`browser_take_screenshot` + `browser_read_screenshot` inline, ~1200 image tokens — read only what must be judged; Option C).
 
-The preamble is part of the scenario — if any step fails, record a critical
-finding (severity: critical, location: "preamble step <N>") and stop. A broken
-preamble is itself a UAT finding, because it means the restore feature is
-broken and every scenario downstream is unreliable.
+**Output** — the agent writes `report.json` (a `passed` rollup + an `assertions[]` array of `{name, kind, passed, expected, actual, evidence}`) and `summary.md` (lead with the verdict, then what was seen, flagging occlusion / contrast / layering / layout breaks) into the runner-provided artifacts directory via `Write`. (This replaced the earlier single-stdout-JSON-findings design: the runner now keys off the process exit code and reads each scenario's `report.json`, rather than parsing stdout.)
 
-Do NOT navigate to any of the URLs listed in the fixture's tiles (Swiss news
-and shopping sites). Tiles are rendered, not visited.
+**Constraints** — only the seven allowed tools (no `Bash`/`Read`/`Edit`); never navigate outside the `moz-extension://` origin (tile URLs are rendered, not visited); a missing documented selector is recorded as drift, not guessed around.
 
-## Scenario execution
+### 6. Runner (`tests/uat/_tools/runner.mjs`)
 
-After the preamble (or instead of it, if `setup: skip-restore`):
+Responsibilities (as built):
 
-1. Execute the scenario's Steps in order using the MCP tools.
-2. At every state change call `browser_take_screenshot` with a descriptive name
-   — this saves a PNG to disk (the image does NOT enter context). Then, only for
-   the shots you actually need to judge, call `browser_read_screenshot` to view
-   it inline. Screenshots kept purely as evidence need not be read. (Option C —
-   keeps image-token cost proportional to what you judge.)
-3. Judge the rendered page against the scenario's "What to judge" criteria.
-   The criteria are the sole ground truth — do not import expectations from
-   elsewhere. Look for: occlusion, contrast issues, missing elements, broken
-   layout, unreadable text.
-4. At the end, emit ONE block of JSON matching the schema below. Nothing else.
-
-## Output schema
-
-{
-  "scenario_id": "<from frontmatter>",
-  "verdict": "pass" | "fail" | "investigate",
-  "findings": [
-    {
-      "severity": "critical" | "major" | "minor",
-      "location": "<selector or visual description, or 'preamble step N'>",
-      "description": "<what's wrong>",
-      "evidence": ["<screenshot filename>"]
-    }
-  ],
-  "evidence": ["<all screenshot filenames captured>"],
-  "notes": "<one paragraph: how the run went, anything ambiguous, did the wallpaper CDN load>"
-}
-
-## Important
-
-- One JSON block, at the end, no prose around it. The runner parses stdout.
-- Do not call tools outside the allowed list.
-- Do not navigate away from moz-extension:// pages. Tile URLs are not to be
-  visited.
-- If you cannot complete a step (element missing, timeout), record it as a
-  finding with severity "critical" and continue if possible.
-- If the scenario's criteria are ambiguous, mark the verdict "investigate" and
-  describe the ambiguity in `notes`. Do not guess.
-- If the wallpaper CDN is unreachable (background image fails to load), note it
-  in `notes` but do not flag as a finding unless the scenario explicitly says
-  the wallpaper must be present.
-```
-
-Notes:
-- No `Bash(...)` in `allowed-tools`. The agent shouldn't need shell access for a UAT scenario; reducing surface area lowers blast radius if a prompt is malformed.
-- No design-reference language. Each scenario's text is the spec.
-- The preamble dogfoods the restore flow on every run. If restore breaks, the very first scenario fails fast with a clear finding — and that's a useful signal, not a workaround target.
-- **Selector reconciliation (implementation task):** the preamble's `#options-toggle` / `#options-backup-restore` / `#options-restore-file` / `#options-restore` selectors are pre-v2. NTT v2 moved Settings into the **config drawer** (titlebar cogwheel → **Advanced** tab → **Backup & Restore**). Reconcile these against the current `newTab.xhtml` when implementing — `#newtab-scrollbox` (the render check) is still valid.
-
-### 6. Runner (`tests/uat/runner.ts`)
-
-Responsibilities:
-
-- Run `preflight.ts` first. Abort on non-zero exit.
-- Parse CLI args: `--scenario <id>` (default: all), `--model <name>` (default: sonnet).
-- Package the extension once: `pnpm build` → writes the `.xpi`/`.zip` to `dist/` (canonical output, shared with AMO release). The MCP server's `XPI_DIR` env var defaults to `dist/`; the runner doesn't need to pass `EXTENSION_XPI` explicitly unless it wants to test a non-default artifact. The runner does **not** launch a browser — the MCP server does that via Selenium, per scenario.
-- Generate the per-run `mcp-config.json` pointing Claude at our MCP server (`tests/uat/_tools/mcp-server.mjs`), passing `EXTENSION_XPI`, `FIREFOX_BIN`, `ARTIFACTS_DIR`, and the pinned UUID via env.
-- For each scenario file:
-  - Create `artifacts/<scenario-id>/<ISO-timestamp>/` directory.
-  - Build the prompt: skill body + scenario body + injected `$NEWTAB_URL`, `$ARTIFACTS_DIR`, `$KNOWN_GOOD_ZIP` (absolute path to `tests/uat/newtabtools_knowngood.zip`).
-  - Invoke Claude Code in headless mode with stream-json output:
-    ```bash
-    claude -p \
-      --output-format=stream-json \
-      --mcp-config tests/uat/_tools/mcp-config.json \
-      --allowedTools "mcp__ntt-uat__*" \
-      --max-turns 50 \
-      --model claude-sonnet-4-6
-    ```
-  - Pipe the prompt to stdin, consume stream-json events, write a transcript log.
-  - Extract the final JSON block from the assistant's last message. Validate against the schema.
-  - Save `report.json`, `transcript.jsonl`, all screenshots.
-- After all scenarios: write a summary `artifacts/<run-timestamp>/summary.md` aggregating verdicts and critical findings. Print path to stdout.
-- Exit code: 0 always (this tier never fails the build). The developer reviews the summary.
+- Run `preflight.mjs` first (8 checks). Abort on non-zero exit, before the daemon or any tokens.
+- Scenario selection: optional positional args select a subset by slug (`pnpm test:uat 01-restore-dogfood 02-…`); no args runs all of `scenarios/*.md` (lex-sorted). Unknown slugs abort with the available list.
+- **Create this run's timestamped directory** `tests/uat/artifacts/<YYYYMMDD-HHMMSS>/`. All of the run's output lives **flat** in it — every scenario's screenshots, reports, summaries, and logs share the one directory (no per-scenario subdirs) so the whole run browses together. Successive runs get separate timestamped dirs, so nothing is overwritten. Per-scenario files are namespaced by a `<run-stamp>-<scenario label>` prefix.
+- **Start the browser daemon** (`browser-daemon.mjs`) once, with `ARTIFACTS_DIR=<run dir>` + `UAT_DAEMON_PORT`. Poll `GET /health` until ready (generous timeout — history seeding is slow on cold links). The runner does **not** launch a browser itself; the daemon owns it for the whole run.
+- For each selected scenario (all writing into the one flat run dir):
+  - Build the prompt: a runner prologue + the scenario markdown, piped to `claude -p` via stdin. The prologue gives the agent the slug, the **absolute fixture path**, and the **exact absolute paths** to write its report (`<prefix>-report.json`) and summary (`<prefix>-summary.md`) to.
+  - Spawn `claude -p --mcp-config <config> --allowedTools <6 browser_* + Write> --max-turns 50`, with env `ARTIFACTS_DIR=<run dir>`, `UAT_DAEMON_PORT`, and `UAT_SHOT_PREFIX=<run-stamp>-<scenario label>` (the prefix the MCP server prepends to screenshot filenames).
+  - Capture stdout → `<prefix>-agent.log`. The agent writes its report + summary to the prologue paths; screenshots land in the run dir via the daemon, prefixed.
+  - Print the scenario's screenshot filenames.
+  - **Between scenarios** (not after the last) `POST /reset_extension` — drives the built-in reset then re-restores the fixture, both verified, so the next scenario starts from a known state. History is not reset.
+- **Stop the daemon** in a `finally` (even if a scenario threw), and also on the runner's own SIGINT/SIGTERM.
+- Write `<run dir>/report.json` aggregating per-scenario `{passed, exitCode, elapsedSec, report, screenshots}` + the run stamp. Exit non-zero if any scenario's `claude -p` exited non-zero. (Unlike the original "exit 0 always" plan, a selective/gating run *does* signal failure via exit code, which is what makes `pnpm test:uat <slug>` usable as a gate; the human still reviews artifacts for the nuanced verdict.)
 
 Implementation notes:
 
-- Use `execa` or Node's `child_process.spawn` for the CLI subprocess.
-- Stream-json parsing: each line is one event (`{type: "user"|"assistant"|"tool_use"|...}`). Fail loudly on unknown event types rather than silently dropping them — this is the early warning for Claude Code release drift.
-- The runner is a Node script run via `tsx`, not via vitest. Vitest is the wrong harness here — there's no assertion model, just artifact production.
-- Keep the runner under ~250 lines. Most logic is shelling out and file I/O.
-- Isolation between scenarios is automatic: the MCP server is spawned once per scenario (per `claude -p` invocation) and Selenium launches a **fresh Firefox with a fresh geckodriver profile** each time, so there is no cross-scenario profile drift. The fixture-restore preamble then seeds the known-good state; `setup: skip-restore` scenarios simply start from the clean fresh profile.
+- Node's `child_process.spawn` (daemon) + `spawnSync` (per-scenario `claude -p`). No `execa` dep.
+- The runner keys off the per-scenario process **exit code**; it does not parse `--output-format=stream-json`. The scenario's structured verdict is the `report.json` the agent writes. (Dropping stream-json parsing removed a Claude-Code-release-drift surface.)
+- The runner is a Node ESM script (`.mjs`, run via `node`) — not vitest, not TypeScript.
+- **Screenshot naming:** `<run-stamp>-<scenario label>-<agent's shot name>.png` (e.g. `20260603-071342-restore-dogfood-01-grid.png`). The run stamp groups a run; the scenario label and the agent's `NN-` shot ordinal make the files sort in capture order, so opening the first in an image viewer and paging forward walks the run.
+- **Isolation between scenarios** is via `/reset_extension` against the shared warm browser (built-in reset → fixture restore), not a fresh Firefox per scenario. Seeded history persists across scenarios by design (it's the environment). This is the B7 change from the original "fresh profile per scenario" model.
 
-### 7. MCP server (`tests/uat/_tools/mcp-server.mjs`)
+### 7. MCP server (`tests/uat/_tools/mcp-server.mjs`) + browser daemon (`browser-daemon.mjs`)
 
-**Implemented** (prototype stage) — a stdio MCP server using `@modelcontextprotocol/sdk`. It's plain JS (`.mjs`, run with `node` — no `tsx`/build needed for the server process Claude spawns). On startup it launches its **own** release Firefox via Selenium + geckodriver, pre-seeds `extensions.webextensions.uuids` to pin the moz-extension UUID, and `installAddon(xpi, true)` (the pattern proven by `browser-smoke.mjs`). The server process holds the one driver for the whole session and is the browser daemon — no separate launch script.
+Since B7 these are two processes (see "Revised 2026-06-02" under Spike outcome):
 
-Tool surface (Option C screenshot contract):
+**`browser-daemon.mjs`** — long-lived, one per run, started/stopped by the runner. On startup it launches release Firefox via Selenium + geckodriver, pins `extensions.webextensions.uuids`, `installAddon(xpi, true)`, **seeds history with 9 URLs**, and opens `newTab.xhtml`. It then serves a localhost HTTP API on `127.0.0.1:$UAT_DAEMON_PORT` (default **9876**, ≠ E2E's 9222) and logs to `<run dir>/daemon.log`. It resolves the `.xpi` from `dist/` (`XPI_DIR`/`EXTENSION_XPI` override). On SIGTERM it `driver.quit()`s.
 
-| Tool | Backed by | Notes |
+| Endpoint | Backed by | Notes |
 |---|---|---|
-| `browser_navigate {url}` | `driver.get` | |
-| `browser_click {selector}` | `findElement().click()` | |
-| `browser_evaluate {script}` | `driver.executeScript` | strict CSP blocks `Function()` polling — prefer explicit waits over evaluate-polling |
-| `browser_file_upload {selector, path}` | `findElement().sendKeys(path)` | drives the restore `<input type=file>` |
-| `browser_take_screenshot {name}` | `driver.takeScreenshot` → **disk** | returns `{saved, bytes}` as text; **no image in context** |
-| `browser_read_screenshot {name}` | reads PNG → **inline image** | on demand; pay image tokens only for shots you judge |
+| `GET /health` | — | `{ status, ready, port }`; the runner polls this |
+| `POST /navigate {url}` | `driver.get` | |
+| `POST /click {selector}` | `findElement().click()` | |
+| `POST /evaluate {script, async?}` | `driver.executeScript` / `executeAsyncScript` | `async:true` for callback/promise queries (e.g. `chrome.*`) |
+| `POST /file_upload {selector, path}` | `findElement().sendKeys(path)` | drives the restore `<input type=file>` |
+| `POST /screenshot {name, dir?}` | `driver.takeScreenshot` → **disk** | writes `<dir>/<name>.png`, returns `{saved, bytes}` |
+| `POST /reset_extension` | built-in reset → fixture restore | verifies 16→9 cells then 9→16 cells + 9 tiles; `{ ok, resetCells, restoredCells, restoredSites }` |
 
-Tool names keep the `@playwright/mcp` shape so scenarios/skill stay tool-agnostic. Screenshots are written under `$ARTIFACTS_DIR`. Config (`tests/uat/_tools/mcp-config.json`, already written):
+**`mcp-server.mjs`** — the thin stdio MCP server Claude spawns per scenario (`@modelcontextprotocol/sdk`, plain `.mjs`). It holds **no** Selenium state; each `browser_*` tool forwards to the daemon over HTTP. The tool surface (Option C contract) is unchanged from the table the skill expects:
+
+| Tool | Forwards to | Notes |
+|---|---|---|
+| `browser_navigate {url}` | `POST /navigate` | |
+| `browser_click {selector}` | `POST /click` | |
+| `browser_evaluate {script}` | `POST /evaluate` | returns the value as JSON text |
+| `browser_file_upload {selector, path}` | `POST /file_upload` | |
+| `browser_take_screenshot {name}` | `POST /screenshot` (into this scenario's dir) | returns `{saved, bytes}`; **no image in context**. Filename gets the `UAT_SHOT_PREFIX` |
+| `browser_read_screenshot {name}` | reads the prefixed PNG off disk → **inline image** | on demand; pay image tokens only for shots you judge |
+
+Tool names keep the `@playwright/mcp` shape so scenarios/skill stay tool-agnostic. Config (`tests/uat/_tools/mcp-config.json`):
 
 ```json
 {
@@ -440,21 +382,20 @@ Tool names keep the `@playwright/mcp` shape so scenarios/skill stay tool-agnosti
       "command": "node",
       "args": ["./tests/uat/_tools/mcp-server.mjs"],
       "env": {
-        "EXTENSION_XPI": "${EXTENSION_XPI}",
-        "FIREFOX_BIN": "${FIREFOX_BIN}",
+        "UAT_DAEMON_PORT": "${UAT_DAEMON_PORT}",
         "ARTIFACTS_DIR": "${ARTIFACTS_DIR}",
-        "NTT_UAT_UUID": "e1a2b3c4-d5e6-4789-9abc-def012345678"
+        "UAT_SHOT_PREFIX": "${UAT_SHOT_PREFIX}"
       }
     }
   }
 }
 ```
 
-Measure the wire payloads any time with `tests/uat/_tools/mcp-smoke.mjs` (after installing the SDK).
+Measure the wire payloads any time with `tests/uat/_tools/mcp-smoke.mjs` (spawns the daemon, then drives the MCP server); the daemon's own HTTP contract is covered by `daemon-smoke.mjs`.
 
-`@modelcontextprotocol/sdk` and `selenium-webdriver` are installed as **pinned devDependencies** in `package.json` (no `^` / `~`). Versions recorded in `tests/uat/README.md` with the date and rationale, per `CONTRIBUTING.md` supply-chain guardrails.
+`@modelcontextprotocol/sdk` and `selenium-webdriver` are **pinned devDependencies** (no `^`/`~`). Versions recorded in `tests/uat/README.md` with date + rationale, per `CONTRIBUTING.md` supply-chain guardrails.
 
-**Plan B fallback if this proves painful:** swap to `tests/uat/_tools/uat-cli.ts` (single CLI, Bash-invoked). Scenarios and skill prompt would change tool-call shape but not content. See Spike outcome.
+**Plan B fallback if this proves painful:** the single-CLI route (`fallback-cli.mjs`, Bash-invoked). Scenarios and skill would change tool-call shape but not content. See Spike outcome.
 
 ---
 
@@ -481,10 +422,10 @@ Outcome documented in §"Spike outcome" above. Decision: roll-your-own MCP, with
 
 - Create `tests/uat/` with the directory layout above.
 - Add `tests/uat/artifacts/` to `.gitignore`. The fixture stays committed.
-- Add `"test:uat": "tsx tests/uat/runner.ts"` to `package.json` scripts.
-- Add `tsx`, `@modelcontextprotocol/sdk@<pinned>`, and `selenium-webdriver@<pinned>` as devDependencies (no `^`); run `pnpm audit`. (geckodriver is provisioned by Selenium Manager or installed onto PATH — a system dep, not a node one.)
-- Write `tests/uat/preflight.ts` with the checks listed in §3 (release Firefox + geckodriver + the fixture-presence check).
-- Stub `runner.ts` with a hello-world that runs preflight, then spawns `claude -p "say hi"` and writes the response to an artifact.
+- Add `"test:uat": "node tests/uat/_tools/runner.mjs"` to `package.json` scripts.
+- Pin `@modelcontextprotocol/sdk@<exact>` and `selenium-webdriver@<exact>` in devDependencies (no `^`); run `pnpm audit`. No `tsx` — the runner is `.mjs` ESM, executed by `node` directly. (geckodriver is provisioned by Selenium Manager or installed onto PATH — a system dep, not a node one.)
+- Write `tests/uat/_tools/preflight.mjs` with the checks listed in §3 (release Firefox + geckodriver + the fixture-presence check).
+- Stub `runner.mjs` with a hello-world that runs preflight, then spawns `claude -p "say hi"` and writes the response to an artifact.
 - Verify on a clean checkout (or via a fresh `git clean -xdf` if you're willing). Preflight should either pass or print actionable instructions.
 
 ### Step 2 — Skill + MCP server wiring (2-3 hours)

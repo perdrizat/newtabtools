@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// UAT bridge prototype — OPTION B: CLI-over-Bash (the @playwright/cli shape).
+// Fallback UAT bridge — CLI-over-Bash (the @playwright/cli shape). Kept as a
+// reference alternative to the MCP server in case the MCP route hits a wall;
+// not used by the running harness.
 //
 // A CLI for stateful browser control needs a persistent browser *server* that
 // every command attaches to (Playwright CLI does exactly this). So this splits

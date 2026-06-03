@@ -1,9 +1,9 @@
-# C1 — Restore dogfood
+# Restore dogfood
 
 **Goal:** prove the UAT loop works end to end — the standard restore preamble
 runs, the fixture's tiles appear, and one screenshot reads as a cleanly
-laid-out grid. This is the gate: if C1 can't pass reliably, the tier needs
-rethinking before more scenarios are added.
+laid-out grid. This is the tier's gate: if this scenario can't pass reliably,
+the harness itself needs attention before more scenarios are added.
 
 Follow the **standard preamble** from the `uat-scenario` skill (open the drawer →
 Advanced → restore the fixture zip → wait for the tiles). Do not skip it — the

@@ -20,6 +20,7 @@
     "test:integration": "vitest run --project fast tests/integration",
     "test:fast": "vitest run --project fast",
     "test:e2e": "tests/e2e/run_esr_tests.sh",
+    "test:uat": "node tests/uat/_tools/runner.mjs",
     "test": "pnpm test:fast && pnpm test:e2e",
     "verify": "pnpm lint && pnpm typecheck && pnpm lint:webext && pnpm test:fast && pnpm build",
     "update-zip": "VER=$(node -p \"require('@zip.js/zip.js/package.json').version\") && printf '/*\\n * @zip.js/zip.js v%s — zip-core.min.js\\n * Source: https://github.com/gildas-lormeau/zip.js\\n * License: BSD-3-Clause\\n * Installed as devDependency; copied via: pnpm update-zip\\n */\\n' \"$VER\" | cat - node_modules/@zip.js/zip.js/dist/zip-core.min.js > webextension/lib/zip.js"
