@@ -19,9 +19,9 @@
 //                               demand (~1.2k image tokens per shot viewed).
 //
 // Env:
-//   UAT_DAEMON_PORT  daemon port (default 9876; must match the running daemon)
-//   ARTIFACTS_DIR    where screenshots are written/read for THIS scenario
-//   UAT_SHOT_PREFIX  filename prefix the runner sets, prepended to shot names
+//   UAT_DAEMON_PORT    daemon port (default 9876; must match the running daemon)
+//   ARTIFACTS_DIR      where screenshots are written/read for THIS scenario
+//   UAT_SCENARIO_LABEL scenario slug, embedded in screenshot filenames
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,12 +34,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
 const BASE = `http://127.0.0.1:${PORT}`;
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
-// Set by the runner: `<run-stamp>-<scenario>`. Prepended to the agent's shot
-// name so files sort in capture order across the run and never collide between
-// runs (e.g. 20260603-071342-restore-dogfood-01-grid.png). Falls back to no
-// prefix when run outside the runner (e.g. mcp-smoke).
-const SHOT_PREFIX = process.env.UAT_SHOT_PREFIX || '';
-const shotFile = name => (SHOT_PREFIX ? `${SHOT_PREFIX}-${name}` : name);
+const SCENARIO_LABEL = process.env.UAT_SCENARIO_LABEL || '';
+
+// Screenshot filenames lead with the CAPTURE time (not the run-start time), so a
+// strict filename sort equals the order shots were taken — across scenarios too
+// (a later scenario's shots get later timestamps). Format:
+// <YYYYMMDD-HHMMSS>-<scenario>-<shot>.png. Seconds resolution is enough: shots
+// are always several seconds apart, so no sub-second sequence is needed.
+function captureStamp(d = new Date()) {
+	const p = n => String(n).padStart(2, '0');
+	return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+// Map the agent's short shot name (e.g. "01-grid") to the timestamped filename
+// it was actually saved as, so browser_read_screenshot can find it again.
+const shotFiles = new Map();
+function buildShotName(name) {
+	const label = SCENARIO_LABEL ? `-${SCENARIO_LABEL}` : '';
+	const file = `${captureStamp()}${label}-${name}`;
+	shotFiles.set(name, file);
+	return file;
+}
 
 async function daemon(endpoint, body) {
 	const res = await fetch(`${BASE}${endpoint}`, {
@@ -85,15 +99,16 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 			return { content: [{ type: 'text', text: `uploaded ${a.path}` }] };
 		}
 		if (name === 'browser_take_screenshot') {
-			// Tell the daemon to write into THIS agent's per-scenario dir, under
-			// the timestamped, capture-ordered filename.
-			const out = await daemon('/screenshot', { name: shotFile(a.name), dir: ARTIFACTS_DIR });
+			// Stamp with the capture time + sequence, then have the daemon write it
+			// into this scenario's dir.
+			const out = await daemon('/screenshot', { name: buildShotName(a.name), dir: ARTIFACTS_DIR });
 			return { content: [{ type: 'text', text: JSON.stringify(out) }] };
 		}
 		if (name === 'browser_read_screenshot') {
-			// Daemon and this process share the filesystem; read locally. Same
-			// prefix as take_screenshot so the agent still refers to its own name.
-			const p = path.join(ARTIFACTS_DIR, `${shotFile(a.name)}.png`);
+			// Daemon and this process share the filesystem; read locally, resolving
+			// the agent's short name to the timestamped file it was saved as.
+			const base = shotFiles.get(a.name) || a.name;
+			const p = path.join(ARTIFACTS_DIR, `${base}.png`);
 			const data = fs.readFileSync(p).toString('base64');
 			return { content: [{ type: 'image', data, mimeType: 'image/png' }] };
 		}

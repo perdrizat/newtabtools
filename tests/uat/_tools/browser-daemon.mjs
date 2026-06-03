@@ -103,7 +103,12 @@ async function makeDriver() {
 	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
 	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 	opts.addArguments('-headless');
+	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
+	// viewport. Screenshots are downscaled before saving (see SHOT_SCALE) so the
+	// agent judges a representative FHD layout without the full-res token cost.
+	opts.addArguments('--width=1920', '--height=1080');
 	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+	await driver.manage().window().setRect({ x: 0, y: 0, width: 1920, height: 1080 });
 	const xpi = resolveXpi();
 	await driver.installAddon(xpi, true); // temporary = unsigned OK on release
 	log(`extension installed: ${path.basename(xpi)}`);
@@ -128,6 +133,47 @@ async function seedHistory(driver) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Screenshots render at Full HD but are saved downscaled to keep the agent's
+// image-token cost low (these tests judge layout/occlusion/contrast, not exact
+// pixel placement). 0.5 → a 1920-wide capture is saved ~960 wide, which keeps
+// tile titles and the About text legible while roughly quartering the pixels.
+// Override with $UAT_SHOT_SCALE; set to 1 to disable. The downscale runs in-page
+// on a <canvas> (the extension CSP allows `img-src data:`), so it needs no extra
+// dependency or external image tool.
+const SHOT_SCALE = (() => {
+	const v = parseFloat(process.env.UAT_SHOT_SCALE);
+	return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.5;
+})();
+const DOWNSCALE_SCRIPT = `
+	const b64 = arguments[0], factor = arguments[1], done = arguments[arguments.length - 1];
+	const img = new Image();
+	img.onload = () => {
+		const w = Math.max(1, Math.round(img.naturalWidth * factor));
+		const h = Math.max(1, Math.round(img.naturalHeight * factor));
+		const c = document.createElement('canvas');
+		c.width = w; c.height = h;
+		const ctx = c.getContext('2d');
+		ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+		ctx.drawImage(img, 0, 0, w, h);
+		done(c.toDataURL('image/png').split(',')[1]);
+	};
+	img.onerror = () => done(null);
+	img.src = 'data:image/png;base64,' + b64;
+`;
+
+// Downscale a base64 PNG via the page's canvas. Falls back to the full-res image
+// if scaling is disabled or fails, so a screenshot is never lost.
+async function downscalePng(b64) {
+	if (SHOT_SCALE >= 1) { return b64; }
+	try {
+		const scaled = await driver.executeAsyncScript(DOWNSCALE_SCRIPT, b64, SHOT_SCALE);
+		return scaled || b64;
+	} catch (e) {
+		log(`screenshot downscale failed (${e.message}); saving full-res`);
+		return b64;
+	}
+}
 
 // Poll the live grid's .newtab-cell count until it equals `expected`. Swallows
 // transient errors (the page reloads mid-reset, briefly detaching the context).
@@ -237,7 +283,7 @@ async function handle(method, url, body) {
 	case '/screenshot': {
 		const dir = body.dir || ARTIFACTS_DIR;
 		fs.mkdirSync(dir, { recursive: true });
-		const data = await driver.takeScreenshot();
+		const data = await downscalePng(await driver.takeScreenshot());
 		const p = path.join(dir, `${body.name}.png`);
 		fs.writeFileSync(p, data, 'base64');
 		return { saved: p, bytes: fs.statSync(p).size };

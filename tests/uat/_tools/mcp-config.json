@@ -6,7 +6,7 @@
       "env": {
         "UAT_DAEMON_PORT": "${UAT_DAEMON_PORT}",
         "ARTIFACTS_DIR": "${ARTIFACTS_DIR}",
-        "UAT_SHOT_PREFIX": "${UAT_SHOT_PREFIX}"
+        "UAT_SCENARIO_LABEL": "${UAT_SCENARIO_LABEL}"
       }
     }
   }

@@ -86,6 +86,23 @@ async function daemonCall(endpoint, body) {
 	return json;
 }
 
+// Parse an agent's report.json defensively (it may be missing or malformed if
+// the agent crashed). Returns the failed assertions, the observations, and the
+// report's own top-level verdict (null if unreadable).
+function readReport(reportPath) {
+	const empty = { failedAssertions: [], observations: [], reportPassed: null };
+	let raw;
+	try { raw = fs.readFileSync(reportPath, 'utf8'); } catch { return empty; }
+	let report;
+	try { report = JSON.parse(raw); } catch { return { ...empty, observations: ['report.json was not valid JSON — see the agent log'] }; }
+	const assertions = Array.isArray(report.assertions) ? report.assertions : [];
+	return {
+		failedAssertions: assertions.filter(a => a && a.passed === false),
+		observations: Array.isArray(report.observations) ? report.observations.map(String) : [],
+		reportPassed: typeof report.passed === 'boolean' ? report.passed : null,
+	};
+}
+
 async function waitHealthy(timeoutMs) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -198,16 +215,17 @@ try {
 		const file = scenarios[i];
 		const slug = file.replace(/\.md$/, '');
 
-		// All scenarios of a run share ONE flat directory (RUN_DIR) so every
-		// screenshot + report can be browsed together. Per-scenario files are
-		// namespaced by this prefix instead of by subdirectory:
-		//   <run-stamp>-<scenario label without its numeric ordinal>
-		// The agent's shot name (e.g. "01-grid") is appended by the MCP server,
-		// giving e.g. 20260603-071342-restore-dogfood-01-grid.png. The agent's
-		// report/summary/agent.log use the same prefix.
-		const shotPrefix = `${RUN_STAMP}-${slug.replace(/^\d+-/, '')}`;
-		const reportPath = path.join(RUN_DIR, `${shotPrefix}-report.json`);
-		const summaryPath = path.join(RUN_DIR, `${shotPrefix}-summary.md`);
+		// All scenarios of a run share ONE flat directory (RUN_DIR) so the whole
+		// run browses together. Every file leads with the time it was CREATED, so
+		// a strict filename sort equals the order things happened:
+		//   - screenshots: stamped at capture by the MCP server
+		//     (<YYYYMMDD-HHMMSS>-<seq>-<slug>-<shot>.png)
+		//   - report / summary / agent.log: stamped here, at scenario end.
+		// The agent writes its report/summary to a stable interim path; we rename
+		// them to their end-stamped names once the scenario finishes (the agent
+		// can't know the end time up front).
+		const interimReport = path.join(RUN_DIR, `${slug}-report.json`);
+		const interimSummary = path.join(RUN_DIR, `${slug}-summary.md`);
 
 		const scenarioContent = fs.readFileSync(path.join(SCENARIOS_DIR, file), 'utf8');
 
@@ -217,8 +235,8 @@ try {
 			`- Scenario slug: \`${slug}\``,
 			`- Fixture zip (absolute path): \`${FIXTURE}\``,
 			'- Use the `uat-scenario` skill (if available) to interpret what follows.',
-			`- Write your report (JSON) to exactly this path: \`${reportPath}\``,
-			`- Write your summary (markdown) to exactly this path: \`${summaryPath}\``,
+			`- Write your report (JSON) to exactly this path: \`${interimReport}\``,
+			`- Write your summary (markdown) to exactly this path: \`${interimSummary}\``,
 			'- Screenshots taken via `mcp__ntt-uat__browser_take_screenshot` are named and placed automatically — just pass a short name like `01-grid`.',
 			'',
 			'---',
@@ -239,21 +257,34 @@ try {
 					...process.env,
 					UAT_DAEMON_PORT: String(PORT),
 					ARTIFACTS_DIR: RUN_DIR,
-					UAT_SHOT_PREFIX: shotPrefix,
+					UAT_SCENARIO_LABEL: slug,
 				},
 				encoding: 'utf8',
 			},
 		);
 		const elapsedSec = (Date.now() - start) / 1000;
 
-		fs.writeFileSync(path.join(RUN_DIR, `${shotPrefix}-agent.log`), result.stdout || '');
+		// End-stamp the scenario's own files so they sort after that scenario's
+		// screenshots and before the next scenario's.
+		const endStamp = runStamp();
+		const reportPath = path.join(RUN_DIR, `${endStamp}-${slug}-report.json`);
+		const summaryPath = path.join(RUN_DIR, `${endStamp}-${slug}-summary.md`);
+		if (fs.existsSync(interimReport)) { fs.renameSync(interimReport, reportPath); }
+		if (fs.existsSync(interimSummary)) { fs.renameSync(interimSummary, summaryPath); }
+		fs.writeFileSync(path.join(RUN_DIR, `${endStamp}-${slug}-agent.log`), result.stdout || '');
 
 		const passed = result.status === 0;
 		if (!passed) { anyFailed = true; }
 
 		const screenshots = fs.readdirSync(RUN_DIR)
-			.filter(f => f.startsWith(`${shotPrefix}-`) && f.endsWith('.png'))
+			.filter(f => f.endsWith('.png') && f.includes(`-${slug}-`))
 			.sort();
+
+		// Read the agent's report back so the runner can surface what mattered to
+		// the terminal — failed assertions, and "observations" (passed, but worth
+		// a human's eyes). Without this the only signal is the exit code, and
+		// anything the agent merely *noticed* stays buried in the report file.
+		const { failedAssertions, observations, reportPassed } = readReport(reportPath);
 
 		results.push({
 			slug,
@@ -262,9 +293,24 @@ try {
 			elapsedSec: Number(elapsedSec.toFixed(2)),
 			report: path.basename(reportPath),
 			screenshots,
+			failedAssertions,
+			observations,
 		});
 
 		console.log(`  ${passed ? '✓' : '✗'} ${slug} (${elapsedSec.toFixed(1)}s, exit ${result.status})`);
+		// A report that says fail while the process exited 0 (or vice-versa) is a
+		// discrepancy worth flagging — the agent and the harness disagree.
+		if (reportPassed !== null && reportPassed !== passed) {
+			console.log(`     ! report says passed=${reportPassed} but exit code says ${passed} — check ${path.basename(reportPath)}`);
+		}
+		for (const a of failedAssertions) {
+			console.log(`     ✗ ${a.name}`);
+			if (a.expected !== undefined) { console.log(`         expected: ${a.expected}`); }
+			if (a.actual !== undefined) { console.log(`         actual:   ${a.actual}`); }
+		}
+		for (const o of observations) {
+			console.log(`     ⚠ observation: ${o}`);
+		}
 		// Screenshots are kept indefinitely (gitignored under tests/uat/artifacts/).
 		// Print what landed so they're easy to scroll through after the run.
 		if (screenshots.length) {
@@ -279,7 +325,7 @@ try {
 		if (i < scenarios.length - 1) {
 			try {
 				const r = await daemonCall('/reset_extension', {});
-				console.log(`  reset_extension ok (cells=${r.cells})`);
+				console.log(`  reset_extension ok (reset→${r.resetCells} cells, restored→${r.restoredCells} cells / ${r.restoredSites} tiles)`);
 			} catch (e) {
 				console.error(`  runner: reset_extension failed: ${e.message}`);
 			}
@@ -307,10 +353,27 @@ const reportPath = path.join(RUN_DIR, 'report.json');
 fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
 
 const totalShots = results.reduce((n, r) => n + (r.screenshots?.length || 0), 0);
-console.log(`\n=== runner: ${report.passed}/${report.scenarioCount} scenarios passed ===`);
+const totalObs = results.reduce((n, r) => n + (r.observations?.length || 0), 0);
+const obsSuffix = totalObs ? `, ${totalObs} observation${totalObs === 1 ? '' : 's'}` : '';
+console.log(`\n=== runner: ${report.passed}/${report.scenarioCount} scenarios passed${obsSuffix} ===`);
+
+// Re-surface anything that needs eyes, so the run's tail is self-sufficient: a
+// reviewer reads this block and only opens a screenshot/report when pointed to.
+const needsAttention = results.filter(r => !r.passed || r.failedAssertions?.length || r.observations?.length);
+if (needsAttention.length) {
+	console.log('Needs attention:');
+	for (const r of needsAttention) {
+		console.log(`  ${r.passed ? '✓' : '✗'} ${r.slug}`);
+		for (const a of r.failedAssertions || []) { console.log(`     ✗ ${a.name}`); }
+		for (const o of r.observations || []) { console.log(`     ⚠ ${o}`); }
+	}
+} else {
+	console.log('Needs attention: none — all assertions passed, no observations.');
+}
+
 console.log(`Run dir:     ${RUN_DIR}/  (timestamped; this run's artifacts, kept indefinitely)`);
 console.log(`Report:      ${reportPath}`);
-console.log(`Screenshots: ${totalShots} total in ${RUN_DIR}/ (named ${RUN_STAMP}-<scenario>-<shot>.png, sort in capture order)`);
+console.log(`Screenshots: ${totalShots} total in ${RUN_DIR}/ (named <capture-time>-<scenario>-<shot>.png, sort in capture order)`);
 console.log(`Daemon log:  ${path.join(RUN_DIR, 'daemon.log')}`);
 
 process.exit(anyFailed ? 1 : 0);

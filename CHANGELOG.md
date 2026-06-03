@@ -11,9 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - UAT (LLM-driven user-acceptance) test tier completed and runnable via `pnpm test:uat` (opt-in; separate from E2E). New `pnpm test:uat` script. Components under `tests/uat/`:
+- `tests/uat/scenarios/02-restore-and-verify.md` — comprehensive UAT scenario: grid structure (9 tiles / 16 cells / spacing), tile content by position, About section (live version vs `getManifest()`, brand, GitHub link), and two visual judgments (grid layout + About-panel readability).
+
+### Changed
+
+- UAT artifacts now lead with the time each file was **created** (`YYYYMMDD-HHMMSS`), not the run-start time, so a strict filename sort matches capture order — screenshots stamped at capture, reports/summaries/logs stamped at scenario end. Fixes scenarios sorting alphabetically (e.g. `restore-and-verify` ahead of the earlier `restore-dogfood`) in image browsers that sort purely by filename.
+- UAT renders at Full HD (1920×1080, 100% / DPR 1) but saves screenshots downscaled to 50% (`$UAT_SHOT_SCALE`, default 0.5 → ~960px wide) to cut the agent's image-token cost while keeping tile titles and About text legible — these tests judge layout/occlusion/contrast, not exact pixels. Downscaling runs in-page on a `<canvas>` (no new dependency; the extension CSP already allows `img-src data:`).
+- UAT runner surfaces results to the terminal: per-scenario failed assertions + `observations[]` (a "passed but noteworthy" channel formalized in the skill), and a final "Needs attention" block with an observation count — so findings aren't buried in the report files.
 
 ### Fixed
 
+- Restoring a backup now applies the wallpaper **live** — previously a restored `backgroundUrl` (CDN wallpaper) didn't appear until the user manually reloaded the new-tab page. `updateUI` re-applies background prefs (`backgroundUrl`/`backgroundColor`/`backgroundPosition`) on change, the same live path tiles/theme/grid already used. Regression test: `tests/integration/restore-wallpaper-live.test.ts`.
 - Restore is now atomic (`webextension/export.js`): `readZip` parses all backup JSON up front, so a malformed backup aborts before any state is written — previously prefs were applied first and a `tiles.json` parse error then left a half-applied state (new grid, zero tiles) with no error surfaced. `webextension/background.js` `Import:restore` now reports `{ok:true}` / `{ok:false,error}` instead of swallowing the rejection. New tests in `backup-restore.test.ts` + `background-messages.test.ts`.
 
 ## [1.0.1] — 2026-06-02

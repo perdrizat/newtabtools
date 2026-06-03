@@ -9,10 +9,13 @@ Follow the **standard preamble** from the `uat-scenario` skill (open the drawer 
 Advanced → restore the fixture zip → wait for the tiles). Do not skip it — the
 restore *is* what this scenario exercises.
 
+The preamble leaves you two screenshots — `00-initial` (before) and `01-restored`
+(the clean restored page, drawer closed). You'll judge `01-restored` below.
+
 ## Verify (structural — `browser_evaluate`)
 
 1. **Tiles rendered:** `document.querySelectorAll('.newtab-site').length` === `9`
-   — the fixture's nine tiles rendered live (no reload).
+   — the fixture's nine tiles.
 2. **Grid dimensions:** `document.querySelectorAll('.newtab-cell').length` === `16`
    — the fixture's 4×4 grid applied (a default profile shows 9; 16 confirms the
    restore changed the grid).
@@ -20,26 +23,25 @@ restore *is* what this scenario exercises.
    least one known fixture title — e.g. one contains `finews.ch` and one
    contains `Tages-Anzeiger`. This proves it's the *fixture's* tiles, not some
    default set.
-
-## Evidence
-
-- Take one screenshot named `01-grid` of the populated grid (evidence-only is
-  fine, but you will also judge this one — so read it back, see below).
+4. **Wallpaper applied (mandatory):** `document.body.style.backgroundImage` must
+   contain `firefox-settings-attachments.cdn.mozilla.net` — the fixture's
+   Mozilla-CDN wallpaper, restored as a pref and applied **live** (no reload). An
+   empty string or `none` is a **failure** (the restore did not carry the
+   wallpaper through). This is a required assertion, not an observation.
 
 ## Visual judgment
 
-- Read the `01-grid` screenshot inline. Judge: **does the grid look populated
-  and cleanly laid out?**
-  - Pass = the nine tiles are visible and arranged in a grid, no overlap, no
+- Read the `01-restored` screenshot inline. Judge **both**:
+  - **Layout:** the nine tiles are visible in a clean grid — no overlap, no
     blank/empty render, no catastrophic layout break.
-  - Fail = blank grid, overlapping/clipped tiles, tiles off-screen, or content
-    that's unreadable.
-- The fixture's wallpaper is a Mozilla-CDN image that may not load in a headless/
-  offline run — note its presence or absence as an observation, but do **not**
-  fail the scenario on a missing wallpaper.
+  - **Wallpaper:** the Mozilla-CDN background image is visibly rendered behind
+    the tiles (not a plain/blank background). If the structural wallpaper
+    assertion passed but the image isn't visible in the screenshot, say so —
+    that's a finding.
+- Pass = tiles laid out cleanly **and** the wallpaper is visibly present.
 
 ## Output
 
-- `report.json` — the three structural assertions above plus the visual verdict.
+- `report.json` — the four structural assertions above plus the visual verdict.
 - `summary.md` — one short paragraph: lead with the verdict, then what the grid
-  looked like (layout, tiles, wallpaper).
+  and wallpaper looked like.
