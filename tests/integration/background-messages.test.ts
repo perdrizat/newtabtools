@@ -470,16 +470,29 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(zipResult));
 		});
 
-		it('Import:restore — calls sendResponse with readZip result', async () => {
-			const restoreResult = { tiles: 3 };
-			mockReadZip.mockResolvedValueOnce(restoreResult);
+		it('Import:restore — responds { ok: true } on success', async () => {
+			mockReadZip.mockResolvedValueOnce(undefined);
 			const result = listener(
 				{ name: 'Import:restore', file: 'fake-zip-data' },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
 			expect(mockReadZip).toHaveBeenCalledWith('fake-zip-data');
-			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(restoreResult));
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ ok: true }));
+		});
+
+		it('Import:restore — surfaces the error instead of swallowing it on failure', async () => {
+			// A malformed backup makes readZip reject. The handler must report the
+			// failure (not leave the message hanging / fail silently).
+			mockReadZip.mockRejectedValueOnce(new Error('bad zip'));
+			const result = listener(
+				{ name: 'Import:restore', file: 'corrupt-zip' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(
+				expect.objectContaining({ ok: false, error: expect.stringContaining('bad zip') }),
+			));
 		});
 	});
 

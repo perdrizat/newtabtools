@@ -62,6 +62,14 @@ async function readZip(file) {
 		return entry.getData(new zip.BlobWriter());
 	}
 
+	// Parse every JSON entry BEFORE writing any state. A malformed backup (e.g.
+	// a corrupt tiles.json) then aborts the whole restore atomically — rather
+	// than the old behaviour, where prefs were applied first and only then was
+	// tiles.json parsed, so a bad file left a half-applied state (new grid
+	// dimensions, zero tiles) with no error surfaced to the user.
+	let prefs = await getAsJSON('prefs.json');
+	let tiles = await getAsJSON('tiles.json');
+
 	let backgroundFile = entries.find(e => e.filename == 'background');
 	if (backgroundFile) {
 		Background.setBackground(await getAsBlob(backgroundFile));
@@ -70,7 +78,6 @@ async function readZip(file) {
 		}
 	}
 
-	let prefs = await getAsJSON('prefs.json');
 	if (prefs) {
 		let allowedKeys = ['theme', 'opacity', 'rows', 'columns',
 			'margin', 'spacing', 'titleSize', 'tileAspect', 'statType',
@@ -100,7 +107,6 @@ async function readZip(file) {
 		await chrome.storage.local.set(filtered);
 	}
 
-	let tiles = await getAsJSON('tiles.json');
 	if (!tiles) {
 		return;
 	}

@@ -241,7 +241,15 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		makeZip().then(sendResponse);
 		return true;
 	case 'Import:restore':
-		readZip(message.file).then(sendResponse);
+		// Surface restore failures instead of swallowing the rejection — a
+		// malformed backup must report an error, not fail silently.
+		readZip(message.file).then(
+			() => sendResponse({ ok: true }),
+			err => {
+				console.error('Import:restore failed:', err);
+				sendResponse({ ok: false, error: String(err && err.message || err) });
+			},
+		);
 		return true;
 	}
 	return false;

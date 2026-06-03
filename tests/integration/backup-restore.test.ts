@@ -514,6 +514,26 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			expect(mockTiles.clear).toHaveBeenCalled();
 			expect(mockTiles.putTile).not.toHaveBeenCalled();
 		});
+
+		it('does not half-apply a backup whose tiles.json is malformed (atomic restore)', async () => {
+			// A corrupt tiles.json (here: a trailing comma — invalid JSON) must
+			// abort the whole restore BEFORE any state is written. Previously the
+			// restore applied prefs first and only then parsed tiles.json, so a bad
+			// backup left a half-applied state (new grid dimensions, zero tiles)
+			// with no error surfaced. Restore must be atomic: parse everything,
+			// then apply, or apply nothing.
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'dark', rows: 4, columns: 4 })),
+				mockZipEntry('tiles.json', '[\n\t{ "id": 1, "url": "https://a.com", "position": 0, }\n]'),
+			]);
+
+			await expect(readZip(new Blob())).rejects.toThrow();
+
+			// Nothing may have been written: not prefs, not the tile store.
+			expect(mockStorageLocal.set).not.toHaveBeenCalled();
+			expect(mockTiles.clear).not.toHaveBeenCalled();
+			expect(mockTiles.putTile).not.toHaveBeenCalled();
+		});
 	});
 
 	// ======================== Helper ========================
