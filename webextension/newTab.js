@@ -930,6 +930,15 @@ var newTabTools = {
 			this.applyTileAspect();
 		}
 
+		// Background prefs (CDN wallpaper URL, solid colour, position) apply on
+		// the same live path as every other pref. Without this, a restore — which
+		// writes backgroundUrl to storage and fires prefsChanged → updateUI — left
+		// the wallpaper unapplied until a manual page reload.
+		if (!keys || keys.includes('backgroundUrl') || keys.includes('backgroundColor')
+			|| keys.includes('backgroundPosition')) {
+			this.refreshBackgroundImage();
+		}
+
 		if (!keys || keys.includes('opacity')) {
 			let opacity = Prefs.opacity;
 			document.querySelector('[name="opacity"]').value = opacity;
