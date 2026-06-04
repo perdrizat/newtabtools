@@ -31,6 +31,12 @@
 //   POST /file_upload      { selector, path }   -> { ok, path }
 //   POST /screenshot       { name, dir? }       -> { saved, bytes }
 //   POST /reset_extension                       -> { ok, resetCells, restoredCells, restoredSites }
+//   POST /open_tabs        { urls, settleMs? }  -> { ok, opened }   (real tabs, left open)
+//   POST /close_other_tabs                      -> { ok, closed }   (→ recently-closed)
+//
+// Env: FIREFOX_BIN, XPI_DIR/EXTENSION_XPI, ARTIFACTS_DIR, UAT_DAEMON_PORT,
+//      UAT_FIXTURE (restore target), UAT_WINDOW=WxH (viewport),
+//      UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS (history seed).
 //
 // Run standalone (after `pnpm build`):
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-daemon.mjs
@@ -51,24 +57,42 @@ const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../a
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const ADDON_ID = 'newtabtools@symlink.ch';
 const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
-const FIXTURE = path.resolve(ROOT, 'tests/uat/newtabtools_knowngood.zip');
+// The fixture restored by /reset_extension. Override with $UAT_FIXTURE (e.g. the
+// marketing fixture used for AMO screenshots).
+const FIXTURE = process.env.UAT_FIXTURE
+	? path.resolve(process.env.UAT_FIXTURE)
+	: path.resolve(ROOT, 'tests/uat/newtabtools_knowngood.zip');
+
+// Window size for the Firefox viewport. Default Full HD; override with
+// $UAT_WINDOW=WxH (e.g. 2560x1600 to supersample marketing screenshots).
+const [WIN_W, WIN_H] = (() => {
+	const m = /^(\d+)x(\d+)$/.exec(process.env.UAT_WINDOW || '');
+	return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : [1920, 1080];
+})();
 
 // History seed — real navigation, so NTT's history-backed features (recent
 // tiles, autocomplete) have something to render against. URLs land in Firefox's
 // history database on navigation START, so a page-load timeout is harmless.
-const SEED_URLS = [
-	'https://nzz.ch/',
-	'https://www.tagesanzeiger.ch/',
-	'https://www.amazon.de/',
-	'https://www.ricardo.ch/',
-	'https://www.migros.ch/',
-	'https://www.coop.ch/',
-	'https://www.ebay.com/',
-	'https://claude.ai/',
-	'https://chatgpt.com/',
-];
+// Override with $UAT_SEED_URLS (comma/space/newline-separated).
+const SEED_URLS = (process.env.UAT_SEED_URLS
+	? process.env.UAT_SEED_URLS.split(/[\s,]+/).filter(Boolean)
+	: [
+		'https://nzz.ch/',
+		'https://www.tagesanzeiger.ch/',
+		'https://www.amazon.de/',
+		'https://www.ricardo.ch/',
+		'https://www.migros.ch/',
+		'https://www.coop.ch/',
+		'https://www.ebay.com/',
+		'https://claude.ai/',
+		'https://chatgpt.com/',
+	]);
 const SEED_PAGELOAD_TIMEOUT_MS = 5000;
-const NORMAL_PAGELOAD_TIMEOUT_MS = 300000;
+// Cap how long /navigate waits for full page load. Default high (so UAT's
+// extension page always finishes); override low (e.g. 15000) when visiting heavy
+// external sites so a slow/never-idle page doesn't hang the run — auto-thumbnail
+// captures whatever painted.
+const NORMAL_PAGELOAD_TIMEOUT_MS = parseInt(process.env.UAT_PAGELOAD_MS, 10) || 300000;
 
 // Grid signatures (.newtab-cell count = rows×columns). NTT's default grid is
 // 3×3 = 9; the UAT fixture sets a 4×4 = 16 grid. These let /reset_extension
@@ -107,9 +131,25 @@ async function makeDriver() {
 	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
 	// viewport. Screenshots are downscaled before saving (see SHOT_SCALE) so the
 	// agent judges a representative FHD layout without the full-res token cost.
-	opts.addArguments('--width=1920', '--height=1080');
+	opts.addArguments(`--width=${WIN_W}`, `--height=${WIN_H}`);
 	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
-	await driver.manage().window().setRect({ x: 0, y: 0, width: 1920, height: 1080 });
+	await driver.manage().window().setRect({ x: 0, y: 0, width: WIN_W, height: WIN_H });
+	// $UAT_VIEWPORT=WxH: size the window so the *inner* viewport (what the
+	// screenshot captures) is exactly WxH — the outer window is larger by the
+	// chrome offset, so a naive setRect undershoots. One measure-and-correct pass
+	// lands it on the dot (used for native 1280×800 marketing screenshots).
+	const vp = /^(\d+)x(\d+)$/.exec(process.env.UAT_VIEWPORT || '');
+	if (vp) {
+		const targetW = parseInt(vp[1], 10), targetH = parseInt(vp[2], 10);
+		await driver.get('about:blank');
+		const inner = await driver.executeScript('return [window.innerWidth, window.innerHeight]');
+		const rect = await driver.manage().window().getRect();
+		await driver.manage().window().setRect({
+			x: 0, y: 0,
+			width: targetW + (rect.width - inner[0]),
+			height: targetH + (rect.height - inner[1]),
+		});
+	}
 	const xpi = resolveXpi();
 	await driver.installAddon(xpi, true); // temporary = unsigned OK on release
 	log(`extension installed: ${path.basename(xpi)}`);
@@ -280,6 +320,96 @@ async function handle(method, url, body) {
 		const el = await driver.findElement(By.css(body.selector));
 		await driver.actions().move({ origin: el }).perform();
 		return { ok: true, selector: body.selector };
+	}
+	case '/open_tabs': {
+		// Open each URL in a real new tab and leave it open (so open-tabs-derived
+		// features like add-shortcut autocomplete have something to suggest), then
+		// return focus to the first tab.
+		const main = (await driver.getAllWindowHandles())[0];
+		for (const url of body.urls || []) {
+			await driver.switchTo().newWindow('tab');
+			try { await driver.get(url); } catch { /* slow page — keep going */ }
+			await sleep(body.settleMs || 1500);
+		}
+		await driver.switchTo().window(main);
+		return { ok: true, opened: (body.urls || []).length };
+	}
+	case '/close_other_tabs': {
+		// Close every tab except the first; closed tabs register in
+		// sessions.getRecentlyClosed (drives the recently-closed-tabs row).
+		const handles = await driver.getAllWindowHandles();
+		for (const h of handles.slice(1)) {
+			await driver.switchTo().window(h);
+			await driver.close();
+		}
+		await driver.switchTo().window((await driver.getAllWindowHandles())[0]);
+		return { ok: true, closed: handles.length - 1 };
+	}
+	case '/dismiss_consent': {
+		// Best-effort cookie/consent dismissal so auto-thumbnails capture the real
+		// page, not a banner. Clicks an Accept/Reject control in the main document
+		// AND in (often cross-origin) CMP iframes — page JS can't reach those, but
+		// WebDriver frame-switching can — then hides any leftover full-screen
+		// fixed overlay. No third-party extension required.
+		const clickConsent = () => driver.executeScript(`
+			// Click a consent ACCEPT control. Short button labels only; an ACCEPT
+			// pattern that must match and a DENY pattern that must NOT (so "I
+			// Accept" is clicked but "Do not accept" / "Manage options" / "Reject"
+			// are skipped). Pierces shadow DOM (OneTrust/Sourcepoint/Quantcast etc.
+			// render in shadow roots) and matches in (cross-origin) iframes too —
+			// this function is also run inside each iframe by the caller.
+			const ACCEPT = /\\b(accept|consent|agree|allow|got it|continue|yes)\\b/i;
+			const DENY = /(do ?n.?t|manage|option|setting|custom|reject|decline|choice|preferenc|more|learn|disagree|essential|necessary|partners|purposes)/i;
+			const PREF = /\\b(accept all|accept|i accept|consent|agree|allow all)\\b/i;
+			const SEL = 'button,[role="button"],a,input[type="button"],input[type="submit"]';
+			const out = [];
+			(function collect(root) {
+				try { for (const el of root.querySelectorAll(SEL)) { out.push(el); } } catch (e) {}
+				try { for (const el of root.querySelectorAll('*')) { if (el.shadowRoot) { collect(el.shadowRoot); } } } catch (e) {}
+			})(document);
+			const cands = out
+				.map(el => ({ el, t: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim() }))
+				.filter(o => o.t && o.t.length <= 25 && ACCEPT.test(o.t) && !DENY.test(o.t));
+			// Prefer an explicit accept-all/agree, then the shortest label (real
+			// consent buttons are terse; long matches are usually FAQ links).
+			cands.sort((a, b) => (PREF.test(b.t) ? 1 : 0) - (PREF.test(a.t) ? 1 : 0) || a.t.length - b.t.length);
+			if (cands.length) { cands[0].el.click(); return cands[0].t; }
+			return null;
+		`);
+		const clicked = [];
+		try { const r = await clickConsent(); if (r) { clicked.push(`main:${r}`); } } catch { /* ignore */ }
+		const frames = await driver.findElements(By.css('iframe'));
+		for (const f of frames.slice(0, 10)) {
+			try {
+				await driver.switchTo().frame(f);
+				const r = await clickConsent();
+				if (r) { clicked.push(`iframe:${r}`); }
+			} catch { /* inaccessible frame */ } finally {
+				try { await driver.switchTo().defaultContent(); } catch { /* ignore */ }
+			}
+		}
+		await driver.executeScript(`
+			// Hide leftover full-screen fixed/sticky overlays (cookie scrims, etc.).
+			for (const el of document.querySelectorAll('body *')) {
+				const s = getComputedStyle(el);
+				if ((s.position === 'fixed' || s.position === 'sticky')
+					&& el.offsetHeight > innerHeight * 0.55 && el.offsetWidth > innerWidth * 0.55) {
+					el.style.display = 'none';
+				}
+			}
+			// Collapse empty/served-blank ad slots so they don't leave whitespace at
+			// the top of the capture (ads don't load headless). Conservative: ad
+			// iframes, and labelled ad containers that rendered (near-)empty.
+			const adSel = 'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="adservice"],iframe[src*="amazon-adsystem"],iframe[id*="google_ads"],[id^="ad-"],[id*="-ad-"],[class*="advertisement"],[class*="ad-slot"],[class*="ad-unit"],[data-ad],[aria-label="Advertisement" i]';
+			for (const el of document.querySelectorAll(adSel)) {
+				if (el.textContent.trim().length < 20) {
+					const box = el.closest('div,section,aside') || el;
+					box.style.display = 'none';
+				}
+			}
+			document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+		`);
+		return { ok: true, clicked };
 	}
 	case '/evaluate':
 		// body.async => executeAsyncScript: the script gets a callback as its

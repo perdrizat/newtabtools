@@ -6,26 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Changed
-
-- Docs restructure: `ROADMAP.md` rewritten as a forward-looking roadmap (Now/Next/Later) + backlog + decisions-of-record, replacing the rewrite-era decision log. Durable content rehomed before retiring three now-completed planning docs — the language/type-safety rules → `CONTRIBUTING.md`, the Firefox-only-API capability-layer note → `MV3_MIGRATION.md`, and the scope/non-goals + remaining-work items → `ROADMAP.md`. Inbound links in `README.md`/`TESTING.md`/`CONTRIBUTING.md`/`tests/uat/README.md` repointed.
-
-### Removed
-
-- `FEATURE_SCOPE.md`, `UAT_PLAN.md`, `MIGRATION_COMPLETED.md` — served their purpose guiding the (now-complete) rewrite + UAT build-out; their durable content moved per above, history preserved in git.
-
 ## [2026-06-04]
 
 ### Added
 
+- `scripts/amo-screenshots.mjs` — generates the AMO listing screenshots (`assets/screenshots/`, native 1280×800 PNG) via the UAT browser daemon. Reproduces a real user's new tab: pins 5 favourites, fills the rest of the grid from browsing history, and browses a curated tech-leaning site list in 3 passes (2 frecency builders → re-render folds topSites into the auto-capture cache → 1 capture pass dismissing cookie banners) so ~15/16 tiles get real thumbnails. Opens/closes deep article tabs to populate the recently-closed row + add-tile autocomplete, then renders an 8-shot gallery (heroes last, at peak coverage) — 4×4 medium and 3×3 "maxi" grids in light + dark themes on different wallpapers, plus settings-drawer, autocomplete, per-domain-filter, and recently-closed feature shots. Headless-blocking sites (Amazon, YouTube, etc.) are omitted.
+- `assets/screenshots/01..08-*.png` — the AMO listing screenshots.
+- Browser daemon gained `UAT_FIXTURE` / `UAT_WINDOW` / `UAT_VIEWPORT` (exact inner size) / `UAT_SEED_URLS` / `UAT_PAGELOAD_MS` overrides and `/open_tabs`, `/close_other_tabs`, `/dismiss_consent` endpoints — real-tab management + best-effort cookie-banner dismissal (page + cross-origin CMP iframes). Reusable for future UAT scenarios.
 - `tests/uat/scenarios/03-tile-hover-occlusion.md` — UAT scenario for the motivating bug class: hovering a tile shows the action-button row, which must stay inside the tile and not cover the title. Validated by mutation testing (moving the buttons over the title makes both the occlusion assertion and the visual judgment fail).
 - `browser_hover` MCP tool + daemon `/hover` endpoint — real pointer move so CSS `:hover` states (tile action rows) activate; synthetic JS events can't trigger them.
 
 ### Changed
 
+- Docs restructure: `ROADMAP.md` rewritten as a forward-looking roadmap (Now/Next/Later) + backlog + decisions-of-record, replacing the rewrite-era decision log. Durable content rehomed before retiring three now-completed planning docs — the language/type-safety rules → `CONTRIBUTING.md`, the Firefox-only-API capability-layer note → `MV3_MIGRATION.md`, and the scope/non-goals + remaining-work items → `ROADMAP.md`. Inbound links in `README.md`/`TESTING.md`/`CONTRIBUTING.md`/`tests/uat/README.md` repointed.
 - UAT runner now gates pass/fail on the agent's **report verdict**, not just the `claude -p` exit code — the agent exits 0 even when its report records failed assertions, so a scenario with a `passed:false` report (or any failed assertion) now correctly fails the run and the runner exit code.
 - `tests/uat/scenarios/02-restore-and-verify.md` asserts the About block is fully visible without scrolling at the standard Full HD viewport (guards a prior "About below the fold" observation, resolved by the FHD render size).
 - Docs: `TESTING.md` UAT section refreshed from "planned" to the built daemon architecture; `CONTRIBUTING.md` "Before Committing" now points UI changes at `pnpm test:uat`.
+
+### Removed
+
+- `FEATURE_SCOPE.md`, `UAT_PLAN.md`, `MIGRATION_COMPLETED.md` — served their purpose guiding the (now-complete) rewrite + UAT build-out; their durable content moved per above, history preserved in git.
 
 ### Added
 

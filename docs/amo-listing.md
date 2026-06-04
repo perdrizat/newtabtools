@@ -100,12 +100,21 @@ See [`amo-submission-notes.md`](./amo-submission-notes.md). Paste into the AMO D
 
 (Item 3 of the AMO submission plan; this section is the placeholder where image filenames + captions will live once the screenshots are taken.)
 
-| Slot | File | Caption (≤100 chars) | Status |
-|---|---|---|---|
-| 1 | `assets/screenshots/01-grid-main.png` | The grid in fill-viewport mode, vivid auto-captured thumbnails on a wallpaper. | TODO |
-| 2 | `assets/screenshots/02-settings-drawer.png` | Settings drawer open: rows × columns, tile aspect ratio, spacing, opacity. | TODO |
-| 3 | `assets/screenshots/03-add-tile-autocomplete.png` | "Add tile" with autocomplete suggestions from tabs / bookmarks / history. | TODO |
-| 4 | `assets/screenshots/04-recently-closed.png` | The recently-closed-tabs row with one-click restore. | TODO |
-| 5 | `assets/screenshots/05-domain-filter.png` | Per-domain cap with `.example.com` wildcard in the settings panel. | TODO |
+Eight shots, native 1280×800 PNG. AMO shows the first as the primary; order them so a 4×4 hero leads. Captions ≤100 chars.
 
-Format: PNG, 1280×800 ideal (AMO accepts 1000×750 minimum). All five should use the UAT fixture (`tests/uat/newtabtools_knowngood.zip`) as the starting state so the screenshots stay reproducible.
+| Slot | File | Caption | Status |
+|---|---|---|---|
+| 1 | `assets/screenshots/01-grid-4x4-medium-light.png` | A 4×4 grid of your sites, auto-captured thumbnails on a wallpaper. | Captured |
+| 2 | `assets/screenshots/02-grid-4x4-medium-dark.png` | The same grid in dark theme — follows your Firefox theme or set it yourself. | Captured |
+| 3 | `assets/screenshots/03-grid-3x3-maxi-light.png` | Go big: fewer columns, large spacing, margins and rounded corners. | Captured |
+| 4 | `assets/screenshots/04-grid-3x3-maxi-dark.png` | The large-tile layout in dark theme. | Captured |
+| 5 | `assets/screenshots/05-settings-drawer.png` | Settings drawer: rows × columns, tile aspect ratio, spacing, opacity. | Captured |
+| 6 | `assets/screenshots/06-add-tile-autocomplete.png` | "Add tile" with autocomplete suggestions from your open tabs. | Captured |
+| 7 | `assets/screenshots/07-domain-filter.png` | Per-domain cap with a `.subdomain` wildcard in the settings panel. | Captured |
+| 8 | `assets/screenshots/08-recently-closed.png` | The recently-closed-tabs row for one-click restore. | Captured |
+
+Format: PNG, native **1280×800** (AMO's ideal; minimum 1000×750).
+
+Reproducible via `node scripts/amo-screenshots.mjs` (needs `FIREFOX_BIN` + `pnpm build`). The script reproduces a real user's new tab: it **pins only the top 5 favourites** and lets the rest of the grid **fill from browsing history** (Firefox topSites). To get real thumbnails it browses the curated site list in **three passes** — two fast passes build frecency so each site enters topSites, then a re-render folds topSites into the extension's auto-capture cache, and a final pass (dismissing cookie banners, settling) triggers the captures. Thumbnails live in IndexedDB keyed by URL, so they re-attach to every layout. It then opens/closes deep article tabs (distinct from the tile homepages, so they survive the recently-closed row's tile-dedup filter) to populate the recently-closed row and the add-tile autocomplete, captures the feature shots, and renders the hero gallery **last** (when thumbnail coverage is highest) — 4×4 medium and 3×3 "maxi" (large spacing/margin/radius) grids in light and dark themes on different wallpapers.
+
+Tiles are popular, recognizable, tech-leaning US + international news/community/shopping (GitHub, Hacker News, Stack Overflow, Steam, Wikipedia pinned; The Verge, Ars Technica, TechCrunch, Reddit, MDN, Product Hunt, BBC, Slashdot, Tom's Hardware, eBay, Adafruit filling from history). Sites that bot-block headless (Amazon, YouTube, Newegg, AliExpress) are deliberately omitted. Typical result: ~15 of 16 tiles carry a real thumbnail; the odd one (e.g. Stack Overflow, whose topSites URL canonicalizes away from the pinned homepage) falls back to a clean letter tile, which reads as authentic. Edit the `SITES`, `RECENT_TABS`, and `OPEN_TABS` lists to adjust.
