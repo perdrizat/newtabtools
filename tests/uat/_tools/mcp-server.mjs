@@ -69,6 +69,7 @@ async function daemon(endpoint, body) {
 const TOOLS = [
 	{ name: 'browser_navigate', description: 'Navigate to a URL.', inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
 	{ name: 'browser_click', description: 'Click the first element matching a CSS selector.', inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] } },
+	{ name: 'browser_hover', description: 'Move the pointer over the first element matching a CSS selector, so CSS :hover styles (e.g. tile action rows) activate. The pointer stays there for a follow-up screenshot or evaluate.', inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] } },
 	{ name: 'browser_evaluate', description: 'Run JS in the page and return the result.', inputSchema: { type: 'object', properties: { script: { type: 'string' } }, required: ['script'] } },
 	{ name: 'browser_file_upload', description: 'Set a file <input> (matched by selector) to an absolute path.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, path: { type: 'string' } }, required: ['selector', 'path'] } },
 	{ name: 'browser_take_screenshot', description: 'Capture the viewport to a PNG on disk and return its path. Does NOT put the image in context — call browser_read_screenshot to view it.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
@@ -89,6 +90,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 		if (name === 'browser_click') {
 			await daemon('/click', { selector: a.selector });
 			return { content: [{ type: 'text', text: `clicked ${a.selector}` }] };
+		}
+		if (name === 'browser_hover') {
+			await daemon('/hover', { selector: a.selector });
+			return { content: [{ type: 'text', text: `hovered ${a.selector}` }] };
 		}
 		if (name === 'browser_evaluate') {
 			const { value } = await daemon('/evaluate', { script: a.script });

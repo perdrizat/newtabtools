@@ -6,7 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [2026-06-03]
+## [2026-06-04]
+
+### Added
+
+- `tests/uat/scenarios/03-tile-hover-occlusion.md` — UAT scenario for the motivating bug class: hovering a tile shows the action-button row, which must stay inside the tile and not cover the title. Validated by mutation testing (moving the buttons over the title makes both the occlusion assertion and the visual judgment fail).
+- `browser_hover` MCP tool + daemon `/hover` endpoint — real pointer move so CSS `:hover` states (tile action rows) activate; synthetic JS events can't trigger them.
+
+### Changed
+
+- UAT runner now gates pass/fail on the agent's **report verdict**, not just the `claude -p` exit code — the agent exits 0 even when its report records failed assertions, so a scenario with a `passed:false` report (or any failed assertion) now correctly fails the run and the runner exit code.
+- `tests/uat/scenarios/02-restore-and-verify.md` asserts the About block is fully visible without scrolling at the standard Full HD viewport (guards a prior "About below the fold" observation, resolved by the FHD render size).
+- Docs: `TESTING.md` UAT section refreshed from "planned" to the built daemon architecture; `CONTRIBUTING.md` "Before Committing" now points UI changes at `pnpm test:uat`.
 
 ### Added
 

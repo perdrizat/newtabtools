@@ -26,6 +26,7 @@
 //   GET  /health          -> { status, ready, port }
 //   POST /navigate         { url }              -> { ok, url }
 //   POST /click            { selector }         -> { ok, selector }
+//   POST /hover            { selector }         -> { ok, selector }
 //   POST /evaluate         { script }           -> { value }
 //   POST /file_upload      { selector, path }   -> { ok, path }
 //   POST /screenshot       { name, dir? }       -> { saved, bytes }
@@ -272,6 +273,14 @@ async function handle(method, url, body) {
 	case '/click':
 		await driver.findElement(By.css(body.selector)).click();
 		return { ok: true, selector: body.selector };
+	case '/hover': {
+		// Real pointer move so CSS :hover activates (synthetic JS events don't).
+		// The pointer stays put, so a follow-up screenshot/evaluate sees the
+		// hover state.
+		const el = await driver.findElement(By.css(body.selector));
+		await driver.actions().move({ origin: el }).perform();
+		return { ok: true, selector: body.selector };
+	}
 	case '/evaluate':
 		// body.async => executeAsyncScript: the script gets a callback as its
 		// last argument and must call it with the result (for chrome.* / IDB

@@ -125,7 +125,7 @@ The repository uses GitHub Actions to automatically run the full test suite on e
 - **Environment:** Ubuntu runners with Firefox ESR installed via the Mozilla APT repository.
 - **Instrumentation:** The CI job runs with `E2E_VERBOSE: 1` enabled. If an E2E test fails, Puppeteer's logs and UUID discovery chatter will be visible in the job's terminal output.
 - **Artifacts:** If the E2E suite fails in CI, any failure screenshots captured by `captureFailure()` are automatically uploaded as a ZIP archive. To find them, go to the **Actions** tab, click on the failed run, and scroll down to the **Artifacts** section.
-- **UAT is *not* run in CI** — and shouldn't be on the normal push/PR path. Three blockers: (1) **auth** — `claude -p` uses the developer's Claude Code *subscription*; CI has no logged-in session, and the plan deliberately does not read `ANTHROPIC_API_KEY` (API-key mode is deferred). (2) **Non-determinism** — UAT's verdict is LLM judgment ("investigate", not pass/fail); it must never gate a merge. (3) **Cost** — every run spends model tokens. If UAT is ever automated, it should be a **separate, manually-triggered (`workflow_dispatch`) or scheduled pre-release** job that installs release Firefox + geckodriver, runs in **API-key mode against a budget**, uploads the `report.json`/`summary.md`/screenshots as artifacts, and **always exits 0** (advisory, non-blocking). Not the push/PR gate. See [`UAT_PLAN.md`](UAT_PLAN.md) "What's explicitly deferred".
+- **UAT is *not* run in CI** — and shouldn't be on the normal push/PR path. Three blockers: (1) **auth** — `claude -p` uses the developer's Claude Code *subscription*; CI has no logged-in session, and the plan deliberately does not read `ANTHROPIC_API_KEY` (API-key mode is deferred). (2) **Non-determinism** — although the local runner gates its exit code on the report's assertions, those assertions include LLM *visual* judgments that aren't reproducible run-to-run, so UAT must never gate a merge. (3) **Cost** — every run spends model tokens. If UAT is ever automated, it should be a **separate, manually-triggered (`workflow_dispatch`) or scheduled pre-release** job that installs release Firefox + geckodriver, runs in **API-key mode against a budget**, uploads the `report.json`/`summary.md`/screenshots as artifacts, and **always exits 0** (advisory, non-blocking). Not the push/PR gate. See [`UAT_PLAN.md`](UAT_PLAN.md) "What's explicitly deferred".
 
 ### Quick Start for Developers
 
@@ -178,7 +178,7 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm test:fast` | Run Unit + Integration tests | TDD Loop |
 | `pnpm test:e2e` | Run full E2E suite against Firefox ESR | Validation |
 | `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
-| `pnpm test:uat` *(planned)* | Run LLM-driven user acceptance scenarios against release-channel Firefox | UAT (pre-release) |
+| `pnpm test:uat` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (pre-release) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 
@@ -218,14 +218,14 @@ The files below make up the test scaffold. A new maintainer should not need to r
 
 ## The Testing Strategy
 
-Testing has three deterministic tiers plus a fourth judgment-based tier (planned), each with its own directory, runner setup, and cadence:
+Testing has three deterministic tiers plus a fourth judgment-based tier (UAT), each with its own directory, runner setup, and cadence:
 
 | Tier | Directory | Runs in | Script | When to run |
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | Vitest + jsdom | `pnpm test:unit` | On every save during TDD |
 | **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `pnpm test:integration` | On every save during TDD |
 | **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR via WebDriver BiDi | `pnpm test:e2e` | At feature completion and pre-commit |
-| **UAT** *(planned)* | `tests/uat/` | Claude Code (headless) + our MCP server + Selenium + release-channel Firefox | `pnpm test:uat` | Pre-release only; never on PR/CI |
+| **UAT** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + release-channel Firefox) | `pnpm test:uat` | Pre-release only; never on PR/CI |
 
 `pnpm test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
 
@@ -332,18 +332,17 @@ document.querySelector('.newtab-site .newtab-control-pin');
 
 **Cleanup is optional but encouraged.** If a test pins tiles with unique URLs (e.g. `https://my-feature-test.example.com/`), unpin them in the test's `finally` block. This is a courtesy to other test files, not a substitute for `clearPinnedTiles` — every file must still call `clearPinnedTiles` in its own `beforeAll`.
 
-### UAT tests (`tests/uat/`) — planned, see [`UAT_PLAN.md`](UAT_PLAN.md)
+### UAT tests (`tests/uat/`) — see [`UAT_PLAN.md`](UAT_PLAN.md)
 
-User Acceptance Testing tier driven by an LLM agent. Scenarios are written in plain English; an agent (Claude Code in headless mode) walks through each one, takes screenshots, and judges the rendered state against criteria stated in the scenario file. Produces JSON reports + screenshot artifacts for human review. Catches the bug class that structural tests miss (occlusion, contrast, layering, "looks broken to a user").
+User Acceptance Testing tier driven by an LLM agent. Scenarios are written in plain English; an agent (Claude Code in headless mode) walks through each one, takes screenshots, and judges the rendered state against criteria stated in the scenario file. Produces a structured `report.json` + a `summary.md` + screenshot artifacts for human review. Catches the bug class that structural tests miss (occlusion, contrast, layering, "looks broken to a user").
 
-- **Status:** Plan in [`UAT_PLAN.md`](UAT_PLAN.md); implementation in progress. Step 0 (architecture spike) complete 2026-05-21; remaining steps tracked in the plan.
-- **Tool stack:** **Selenium + geckodriver driving release-channel Firefox** — a different stack from the E2E tier (ESR + `web-ext` + Puppeteer-BiDi), by design (see [`UAT_PLAN.md`](UAT_PLAN.md) 2026-06-01 revision). The agent talks to an MCP server we own (`tests/uat/_tools/mcp-server.mjs`, plain `.mjs`/Node) that holds one Selenium session, installs the unsigned extension temporarily (`installAddon`, works on release), pins the `moz-extension://` UUID, and exposes `browser_navigate`, `browser_click`, `browser_evaluate`, `browser_file_upload`, `browser_take_screenshot`, `browser_read_screenshot`. `@modelcontextprotocol/sdk` over stdio; Claude Code spawns it per scenario.
-- **Screenshot strategy — Option C (decided 2026-06-01).** `browser_take_screenshot` writes a PNG to disk and returns the path; `browser_read_screenshot` pulls one inline *on demand*. UAT is screenshot-heavy and the ~1.2k image-tokens/shot dominate cost identically across transports, so the only real lever is *whether/when* an image enters context — Option C gives that lever while keeping MCP's single-process daemon + tight allowlist.
-- **Why not `@playwright/mcp` / `@playwright/cli`?** Playwright's Firefox-extension support is Chromium-only (loading a FF extension needs an unsupported `policies.json` hack into Playwright's *patched* build), so it can't load our extension into a real release Firefox; Selenium does it in one supported call. See `UAT_PLAN.md` §"Spike outcome".
-- **Why not Bash + standalone CLI scripts?** A stateful browser CLI needs a persistent **daemon** each command attaches to, plus a broad `Bash(node …*)` allowlist — and its one advantage (deferring image loads) is already captured by Option C *inside* MCP. Kept warm as the Plan-B fallback (`tests/uat/_tools/fallback-cli.mjs`).
-- **Per-scenario known-good fixture:** every scenario starts by restoring `tests/uat/newtabtools_knowngood.zip` (a checked-in NTT backup) so findings reflect the code change, not profile drift. The restore flow is exercised on every run as a side effect — a broken restore feature fails UAT loudly.
-- **When to run:** Pre-release only (e.g. before AMO submission). **Never on PR / commit / CI** — non-deterministic, costs subscription quota, and judgment-based by design.
-- **Verdict is "investigate", not "pass/fail".** The runner always exits 0. A human reviews the summary artifact before releasing. UAT does not gate merges.
+- **Status:** built and runnable (`pnpm test:uat`, optionally with scenario slugs to run a subset). Scenarios so far: `01-restore-dogfood` (restore + grid sanity), `02-restore-and-verify` (grid/tile/About assertions), `03-tile-hover-occlusion` (the motivating bug class). Full design + rationale in [`UAT_PLAN.md`](UAT_PLAN.md).
+- **Architecture — long-lived browser daemon + thin MCP client.** `tests/uat/_tools/browser-daemon.mjs` holds one **Selenium + geckodriver + release-channel Firefox** session for the whole run (a different stack from E2E's ESR + `web-ext` + Puppeteer-BiDi, by design): it installs the unsigned extension temporarily (`installAddon`, works on release), pins the `moz-extension://` UUID, seeds history, and serves an HTTP API on port 9876 (`$UAT_DAEMON_PORT`). `tests/uat/_tools/mcp-server.mjs` is a thin MCP server Claude spawns per scenario that forwards `browser_navigate/click/hover/evaluate/file_upload/take_screenshot/read_screenshot` to the daemon. The runner (`runner.mjs`) owns the daemon lifecycle and runs each scenario's `claude -p`.
+- **Screenshots:** rendered at Full HD (100%), saved downscaled (`$UAT_SHOT_SCALE`, default 0.5 → ~960px) to keep image-token cost low; `browser_take_screenshot` writes to disk and returns a path, `browser_read_screenshot` pulls one inline only when the agent must judge it. Each run writes a flat, timestamped `artifacts/<YYYYMMDD-HHMMSS>/` dir; files lead with their capture/creation time so a filename sort is capture order.
+- **Why not `@playwright/mcp` / `@playwright/cli`?** Playwright's Firefox-extension support is Chromium-only (loading a FF extension needs an unsupported `policies.json` hack into Playwright's *patched* build), so it can't load our extension into a real release Firefox; Selenium does it in one supported call. See `UAT_PLAN.md`.
+- **Standard preamble + fixture:** every scenario starts by restoring `tests/uat/newtabtools_knowngood.zip` (a checked-in NTT backup) so findings reflect the code change, not profile drift. The restore flow is exercised on every run as a side effect — a broken restore fails UAT loudly.
+- **When to run:** Pre-release only (e.g. before AMO submission). **Never on PR / commit / CI** — non-deterministic, costs subscription quota, judgment-based by design; it does not gate merges.
+- **Pass/fail vs. observations.** Each scenario's `report.json` has `assertions[]` (structural + visual, which decide pass/fail) and `observations[]` ("passed, but a human should know"). The runner gates its exit code on the report verdict — a failed assertion fails the run — and prints failed assertions + observations to the terminal so nothing stays buried. A human still reviews the summary + screenshots before releasing.
 
 ## TDD Workflow per Task
 

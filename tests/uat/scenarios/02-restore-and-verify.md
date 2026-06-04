@@ -50,6 +50,18 @@ closed from the preamble):
 3. **GitHub link:** `document.querySelector('#options-about a[data-message="github"]').getAttribute('href')`
    === `'https://github.com/perdrizat/newtabtools'`.
 
+## Verify — About is visible (open the drawer)
+
+Now open the drawer: click `#options-toggle`, then `[data-drawer-tab="advanced"]`.
+Leave it open for the rest of the scenario (don't click `#options-toggle` again —
+that closes it).
+
+4. **About fully visible without scrolling:** *before scrolling*, assert the About
+   block is fully within the viewport — `const r = document.querySelector('#options-about').getBoundingClientRect();`
+   then `r.top >= 0 && r.bottom <= window.innerHeight` is `true`. At the standard
+   Full HD viewport the whole Advanced panel fits; if About falls below the fold
+   that's a layout regression.
+
 ## Evidence + visual judgment
 
 - **Restored grid** — judge the preamble's `01-restored` screenshot (drawer
@@ -57,12 +69,11 @@ closed from the preamble):
   no clipping, titles legible, **and** the Mozilla-CDN wallpaper is visibly
   rendered behind them (not a plain/blank background). Pass = clean layout **and**
   visible wallpaper.
-- **About panel** — re-open the drawer: click `#options-toggle`, then
-  `[data-drawer-tab="advanced"]`. Take a screenshot `02-about` of the open
-  Advanced drawer showing the About block, read it inline, and judge: the About
-  text (brand + version + links) is readable against the drawer background — flag
-  any contrast or truncation problems. "NewTab PowerTools v<version>" and the
-  three links should be visible.
+- **About panel** — with the drawer already open on Advanced (from the step
+  above), take a screenshot `02-about`, read it inline, and judge: the About text
+  (brand + version + links) is readable against the drawer background — flag any
+  contrast or truncation problems. "NewTab PowerTools v<version>" and the three
+  links should be visible.
 
 ## Output
 

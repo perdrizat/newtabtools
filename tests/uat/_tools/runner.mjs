@@ -68,6 +68,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ALLOWED_TOOLS = [
 	'mcp__ntt-uat__browser_navigate',
 	'mcp__ntt-uat__browser_click',
+	'mcp__ntt-uat__browser_hover',
 	'mcp__ntt-uat__browser_evaluate',
 	'mcp__ntt-uat__browser_file_upload',
 	'mcp__ntt-uat__browser_take_screenshot',
@@ -273,23 +274,27 @@ try {
 		if (fs.existsSync(interimSummary)) { fs.renameSync(interimSummary, summaryPath); }
 		fs.writeFileSync(path.join(RUN_DIR, `${endStamp}-${slug}-agent.log`), result.stdout || '');
 
-		const passed = result.status === 0;
-		if (!passed) { anyFailed = true; }
-
 		const screenshots = fs.readdirSync(RUN_DIR)
 			.filter(f => f.endsWith('.png') && f.includes(`-${slug}-`))
 			.sort();
 
 		// Read the agent's report back so the runner can surface what mattered to
 		// the terminal — failed assertions, and "observations" (passed, but worth
-		// a human's eyes). Without this the only signal is the exit code, and
-		// anything the agent merely *noticed* stays buried in the report file.
+		// a human's eyes) — and, crucially, gate on the report's own verdict.
+		// `claude -p` exits 0 once it finishes the scenario even if the report
+		// records failed assertions, so the process exit code alone is not the
+		// pass/fail signal: a scenario fails if the process errored OR the report
+		// says failed (or is missing/unreadable when one was expected).
 		const { failedAssertions, observations, reportPassed } = readReport(reportPath);
+		const processOk = result.status === 0;
+		const passed = processOk && reportPassed !== false && failedAssertions.length === 0;
+		if (!passed) { anyFailed = true; }
 
 		results.push({
 			slug,
 			passed,
 			exitCode: result.status,
+			reportPassed,
 			elapsedSec: Number(elapsedSec.toFixed(2)),
 			report: path.basename(reportPath),
 			screenshots,
@@ -298,10 +303,10 @@ try {
 		});
 
 		console.log(`  ${passed ? '✓' : '✗'} ${slug} (${elapsedSec.toFixed(1)}s, exit ${result.status})`);
-		// A report that says fail while the process exited 0 (or vice-versa) is a
-		// discrepancy worth flagging — the agent and the harness disagree.
-		if (reportPassed !== null && reportPassed !== passed) {
-			console.log(`     ! report says passed=${reportPassed} but exit code says ${passed} — check ${path.basename(reportPath)}`);
+		// If the process exited non-zero but no report failure explains it, say so —
+		// the agent likely crashed before writing a verdict.
+		if (!processOk && reportPassed !== false && !failedAssertions.length) {
+			console.log(`     ! agent exited ${result.status} without a failing report — likely crashed; check the agent log`);
 		}
 		for (const a of failedAssertions) {
 			console.log(`     ✗ ${a.name}`);

@@ -64,6 +64,7 @@ web-ext build --source-dir webextension/
 ### Before Committing
 
 - **Run `pnpm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**
+- **For user-visible UI changes, run the UAT tier** with `pnpm test:uat` and review the run's `summary.md` + screenshots before requesting review. UAT is pre-release / local-only (it spends Claude Code subscription tokens and never runs in CI) — it catches the "looks broken to a user" bug class deterministic tests miss. See [`TESTING.md`](TESTING.md#uat-tests-testsuat--see-uat_planmd) and [`tests/uat/README.md`](tests/uat/README.md).
 - If your new tests use `fs.readFileSync` on files under `webextension/`, the ESLint rule `ntt/no-source-grep` will flag it — add a disable comment with justification if the check is purely structural.
 - Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
 - After changing `package.json` or `pnpm-lock.yaml`, run `pnpm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.

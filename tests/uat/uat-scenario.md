@@ -4,6 +4,7 @@ description: Execute a NewTab PowerTools UAT scenario against a live release-Fir
 allowed-tools:
   - mcp__ntt-uat__browser_navigate
   - mcp__ntt-uat__browser_click
+  - mcp__ntt-uat__browser_hover
   - mcp__ntt-uat__browser_evaluate
   - mcp__ntt-uat__browser_file_upload
   - mcp__ntt-uat__browser_take_screenshot
@@ -52,6 +53,8 @@ Match the tool to the kind of assertion:
 `browser_read_screenshot` costs ~1200 image tokens. Read only the shots you must judge.
 
 **`browser_evaluate` runs your script via Selenium `executeScript`** — it returns a value only if your script has an explicit `return`. `document.querySelectorAll('.newtab-site').length` returns `null`; `return document.querySelectorAll('.newtab-site').length` returns the number. Always `return` what you want to read, and don't use top-level `await` (wrap async work or assert on something synchronous).
+
+**Hover states need `browser_hover`** — many things (tile action rows, buttons) appear only on real CSS `:hover`, which synthetic JS events can't trigger. Call `browser_hover` with the element's selector; the pointer stays there, so the next `browser_take_screenshot` / `browser_evaluate` sees the hover state. To return to the resting state, hover something neutral (e.g. `body`).
 
 ## Output
 
@@ -113,7 +116,7 @@ Avoid generic "looks fine." Be specific even when nothing's wrong: "Grid renders
 
 ## Constraints
 
-- Use only the seven allowed tools above. No `Bash`, no `Read`, no `Edit`.
+- Use only the allowed tools listed in the frontmatter above. No `Bash`, no `Read`, no `Edit`.
 - Do NOT navigate to URLs outside the extension's `moz-extension://` origin. Tiles are rendered, not visited — the daemon has already seeded Firefox's history with the test URLs.
 - Do NOT call `browser_read_screenshot` on evidence-only screenshots.
 - `Write` requires absolute paths. Use the exact report/summary paths from the runner prologue verbatim.
