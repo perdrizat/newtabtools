@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Docs restructure: `ROADMAP.md` rewritten as a forward-looking roadmap (Now/Next/Later) + backlog + decisions-of-record, replacing the rewrite-era decision log. Durable content rehomed before retiring three now-completed planning docs — the language/type-safety rules → `CONTRIBUTING.md`, the Firefox-only-API capability-layer note → `MV3_MIGRATION.md`, and the scope/non-goals + remaining-work items → `ROADMAP.md`. Inbound links in `README.md`/`TESTING.md`/`CONTRIBUTING.md`/`tests/uat/README.md` repointed.
+
+### Removed
+
+- `FEATURE_SCOPE.md`, `UAT_PLAN.md`, `MIGRATION_COMPLETED.md` — served their purpose guiding the (now-complete) rewrite + UAT build-out; their durable content moved per above, history preserved in git.
+
 ## [2026-06-04]
 
 ### Added

@@ -54,7 +54,19 @@ web-ext build --source-dir webextension/
 ### Patterns & Conventions
 
 - **Red/Green TDD is mandatory:** Write failing tests first. See [`TESTING.md`](TESTING.md) for the tier-by-tier strategy.
-- **Language:** Production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. See [`MIGRATION.md`](MIGRATION.md) "Language and type safety" for the full rules.
+- **Language:** Production code is JavaScript with JSDoc-based type annotations; tests are TypeScript. Both are checked by `tsc --noEmit` (`allowJs: true`, `checkJs: true`). The extension has **no build step** — `web-ext run` and the E2E lifecycle consume `webextension/` directly. Full TypeScript would put a compiler between source and runtime that a single maintainer absorbs forever; JSDoc + `checkJs` gets most of the safety benefit at zero build cost, and TS reads JSDoc so a `.ts` test importing a `lib/*.js` module sees its declared signatures.
+
+#### Rules for new code
+
+- **Production files in `webextension/`:** stay `.js`. Add JSDoc types to function signatures, exported objects, and `browser.*` callback parameters. `checkJs: true` checks every `.js` by default — no per-file `// @ts-check` needed.
+- **Test files in `tests/`:** all `.ts`. New tests must be TypeScript too.
+- **WebExtension API types** come from `@types/firefox-webext-browser`. (`@types/chrome` joins it if/when Chrome support arrives.)
+- **Modules:** `webextension/lib/` is reserved for ES modules; eslint enforces module-mode there. Pure-logic extraction into `lib/` is deferred to the MV3 migration (MV2 script-mode files can't import ES modules) — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
+- **Don't introduce a build step.** If a feature seems to need TS-only ergonomics JSDoc can't express, simplify the design rather than adding a compiler.
+- **Don't suppress type errors** with `// @ts-ignore`. Fix the underlying JSDoc, or use `// @ts-expect-error` + a one-line reason (it preserves the signal once the issue is fixed).
+- **Don't add `.ts` files under `webextension/`.** The escape hatch (renaming `.js`→`.ts` later) is preserved by not using it now.
+
+For the MV3/Chrome forward-compatibility rules new code should also follow (promise-based `browser.*`, no DOM in background scope where it'll matter, avoid widening `<all_urls>`), see [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 
 ### After Finishing Feature Work
 
@@ -97,6 +109,5 @@ Contributions generated with the help of AI are welcome but must follow the stan
 - [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
 - [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
 - [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
-- [`ROADMAP.md`](ROADMAP.md): Architectural decisions, both taken and deferred.
-- [`MIGRATION.md`](MIGRATION.md): The per-feature migration ledger for the cherry-pick + reference rewrite.
-- [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md): Gap analysis vs. native Firefox.
+- [`ROADMAP.md`](ROADMAP.md): Direction, scope/non-goals, backlog, and the load-bearing decisions of record.
+- [`MV3_MIGRATION.md`](MV3_MIGRATION.md): The Manifest V3 migration plan (next major stage) + forward-compat directives for new code.

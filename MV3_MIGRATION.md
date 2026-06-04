@@ -69,3 +69,9 @@ This phase requires flipping the manifest version and testing the extension stri
 
 ### Phase 3: Chrome Support (Deferred)
 (Tracked separately. Will require `chrome.offscreen` API for DOM usage, `webextension-polyfill`, dual-build setups, and `webRequest` alternatives).
+
+**Firefox-only APIs to isolate behind a capability layer (`webextension/lib/platform.js`) before Chrome:**
+- `browser.theme.getCurrent`, `browser.theme.onUpdated` — auto-theme integration (`newTab.js`). No Chrome equivalent; feature-flag or accept divergence.
+- `browser.menus.getTargetElement`, `browser.menus.refresh`, `browser.menus.onShown` — context-menu refinements. Chrome's `contextMenus` has no `getTargetElement`; derive the click target differently.
+- `browser.runtime.getBrowserInfo` — version checks.
+- `chrome.sessions.*` (recently-closed row) exists on Chrome but with behavioural differences — verify before relying on Firefox-specific quirks.

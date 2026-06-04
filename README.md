@@ -22,9 +22,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - `webextension/` — the extension source. Currently MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
 - [`MV3_MIGRATION.md`](MV3_MIGRATION.md) — the active migration plan for Manifest V3 (Firefox-only first, Chrome deferred).
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
-- [`ROADMAP.md`](ROADMAP.md) — log of architectural decisions, both taken and deferred.
-- [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md) — historical record of the completed cherry-pick + reference rewrite migration. Per-feature table with strategy, implementation refs, and test status.
-- [`FEATURE_SCOPE.md`](FEATURE_SCOPE.md) — gap analysis vs. native Firefox; drives which features get full E2E coverage and which get parity smokes.
+- [`ROADMAP.md`](ROADMAP.md) — direction (Now / Next / Later), scope & non-goals, backlog, and the load-bearing decisions of record.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, AI-assisted contribution guardrails.
 
@@ -37,7 +35,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - [x] Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md)).
 - [x] Security: all 7 findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved. [Post-takeover code review](audit/2026-05-11-code-review.md) completed.
 - [x] Test-first characterization sweep across all 22 features (the suite has since grown to ~890 unit/integration tests in 52 files plus 110 E2E tests in 28 files, run on every change).
-- [x] Codebase migration complete (see [`MIGRATION_COMPLETED.md`](MIGRATION_COMPLETED.md)). Auto-thumbnail rewritten, drop sweep done, all features working.
+- [x] Codebase migration complete (cherry-pick + reference rewrite). Auto-thumbnail rewritten, drop sweep done, all features working.
 - [x] **"NTT v2" UI redesign** — titlebar with inline recently-closed cards, the awesome bar, the configuration drawer, the theme system, and on-tile favicons all shipped, each phase gated on the full E2E suite.
 **Next:**
 - [x] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Email sent; fork proceeding under new ID in parallel.

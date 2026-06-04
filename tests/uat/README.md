@@ -1,6 +1,6 @@
 # UAT tier — tooling
 
-LLM-driven user-acceptance testing. Full design + rationale: [`../../UAT_PLAN.md`](../../UAT_PLAN.md).
+LLM-driven user-acceptance testing. Design + rationale: [`../../TESTING.md`](../../TESTING.md) "UAT tests" section. This file is the tooling/operational guide.
 
 **Browser:** a long-lived daemon (`_tools/browser-daemon.mjs`) holds one Selenium
 + geckodriver session driving **release-channel Firefox** for the whole run, with
