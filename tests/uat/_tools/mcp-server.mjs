@@ -71,6 +71,7 @@ const TOOLS = [
 	{ name: 'browser_click', description: 'Click the first element matching a CSS selector.', inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] } },
 	{ name: 'browser_hover', description: 'Move the pointer over the first element matching a CSS selector, so CSS :hover styles (e.g. tile action rows) activate. The pointer stays there for a follow-up screenshot or evaluate.', inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] } },
 	{ name: 'browser_evaluate', description: 'Run JS in the page and return the result.', inputSchema: { type: 'object', properties: { script: { type: 'string' } }, required: ['script'] } },
+	{ name: 'browser_capture_tiles', description: 'Open each given tile URL in turn (short timeout, then return to the new-tab page) to trigger the extension\'s auto-thumbnail + favicon capture. Use this for capture tests instead of navigating to each tile URL one by one.', inputSchema: { type: 'object', properties: { urls: { type: 'array', items: { type: 'string' } } }, required: ['urls'] } },
 	{ name: 'browser_file_upload', description: 'Set a file <input> (matched by selector) to an absolute path.', inputSchema: { type: 'object', properties: { selector: { type: 'string' }, path: { type: 'string' } }, required: ['selector', 'path'] } },
 	{ name: 'browser_take_screenshot', description: 'Capture the viewport to a PNG on disk and return its path. Does NOT put the image in context — call browser_read_screenshot to view it.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
 	{ name: 'browser_read_screenshot', description: 'Load a previously-captured screenshot inline so you can judge it. Read only the ones you need.', inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
@@ -98,6 +99,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 		if (name === 'browser_evaluate') {
 			const { value } = await daemon('/evaluate', { script: a.script });
 			return { content: [{ type: 'text', text: JSON.stringify(value) }] };
+		}
+		if (name === 'browser_capture_tiles') {
+			const out = await daemon('/capture_tiles', { urls: a.urls });
+			return { content: [{ type: 'text', text: JSON.stringify(out) }] };
 		}
 		if (name === 'browser_file_upload') {
 			await daemon('/file_upload', { selector: a.selector, path: a.path });

@@ -11,8 +11,8 @@
  *   1. Run preflight.mjs; abort if any check fails.
  *   2. Discover scenarios in tests/uat/scenarios/*.md (lex-sorted). Optional
  *      positional args select a subset by slug: `pnpm test:uat 01-restore-dogfood`.
- *   3. Start browser-daemon.mjs (release Firefox + Selenium + extension install
- *      + 9-URL history seed); poll /health until ready.
+ *   3. Start browser-daemon.mjs (release Firefox + Selenium + environment seed
+ *      [history + recently-closed, then extension install]); poll /health.
  *   4. For each scenario:
  *      a. Make tests/uat/artifacts/<slug>/ (mcp-server reads ARTIFACTS_DIR).
  *      b. Spawn `claude -p` with our MCP config + restricted allowedTools.
@@ -70,6 +70,7 @@ const ALLOWED_TOOLS = [
 	'mcp__ntt-uat__browser_click',
 	'mcp__ntt-uat__browser_hover',
 	'mcp__ntt-uat__browser_evaluate',
+	'mcp__ntt-uat__browser_capture_tiles',
 	'mcp__ntt-uat__browser_file_upload',
 	'mcp__ntt-uat__browser_take_screenshot',
 	'mcp__ntt-uat__browser_read_screenshot',
@@ -97,10 +98,14 @@ function readReport(reportPath) {
 	let report;
 	try { report = JSON.parse(raw); } catch { return { ...empty, observations: ['report.json was not valid JSON — see the agent log'] }; }
 	const assertions = Array.isArray(report.assertions) ? report.assertions : [];
+	// An assertion failed if it carries an explicit false verdict. Accept both
+	// `passed` (the documented schema) and `pass` (a common agent variant) so a
+	// real failure can't slip through as a false green on a field-name drift.
 	return {
-		failedAssertions: assertions.filter(a => a && a.passed === false),
+		failedAssertions: assertions.filter(a => a && (a.passed === false || a.pass === false)),
 		observations: Array.isArray(report.observations) ? report.observations.map(String) : [],
-		reportPassed: typeof report.passed === 'boolean' ? report.passed : null,
+		reportPassed: typeof report.passed === 'boolean' ? report.passed
+			: typeof report.pass === 'boolean' ? report.pass : null,
 	};
 }
 
@@ -250,7 +255,7 @@ try {
 		const start = Date.now();
 		const result = spawnSync(
 			'claude',
-			['-p', '--mcp-config', MCP_CONFIG, '--allowedTools', ALLOWED_TOOLS, '--max-turns', '50'],
+			['-p', '--mcp-config', MCP_CONFIG, '--allowedTools', ALLOWED_TOOLS, '--max-turns', '60'],
 			{
 				input: prompt,
 				stdio: ['pipe', 'pipe', 'inherit'],
@@ -330,7 +335,7 @@ try {
 		if (i < scenarios.length - 1) {
 			try {
 				const r = await daemonCall('/reset_extension', {});
-				console.log(`  reset_extension ok (reset→${r.resetCells} cells, restored→${r.restoredCells} cells / ${r.restoredSites} tiles)`);
+				console.log(`  reset_extension ok (default grid: ${r.resetCells} cells)`);
 			} catch (e) {
 				console.error(`  runner: reset_extension failed: ${e.message}`);
 			}

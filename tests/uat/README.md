@@ -4,11 +4,15 @@ LLM-driven user-acceptance testing. Design + rationale: [`../../TESTING.md`](../
 
 **Browser:** a long-lived daemon (`_tools/browser-daemon.mjs`) holds one Selenium
 + geckodriver session driving **release-channel Firefox** for the whole run, with
-the unsigned extension installed temporarily (`installAddon(xpi, true)`) and the
-`moz-extension://` UUID pinned via a pre-seeded pref. It seeds history with a
-fixed set of URLs at startup and exposes a localhost HTTP API on port **9876**
-(`$UAT_DAEMON_PORT`; ≠ E2E's 9222). (E2E is unrelated — it stays on Firefox ESR +
-Puppeteer-BiDi.)
+the `moz-extension://` UUID pinned via a pre-seeded pref. At startup it **seeds the
+environment** by real navigation — two passes over a merged US/global + Swiss URL
+set (frecency needs ~2 visits before a site enters `topSites`, which fills the
+default grid), accepting cookie banners as it goes, then opening a top article per
+news site and closing the tab to seed the recently-closed row. Only **after** that
+does it install the unsigned extension temporarily (`installAddon(xpi, true)`), so
+the first new-tab render is an authentic new-user state (history-filled grid, no
+thumbnails yet). It exposes a localhost HTTP API on port **9876** (`$UAT_DAEMON_PORT`;
+≠ E2E's 9222). (E2E is unrelated — it stays on Firefox ESR + Puppeteer-BiDi.)
 
 **Agent bridge:** a thin MCP server (`_tools/mcp-server.mjs`) Claude spawns per
 scenario that forwards each `browser_*` tool call to the daemon — it holds no
@@ -21,7 +25,7 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 
 | File | Purpose | Needs SDK? |
 |---|---|---|
-| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox + history seed + HTTP API) | no |
+| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox + environment seed + HTTP API) | no |
 | `_tools/mcp-server.mjs` | thin MCP→HTTP client to the daemon | yes |
 | `_tools/mcp-config.json` | config Claude reads to spawn the MCP server | — |
 | `_tools/daemon-smoke.mjs` | daemon HTTP-API contract smoke | no |
@@ -29,13 +33,15 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 | `_tools/browser-smoke.mjs` | standalone browser-path check (no MCP) | no |
 | `_tools/fallback-cli.mjs` | reference fallback (CLI-over-Bash); not used by the harness | no |
 | `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox, .xpi, fixture sha, claude CLI, SDK, daemon port) | no |
-| `_tools/runner.mjs` | orchestrator: ensure skill symlink → preflight → start daemon → per-scenario `claude -p` → reset between → aggregated report | yes |
+| `_tools/runner.mjs` | orchestrator: ensure skill symlink → preflight → start daemon → per-scenario `claude -p` → reset-to-default between → aggregated report | yes |
 | `scenarios/*.md` | the scenarios the runner walks | — |
 | `uat-scenario.md` | the agent skill prompt (see "Skill" below) | — |
 
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
 
-Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 01-restore-dogfood`.
+Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 03-restore`.
+
+The suite walks, in order: `00-uat-init` (verify the seeded environment), `01-default-ui` (default layout/chrome/drawer + the first-run auto-thumbnail & favicon capture), `02-config` (live config changes), `03-restore` (restore the known-good backup), `04-action-buttons` (tile hover action row).
 
 ## Skill
 

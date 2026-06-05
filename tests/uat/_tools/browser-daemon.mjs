@@ -12,9 +12,11 @@
 // against the same warm browser, then SIGTERMs it.
 //
 // Why a daemon (vs. launching Firefox inside each `claude -p` session):
-//   - Launch + extension-install + history-seed cost is paid ONCE per run, not
+//   - Launch + history-seed + extension-install cost is paid ONCE per run, not
 //     once per scenario.
-//   - History seeding (9 real URLs) only makes sense paid once.
+//   - History is seeded by real navigation BEFORE the extension is installed, so
+//     the first new-tab render is an authentic new-user state (history-filled
+//     grid, no thumbnails). This only makes sense paid once.
 //   - Established split (browserless / Playwright launch-server / Selenium Grid):
 //     browser runtime is separate from the agent's MCP context.
 //
@@ -30,13 +32,15 @@
 //   POST /evaluate         { script }           -> { value }
 //   POST /file_upload      { selector, path }   -> { ok, path }
 //   POST /screenshot       { name, dir? }       -> { saved, bytes }
-//   POST /reset_extension                       -> { ok, resetCells, restoredCells, restoredSites }
+//   POST /reset_extension                       -> { ok, resetCells }  (→ default 3×3)
+//   POST /capture_tiles    { urls, settleMs? }  -> { ok, visited }  (trigger thumbnail capture)
 //   POST /open_tabs        { urls, settleMs? }  -> { ok, opened }   (real tabs, left open)
 //   POST /close_other_tabs                      -> { ok, closed }   (→ recently-closed)
+//   POST /dismiss_consent                       -> { ok, clicked }  (accept cookies)
 //
 // Env: FIREFOX_BIN, XPI_DIR/EXTENSION_XPI, ARTIFACTS_DIR, UAT_DAEMON_PORT,
-//      UAT_FIXTURE (restore target), UAT_WINDOW=WxH (viewport),
-//      UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS (history seed).
+//      UAT_WINDOW=WxH (viewport), UAT_VIEWPORT=WxH (exact inner size),
+//      UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS + UAT_NEWS_URLS (environment seed).
 //
 // Run standalone (after `pnpm build`):
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-daemon.mjs
@@ -57,11 +61,6 @@ const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../a
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const ADDON_ID = 'newtabtools@symlink.ch';
 const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
-// The fixture restored by /reset_extension. Override with $UAT_FIXTURE (e.g. the
-// marketing fixture used for AMO screenshots).
-const FIXTURE = process.env.UAT_FIXTURE
-	? path.resolve(process.env.UAT_FIXTURE)
-	: path.resolve(ROOT, 'tests/uat/newtabtools_knowngood.zip');
 
 // Window size for the Firefox viewport. Default Full HD; override with
 // $UAT_WINDOW=WxH (e.g. 2560x1600 to supersample marketing screenshots).
@@ -70,38 +69,54 @@ const [WIN_W, WIN_H] = (() => {
 	return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : [1920, 1080];
 })();
 
-// History seed — real navigation, so NTT's history-backed features (recent
-// tiles, autocomplete) have something to render against. URLs land in Firefox's
-// history database on navigation START, so a page-load timeout is harmless.
-// Override with $UAT_SEED_URLS (comma/space/newline-separated).
+// Environment seed — real navigation builds Firefox history + frecency so
+// chrome.topSites (and thus NTT's default history-filled grid) has real entries
+// to render. A merged US/global + Swiss list, tech-leaning, all reachable
+// headless. Two visits per URL are needed before a site enters topSites, so the
+// seed runs two passes (see seedEnvironment). Override with $UAT_SEED_URLS
+// (comma/space/newline-separated).
 const SEED_URLS = (process.env.UAT_SEED_URLS
 	? process.env.UAT_SEED_URLS.split(/[\s,]+/).filter(Boolean)
 	: [
-		'https://nzz.ch/',
+		// US / global
+		'https://github.com/',
+		'https://news.ycombinator.com/',
+		'https://stackoverflow.com/',
+		'https://developer.mozilla.org/',
+		'https://www.theverge.com/',
+		'https://arstechnica.com/',
+		'https://www.bbc.com/news',
+		'https://en.wikipedia.org/wiki/Firefox',
+		// Swiss
+		'https://www.nzz.ch/',
 		'https://www.tagesanzeiger.ch/',
-		'https://www.amazon.de/',
-		'https://www.ricardo.ch/',
 		'https://www.migros.ch/',
 		'https://www.coop.ch/',
-		'https://www.ebay.com/',
-		'https://claude.ai/',
-		'https://chatgpt.com/',
+		'https://www.ricardo.ch/',
+		'https://www.finews.ch/',
 	]);
-const SEED_PAGELOAD_TIMEOUT_MS = 5000;
+// News homepages used to seed the recently-closed row: we open each, find a top
+// article, navigate to it, then close the tab (the article URL — distinct from
+// the homepage tile — lands in chrome.sessions.getRecentlyClosed).
+const NEWS_URLS = (process.env.UAT_NEWS_URLS
+	? process.env.UAT_NEWS_URLS.split(/[\s,]+/).filter(Boolean)
+	: [
+		'https://www.theverge.com/',
+		'https://arstechnica.com/',
+		'https://www.bbc.com/news',
+		'https://www.nzz.ch/',
+	]);
+const SEED_PAGELOAD_TIMEOUT_MS = 8000;
 // Cap how long /navigate waits for full page load. Default high (so UAT's
 // extension page always finishes); override low (e.g. 15000) when visiting heavy
 // external sites so a slow/never-idle page doesn't hang the run — auto-thumbnail
 // captures whatever painted.
 const NORMAL_PAGELOAD_TIMEOUT_MS = parseInt(process.env.UAT_PAGELOAD_MS, 10) || 300000;
 
-// Grid signatures (.newtab-cell count = rows×columns). NTT's default grid is
-// 3×3 = 9; the UAT fixture sets a 4×4 = 16 grid. These let /reset_extension
-// VERIFY both the built-in reset (16 -> 9) and the restore (9 -> 16) actually
-// took effect — if either count is wrong the daemon throws, surfacing a broken
-// reset/restore code path as a between-scenario failure.
+// Grid signature: .newtab-cell count = rows×columns. NTT's default grid is
+// 3×3 = 9. /reset_extension returns the extension to this default and VERIFIES
+// the count, so a broken reset surfaces as a between-scenario failure.
 const DEFAULT_GRID_CELLS = 9;
-const FIXTURE_GRID_CELLS = 16;
-const FIXTURE_TILES = 9; // populated cells (.newtab-site) the fixture restores
 
 const LOG_PATH = path.join(ARTIFACTS_DIR, 'daemon.log');
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
@@ -150,27 +165,143 @@ async function makeDriver() {
 			height: targetH + (rect.height - inner[1]),
 		});
 	}
-	const xpi = resolveXpi();
-	await driver.installAddon(xpi, true); // temporary = unsigned OK on release
-	log(`extension installed: ${path.basename(xpi)}`);
+	// NB: the extension is NOT installed here. The daemon seeds history first
+	// (no extension loaded → no auto-thumbnail capture), then installs it, so the
+	// first new-tab render is an authentic new-user state: history-filled grid
+	// with no thumbnails yet. See installExtension(), called after seedEnvironment.
 	return driver;
 }
+async function installExtension(d) {
+	const xpi = resolveXpi();
+	await d.installAddon(xpi, true); // temporary = unsigned OK on release
+	log(`extension installed: ${path.basename(xpi)}`);
+}
 
-async function seedHistory(driver) {
-	await driver.manage().setTimeouts({ pageLoad: SEED_PAGELOAD_TIMEOUT_MS });
-	let seeded = 0;
-	for (const url of SEED_URLS) {
+// Click an Accept/consent control on the current page AND in (often cross-origin)
+// CMP iframes, then hide any leftover full-screen overlay + empty ad slots.
+// Reused by the /dismiss_consent endpoint and the environment seed. Best-effort.
+async function dismissConsent(d) {
+	const clickConsent = () => d.executeScript(`
+		// Click a consent ACCEPT control. Short button labels only; an ACCEPT
+		// pattern that must match and a DENY pattern that must NOT (so "I Accept"
+		// is clicked but "Do not accept" / "Manage options" / "Reject" are
+		// skipped). Pierces shadow DOM and matches in (cross-origin) iframes too.
+		const ACCEPT = /\\b(accept|consent|agree|allow|got it|continue|yes)\\b/i;
+		const DENY = /(do ?n.?t|manage|option|setting|custom|reject|decline|choice|preferenc|more|learn|disagree|essential|necessary|partners|purposes)/i;
+		const PREF = /\\b(accept all|accept|i accept|consent|agree|allow all)\\b/i;
+		const SEL = 'button,[role="button"],a,input[type="button"],input[type="submit"]';
+		const out = [];
+		(function collect(root) {
+			try { for (const el of root.querySelectorAll(SEL)) { out.push(el); } } catch (e) {}
+			try { for (const el of root.querySelectorAll('*')) { if (el.shadowRoot) { collect(el.shadowRoot); } } } catch (e) {}
+		})(document);
+		const cands = out
+			.map(el => ({ el, t: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim() }))
+			.filter(o => o.t && o.t.length <= 25 && ACCEPT.test(o.t) && !DENY.test(o.t));
+		cands.sort((a, b) => (PREF.test(b.t) ? 1 : 0) - (PREF.test(a.t) ? 1 : 0) || a.t.length - b.t.length);
+		if (cands.length) { cands[0].el.click(); return cands[0].t; }
+		return null;
+	`);
+	const clicked = [];
+	try { const r = await clickConsent(); if (r) { clicked.push(`main:${r}`); } } catch { /* ignore */ }
+	const frames = await d.findElements(By.css('iframe'));
+	for (const f of frames.slice(0, 10)) {
 		try {
-			await driver.get(url);
-			seeded++;
-		} catch {
-			// Timeout / network error: the URL still reached the history DB on
-			// navigation start, which is all the seed needs. Count it anyway.
-			seeded++;
+			await d.switchTo().frame(f);
+			const r = await clickConsent();
+			if (r) { clicked.push(`iframe:${r}`); }
+		} catch { /* inaccessible frame */ } finally {
+			try { await d.switchTo().defaultContent(); } catch { /* ignore */ }
 		}
 	}
-	await driver.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
-	log(`history seeded: ${seeded}/${SEED_URLS.length} URLs`);
+	try {
+		await d.executeScript(`
+			// Hide leftover full-screen fixed/sticky overlays (cookie scrims, etc.).
+			for (const el of document.querySelectorAll('body *')) {
+				const s = getComputedStyle(el);
+				if ((s.position === 'fixed' || s.position === 'sticky')
+					&& el.offsetHeight > innerHeight * 0.55 && el.offsetWidth > innerWidth * 0.55) {
+					el.style.display = 'none';
+				}
+			}
+			// Collapse empty/served-blank ad slots (ads don't load headless).
+			const adSel = 'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="adservice"],iframe[src*="amazon-adsystem"],iframe[id*="google_ads"],[id^="ad-"],[id*="-ad-"],[class*="advertisement"],[class*="ad-slot"],[class*="ad-unit"],[data-ad],[aria-label="Advertisement" i]';
+			for (const el of document.querySelectorAll(adSel)) {
+				if (el.textContent.trim().length < 20) { (el.closest('div,section,aside') || el).style.display = 'none'; }
+			}
+			document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+		`);
+	} catch { /* ignore */ }
+	return { ok: true, clicked };
+}
+
+// Seed the recently-closed-tabs row: open each news homepage in a fresh tab,
+// accept its cookie banner, pick a prominent same-origin article link, navigate
+// to it, then close the tab. The closed tab's URL is the article (distinct from
+// the homepage tile, so it survives the row's tile-dedup filter). Runs before
+// the extension is installed; closes are still visible to chrome.sessions later.
+async function seedRecentlyClosed(d) {
+	const main = (await d.getAllWindowHandles())[0];
+	let seeded = 0;
+	for (const home of NEWS_URLS) {
+		// Collect the top 2 distinct article links from the homepage…
+		let articles = [];
+		try {
+			await d.switchTo().newWindow('tab');
+			try { await d.get(home); } catch { /* slow */ }
+			await sleep(1500);
+			try { await dismissConsent(d); } catch { /* best effort */ }
+			articles = await d.executeScript(`
+				const origin = location.origin, seen = new Set(), out = [];
+				for (const a of document.querySelectorAll('a[href]')) {
+					let u; try { u = new URL(a.href); } catch (e) { continue; }
+					if (u.origin !== origin || u.pathname.split('/').filter(Boolean).length < 2) continue;
+					if ((a.textContent || '').trim().length <= 40 || seen.has(u.href)) continue;
+					seen.add(u.href); out.push(u.href);
+					if (out.length >= 2) break;
+				}
+				return out;
+			`);
+			await d.close();
+			await d.switchTo().window(main);
+		} catch { try { await d.switchTo().window(main); } catch { /* ignore */ } }
+		// …then visit + close each in its own tab so both land in recently-closed.
+		for (const article of (articles || [])) {
+			try {
+				await d.switchTo().newWindow('tab');
+				try { await d.get(article); } catch { /* slow */ }
+				await sleep(1000);
+				await d.close();
+				await d.switchTo().window(main);
+				seeded++;
+			} catch { try { await d.switchTo().window(main); } catch { /* ignore */ } }
+		}
+	}
+	log(`recently-closed seeded: ${seeded} articles from ${NEWS_URLS.length} sites`);
+}
+
+// Build the environment BEFORE the extension is installed: two navigation passes
+// over SEED_URLS (frecency needs ~2 visits before a site enters topSites), then
+// the recently-closed seed. Pass 1 also accepts cookie banners (persists in the
+// profile for the run); pass 2 just revisits to lift frecency.
+async function seedEnvironment(d) {
+	await d.manage().setTimeouts({ pageLoad: SEED_PAGELOAD_TIMEOUT_MS });
+	for (const url of SEED_URLS) {
+		try { await d.get(url); } catch { /* timeout harmless — URL still hit history */ }
+		// Settle before dismissing: consent platforms (e.g. Sourcepoint, used by
+		// BBC) render their Accept control in an async cross-origin iframe a few
+		// seconds after load. Accepting here sets a cookie that persists for the
+		// run, so the site is banner-free on every later visit (incl. captures).
+		await sleep(3000);
+		try { await dismissConsent(d); } catch { /* best effort */ }
+	}
+	for (const url of SEED_URLS) {
+		try { await d.get(url); } catch { /* timeout harmless */ }
+		await sleep(500);
+	}
+	await seedRecentlyClosed(d);
+	await d.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
+	log(`environment seeded: ${SEED_URLS.length} sites × 2 passes + recently-closed`);
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -231,21 +362,6 @@ async function waitForCells(expected, timeoutMs) {
 	throw new Error(`grid never reached ${expected} cells (last=${last}) within ${timeoutMs}ms`);
 }
 
-// Poll the rendered tile count (.newtab-site = a populated cell). After a valid
-// restore the fixture renders 9 tiles LIVE (no reload needed).
-async function waitForSites(expected, timeoutMs) {
-	const deadline = Date.now() + timeoutMs;
-	let last = null;
-	while (Date.now() < deadline) {
-		try {
-			last = await driver.executeScript('return document.querySelectorAll(".newtab-site").length');
-			if (last === expected) { return last; }
-		} catch { /* page reloading — retry */ }
-		await sleep(250);
-	}
-	throw new Error(`grid never reached ${expected} tiles (last=${last}) within ${timeoutMs}ms`);
-}
-
 async function openAdvancedDrawer() {
 	await driver.findElement(By.css('#options-toggle')).click();
 	await sleep(300);
@@ -253,38 +369,30 @@ async function openAdvancedDrawer() {
 	await sleep(300);
 }
 
-// Between-scenario reset. Returns the extension to a known state AND exercises
-// its own reset + restore code on every run, so a regression in either surfaces
-// here as a between-scenario failure:
-//   1. Drive the built-in reset (#options-reset-all -> resetAllSettings()),
-//      bypassing its blocking window.confirm. It clears everything and reloads.
-//   2. VERIFY the reset took: grid back to the default 9-cell (3×3) layout.
-//   3. Restore the checked-in fixture through the UI (#options-restore-file +
-//      #options-restore).
-//   4. VERIFY the restore took: grid back to the fixture's 16-cell (4×4) layout
-//      AND its 9 tiles rendered live (no reload).
-// History is NOT touched — it stays the seeded environment.
-async function resetAndRestore() {
+// Between-scenario reset: return the extension to its default state and verify.
+// Drives the built-in reset (#options-reset-all -> resetAllSettings()), bypassing
+// its blocking window.confirm; it clears prefs + pinned tiles + thumbnails and
+// reloads to the default 3×3 grid (which refills from the seeded history). The
+// seeded ENVIRONMENT — Firefox history, accepted-cookie state, and the
+// recently-closed list — is browser-level and survives the reset, so every
+// scenario starts from the same default UI on top of the same environment.
+// Restoring the known-good fixture is now an explicit scenario step (03-restore),
+// not part of the reset.
+async function resetToDefault() {
 	await driver.get(NEWTAB_URL);
 	await openAdvancedDrawer();
 	await driver.executeScript('window.confirm = () => true;');
 	await driver.findElement(By.css('#options-reset-all')).click();
 	const resetCells = await waitForCells(DEFAULT_GRID_CELLS, 15000);
-
-	await openAdvancedDrawer();
-	await driver.findElement(By.css('#options-restore-file')).sendKeys(FIXTURE);
-	await sleep(300);
-	await driver.findElement(By.css('#options-restore')).click();
-	const restoredCells = await waitForCells(FIXTURE_GRID_CELLS, 15000);
-	const restoredSites = await waitForSites(FIXTURE_TILES, 15000);
-
-	return { ok: true, resetCells, restoredCells, restoredSites };
+	await driver.get(NEWTAB_URL);
+	return { ok: true, resetCells };
 }
 
 const driver = await makeDriver();
-await seedHistory(driver);
+await seedEnvironment(driver);
+await installExtension(driver);
 await driver.get(NEWTAB_URL);
-log('initial newTab.xhtml loaded');
+log('initial newTab.xhtml loaded (extension installed post-seed)');
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
 
@@ -334,6 +442,29 @@ async function handle(method, url, body) {
 		await driver.switchTo().window(main);
 		return { ok: true, opened: (body.urls || []).length };
 	}
+	case '/capture_tiles': {
+		// Open each tile URL in the main tab to trigger the extension's auto-thumbnail
+		// + favicon capture (the background script captures the visible tab on load),
+		// then return to the new-tab page. A short page-load timeout keeps a slow site
+		// from hanging the run; cookies were accepted during the seed, so pages are
+		// clean. One call replaces N agent navigations — cheap and bounded.
+		const urls = body.urls || [];
+		const settleMs = body.settleMs || 3000;
+		await driver.manage().setTimeouts({ pageLoad: 20000 });
+		let visited = 0;
+		for (const u of urls) {
+			try { await driver.get(u); } catch { /* slow — a partial load still triggers capture */ }
+			visited++;
+			// No consent handling here: cookie banners were accepted during the #0
+			// seed and that acceptance persists in the profile, so these tile URLs
+			// load banner-free and the multi-stage capture finalizes clean.
+			await sleep(settleMs); // let the capture finalize
+		}
+		await driver.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
+		await driver.get(NEWTAB_URL);
+		await sleep(1500);
+		return { ok: true, visited };
+	}
 	case '/close_other_tabs': {
 		// Close every tab except the first; closed tabs register in
 		// sessions.getRecentlyClosed (drives the recently-closed-tabs row).
@@ -345,72 +476,10 @@ async function handle(method, url, body) {
 		await driver.switchTo().window((await driver.getAllWindowHandles())[0]);
 		return { ok: true, closed: handles.length - 1 };
 	}
-	case '/dismiss_consent': {
-		// Best-effort cookie/consent dismissal so auto-thumbnails capture the real
-		// page, not a banner. Clicks an Accept/Reject control in the main document
-		// AND in (often cross-origin) CMP iframes — page JS can't reach those, but
-		// WebDriver frame-switching can — then hides any leftover full-screen
-		// fixed overlay. No third-party extension required.
-		const clickConsent = () => driver.executeScript(`
-			// Click a consent ACCEPT control. Short button labels only; an ACCEPT
-			// pattern that must match and a DENY pattern that must NOT (so "I
-			// Accept" is clicked but "Do not accept" / "Manage options" / "Reject"
-			// are skipped). Pierces shadow DOM (OneTrust/Sourcepoint/Quantcast etc.
-			// render in shadow roots) and matches in (cross-origin) iframes too —
-			// this function is also run inside each iframe by the caller.
-			const ACCEPT = /\\b(accept|consent|agree|allow|got it|continue|yes)\\b/i;
-			const DENY = /(do ?n.?t|manage|option|setting|custom|reject|decline|choice|preferenc|more|learn|disagree|essential|necessary|partners|purposes)/i;
-			const PREF = /\\b(accept all|accept|i accept|consent|agree|allow all)\\b/i;
-			const SEL = 'button,[role="button"],a,input[type="button"],input[type="submit"]';
-			const out = [];
-			(function collect(root) {
-				try { for (const el of root.querySelectorAll(SEL)) { out.push(el); } } catch (e) {}
-				try { for (const el of root.querySelectorAll('*')) { if (el.shadowRoot) { collect(el.shadowRoot); } } } catch (e) {}
-			})(document);
-			const cands = out
-				.map(el => ({ el, t: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim() }))
-				.filter(o => o.t && o.t.length <= 25 && ACCEPT.test(o.t) && !DENY.test(o.t));
-			// Prefer an explicit accept-all/agree, then the shortest label (real
-			// consent buttons are terse; long matches are usually FAQ links).
-			cands.sort((a, b) => (PREF.test(b.t) ? 1 : 0) - (PREF.test(a.t) ? 1 : 0) || a.t.length - b.t.length);
-			if (cands.length) { cands[0].el.click(); return cands[0].t; }
-			return null;
-		`);
-		const clicked = [];
-		try { const r = await clickConsent(); if (r) { clicked.push(`main:${r}`); } } catch { /* ignore */ }
-		const frames = await driver.findElements(By.css('iframe'));
-		for (const f of frames.slice(0, 10)) {
-			try {
-				await driver.switchTo().frame(f);
-				const r = await clickConsent();
-				if (r) { clicked.push(`iframe:${r}`); }
-			} catch { /* inaccessible frame */ } finally {
-				try { await driver.switchTo().defaultContent(); } catch { /* ignore */ }
-			}
-		}
-		await driver.executeScript(`
-			// Hide leftover full-screen fixed/sticky overlays (cookie scrims, etc.).
-			for (const el of document.querySelectorAll('body *')) {
-				const s = getComputedStyle(el);
-				if ((s.position === 'fixed' || s.position === 'sticky')
-					&& el.offsetHeight > innerHeight * 0.55 && el.offsetWidth > innerWidth * 0.55) {
-					el.style.display = 'none';
-				}
-			}
-			// Collapse empty/served-blank ad slots so they don't leave whitespace at
-			// the top of the capture (ads don't load headless). Conservative: ad
-			// iframes, and labelled ad containers that rendered (near-)empty.
-			const adSel = 'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="adservice"],iframe[src*="amazon-adsystem"],iframe[id*="google_ads"],[id^="ad-"],[id*="-ad-"],[class*="advertisement"],[class*="ad-slot"],[class*="ad-unit"],[data-ad],[aria-label="Advertisement" i]';
-			for (const el of document.querySelectorAll(adSel)) {
-				if (el.textContent.trim().length < 20) {
-					const box = el.closest('div,section,aside') || el;
-					box.style.display = 'none';
-				}
-			}
-			document.documentElement.style.overflow = ''; document.body.style.overflow = '';
-		`);
-		return { ok: true, clicked };
-	}
+	case '/dismiss_consent':
+		// Best-effort cookie/consent dismissal (page + cross-origin CMP iframes) +
+		// overlay/ad-slot hiding. Shared with the environment seed.
+		return await dismissConsent(driver);
 	case '/evaluate':
 		// body.async => executeAsyncScript: the script gets a callback as its
 		// last argument and must call it with the result (for chrome.* / IDB
@@ -428,7 +497,7 @@ async function handle(method, url, body) {
 		return { saved: p, bytes: fs.statSync(p).size };
 	}
 	case '/reset_extension':
-		return await resetAndRestore();
+		return await resetToDefault();
 	default:
 		return { __status: 404, error: `no route ${method} ${url}` };
 	}

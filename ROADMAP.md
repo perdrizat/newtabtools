@@ -72,7 +72,7 @@ directives in [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 - **Shape:** Firefox-first (MV3 event pages keep DOM access, halving scope vs. Chrome);
   no TypeScript / no build step; ES-module extraction of the background scripts.
 
-## Later — Chrome (stage 3)
+## Later — Chrome extension (stage 3)
 
 After Firefox MV3 ships and bakes. Single-source / dual-build (shared `webextension/`
 with per-target manifest variants), **not** a long-lived parallel branch. Requires the
@@ -92,8 +92,11 @@ Concrete items not yet on a horizon. Roughly priority-ordered within each group.
   it now would mean maintaining duplicate copies.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
-- More scenarios beyond the current three: dark-theme, pin/unpin, locked-state, and
-  other differentiating features that benefit from visual judgment.
+- The suite walks a first-run journey on a seeded environment: `00-uat-init`,
+  `01-default-ui` (incl. first-run thumbnail + favicon capture), `02-config`,
+  `03-restore`, `04-action-buttons`. More scenarios for differentiating features
+  that benefit from visual judgment: locked-grid, per-domain filter caps, per-tile
+  background colour, backup export, multi-page grids.
 - Aggregate run-level `summary.md` (table of scenarios × verdicts + a section
   highlighting preamble failures); today the runner writes a per-scenario summary +
   an aggregate `report.json` + a terminal digest.

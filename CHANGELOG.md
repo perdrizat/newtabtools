@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2026-06-05]
+
+### Changed
+
+- UAT tier rebaselined around a seeded environment + a first-run user journey. The daemon now seeds Firefox history by real navigation (two passes over a merged US/global + Swiss URL set → `topSites`) and seeds the recently-closed row (open the top 2 articles per news site via a DOM heuristic, then close the tabs) **before** installing the extension — so the first new-tab render is an authentic new-user state (history-filled grid, no thumbnails). Cookie banners are accepted during the seed with a 3s settle so async consent platforms (e.g. Sourcepoint/BBC) render their Accept control first; the acceptance persists for the run, keeping later captures banner-free.
+- `/reset_extension` now resets to the default 3×3 state only (dropped the auto-restore-fixture); the seeded environment (history, cookies, recently-closed) is browser-level and survives the reset. Restoring the known-good fixture is now an explicit scenario step.
+- Scenario suite replaced: `00-uat-init` (verify the seeded env), `01-default-ui` (default layout/chrome/drawer + first-run auto-thumbnail & favicon capture), `02-config` (live config changes), `03-restore` (restore the backup), `04-action-buttons` (tile hover action row). Old `01-restore-dogfood` / `02-restore-and-verify` / `03-tile-hover-occlusion` removed. The skill preamble is now navigate-only by default with an opt-in restore block.
+
+### Added
+
+- `browser_capture_tiles` MCP tool + daemon `/capture_tiles` endpoint — opens tile URLs (bounded page-load timeout) to trigger the extension's auto-thumbnail + favicon capture, then returns to the new-tab page; lets the capture test run as one call instead of agent-driven external navigation.
+
+### Fixed
+
+- UAT runner now flags an assertion as failed on `pass: false` as well as `passed: false`, so an agent's field-name variant can't slip a real failure through as a false green.
+
 ## [2026-06-04]
 
 ### Added

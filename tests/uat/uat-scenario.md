@@ -6,6 +6,7 @@ allowed-tools:
   - mcp__ntt-uat__browser_click
   - mcp__ntt-uat__browser_hover
   - mcp__ntt-uat__browser_evaluate
+  - mcp__ntt-uat__browser_capture_tiles
   - mcp__ntt-uat__browser_file_upload
   - mcp__ntt-uat__browser_take_screenshot
   - mcp__ntt-uat__browser_read_screenshot
@@ -20,23 +21,32 @@ You are running a UAT scenario for the NewTab PowerTools Firefox extension. The 
 
 All scenarios of a run share one flat artifacts directory, so the runner gives you per-scenario filenames — use the prologue's paths verbatim; do not invent `report.json` / `summary.md` in some other location. The runner reads your report to roll up pass/fail; humans read your summary to understand what happened. Screenshots are auto-named and placed by the tools — you only pass a short shot name like `01-grid`.
 
-## Standard preamble
+## Preamble
 
-Every scenario starts from the same NewTab PowerTools state — the fixture restored via the UI. The browser daemon already launched Firefox, seeded its history with a fixed list of URLs, and installed the extension; you don't need to repeat any of that. Unless the scenario says "skip preamble," do exactly this:
+The browser daemon has already launched Firefox, seeded its history (so the default grid fills from `topSites`), seeded the recently-closed row from real article visits, accepted cookie banners, and installed the extension. You don't repeat any of that. The extension was installed *after* the history seed, so the first new-tab render is an authentic new-user state: a history-filled grid with **no thumbnails yet**.
 
-1. `mcp__ntt-uat__browser_navigate` to the extension's `newTab.xhtml`. The daemon is already there, but navigating again confirms the page is reachable and gets you a stable starting frame.
-2. **Capture the starting state:** `browser_take_screenshot` named `00-initial`. This is the "before" frame — take it before you touch anything, so the screenshot sequence reads as a story.
-3. Click `#options-toggle` to open the settings drawer.
-4. Click `[data-drawer-tab="advanced"]` to switch to the Advanced panel.
-5. `mcp__ntt-uat__browser_file_upload` the fixture into selector `#options-restore-file`. The fixture's absolute path is given in the runner prologue ("Fixture zip (absolute path)") — use it verbatim; do not compute it.
-6. Click `#options-restore`.
-7. Wait until `document.querySelectorAll('.newtab-site').length === 9` (use `browser_evaluate` in a small polling loop; 10-second budget). Restore applies **live** — tiles, grid size, theme, and wallpaper all take effect immediately, with no page reload.
-8. Click `#options-toggle` to close the settings drawer, so the restored page is unobstructed.
-9. **Capture the restored state:** `browser_take_screenshot` named `01-restored` — the clean restored new-tab page (grid + wallpaper), drawer closed, nothing overlaying it.
+Most scenarios start from this default state. Unless the scenario directs otherwise:
 
-**Grid vs. tiles — don't confuse them.** The fixture sets a 4×4 grid, so after restore there are **16** `.newtab-cell` elements (the grid slots) of which **9** become populated `.newtab-site` tiles. `.newtab-cell` count is therefore *not* a restore signal — a fresh/default profile already shows 9 empty cells (3×3). Always assert on `.newtab-site` (populated tiles) or on tile content (titles/links), never on raw `.newtab-cell` count, to confirm a restore worked.
+1. `mcp__ntt-uat__browser_navigate` to the extension's `newTab.xhtml` (a stable starting frame).
+2. **Capture the starting state:** `browser_take_screenshot` named `00-initial`, before you touch anything.
 
-If any preamble step fails — selector missing, file input rejects the zip, count never hits 9 — record it as a critical assertion in `report.json` and stop the scenario. A broken preamble means restore itself is broken, which is itself a finding.
+Then walk the scenario's own Verify / Visual sections.
+
+### Restore preamble (only when a scenario says "run the restore preamble")
+
+Some scenarios restore the known-good fixture via the UI. When directed:
+
+1. `browser_navigate` to `newTab.xhtml`; `browser_take_screenshot` named `00-initial`.
+2. Click `#options-toggle` (open drawer), then `[data-drawer-tab="advanced"]`.
+3. `mcp__ntt-uat__browser_file_upload` the fixture into `#options-restore-file`. The fixture's absolute path is in the runner prologue ("Fixture zip (absolute path)") — use it verbatim.
+4. Click `#options-restore`.
+5. Wait until `document.querySelectorAll('.newtab-cell').length === 16` (poll with `browser_evaluate`, ~10s budget) — the fixture's 4×4 grid is the restore signal. (The grid then fills from the seeded history, so the populated `.newtab-site` count settles at 16, not 9.) Restore applies **live** — tiles, grid, theme, and wallpaper take effect with no reload.
+6. Click `#options-toggle` to close the drawer.
+7. **Capture the restored state:** `browser_take_screenshot` named `01-restored` — the clean restored page, drawer closed.
+
+If any restore step fails (selector missing, file input rejects the zip, count never hits 9), record it as a critical failed assertion and stop — a broken restore is itself a finding.
+
+**Grid vs. tiles — don't confuse them.** `.newtab-cell` counts the grid slots (rows×columns: **9** for the default 3×3, **16** for the fixture's 4×4); `.newtab-site` counts the populated tiles. Use `.newtab-cell` count for grid dimensions, and `.newtab-site` count or tile content (titles/links) for tile presence.
 
 **Screenshots tell the story.** A reviewer flips through a run's screenshots in filename order to confirm it concluded correctly, so always leave at least the `00-initial` (before) and `01-restored` (after) frames, plus any state your scenario changes. The harness stamps each shot's filename with its capture time, so they always sort in the order you took them — you don't need to worry about ordering, just give each shot a short descriptive name (e.g. `grid`, `about`, `hover`).
 
@@ -117,10 +127,10 @@ Avoid generic "looks fine." Be specific even when nothing's wrong: "Grid renders
 ## Constraints
 
 - Use only the allowed tools listed in the frontmatter above. No `Bash`, no `Read`, no `Edit`.
-- Do NOT navigate to URLs outside the extension's `moz-extension://` origin. Tiles are rendered, not visited — the daemon has already seeded Firefox's history with the test URLs.
+- Stay on the extension's `moz-extension://` origin. To trigger auto-thumbnail capture, use `browser_capture_tiles` (it opens the tile URLs with a short timeout and returns you to the new-tab page) — don't navigate to external sites yourself.
 - Do NOT call `browser_read_screenshot` on evidence-only screenshots.
 - `Write` requires absolute paths. Use the exact report/summary paths from the runner prologue verbatim.
-- Stop early if the preamble fails. There's no point continuing if restore is broken.
+- In a restore scenario, stop early if the restore preamble fails — there's no point continuing if restore is broken.
 
 ## When the UI has drifted from the selectors above
 

@@ -10,8 +10,9 @@
 //   pnpm build
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/daemon-smoke.mjs
 //
-// Slow internet note: the daemon seeds 9 real URLs into history at startup, so
-// /health can take a while to go green on a cold connection.
+// Slow internet note: the daemon seeds a merged URL set into history (two
+// navigation passes) + a recently-closed row, all BEFORE installing the
+// extension, so /health only goes green after that — a while on a cold link.
 
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -61,24 +62,36 @@ try {
 	const nav = await call('/navigate', { url: NEWTAB_URL });
 	console.log(`[daemon-smoke] /navigate -> ${JSON.stringify(nav)}`);
 
-	const evald = await call('/evaluate', { script: 'return document.querySelectorAll(".newtab-cell, #newtab-grid > *").length' });
-	console.log(`[daemon-smoke] /evaluate cell-ish count -> ${JSON.stringify(evald.value)}  (${size(evald)} bytes)`);
+	// Verify the seeded environment: the default 3×3 grid (9 cells) filled from the
+	// seeded history (topSites), the recently-closed row populated from the article
+	// seed, and NO thumbnails yet (extension installed after the seed).
+	const env = await call('/evaluate', {
+		script: 'return JSON.stringify({'
+			+ 'cells: document.querySelectorAll(".newtab-cell").length,'
+			+ 'tiles: document.querySelectorAll(".newtab-site").length,'
+			+ 'recent: document.querySelectorAll(".ntt-recent-card").length,'
+			+ 'thumbs: [...document.querySelectorAll(".newtab-thumbnail")].filter(t => getComputedStyle(t).backgroundImage.includes("url")).length'
+			+ '})',
+	});
+	const e = JSON.parse(env.value);
+	console.log(`[daemon-smoke] seeded env -> ${env.value} (${size(env)} bytes)`);
+	if (e.cells !== 9) { throw new Error(`expected default 9-cell grid, got ${e.cells}`); }
+	if (e.tiles < 5) { throw new Error(`expected >=5 history-filled tiles, got ${e.tiles}`); }
+	if (e.recent < 1) { throw new Error(`expected >=1 recently-closed card, got ${e.recent}`); }
+	if (e.thumbs !== 0) { throw new Error(`expected 0 thumbnails (new-user state), got ${e.thumbs}`); }
 
 	const shot = await call('/screenshot', { name: 'daemon-smoke' });
 	console.log(`[daemon-smoke] /screenshot -> ${shot.saved} (${shot.bytes} bytes on disk)`);
 
-	// /reset_extension drives the built-in reset (16->9 cells, verified) then
-	// restores the fixture (9->16 cells AND 9 tiles rendered live, verified).
-	// It throws if any step doesn't take.
+	// /reset_extension drives the built-in reset and verifies it returns to the
+	// default 3×3 (9-cell) grid. It throws if the reset doesn't take.
 	const reset = await call('/reset_extension', {});
 	console.log(`[daemon-smoke] /reset_extension -> ${JSON.stringify(reset)}`);
-	if (reset.resetCells !== 9 || reset.restoredCells !== 16 || reset.restoredSites !== 9) {
-		throw new Error(`reset/restore signature wrong: ${JSON.stringify(reset)}`);
-	}
+	if (reset.resetCells !== 9) { throw new Error(`reset signature wrong: ${JSON.stringify(reset)}`); }
 
-	const after = await call('/evaluate', { script: 'return document.querySelectorAll(".newtab-site").length + "/" + document.querySelectorAll(".newtab-cell").length' });
-	console.log(`[daemon-smoke] post-reset tiles/cells -> ${JSON.stringify(after.value)} (expect 9/16 — fixture restored)`);
-	if (after.value !== '9/16') { throw new Error(`expected 9/16 after reset_extension, got ${after.value}`); }
+	const after = await call('/evaluate', { script: 'return document.querySelectorAll(".newtab-cell").length' });
+	console.log(`[daemon-smoke] post-reset cells -> ${JSON.stringify(after.value)} (expect 9 — default grid)`);
+	if (after.value !== 9) { throw new Error(`expected 9 cells after reset_extension, got ${after.value}`); }
 
 	console.log('[daemon-smoke] OK');
 } catch (e) {
