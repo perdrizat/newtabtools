@@ -93,7 +93,7 @@ describe('E2E: titlebar recent-card reflow on drawer open/close', () => {
 				page,
 				() => {
 					const tb = document.getElementById('ntt-titlebar') as HTMLElement | null;
-					return !!(tb && tb.clientWidth > 0 && document.getElementById('ntt-masthead'));
+					return !!(tb && tb.clientWidth > 0 && document.getElementById('options-toggle'));
 				},
 				[],
 				{ timeout: 10_000, message: 'Titlebar never gained a non-zero layout width' }

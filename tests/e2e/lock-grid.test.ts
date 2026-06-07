@@ -3,14 +3,18 @@ import type { Browser } from 'puppeteer-core';
 import {
 	connectToFirefox,
 	openNewTab,
-	getNewTabURL,
 	captureFailure,
-	waitForCondition,
 	waitForGridReady,
 	resetTestState,
 } from './_helpers.ts';
 
-describe('E2E: Lock-grid toggle (slot 21)', () => {
+/**
+ * Board A / Edit mode (DESIGNv2_REVIEW §2): there is no titlebar padlock and no
+ * standalone lock checkbox. Lock is transient — opening the drawer IS edit mode
+ * (board unlocks, button reads "Done"); closing it (Done/Esc) re-locks (button
+ * reads "Edit"). This replaces the old padlock/checkbox lock toggle.
+ */
+describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 	let browser: Browser;
 
 	beforeAll(async () => {
@@ -24,137 +28,85 @@ describe('E2E: Lock-grid toggle (slot 21)', () => {
 		}
 	});
 
-	it('enabling lock adds locked attribute to root and hides tile controls', async () => {
+	it('opening the drawer enters edit mode (unlocks + "Done"); closing re-locks (+ "Edit")', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
-		const url = await getNewTabURL();
 
 		try {
-			// Pin a tile so action buttons exist in the grid.
-			await page.evaluate(async () => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({
-						name: 'Tiles.pinTile',
-						title: 'Lock Test',
-						url: 'https://lock-test.example.com/',
-					}, resolve);
-				});
-			});
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
-			await waitForGridReady(page);
+			// Open the drawer = enter edit mode.
+			await page.evaluate(() => (window as any).newTabTools.openDrawer());
+			await new Promise(r => setTimeout(r, 300));
+			const editing = await page.evaluate(() => ({
+				drawerOpen: document.documentElement.hasAttribute('drawer-open'),
+				locked: document.documentElement.hasAttribute('locked'),
+				prefLocked: (window as any).Prefs.locked,
+				btn: (document.getElementById('options-toggle')!.textContent || '').trim(),
+			}));
+			expect(editing.drawerOpen).toBe(true);
+			expect(editing.locked).toBe(false);
+			expect(editing.prefLocked).toBe(false);
+			expect(editing.btn).toBe('Done');
 
-			await waitForCondition(
-				page,
-				() => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === 'https://lock-test.example.com/');
-				},
-				[],
-				{ timeout: 10_000, message: 'Pinned tile not in grid' }
-			);
+			// Close = exit edit mode, re-lock.
+			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await new Promise(r => setTimeout(r, 300));
+			const done = await page.evaluate(() => ({
+				drawerOpen: document.documentElement.hasAttribute('drawer-open'),
+				locked: document.documentElement.hasAttribute('locked'),
+				prefLocked: (window as any).Prefs.locked,
+				btn: (document.getElementById('options-toggle')!.textContent || '').trim(),
+			}));
+			expect(done.drawerOpen).toBe(false);
+			expect(done.locked).toBe(true);
+			expect(done.prefLocked).toBe(true);
+			expect(done.btn).toBe('Edit');
+		} catch (e) {
+			await captureFailure(page, 'edit-mode-lock');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
 
-			// Verify initially unlocked.
-			const initialLocked = await page.evaluate(() => {
-				return document.documentElement.hasAttribute('locked');
-			});
-			expect(initialLocked).toBe(false);
+	it('no titlebar padlock or standalone lock checkbox exists (Board A)', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
 
-			// Open settings.
-			await page.evaluate(() => document.getElementById('options-toggle')!.click());
-			await new Promise(r => setTimeout(r, 500));
+		try {
+			const gone = await page.evaluate(() => ({
+				noPadlock: !document.getElementById('locked-toggle'),
+				noCheckbox: !document.querySelector('[name="locked"]'),
+			}));
+			expect(gone.noPadlock).toBe(true);
+			expect(gone.noCheckbox).toBe(true);
+		} catch (e) {
+			await captureFailure(page, 'no-padlock');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	});
 
-			// Enable lock.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
-				cb.checked = true;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-			await new Promise(r => setTimeout(r, 500));
+	it('hover actions remain available in normal (locked) mode — not gated on lock (§3c)', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
 
-			const lockedAfter = await page.evaluate(() => {
-				return document.documentElement.getAttribute('locked');
-			});
-			expect(lockedAfter).toBe('true');
-
-			// When locked, .ntt-actions are display: none (CSS rule).
+		try {
+			// Ensure normal/locked mode (drawer closed).
+			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await new Promise(r => setTimeout(r, 300));
+			// The action row is opacity:0 at rest but NOT display:none — it is
+			// reachable on hover even while the board is locked.
 			const actionsDisplay = await page.evaluate(() => {
-				const actions = document.querySelector('.ntt-actions');
-				if (!actions) {return 'no-actions-found';}
-				return window.getComputedStyle(actions).display;
+				const a = document.querySelector('.ntt-actions');
+				return a ? getComputedStyle(a).display : 'no-actions';
 			});
-			expect(actionsDisplay).toBe('none');
-
-			// Disable lock.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
-				cb.checked = false;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-			await new Promise(r => setTimeout(r, 300));
-
-			const unlockedAfter = await page.evaluate(() => {
-				return document.documentElement.hasAttribute('locked');
-			});
-			expect(unlockedAfter).toBe(false);
-
-			// Cleanup: unpin.
-			await page.evaluate(async () => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: 'https://lock-test.example.com/' }, resolve);
-				});
-			});
+			expect(actionsDisplay).not.toBe('none');
 		} catch (e) {
-			await captureFailure(page, 'lock-grid');
+			await captureFailure(page, 'actions-available-locked');
 			throw e;
 		} finally {
 			await page.close();
 		}
-	}, 90_000);
-
-	it('lock-toggle button at bottom-right reflects locked state', async () => {
-		const page = await openNewTab(browser);
-		await waitForGridReady(page);
-
-		try {
-			// Ensure clean unlocked state.
-			await page.evaluate(() => {
-				Prefs.locked = false;
-			});
-			await new Promise(r => setTimeout(r, 300));
-
-			// The locked-toggle button should exist.
-			const hasButton = await page.evaluate(() => {
-				return !!document.getElementById('locked-toggle');
-			});
-			expect(hasButton).toBe(true);
-
-			// Enable lock via settings.
-			await page.evaluate(() => document.getElementById('options-toggle')!.click());
-			await new Promise(r => setTimeout(r, 500));
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
-				cb.checked = true;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-			await new Promise(r => setTimeout(r, 500));
-
-			// Verify locked attribute on root (button icon depends on themed images).
-			const locked = await page.evaluate(() => {
-				return document.documentElement.getAttribute('locked');
-			});
-			expect(locked).toBe('true');
-
-			// Cleanup: unlock.
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="locked"]') as HTMLInputElement;
-				cb.checked = false;
-				cb.dispatchEvent(new Event('change', { bubbles: true }));
-			});
-		} catch (e) {
-			await captureFailure(page, 'lock-grid-button');
-			throw e;
-		} finally {
-			await page.close();
-		}
-	}, 90_000);
+	});
 });

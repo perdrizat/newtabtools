@@ -4,7 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.0.2] — 2026-06-08
+
+### Changed
+
+- UAT screenshot downscaling default changed from 0.5 to 1 (full resolution); estimated `browser_read_screenshot` token cost in docs updated from ~1.2k to ~2.8k.
+- Typography role discipline (design review §6): recently-closed domains, awesomebar URLs/section captions, helper/explanatory copy, and the undo toast move from monospace to the UI sans; monospace now reserved for stat numbers + keyboard hints. Inline italics dropped from the drawer filter helptext and the restore/reset warnings.
+- Tile surface (design review §3): bottom title overlay ramps into a near-solid dark floor + stronger title text-shadow so white titles stay legible on light thumbnails; hover actions trimmed to Edit URL · Reload · Pin/Unpin · Remove (dropped "open in new tab"), a kebab shows at rest, and the Remove (✕) uses the danger colour.
+- Title bar (design review §1, §4): "Board A" — removed the wordmark, padlock, and cogwheel; the single right-side `Edit` button is now the only titlebar action (opens the drawer). Recently-closed chips show the registrable domain (leading `www.` stripped). Existing S/M/L spacing unchanged.
+- Advanced tab on-system (design review §5): the history native checkbox is now a copper toggle (no native checkboxes anywhere in the drawer); drawer action buttons follow a three-tier hierarchy (ghost / copper primary / danger); the unpinned-count steppers are restyled to match the segmented control; the domain table gained drawer row rhythm + hairlines.
+- Confirm steps (design review §7): Reset everything and Restore now reveal an inline Confirm/Cancel row (danger-filled) instead of acting immediately — `window.confirm` removed from the reset path; per-tile Remove keeps its undo toast (no confirm).
+- High-contrast validation (design review §8): `--ntt-danger` bumped to the existing dark tone (`#e89279`) in the contrast theme for AAA legibility on black; added a consistent copper focus ring (search box + drawer controls) — the search input previously cleared the UA outline with no replacement (a11y gap surfaced by UAT).
+
+### Fixed
+
+- Danger button tier rendered identically to ghost — the ghost base selector's `:not(#id)` inflated its specificity above the danger/primary modifiers (caught by UAT; deterministic regression guard added).
+- Readability (UAT-surfaced): removed the v1 blanket text-shadow glow (redundant in v2 — text sits on its own backing — and it muddied recent-closed titles + "+ Add tile"); dimmed the edit-mode auto-tile fade + added a scrim behind "+ Add tile"; high-contrast gets a defined black action-pill (destructive ✕ kept coral) and accent-coloured drawer links (was low-contrast browser-blue on the HC ground).
+- Edit/Done mode (design review §2): opening the drawer IS edit mode — the board unlocks, the button flips to a copper `Done`, pinned tiles gain a persistent action row + a centred drag handle + a dashed accent outline, and auto tiles fade to offer "+ Add tile"; closing (Done) re-locks. The board is now locked by default; the standalone lock checkbox is gone. Hover actions are no longer gated on lock (available in normal mode per §3c). Grid column-reflow-on-drawer-open (§2) deferred — needs a grid recompute, flagged for follow-up.
+
+### Added
+
+- `tests/integration/typography.test.ts` + `tests/uat/scenarios/30-typography.md` — guard the §6 role split (textual → sans, numeric/keys → mono, never italic).
+- `tests/integration/tile-surface.test.ts` + `tests/uat/scenarios/10-tile-surface.md` — guard the §3c kebab-at-rest affordance, the 4-action hover row, and the danger-coloured Remove.
+- `tests/uat/scenarios/31-titlebar.md` — guard the Board A titlebar (single Edit button, no wordmark/padlock/cogwheel) + recent-chip identity.
+- `tests/integration/edit-mode.test.ts` + `tests/uat/scenarios/23-edit-mode-design.md` — guard the §2 edit-mode affordances (Done button, pinned drag handle + dashed outline + persistent actions, auto-tile "+ Add tile") + the lock cycle; `grip` icon added.
+- `tests/integration/advanced-tab.test.ts` + `tests/uat/scenarios/22-advanced-tab.md` + `tests/uat/scenarios/32-high-contrast.md` — guard the §5 on-system Advanced tab (toggle, button hierarchy, steppers, table), the §7 confirm steps, and the §8 high-contrast validation pass.
+- UAT scenarios renumbered by category: tiles 1x (`10-tile-surface`, `11-action-buttons`), drawer 2x (`20-config`, `21-restore`, `22-advanced-tab`, `23-edit-mode-design`), design 3x (`30-typography`, `31-titlebar`, `32-high-contrast`); env/smoke keep `00`/`01`.
+- UAT daemon `resetToDefault` is now a lighter message-based reset (clears the `tiles` + `background` IDB stores + `storage.local` prefs) that deliberately preserves the `thumbnails` store, so the default pins' captured imagery survives between scenarios (Option B). The previous UI-click reset (`#options-reset-all` → `#options-reset-confirm`) wiped thumbnails on every reset.
+- UAT daemon now pins a default "favourites" set (heise, TechCrunch, Hacker News, MDN, the NTT repo) at startup and after every reset, and captures their screenshots + favicons once at startup so the pinned tiles show real thumbnails + favicons (re-attached by URL on every re-pin via the preserved thumbnails store). `00-uat-init`/`01-default-ui` no-thumbnail checks now scope to non-pinned (`:not([pinned])`) tiles.
+- TESTING.md: documented running a single fast/integration/unit file via `pnpm test:fast <name>` (vitest never invoked directly). CONTRIBUTING.md: daily patch-bump (`pnpm version patch`) + version-led dated CHANGELOG sections.
 
 ## [2026-06-05]
 

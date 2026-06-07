@@ -42,15 +42,32 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - [x] AMO listing copy + privacy policy + MPL-2.0 LICENSE + reviewer submission notes (`docs/amo-listing.md`, `PRIVACY.md`, `LICENSE`, `docs/amo-submission-notes.md`).
 - [ ] Capture marketing screenshots (5) from a clean Firefox profile loaded with the `tests/uat/newtabtools_knowngood.zip` fixture. See `docs/amo-listing.md` "Screenshots checklist".
 - [ ] First release on AMO.
-- [ ] Open the issue tracker for new bug reports.
+- [x] Open the issue tracker for new bug reports.
 - [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 
 ## For developers
  
 If you want to contribute to NewTab PowerTools, please read the **[Contributing Guide](CONTRIBUTING.md)** first. 
 
+### Quick Start
+
+1. **Environment Setup:** You will need Node.js >= 22, `pnpm` >= 10, and Firefox ESR. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+
+2. **Clone and install:**
+   ```bash
+   git clone git@github.com:perdrizat/newtabtools.git
+   cd newtabtools
+   pnpm install
+   ```
+
+3. **Run the extension locally:**
+   ```bash
+   pnpm dev
+   ```
+   This launches a temporary Firefox instance with the extension pre-loaded. The profile is discarded on exit. To load it into your persistent browser profile, use `about:debugging` and load a temporary add-on from the `webextension/` directory.
+
+### Testing is mandatory
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:
-- **[Environment Setup](TESTING.md#environment-setup):** Installing Node.js and Firefox ESR.
 - **[CLI Reference](TESTING.md#cli-reference):** Commands for dev, linting, and testing.
 - **[Testing Strategy](TESTING.md#the-testing-strategy):** Our tier-by-tier TDD workflow.
 

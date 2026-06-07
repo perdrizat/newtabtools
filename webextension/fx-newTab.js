@@ -959,9 +959,33 @@ Site.prototype = {
 		if (!container || container.children.length > 0) {
 			return;
 		}
+		// At-rest affordance: a single kebab that the hover row replaces (§3c).
+		let kebab = this._querySelector('.ntt-actions-kebab');
+		if (kebab && kebab.children.length === 0) {
+			let kebabIcon = NttIcons.create('kebab', 16);
+			if (kebabIcon) {
+				kebab.appendChild(kebabIcon);
+			}
+		}
+		// Edit-mode affordances (§2): a centred drag handle (shown on pinned tiles
+		// while editing) and an "Add tile" prompt (shown on auto tiles while
+		// editing). CSS keeps both hidden outside edit mode (`:root[drawer-open]`).
+		let dragHandle = this._querySelector('.ntt-drag-handle');
+		if (dragHandle && dragHandle.children.length === 0) {
+			let grip = NttIcons.create('grip', 18);
+			if (grip) {
+				dragHandle.appendChild(grip);
+			}
+		}
+		let addTile = this._querySelector('.ntt-add-tile');
+		if (addTile && !addTile.textContent) {
+			addTile.textContent = newTabTools.getString('tile_add');
+		}
+		// §3c order: Edit URL · Reload · Pin/Unpin · Remove. "Open in new tab"
+		// was dropped — clicking the tile already opens it (middle-/⌘-click for
+		// a new tab).
 		let actions = [
 			{ action: 'edit', icon: 'edit', title: 'tile_edit_url' },
-			{ action: 'open', icon: 'open', title: 'tile_open_newtab' },
 			{ action: 'refresh', icon: 'refresh', title: 'tile_refresh_thumbnail' },
 			{ action: 'pin', icon: this.isPinned ? 'unpin' : 'pin', title: this.isPinned ? 'tile_unpin' : 'tile_pin' },
 			{ action: 'remove', icon: 'close', title: 'tile_block' },
@@ -1131,11 +1155,6 @@ Site.prototype = {
 							newTabTools.setTitleInput.value = historyTitle;
 						}
 					});
-				}
-				break;
-			case 'open':
-				if (newTabTools.isValidURL(this.url)) {
-					chrome.tabs.create({ url: this.url, active: false });
 				}
 				break;
 			case 'edit':

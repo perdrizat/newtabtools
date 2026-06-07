@@ -316,11 +316,29 @@ var newTabTools = {
 			});
 			return;
 		case 'options-restore':
+			// Restore overwrites the whole setup — require an explicit inline
+			// Confirm/Cancel (§7) rather than acting on the first click.
+			this._showConfirm('options-restore-confirm-row');
+			return;
+		case 'options-restore-confirm': {
 			let input = document.getElementById('options-restore-file');
 			chrome.runtime.sendMessage({name: 'Import:restore', file: input.files[0]});
+			this._hideConfirm('options-restore-confirm-row');
+			return;
+		}
+		case 'options-restore-cancel':
+			this._hideConfirm('options-restore-confirm-row');
 			return;
 		case 'options-reset-all':
+			// Irreversible — inline Confirm/Cancel (§7).
+			this._showConfirm('options-reset-confirm-row');
+			return;
+		case 'options-reset-confirm':
+			this._hideConfirm('options-reset-confirm-row');
 			this.resetAllSettings();
+			return;
+		case 'options-reset-cancel':
+			this._hideConfirm('options-reset-confirm-row');
 			return;
 		}
 
@@ -775,9 +793,6 @@ var newTabTools = {
 
 		for (let [selector, name] of Object.entries({
 			'.close-button': 'close',
-			'#options-toggle': 'options',
-			'#locked-toggle': 'unlocked',
-			':root[locked="true"] #locked-toggle': 'locked',
 			'button.arrow': 'arrow',
 		})) {
 			let url = await this.getThemedImageURL(name);
@@ -849,17 +864,12 @@ var newTabTools = {
 
 		if (!keys || keys.includes('locked')) {
 			let locked = Prefs.locked;
-			document.querySelector('[name="locked"]').checked = locked;
+			let lockedCheckbox = document.querySelector('[name="locked"]');
+			if (lockedCheckbox) { lockedCheckbox.checked = locked; }
 			if (locked) {
 				document.documentElement.setAttribute('locked', 'true');
-				this.getThemedImageURL('locked').then(url => {
-					this.lockedToggleButton.style.backgroundImage = url ? `url(${url})` : null;
-				});
 			} else {
 				document.documentElement.removeAttribute('locked');
-				this.getThemedImageURL('unlocked').then(url => {
-					this.lockedToggleButton.style.backgroundImage = url ? `url(${url})` : null;
-				});
 			}
 		}
 
@@ -947,8 +957,9 @@ var newTabTools = {
 
 		if (!keys || keys.includes('history')) {
 			let history = Prefs.history;
-			document.querySelector('[name="history"]').checked = history;
-			document.getElementById('historytiles-filter').disabled = !history;
+			this._syncDrawerToggle('history', history);
+			let filterBtn = document.getElementById('historytiles-filter');
+			if (filterBtn) { filterBtn.disabled = !history; }
 		}
 
 		if (!keys || keys.includes('recent')) {
@@ -1154,7 +1165,9 @@ var newTabTools = {
 				let displayTitle = title || url;
 				let domain;
 				try {
-					domain = new URL(url).hostname;
+					// Registrable-ish domain: drop a leading `www.` so the chip
+					// reads `theverge.com`, not `www.theverge.com` (§4).
+					domain = new URL(url).hostname.replace(/^www\./, '');
 				} catch (e) {
 					domain = url;
 				}
@@ -1215,14 +1228,18 @@ var newTabTools = {
 	},
 	trimRecent() {
 	},
+	_showConfirm(rowId) {
+		let row = document.getElementById(rowId);
+		if (row) { row.hidden = false; }
+	},
+	_hideConfirm(rowId) {
+		let row = document.getElementById(rowId);
+		if (row) { row.hidden = true; }
+	},
 	async resetAllSettings() {
 		// Hard reset: wipe pinned tiles, blocked URLs, history filters and
-		// every persisted pref. Confirmed via window.confirm — destructive
-		// and irreversible.
-		let confirmed = window.confirm(this.getString('reset_confirm'));
-		if (!confirmed) {
-			return;
-		}
+		// every persisted pref. The inline Confirm/Cancel row (§7) gates this —
+		// destructive and irreversible, so there is no window.confirm here.
 		// The page-side `Tiles` (tiles-shim.js) is just an IPC façade — no
 		// `.clear()` method exists. Route through the background which owns
 		// the IDB transaction. Clear the Thumbnails store (captured screenshots
@@ -1529,6 +1546,13 @@ var newTabTools = {
 	},
 	openDrawer() {
 		document.documentElement.setAttribute('drawer-open', '');
+		// Drawer-open IS edit mode (§2): unlock the board so tiles can move and
+		// the edit affordances show; the titlebar button becomes "Done". Set the
+		// attribute directly (immediate, no storage round-trip) and persist via
+		// the pref so the drag guard + a reload agree.
+		document.documentElement.removeAttribute('locked');
+		if (typeof Prefs !== 'undefined') { Prefs.locked = false; }
+		if (this._setEditButtonLabel) { this._setEditButtonLabel(true); }
 		let drawer = document.getElementById('ntt-drawer');
 		if (drawer) {
 			drawer.setAttribute('aria-hidden', 'false');
@@ -1539,11 +1563,21 @@ var newTabTools = {
 	},
 	closeDrawer() {
 		document.documentElement.removeAttribute('drawer-open');
+		// Closing exits edit mode and re-locks the board (§2).
+		document.documentElement.setAttribute('locked', 'true');
+		if (typeof Prefs !== 'undefined') { Prefs.locked = true; }
+		if (this._setEditButtonLabel) { this._setEditButtonLabel(false); }
 		let drawer = document.getElementById('ntt-drawer');
 		if (drawer) {
 			drawer.setAttribute('aria-hidden', 'true');
 		}
 		this._refreshGridPositionsAfterDrawerTransition();
+	},
+	_setEditButtonLabel(editing) {
+		let btn = this.optionsToggleButton;
+		if (btn) {
+			btn.textContent = this.getString(editing ? 'options_done' : 'options_edit');
+		}
 	},
 	_refreshGridPositionsAfterDrawerTransition() {
 		// The drawer's flex-basis/width animates over 220ms. The grid and the
@@ -1909,7 +1943,6 @@ var newTabTools = {
 		'optionsFilterHostAutocomplete': 'host-autocomplete',
 		'optionsFilterCount': 'options-filter-count',
 		'optionsFilterSet': 'options-filter-set',
-		'lockedToggleButton': 'locked-toggle',
 		'databaseError': 'database-error',
 		'contextMenu': 'context-menu',
 		'contextMenuPin': 'newtabtools-pintile',
@@ -1928,10 +1961,6 @@ var newTabTools = {
 		}
 	}
 
-	newTabTools.lockedToggleButton.addEventListener('click', function() {
-		Prefs.locked = !Prefs.locked;
-		this.blur();
-	});
 	newTabTools.optionsToggleButton.addEventListener('click', newTabTools.toggleDrawer.bind(newTabTools));
 	newTabTools.pinURLInput.addEventListener('input', newTabTools.autocomplete.bind(newTabTools));
 	newTabTools.drawerEl.addEventListener('click', function(event) {

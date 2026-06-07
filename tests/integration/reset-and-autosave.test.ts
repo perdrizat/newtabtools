@@ -83,12 +83,14 @@ describe('resetAllSettings — destructive factory reset', () => {
 		(globalThis as any).Filters = { _list: { 'example.com': 2 }, _saveList: vi.fn() };
 	});
 
-	it('refuses to run when the confirm prompt is dismissed', async () => {
-		window.confirm = vi.fn().mockReturnValue(false);
+	it('runs without a window.confirm prompt — the inline Confirm row gates it now (§7)', async () => {
+		// §7 replaced window.confirm with an inline Confirm/Cancel row (wired in
+		// optionsOnClick, covered by advanced-tab.test.ts). resetAllSettings is
+		// the post-confirm action, so it performs the reset unconditionally.
+		(window as any).confirm = vi.fn();
 		await harness.resetAllSettings();
-		expect(tilesClear).not.toHaveBeenCalled();
-		expect(storageClear).not.toHaveBeenCalled();
-		expect(reloadSpy).not.toHaveBeenCalled();
+		expect((window as any).confirm).not.toHaveBeenCalled();
+		expect(tilesClear).toHaveBeenCalled();
 	});
 
 	it('regression: dispatches the `Tiles.clear` background message (page-side Tiles has no .clear method)', async () => {

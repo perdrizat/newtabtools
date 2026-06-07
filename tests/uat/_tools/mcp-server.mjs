@@ -16,7 +16,7 @@
 //   browser_take_screenshot  -> daemon writes a PNG to disk (into this agent's
 //                               ARTIFACTS_DIR), returns the PATH only.
 //   browser_read_screenshot  -> reads a saved PNG INLINE from local disk on
-//                               demand (~1.2k image tokens per shot viewed).
+//                               demand (~2.8k image tokens per shot viewed).
 //
 // Env:
 //   UAT_DAEMON_PORT    daemon port (default 9876; must match the running daemon)

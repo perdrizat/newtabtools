@@ -125,6 +125,16 @@ var NttIcons = (() => {
 				el('circle', { cx: 12, cy: 18, r: 1.2, fill: color, stroke: 'none' }),
 			];
 		},
+		grip(color) {
+			return [
+				el('circle', { cx: 9, cy: 6, r: 1.3, fill: color, stroke: 'none' }),
+				el('circle', { cx: 15, cy: 6, r: 1.3, fill: color, stroke: 'none' }),
+				el('circle', { cx: 9, cy: 12, r: 1.3, fill: color, stroke: 'none' }),
+				el('circle', { cx: 15, cy: 12, r: 1.3, fill: color, stroke: 'none' }),
+				el('circle', { cx: 9, cy: 18, r: 1.3, fill: color, stroke: 'none' }),
+				el('circle', { cx: 15, cy: 18, r: 1.3, fill: color, stroke: 'none' }),
+			];
+		},
 		cmd() {
 			return [el('path', { d: 'M6 18a2 2 0 1 1 2-2v0h8v0a2 2 0 1 1-2 2v-8a2 2 0 1 1 2-2h0a2 2 0 1 1-2 2H8a2 2 0 1 1-2-2 2 2 0 0 1 2 2v8a2 2 0 0 1-2 2z' })];
 		},

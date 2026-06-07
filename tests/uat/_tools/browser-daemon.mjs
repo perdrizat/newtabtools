@@ -74,37 +74,41 @@ const [WIN_W, WIN_H] = (() => {
 // to render. A merged US/global + Swiss list, tech-leaning, all reachable
 // headless. Two visits per URL are needed before a site enters topSites, so the
 // seed runs two passes (see seedEnvironment). Override with $UAT_SEED_URLS
-// (comma/space/newline-separated).
-const SEED_URLS = (process.env.UAT_SEED_URLS
-	? process.env.UAT_SEED_URLS.split(/[\s,]+/).filter(Boolean)
-	: [
-		// US / global
-		'https://github.com/',
-		'https://news.ycombinator.com/',
-		'https://stackoverflow.com/',
-		'https://developer.mozilla.org/',
-		'https://www.theverge.com/',
-		'https://arstechnica.com/',
-		'https://www.bbc.com/news',
-		'https://en.wikipedia.org/wiki/Firefox',
-		// Swiss
-		'https://www.nzz.ch/',
-		'https://www.tagesanzeiger.ch/',
-		'https://www.migros.ch/',
-		'https://www.coop.ch/',
-		'https://www.ricardo.ch/',
-		'https://www.finews.ch/',
-	]);
+export const SITES = [
+	['https://github.com/', 'GitHub'],
+	['https://news.ycombinator.com/', 'Hacker News'],
+	['https://stackoverflow.com/', 'Stack Overflow'],
+	['https://store.steampowered.com/', 'Steam'],
+	['https://en.wikipedia.org/wiki/Firefox', 'Wikipedia'],
+	['https://developer.mozilla.org/en-US/', 'MDN Web Docs'],
+	['https://www.theverge.com/', 'The Verge'],
+	['https://techcrunch.com/', 'TechCrunch'],
+	['https://www.home-assistant.io/', 'Home Assistant'],
+	['https://www.heise.de/newsticker/', 'heise online'],
+	['https://www.bbc.com/news', 'BBC News'],
+	['https://www.digitec.ch/en', 'Digitec'],
+	['https://www.tomshardware.com/', 'Tom\'s Hardware'],
+	['https://www.ebay.com/', 'eBay'],
+	['https://www.adafruit.com/', 'Adafruit'],
+	['https://www.theregister.com/', 'The Register'],
+	['https://www.theblock.co/', 'The Block'],
+];
+
+export const VISIT_URLS = [...SITES.map(s => s[0])];
+
+const SEED_URLS = process.env.UAT_SEED_URLS ? process.env.UAT_SEED_URLS.split(/[\s,]+/).filter(Boolean) : VISIT_URLS;
+
 // News homepages used to seed the recently-closed row: we open each, find a top
 // article, navigate to it, then close the tab (the article URL — distinct from
 // the homepage tile — lands in chrome.sessions.getRecentlyClosed).
-const NEWS_URLS = (process.env.UAT_NEWS_URLS
+export const NEWS_URLS = (process.env.UAT_NEWS_URLS
 	? process.env.UAT_NEWS_URLS.split(/[\s,]+/).filter(Boolean)
 	: [
-		'https://www.theverge.com/',
-		'https://arstechnica.com/',
-		'https://www.bbc.com/news',
-		'https://www.nzz.ch/',
+		'https://www.theregister.com/',
+		'https://news.ycombinator.com/',
+		'https://techcrunch.com/',
+		'https://www.heise.de/newsticker/',
+		'https://www.theblock.co/',
 	]);
 const SEED_PAGELOAD_TIMEOUT_MS = 8000;
 // Cap how long /navigate waits for full page load. Default high (so UAT's
@@ -117,6 +121,19 @@ const NORMAL_PAGELOAD_TIMEOUT_MS = parseInt(process.env.UAT_PAGELOAD_MS, 10) || 
 // 3×3 = 9. /reset_extension returns the extension to this default and VERIFIES
 // the count, so a broken reset surfaces as a between-scenario failure.
 const DEFAULT_GRID_CELLS = 9;
+
+// Default "favourite" pins applied at startup and after every reset (a factory
+// reset wipes pinned tiles), so the board looks lived-in — real users pin a few.
+// Heise / Ars / Hacker News match the history-seed URLs (they convert auto →
+// pinned, no duplicate); the repo URL is pin-only. `Tiles.pinTile` is idempotent
+// (no-ops if already pinned).
+export const DEFAULT_PINS = [
+	{ url: 'https://www.heise.de/newsticker/', title: 'heise online' },
+	{ url: 'https://techcrunch.com/', title: 'TechCrunch' },
+	{ url: 'https://news.ycombinator.com/', title: 'Hacker News' },
+	{ url: 'https://developer.mozilla.org/en-US/', title: 'MDN Web Docs' },
+	{ url: 'https://github.com/perdrizat/newtabtools', title: 'NewTab PowerTools' },
+];
 
 const LOG_PATH = path.join(ARTIFACTS_DIR, 'daemon.log');
 fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
@@ -144,8 +161,8 @@ async function makeDriver() {
 	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 	opts.addArguments('-headless');
 	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
-	// viewport. Screenshots are downscaled before saving (see SHOT_SCALE) so the
-	// agent judges a representative FHD layout without the full-res token cost.
+	// viewport. Screenshots are saved at full resolution by default (see SHOT_SCALE)
+	// so the agent judges a representative FHD layout.
 	opts.addArguments(`--width=${WIN_W}`, `--height=${WIN_H}`);
 	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
 	await driver.manage().window().setRect({ x: 0, y: 0, width: WIN_W, height: WIN_H });
@@ -182,13 +199,25 @@ async function installExtension(d) {
 // Reused by the /dismiss_consent endpoint and the environment seed. Best-effort.
 async function dismissConsent(d) {
 	const clickConsent = () => d.executeScript(`
+		// Pre-sweep known CMP consent buttons (OneTrust, Quantcast, SourcePoint, Oath/Yahoo, TrustArc, etc.)
+		try {
+			const known = document.querySelector('button[name="agree"], button[value="agree"], button.fc-cta-consent, .fc-vendor-preferences-accept-all, button.sp_choice_type_11, #onetrust-accept-btn-handler, #sp-cc-accept, .js-accept-all-cookies, .cmp-intro_acceptAll, [data-testid="cookie-policy-dialog-accept-button"], button[data-action="accept-all"], #truste-consent-button, .qc-cmp2-agree, button.message-component, button.qc-cmp-button, .qc-cmp2-summary-buttons button[mode="primary"], .qc-cmp2-b-p, .qc-cmp-button.qc-cmp-secondary-button:last-child');
+			if (known) { known.click(); return 'known-cmp'; }
+		} catch (e) {}
+
+		// Reddit specific shadow-DOM CMP
+		try {
+			const rBtn = document.querySelector('shreddit-app').shadowRoot.querySelector('shreddit-async-button[button-text="Accept All"], button[slot="accept-all"]');
+			if (rBtn) { rBtn.click(); return 'reddit-cmp'; }
+		} catch (e) {}
+
 		// Click a consent ACCEPT control. Short button labels only; an ACCEPT
 		// pattern that must match and a DENY pattern that must NOT (so "I Accept"
 		// is clicked but "Do not accept" / "Manage options" / "Reject" are
 		// skipped). Pierces shadow DOM and matches in (cross-origin) iframes too.
-		const ACCEPT = /\\b(accept|consent|agree|allow|got it|continue|yes)\\b/i;
-		const DENY = /(do ?n.?t|manage|option|setting|custom|reject|decline|choice|preferenc|more|learn|disagree|essential|necessary|partners|purposes)/i;
-		const PREF = /\\b(accept all|accept|i accept|consent|agree|allow all)\\b/i;
+		const ACCEPT = /\b(accept|consent|agree|allow|got it|continue|yes|zustimmen|akzeptieren|einverstanden|ok)\b/i;
+		const DENY = /(do ?n.?t|manage|option|setting|custom|reject|decline|choice|preferenc|more|learn|disagree|essential|necessary|partners|purposes|ablehnen|einstellungen|zwecke)/i;
+		const PREF = /\b(accept all|accept|i accept|consent|agree|allow all|zustimmen|alle akzeptieren)\b/i;
 		const SEL = 'button,[role="button"],a,input[type="button"],input[type="submit"]';
 		const out = [];
 		(function collect(root) {
@@ -196,8 +225,8 @@ async function dismissConsent(d) {
 			try { for (const el of root.querySelectorAll('*')) { if (el.shadowRoot) { collect(el.shadowRoot); } } } catch (e) {}
 		})(document);
 		const cands = out
-			.map(el => ({ el, t: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim() }))
-			.filter(o => o.t && o.t.length <= 25 && ACCEPT.test(o.t) && !DENY.test(o.t));
+			.map(el => ({ el, t: (el.textContent || el.value || el.getAttribute('aria-label') || '').trim() }))
+			.filter(o => o.t && o.t.length <= 35 && ACCEPT.test(o.t) && !DENY.test(o.t));
 		cands.sort((a, b) => (PREF.test(b.t) ? 1 : 0) - (PREF.test(a.t) ? 1 : 0) || a.t.length - b.t.length);
 		if (cands.length) { cands[0].el.click(); return cands[0].t; }
 		return null;
@@ -205,7 +234,7 @@ async function dismissConsent(d) {
 	const clicked = [];
 	try { const r = await clickConsent(); if (r) { clicked.push(`main:${r}`); } } catch { /* ignore */ }
 	const frames = await d.findElements(By.css('iframe'));
-	for (const f of frames.slice(0, 10)) {
+	for (const f of frames.slice(0, 35)) {
 		try {
 			await d.switchTo().frame(f);
 			const r = await clickConsent();
@@ -224,12 +253,19 @@ async function dismissConsent(d) {
 					el.style.display = 'none';
 				}
 			}
-			// Collapse empty/served-blank ad slots (ads don't load headless).
-			const adSel = 'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="adservice"],iframe[src*="amazon-adsystem"],iframe[id*="google_ads"],[id^="ad-"],[id*="-ad-"],[class*="advertisement"],[class*="ad-slot"],[class*="ad-unit"],[data-ad],[aria-label="Advertisement" i]';
+			// Collapse empty/served-blank ad slots (ads don't load headless) and known ad containers.
+			const adSel = 'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="adservice"],iframe[src*="amazon-adsystem"],iframe[id*="google_ads"],[id^="ad-"],[id*="-ad-"],[id^="dfp-"],[class*="advertisement"],[class*="sponsored"],[class*="ad-slot"],[class*="ad-unit"],[data-ad],[aria-label="Advertisement" i],.ad-container,.ad-wrapper,[id*="banner-ad"],[class*="banner-ad"],[data-testid*="ad-"]';
 			for (const el of document.querySelectorAll(adSel)) {
-				if (el.textContent.trim().length < 20) { (el.closest('div,section,aside') || el).style.display = 'none'; }
+				el.style.setProperty('display', 'none', 'important');
+				el.style.setProperty('min-height', '0', 'important');
+				const p = el.parentElement;
+				if (p && p.textContent.trim().length < 50) p.style.setProperty('display', 'none', 'important');
 			}
 			document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+			document.body.style.setProperty('margin-top', '0', 'important');
+			document.body.style.setProperty('padding-top', '0', 'important');
+			document.documentElement.style.setProperty('margin-top', '0', 'important');
+			document.documentElement.style.setProperty('padding-top', '0', 'important');
 		`);
 	} catch { /* ignore */ }
 	return { ok: true, clicked };
@@ -249,7 +285,9 @@ async function seedRecentlyClosed(d) {
 		try {
 			await d.switchTo().newWindow('tab');
 			try { await d.get(home); } catch { /* slow */ }
-			await sleep(1500);
+			await sleep(2500);
+			try { await dismissConsent(d); } catch { /* best effort */ }
+			await sleep(1000);
 			try { await dismissConsent(d); } catch { /* best effort */ }
 			articles = await d.executeScript(`
 				const origin = location.origin, seen = new Set(), out = [];
@@ -292,7 +330,9 @@ async function seedEnvironment(d) {
 		// BBC) render their Accept control in an async cross-origin iframe a few
 		// seconds after load. Accepting here sets a cookie that persists for the
 		// run, so the site is banner-free on every later visit (incl. captures).
-		await sleep(3000);
+		await sleep(2500);
+		try { await dismissConsent(d); } catch { /* best effort */ }
+		await sleep(1000);
 		try { await dismissConsent(d); } catch { /* best effort */ }
 	}
 	for (const url of SEED_URLS) {
@@ -306,16 +346,16 @@ async function seedEnvironment(d) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Screenshots render at Full HD but are saved downscaled to keep the agent's
-// image-token cost low (these tests judge layout/occlusion/contrast, not exact
-// pixel placement). 0.5 → a 1920-wide capture is saved ~960 wide, which keeps
-// tile titles and the About text legible while roughly quartering the pixels.
-// Override with $UAT_SHOT_SCALE; set to 1 to disable. The downscale runs in-page
-// on a <canvas> (the extension CSP allows `img-src data:`), so it needs no extra
+// Screenshots render at Full HD. By default they are saved at full resolution
+// (scale 1). To reduce the agent's image-token cost, they can be downscaled
+// (e.g. 0.5 -> a 1920-wide capture is saved ~960 wide, which roughly quarters
+// the pixels while keeping text legible).
+// Override with $UAT_SHOT_SCALE. The downscale runs in-page on a <canvas>
+// (the extension CSP allows `img-src data:`), so it needs no extra
 // dependency or external image tool.
 const SHOT_SCALE = (() => {
 	const v = parseFloat(process.env.UAT_SHOT_SCALE);
-	return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.5;
+	return Number.isFinite(v) && v > 0 && v <= 1 ? v : 1;
 })();
 const DOWNSCALE_SCRIPT = `
 	const b64 = arguments[0], factor = arguments[1], done = arguments[arguments.length - 1];
@@ -362,29 +402,93 @@ async function waitForCells(expected, timeoutMs) {
 	throw new Error(`grid never reached ${expected} cells (last=${last}) within ${timeoutMs}ms`);
 }
 
-async function openAdvancedDrawer() {
-	await driver.findElement(By.css('#options-toggle')).click();
-	await sleep(300);
-	await driver.findElement(By.css('[data-drawer-tab="advanced"]')).click();
-	await sleep(300);
+// Open each URL in the main tab to trigger the extension's auto-thumbnail +
+// favicon capture (the background captures the visible tab on load and stores it
+// in the Thumbnails IDB store, keyed by URL), then return to the new-tab page.
+async function captureTiles(urls, settleMs = 3000) {
+	await driver.manage().setTimeouts({ pageLoad: 20000 });
+	let visited = 0;
+	for (const u of urls) {
+		try { await driver.get(u); } catch { /* slow — a partial load still triggers capture */ }
+		visited++;
+		await sleep(settleMs); // let the multi-stage capture finalize
+	}
+	await driver.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
+	await driver.get(NEWTAB_URL);
+	await sleep(1500);
+	return visited;
+}
+
+// One-time live capture of the DEFAULT_PINS so the pinned favourites carry real
+// screenshots + favicons. The capture lands in the Thumbnails IDB store keyed by
+// URL; the lighter between-scenario reset preserves that store, so this runs ONCE
+// (at startup) and the imagery survives every reset — re-pinned tiles re-fetch it
+// by URL via getThumbnails()/getFavicons() (Option B).
+let defaultPinsCaptured = false;
+async function captureDefaultPins() {
+	if (defaultPinsCaptured) { return; }
+	await captureTiles(DEFAULT_PINS.map(p => p.url));
+	defaultPinsCaptured = true;
+	log(`default pin thumbnails + favicons captured: ${DEFAULT_PINS.length}`);
+}
+
+// Pin the DEFAULT_PINS via the background `Tiles.pinTile` message (idempotent;
+// the handler live-updates the open grid). Applied at startup and after every
+// reset so screenshots show a few pinned "favourites". Best-effort: a pin that
+// doesn't paint logs a warning rather than aborting the run.
+async function pinDefaultTiles() {
+	await driver.get(NEWTAB_URL);
+	await driver.manage().setTimeouts({ script: 20000 });
+	await driver.executeAsyncScript(function(pins, done) {
+		(async function() {
+			for (const p of pins) {
+				await new Promise(function(res) {
+					chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: p.title, url: p.url }, function() { res(); });
+				});
+			}
+			done(true);
+		})();
+	}, DEFAULT_PINS);
+	await driver.get(NEWTAB_URL);
+	try {
+		await driver.wait(async function() {
+			const n = await driver.executeScript('return document.querySelectorAll(".newtab-site[pinned]").length;');
+			return n >= DEFAULT_PINS.length;
+		}, 10000);
+		log(`default tiles pinned: ${DEFAULT_PINS.length}`);
+	} catch {
+		const n = await driver.executeScript('return document.querySelectorAll(".newtab-site[pinned]").length;').catch(() => 0);
+		log(`WARN: only ${n}/${DEFAULT_PINS.length} default pins rendered`);
+	}
 }
 
 // Between-scenario reset: return the extension to its default state and verify.
-// Drives the built-in reset (#options-reset-all -> resetAllSettings()), bypassing
-// its blocking window.confirm; it clears prefs + pinned tiles + thumbnails and
-// reloads to the default 3×3 grid (which refills from the seeded history). The
-// seeded ENVIRONMENT — Firefox history, accepted-cookie state, and the
-// recently-closed list — is browser-level and survives the reset, so every
-// scenario starts from the same default UI on top of the same environment.
-// Restoring the known-good fixture is now an explicit scenario step (03-restore),
-// not part of the reset.
+// Option B (Thumbnails-preserving): clear the `tiles` + `background` IDB stores and
+// prefs (storage.local) via background messages, but DELIBERATELY leave the
+// `thumbnails` store intact — the default pins' screenshots + favicons were captured
+// once at startup (see captureDefaultPins) and live there keyed by URL, so re-pinning
+// below re-attaches them by URL on render with no per-reset recapture. This is lighter
+// than driving the UI "Reset everything" path, which also wipes thumbnails. The seeded
+// ENVIRONMENT — Firefox history, accepted-cookie state, and the recently-closed list —
+// is browser-level and survives regardless, so every scenario starts from the same
+// default UI on top of the same environment. Restoring the known-good fixture is an
+// explicit scenario step (21-restore), not part of the reset.
 async function resetToDefault() {
 	await driver.get(NEWTAB_URL);
-	await openAdvancedDrawer();
-	await driver.executeScript('window.confirm = () => true;');
-	await driver.findElement(By.css('#options-reset-all')).click();
-	const resetCells = await waitForCells(DEFAULT_GRID_CELLS, 15000);
+	await driver.manage().setTimeouts({ script: 20000 });
+	await driver.executeAsyncScript(function(done) {
+		(async function() {
+			await new Promise(function(res) { chrome.runtime.sendMessage({ name: 'Tiles.clear' }, function() { res(); }); });
+			await new Promise(function(res) { chrome.runtime.sendMessage({ name: 'Background.setBackground', file: null }, function() { res(); }); });
+			await new Promise(function(res) { chrome.storage.local.clear(function() { res(); }); });
+			done(true);
+		})();
+	});
 	await driver.get(NEWTAB_URL);
+	const resetCells = await waitForCells(DEFAULT_GRID_CELLS, 15000);
+	// Re-apply the default pins — Tiles.clear wiped them; their imagery survives in
+	// the preserved thumbnails store and re-attaches by URL on render.
+	await pinDefaultTiles();
 	return { ok: true, resetCells };
 }
 
@@ -392,7 +496,9 @@ const driver = await makeDriver();
 await seedEnvironment(driver);
 await installExtension(driver);
 await driver.get(NEWTAB_URL);
-log('initial newTab.xhtml loaded (extension installed post-seed)');
+await pinDefaultTiles();
+await captureDefaultPins();
+log('initial newTab.xhtml loaded (extension installed post-seed; default tiles pinned + imagery captured)');
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
 
@@ -443,26 +549,12 @@ async function handle(method, url, body) {
 		return { ok: true, opened: (body.urls || []).length };
 	}
 	case '/capture_tiles': {
-		// Open each tile URL in the main tab to trigger the extension's auto-thumbnail
-		// + favicon capture (the background script captures the visible tab on load),
-		// then return to the new-tab page. A short page-load timeout keeps a slow site
-		// from hanging the run; cookies were accepted during the seed, so pages are
-		// clean. One call replaces N agent navigations — cheap and bounded.
-		const urls = body.urls || [];
-		const settleMs = body.settleMs || 3000;
-		await driver.manage().setTimeouts({ pageLoad: 20000 });
-		let visited = 0;
-		for (const u of urls) {
-			try { await driver.get(u); } catch { /* slow — a partial load still triggers capture */ }
-			visited++;
-			// No consent handling here: cookie banners were accepted during the #0
-			// seed and that acceptance persists in the profile, so these tile URLs
-			// load banner-free and the multi-stage capture finalizes clean.
-			await sleep(settleMs); // let the capture finalize
-		}
-		await driver.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
-		await driver.get(NEWTAB_URL);
-		await sleep(1500);
+		// Open each tile URL to trigger the extension's auto-thumbnail + favicon
+		// capture, then return to the new-tab page (see captureTiles). Cookies were
+		// accepted during the #0 seed and persist in the profile, so these URLs load
+		// banner-free and the multi-stage capture finalizes clean. One call replaces N
+		// agent navigations — cheap and bounded.
+		const visited = await captureTiles(body.urls || [], body.settleMs || 3000);
 		return { ok: true, visited };
 	}
 	case '/close_other_tabs': {

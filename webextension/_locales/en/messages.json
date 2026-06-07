@@ -281,6 +281,24 @@
 	"options_button": {
 		"message": "Settings"
 	},
+	"options_edit": {
+		"message": "Edit"
+	},
+	"options_done": {
+		"message": "Done"
+	},
+	"tile_add": {
+		"message": "+ Add tile"
+	},
+	"confirm_yes": {
+		"message": "Confirm"
+	},
+	"confirm_cancel": {
+		"message": "Cancel"
+	},
+	"restore_confirm": {
+		"message": "Restore from backup? This replaces your current tiles and settings."
+	},
 	"options_recent": {
 		"message": "Recently closed tabs"
 	},

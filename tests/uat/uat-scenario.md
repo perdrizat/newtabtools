@@ -39,7 +39,7 @@ Some scenarios restore the known-good fixture via the UI. When directed:
 1. `browser_navigate` to `newTab.xhtml`; `browser_take_screenshot` named `00-initial`.
 2. Click `#options-toggle` (open drawer), then `[data-drawer-tab="advanced"]`.
 3. `mcp__ntt-uat__browser_file_upload` the fixture into `#options-restore-file`. The fixture's absolute path is in the runner prologue ("Fixture zip (absolute path)") — use it verbatim.
-4. Click `#options-restore`.
+4. Click `#options-restore`, then click `#options-restore-confirm` in the inline confirmation row that appears. (Restore overwrites the whole setup, so §7 gates it behind an inline Confirm/Cancel row — clicking Restore only *reveals* the prompt; the restore runs on Confirm.)
 5. Wait until `document.querySelectorAll('.newtab-cell').length === 16` (poll with `browser_evaluate`, ~10s budget) — the fixture's 4×4 grid is the restore signal. (The grid then fills from the seeded history, so the populated `.newtab-site` count settles at 16, not 9.) Restore applies **live** — tiles, grid, theme, and wallpaper take effect with no reload.
 6. Click `#options-toggle` to close the drawer.
 7. **Capture the restored state:** `browser_take_screenshot` named `01-restored` — the clean restored page, drawer closed.
@@ -49,6 +49,17 @@ If any restore step fails (selector missing, file input rejects the zip, count n
 **Grid vs. tiles — don't confuse them.** `.newtab-cell` counts the grid slots (rows×columns: **9** for the default 3×3, **16** for the fixture's 4×4); `.newtab-site` counts the populated tiles. Use `.newtab-cell` count for grid dimensions, and `.newtab-site` count or tile content (titles/links) for tile presence.
 
 **Screenshots tell the story.** A reviewer flips through a run's screenshots in filename order to confirm it concluded correctly, so always leave at least the `00-initial` (before) and `01-restored` (after) frames, plus any state your scenario changes. The harness stamps each shot's filename with its capture time, so they always sort in the order you took them — you don't need to worry about ordering, just give each shot a short descriptive name (e.g. `grid`, `about`, `hover`).
+
+## Known v2 behaviours — do NOT flag these as defects
+
+These are intended designs (DESIGNv2_REVIEW), not bugs:
+
+- **Opening the drawer IS Edit mode (§2).** Whenever the drawer is open, the board behind it is in edit mode: pinned tiles show a dashed copper outline + a centred drag handle + a persistent top-right action row; auto (non-pinned) tiles fade and show a centred "+ Add tile"; the titlebar button reads `Done`. This is correct — don't report it as unexpected clutter or occlusion.
+- **Reach the page by its `moz-extension://<uuid>/newTab.xhtml` URL** (the runner prologue / preamble give it). `about:newtab` returns an empty non-extension document in this harness — that is not a defect.
+- **Key selectors:** the drawer is `#ntt-drawer`; the single titlebar action button is `#options-toggle` (reads `Edit`, or `Done` while open); there is no wordmark, padlock, or cogwheel (Board A §1).
+- **Recently-closed chips render the letter-block fallback favicon** in the seeded environment (closed-tab session data carries no favicon). §4 permits the fallback at the same size/radius — don't flag the absence of real favicons.
+- **Disabled-looking Restore button** when no backup file is selected is the expected resting state.
+- **The board ships with a few pinned "favourite" tiles by default** (heise, TechCrunch, Hacker News, MDN, and the NewTab Tools repo) — the daemon pins them at startup and re-pins after every reset, so the default board looks lived-in. They're expected; don't flag them as user-added or unexpected, and a pinned tile correctly shows the accent top-edge stripe. **These pins carry real page thumbnails + favicons** (the daemon captures them once at startup; the between-scenario reset preserves the thumbnails store, so they survive). Only the history-derived (non-pinned) tiles start bare — when a scenario checks the "new-user no-thumbnail" state, scope it to `.newtab-site:not([pinned])`.
 
 ## Assertion vocabulary
 
@@ -60,7 +71,7 @@ Match the tool to the kind of assertion:
 | **Evidence-only** (capture for the record) | `mcp__ntt-uat__browser_take_screenshot` | When the scenario or your judgment calls for a screenshot but you don't need to look at it yourself — the runner archives it; do NOT `browser_read_screenshot` evidence-only shots |
 | **Visual judgment** (does this look right?) | `browser_take_screenshot` + then `browser_read_screenshot` | When the scenario asks you to judge — read the image inline, write a verdict in `summary.md` and `report.json` |
 
-`browser_read_screenshot` costs ~1200 image tokens. Read only the shots you must judge.
+`browser_read_screenshot` costs ~2800 image tokens (at full resolution). Read only the shots you must judge.
 
 **`browser_evaluate` runs your script via Selenium `executeScript`** — it returns a value only if your script has an explicit `return`. `document.querySelectorAll('.newtab-site').length` returns `null`; `return document.querySelectorAll('.newtab-site').length` returns the number. Always `return` what you want to read, and don't use top-level `await` (wrap async work or assert on something synchronous).
 

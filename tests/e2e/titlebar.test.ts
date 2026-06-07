@@ -23,7 +23,7 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 		}
 	});
 
-	it('renders #ntt-titlebar with wordmark, search, recent container, and buttons', async () => {
+	it('renders #ntt-titlebar with search, recent container, and a single Edit button (Board A)', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -33,16 +33,18 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 				() => {
 					const bar = document.getElementById('ntt-titlebar');
 					if (!bar) { return false; }
-					const mast = document.getElementById('ntt-masthead');
-					const wordmark = !!(mast && mast.querySelector('#ntt-wordmark'));
 					const search = !!document.getElementById('ntt-search');
 					const recent = !!document.getElementById('ntt-titlebar-recent');
-					const buttons = !!(mast && mast.querySelector('#ntt-titlebar-buttons'));
-					// Clock + theme toggle were removed in the inline-recent redesign.
+					const edit = !!document.getElementById('options-toggle');
+					// Board A drops the wordmark, masthead, lock/cogwheel cluster,
+					// clock, and theme toggle.
+					const noWordmark = !document.getElementById('ntt-wordmark');
+					const noMasthead = !document.getElementById('ntt-masthead');
+					const noButtons = !document.getElementById('ntt-titlebar-buttons');
+					const noLock = !document.getElementById('locked-toggle');
 					const noClock = !document.getElementById('ntt-clock');
-					const noTheme = !document.getElementById('ntt-theme-toggle');
-					if (wordmark && search && recent && buttons && noClock && noTheme) { return true; }
-					return JSON.stringify({ wordmark, search, recent, buttons, noClock, noTheme });
+					if (search && recent && edit && noWordmark && noMasthead && noButtons && noLock && noClock) { return true; }
+					return JSON.stringify({ search, recent, edit, noWordmark, noMasthead, noButtons, noLock, noClock });
 				},
 				[],
 				{ timeout: 10_000, message: 'Titlebar elements not as expected' }
@@ -104,7 +106,7 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 		}
 	});
 
-	it('wordmark displays extension name', async () => {
+	it('the single titlebar action button reads "Edit"', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -112,19 +114,17 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 			const text = await waitForCondition(
 				page,
 				() => {
-					const el = document.getElementById('ntt-wordmark');
+					const el = document.getElementById('options-toggle');
 					if (!el) { return false; }
-					const t = el.textContent || '';
-					// Two-line wordmark: "New Tab" / "Powertools".
-					return (t.includes('New Tab') && t.includes('Powertools')) ? t : false;
+					const t = (el.textContent || '').trim();
+					return t === 'Edit' ? t : false;
 				},
 				[],
-				{ timeout: 10_000, message: 'Wordmark text not found' }
+				{ timeout: 10_000, message: 'Edit button text not found' }
 			);
-			expect(text).toContain('New Tab');
-			expect(text).toContain('Powertools');
+			expect(text).toBe('Edit');
 		} catch (e) {
-			await captureFailure(page, 'titlebar-wordmark');
+			await captureFailure(page, 'titlebar-edit-label');
 			throw e;
 		} finally {
 			await page.close();
@@ -155,38 +155,34 @@ describe('E2E: Titlebar (inline-recent slot layout)', () => {
 		}
 	});
 
-	it('buttons cell (lock + cogwheel) sits at the right edge of the titlebar', async () => {
+	it('the Edit button sits flush at the right edge of the titlebar', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 		try {
 			const result = await page.evaluate(() => {
 				const tb = document.getElementById('ntt-titlebar') as HTMLElement;
-				const mast = document.getElementById('ntt-masthead') as HTMLElement;
+				const edit = document.getElementById('options-toggle') as HTMLElement;
 				const recent = document.getElementById('ntt-titlebar-recent') as HTMLElement;
 				const cs = getComputedStyle(tb);
 				const padR = parseFloat(cs.paddingRight) || 0;
 				const rcs = recent ? getComputedStyle(recent) : null;
 				return {
-					gap: tb.getBoundingClientRect().right - mast.getBoundingClientRect().right - padR,
-					hasWordmark: !!mast.querySelector('#ntt-wordmark'),
-					buttonCount: mast.querySelectorAll('#ntt-titlebar-buttons input, #ntt-titlebar-buttons button').length,
+					gap: tb.getBoundingClientRect().right - edit.getBoundingClientRect().right - padR,
+					editText: (edit.textContent || '').trim(),
 					tbWidth: Math.round(tb.getBoundingClientRect().width),
 					recentWidth: recent ? Math.round(recent.getBoundingClientRect().width) : -1,
-					mastWidth: Math.round(mast.getBoundingClientRect().width),
 					recentFlex: rcs ? rcs.flexGrow + '/' + rcs.flexShrink + '/' + rcs.flexBasis : 'n/a',
 					tbDisplay: cs.display,
 				};
 			});
-			// The masthead's right edge hugs the titlebar content edge.
+			// The Edit button's right edge hugs the titlebar content edge.
 			expect(
 				Math.abs(result.gap),
-				`masthead not flush right — ${JSON.stringify(result)}`
+				`Edit button not flush right — ${JSON.stringify(result)}`
 			).toBeLessThan(4);
-			// Combined box holds the wordmark + lock + cogwheel (theme removed).
-			expect(result.hasWordmark).toBe(true);
-			expect(result.buttonCount).toBe(2);
+			expect(result.editText).toBe('Edit');
 		} catch (e) {
-			await captureFailure(page, 'titlebar-buttons-right');
+			await captureFailure(page, 'titlebar-edit-right');
 			throw e;
 		} finally {
 			await page.close();

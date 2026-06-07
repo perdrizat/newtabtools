@@ -199,6 +199,16 @@ describe('Recently-closed tabs — newTab.js', () => {
 		expect(urlText.textContent).toBe('example.com');
 	});
 
+	it('domain span shows the registrable domain — strips a leading www. (§4)', () => {
+		const items = [
+			{ tab: { url: 'https://www.theverge.com/tech', title: 'The Verge', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		harness.refreshRecent();
+		const urlEl = appendedCards[0]._children[1]._children[1];
+		expect(urlEl._children[0].textContent).toBe('theverge.com');
+	});
+
 	it('sets tooltip with title and URL when both differ', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },

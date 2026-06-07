@@ -1,20 +1,24 @@
 # Tile action buttons
 
-On hover, a tile shows a row of action buttons across its top. The row must be
-hidden at rest, appear on hover, stay inside the tile, and not cover the tile's
-title.
+At rest a tile shows a single kebab; on hover the kebab is replaced by a row of
+action buttons across its top. The row must be hidden at rest, appear on hover,
+stay inside the tile, and not cover the tile's title (§3c).
 
 Skip the restore preamble. `browser_navigate` to the new-tab page and take a
 `00-initial` screenshot (resting state, no hover).
 
 Target the first tile: `.newtab-cell:nth-child(1) .newtab-site`. Its parts are
-`.ntt-actions` (the action row) and `.newtab-title` (the bottom overlay).
+`.ntt-actions-kebab` (the rest affordance), `.ntt-actions` (the hover row), and
+`.newtab-title` (the bottom overlay).
 
 ## Verify — resting state (structural, `browser_evaluate`)
 
 1. **Action row hidden at rest:**
    `getComputedStyle(document.querySelector('.newtab-cell:nth-child(1) .ntt-actions')).opacity`
    === `'0'`.
+1b. **Kebab shown at rest:**
+   `getComputedStyle(document.querySelector('.newtab-cell:nth-child(1) .ntt-actions-kebab')).opacity`
+   === `'1'`.
 
 ## Verify — hover state (structural)
 
@@ -57,6 +61,6 @@ then assert (each as a single `return`-ing expression):
 
 ## Output
 
-- `report.json` — the five structural assertions plus the visual verdict.
+- `report.json` — the six structural assertions plus the visual verdict.
 - `summary.md` — lead with the verdict, then describe the hover state: where the
   action row sits and whether it occludes the title.

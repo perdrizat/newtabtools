@@ -183,13 +183,15 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			});
 			expect(locked).toBe('true');
 
-			// When locked, :root[locked="true"] .ntt-actions { display: none }
+			// §3c: hover actions are NOT gated on lock anymore — the row is
+			// opacity:0 at rest but stays display-able so it's reachable on hover
+			// even while the board is locked (normal mode).
 			const actionsDisplay = await page.evaluate(() => {
 				const actions = document.querySelector('.ntt-actions');
 				if (!actions) {return 'no-actions';}
 				return window.getComputedStyle(actions).display;
 			});
-			expect(actionsDisplay).toBe('none');
+			expect(actionsDisplay).not.toBe('none');
 
 			// Cleanup: unlock and unpin.
 			await page.evaluate(() => {

@@ -5,7 +5,8 @@ tiles, grid size, spacing, and wallpaper all change with no page reload.
 
 Run the **restore preamble** from the `uat-scenario` skill (navigate → open drawer
 → Advanced → upload the fixture into `#options-restore-file` → click
-`#options-restore` → wait for the grid to repopulate → close drawer). It leaves a
+`#options-restore` then confirm via `#options-restore-confirm` → wait for the grid
+to repopulate → close drawer). It leaves a
 `00-initial` (before) and `01-restored` (after) screenshot; you'll judge
 `01-restored`.
 

@@ -96,20 +96,23 @@ describe('Tile redesign — CSS (newTab.css)', () => {
 		expect(css).toMatch(/\.newtab-site\[pinned\]\s+\.ntt-pin-stripe[^{]*\{[^}]*display:\s*block/);
 	});
 
-	it('.ntt-overlay gradient has 3 stops for title contrast', () => {
+	it('.ntt-overlay gradient ramps into a near-solid dark floor (§3a)', () => {
+		// §3a: a pure fade-to-transparent gave white titles nothing to sit on
+		// over light thumbnails. The ramp now starts lower (12%), reaches a
+		// mid-strength floor by 50%, and lands near-solid at the bottom.
 		const overlayBlock = css.match(/\.ntt-overlay\s*\{[^}]*\}/s);
 		expect(overlayBlock).toBeTruthy();
 		const bg = overlayBlock![0];
 		expect(bg).toMatch(/linear-gradient/);
-		expect(bg).toMatch(/rgba\(0,\s*0,\s*0,\s*0\)\s*20%/);
-		expect(bg).toMatch(/rgba\(0,\s*0,\s*0,\s*0\.55\)\s*55%/);
+		expect(bg).toMatch(/transparent\s+12%/);
+		expect(bg).toMatch(/rgba\(0,\s*0,\s*0,\s*0\.45\)\s*50%/);
 		expect(bg).toMatch(/rgba\(0,\s*0,\s*0,\s*0\.85\)\s*100%/);
 	});
 
-	it('.newtab-title has text-shadow for contrast', () => {
+	it('.newtab-title has text-shadow for contrast (§3a — strengthened to 0.6)', () => {
 		const titleBlock = css.match(/\.newtab-title\s*\{[^}]*\}/s);
 		expect(titleBlock).toBeTruthy();
-		expect(titleBlock![0]).toMatch(/text-shadow:\s*0\s+1px\s+3px\s+rgba\(0,\s*0,\s*0,\s*[.0-9]*0\.55\)/);
+		expect(titleBlock![0]).toMatch(/text-shadow:\s*0\s+1px\s+3px\s+rgba\(0,\s*0,\s*0,\s*[.0-9]*0\.6\)/);
 	});
 
 	it('.ntt-overlay is positioned at bottom', () => {
@@ -208,8 +211,9 @@ describe('Tile redesign — JS (fx-newTab.js)', () => {
 		expect(fxSource).toMatch(/this\._node\.setAttribute\('pinned'/);
 	});
 
-	it('open action validates URL before chrome.tabs.create (§1.2)', () => {
-		expect(fxSource).toMatch(/case\s+'open'[\s\S]*?isValidURL/);
+	it('the "open in new tab" action is removed (§3c — redundant with click)', () => {
+		expect(fxSource).not.toMatch(/case\s+'open'/);
+		expect(fxSource).not.toMatch(/action:\s*'open'/);
 	});
 
 	it('fresh stat uses data-stat-fresh attribute, not inline styles (§3.2)', () => {
@@ -301,12 +305,12 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('_renderActions produces 5 buttons with correct data-action values', () => {
+	it('_renderActions produces 4 buttons in §3c order (no "open in new tab")', () => {
 		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btns = site.node.querySelectorAll('.ntt-action-btn');
-		expect(btns.length).toBe(5);
+		expect(btns.length).toBe(4);
 		const actions = Array.from(btns).map((b: any) => b.getAttribute('data-action'));
-		expect(actions).toEqual(['edit', 'open', 'refresh', 'pin', 'remove']);
+		expect(actions).toEqual(['edit', 'refresh', 'pin', 'remove']);
 		cleanup();
 	});
 

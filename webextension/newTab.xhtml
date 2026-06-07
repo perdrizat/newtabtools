@@ -20,19 +20,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<input id="ntt-search-input" type="text" placeholder="Search the web, jump to a tile, or paste a URL…" autocomplete="off" />
 					<span class="ntt-search-kbd">/</span>
 				</div>
-				<div id="ntt-masthead">
-					<div id="ntt-wordmark">
-						<div id="ntt-wordmark-icon">N</div>
-						<div id="ntt-wordmark-text">
-							<span id="ntt-wordmark-name">New Tab</span>
-							<span id="ntt-wordmark-name2">Powertools</span>
-						</div>
-					</div>
-					<div id="ntt-titlebar-buttons">
-						<input id="locked-toggle" type="button" data-title="options_locked" />
-						<input id="options-toggle" type="button" data-title="options_button" />
-					</div>
-				</div>
+				<button id="options-toggle" type="button" data-message="options_edit"></button>
 			</div>
 			<div id="newtab-margin-top">
 				<div class="newtab-side-margin newtab-margin-left"></div>
@@ -75,7 +63,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					</div>
 					<div class="options-row">
 						<input id="options-pinURL-input" type="url" required="true" autocomplete="off" data-placeholder="pin_url_placeholder" />
-						<button id="options-pinURL" data-message="pin_url_button"></button>
+						<button id="options-pinURL" class="ntt-btn-primary" data-message="pin_url_button"></button>
 					</div>
 					<div class="options-row" style="position: relative;">
 						<ul id="autocomplete" hidden="">
@@ -109,7 +97,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<label id="options-url"></label>
 						<div id="options-edit-url" class="options-row">
 							<input id="options-url-input" data-placeholder="tile_url_placeholder" />
-							<button id="options-url-set" data-message="tile_url_set"></button>
+							<button id="options-url-set" class="ntt-btn-primary" data-message="tile_url_set"></button>
 						</div>
 						<label class="options-row-label" for="options-savedthumb-input" data-message="tile_savedthumb_label"></label>
 						<div class="options-row">
@@ -132,7 +120,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<label class="options-row-label" for="options-title-input" data-message="tile_title_label"></label>
 						<div id="options-edit-title" class="options-row">
 							<input id="options-title-input" data-placeholder="tile_title_placeholder" />
-							<button id="options-title-set" data-message="tile_title_set"></button>
+							<button id="options-title-set" class="ntt-btn-primary" data-message="tile_title_set"></button>
 						</div>
 					</div>
 				</div>
@@ -191,11 +179,6 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<button type="button" role="radio" data-value="medium" data-message="options_size_medium"></button>
 						<button type="button" role="radio" data-value="large" data-message="options_size_large"></button>
 					</div>
-				</div>
-				<div class="ntt-form-group">
-					<label class="ntt-checkbox-row">
-						<input type="checkbox" name="locked" data-label="options_locked" />
-					</label>
 				</div>
 			</section>
 			<section data-drawer-panel="page">
@@ -307,11 +290,14 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 				</div>
 			</section>
 			<section data-drawer-panel="advanced" hidden="">
-				<div class="ntt-form-group">
-					<label class="ntt-checkbox-row">
-						<input type="checkbox" name="history" data-label="options_historytiles" />
-						<button id="historytiles-filter" data-message="filter_button"></button>
-					</label>
+				<div class="ntt-form-group" data-group="history">
+					<div class="ntt-toggle-row" data-pref="history">
+						<span class="ntt-toggle-label"><span data-message="options_historytiles"></span></span>
+						<button type="button" role="switch" class="ntt-toggle" data-pref="history" aria-checked="true"></button>
+					</div>
+					<div class="options-row">
+						<button id="historytiles-filter" class="ntt-btn-ghost" data-message="filter_button"></button>
+					</div>
 				</div>
 				<div class="ntt-form-group" id="options-filter">
 					<div class="ntt-form-group-head">
@@ -337,12 +323,12 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 									<td>
 										<div style="display: flex">
 											<input id="options-filter-count" type="text" size="1" maxlength="2" required="" pattern="^\d+$" style="flex: 1; text-align: center;" data-placeholder="filter_placeholder_limit" />
-											<button id="options-filter-set" disabled="" data-message="filter_set" />
+											<button id="options-filter-set" class="ntt-btn-primary" disabled="" data-message="filter_set" />
 										</div>
 									</td>
 								</tr>
 								<tr>
-									<td colspan="3" style="font-style: italic; text-align: center; line-height: 1.5;" data-message="filter_helptext"></td>
+									<td colspan="3" style="text-align: center; line-height: 1.5;" data-message="filter_helptext"></td>
 								</tr>
 							</tfoot>
 							<tbody>
@@ -366,13 +352,18 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					</div>
 					<div class="ntt-form-group-help" data-message="backup_description"></div>
 					<div class="options-row">
-						<button id="options-backup" data-message="backup_button"></button>
+						<button id="options-backup" class="ntt-btn-ghost" data-message="backup_button"></button>
 					</div>
 					<div class="ntt-form-group-help" data-message="restore_description"></div>
-					<div class="ntt-form-group-help" data-message="restore_warning" style="font-style: italic;"></div>
+					<div class="ntt-form-group-help" data-message="restore_warning"></div>
 					<div class="options-row">
 						<input id="options-restore-file" type="file" accept="application/zip" />
-						<button id="options-restore" disabled="" data-message="restore_button"></button>
+						<button id="options-restore" class="ntt-btn-danger" disabled="" data-message="restore_button"></button>
+					</div>
+					<div class="options-row ntt-confirm-row" id="options-restore-confirm-row" hidden="">
+						<span class="ntt-confirm-prompt" data-message="restore_confirm"></span>
+						<button id="options-restore-confirm" class="ntt-btn-danger" data-message="confirm_yes"></button>
+						<button id="options-restore-cancel" class="ntt-btn-ghost" data-message="confirm_cancel"></button>
 					</div>
 				</div>
 				<div class="ntt-form-group" id="options-reset-group">
@@ -380,9 +371,14 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<span class="ntt-form-group-label" data-message="reset_header"></span>
 					</div>
 					<div class="ntt-form-group-help" data-message="reset_description"></div>
-					<div class="ntt-form-group-help" data-message="reset_warning" style="font-style: italic;"></div>
+					<div class="ntt-form-group-help" data-message="reset_warning"></div>
 					<div class="options-row">
-						<button id="options-reset-all" data-message="reset_button"></button>
+						<button id="options-reset-all" class="ntt-btn-danger" data-message="reset_button"></button>
+					</div>
+					<div class="options-row ntt-confirm-row" id="options-reset-confirm-row" hidden="">
+						<span class="ntt-confirm-prompt" data-message="reset_confirm"></span>
+						<button id="options-reset-confirm" class="ntt-btn-danger" data-message="confirm_yes"></button>
+						<button id="options-reset-cancel" class="ntt-btn-ghost" data-message="confirm_cancel"></button>
 					</div>
 				</div>
 				<div class="ntt-form-group" id="options-about">
@@ -419,7 +415,10 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 			</a>
 			<span class="ntt-pin-stripe" />
 			<span class="ntt-stat-chip" />
+			<span class="ntt-actions-kebab" />
 			<span class="ntt-actions" />
+			<span class="ntt-drag-handle" />
+			<span class="ntt-add-tile" />
 			<span class="ntt-overlay">
 				<span class="ntt-favicon" />
 				<span class="newtab-title" />

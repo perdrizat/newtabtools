@@ -125,13 +125,9 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			// Open settings → filter panel.
 			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
-			await page.evaluate(() => {
-				const cb = document.querySelector('[name="history"]') as HTMLInputElement;
-				if (!cb.checked) {
-					cb.checked = true;
-					cb.dispatchEvent(new Event('change', { bubbles: true }));
-				}
-			});
+			// History is a copper toggle now (no native checkbox) — enable it via
+			// the pref, which updateUI mirrors onto the toggle + enables the filter.
+			await page.evaluate(() => { (window as any).Prefs.history = true; });
 			await new Promise(r => setTimeout(r, 300));
 			await page.evaluate(() => {
 				document.getElementById('historytiles-filter')!.click();

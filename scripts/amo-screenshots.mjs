@@ -28,6 +28,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ZipWriter, TextReader, BlobWriter } from '@zip.js/zip.js';
+import { SITES, VISIT_URLS, DEFAULT_PINS } from '../tests/uat/_tools/browser-daemon.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -48,49 +49,34 @@ const WP = {
 	starryCanyon: `${CDN}7d98c7ab-274a-411d-95e4-84afd4e6203c.avif`, // starry-canyon (dark)
 };
 
-// Curated tiles: popular, recognizable, tech-leaning US + international news,
-// community & shopping — all verified to render real content headless (sites
-// that bot-block headless, e.g. Amazon/YouTube/Newegg/AliExpress, are omitted).
-const SITES = [
-	// First PIN_COUNT are pinned (clean, recognizable, ad-light); the rest fill
-	// from history.
-	['https://github.com/', 'GitHub'],
-	['https://news.ycombinator.com/', 'Hacker News'],
-	['https://stackoverflow.com/', 'Stack Overflow'],
-	['https://store.steampowered.com/', 'Steam'],
-	['https://en.wikipedia.org/wiki/Firefox', 'Wikipedia'],
-	['https://developer.mozilla.org/', 'MDN Web Docs'],
-	['https://www.theverge.com/', 'The Verge'],
-	['https://arstechnica.com/', 'Ars Technica'],
-	['https://techcrunch.com/', 'TechCrunch'],
-	['https://www.reddit.com/', 'Reddit'],
-	['https://www.producthunt.com/', 'Product Hunt'],
-	['https://www.bbc.com/news', 'BBC News'],
-	['https://slashdot.org/', 'Slashdot'],
-	['https://www.tomshardware.com/', 'Tom\'s Hardware'],
-	['https://www.ebay.com/', 'eBay'],
-	['https://www.adafruit.com/', 'Adafruit'],
-];
-
 // Deep article/section URLs (NOT the tile homepages) opened as background tabs.
-// They drive two features and are split into two batches:
-//   • RECENT_TABS — opened then closed EARLY, so the recently-closed row is
-//     populated for every feature shot (the row deliberately skips URLs already
-//     on the grid, so distinct deep links are required). getRecentlyClosed
-//     persists for the session, so these cards survive to the end.
 //   • OPEN_TABS — opened and left OPEN through the autocomplete shot, so it
 //     genuinely shows suggestions "from your open tabs". All carry "tech" so a
 //     `tech` query matches several. Closed at the end → more recent cards.
-const RECENT_TABS = [
-	'https://news.ycombinator.com/newest',
-	'https://github.com/explore',
-	'https://www.bbc.com/news/technology',
+let OPEN_TABS = [
+	'https://www.theverge.com/',
+	'https://techcrunch.com/',
 ];
-const OPEN_TABS = [
-	'https://www.theverge.com/tech',
-	'https://arstechnica.com/gadgets/',
-	'https://techcrunch.com/category/startups/',
-];
+
+async function resolveTopStory(url) {
+	try { await call('/navigate', { url }); } catch { /* slow */ }
+	await sleep(2000);
+	try { await call('/dismiss_consent', {}); } catch {}
+	await sleep(1000);
+	try { await call('/dismiss_consent', {}); } catch {}
+	const links = await ev(`
+		const origin = location.origin, seen = new Set(), out = [];
+		for (const a of document.querySelectorAll('a[href]')) {
+			let u; try { u = new URL(a.href); } catch (e) { continue; }
+			if (u.origin !== origin || u.pathname.split('/').filter(Boolean).length < 2) continue;
+			if ((a.textContent || '').trim().length <= 40 || seen.has(u.href)) continue;
+			seen.add(u.href); out.push(u.href);
+			if (out.length >= 1) break;
+		}
+		return out;
+	`);
+	return (links && links.length) ? links[0] : url;
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function call(ep, body) {
@@ -105,6 +91,7 @@ async function call(ep, body) {
 }
 const ev = script => call('/evaluate', { script }).then(r => r.value);
 const click = selector => call('/click', { selector });
+const hover = selector => call('/hover', { selector });
 const shot = name => call('/screenshot', { name, dir: OUT_DIR }).then(r => {
 	console.log(`  ✓ ${name}.png (${(r.bytes / 1024).toFixed(0)} KB)`);
 });
@@ -150,7 +137,8 @@ async function restore(prefs, target) {
 	await click('#options-toggle'); await sleep(300);
 	await click('[data-drawer-tab="advanced"]'); await sleep(300);
 	await call('/file_upload', { selector: '#options-restore-file', path: file }); await sleep(300);
-	await click('#options-restore');
+	await click('#options-restore'); await sleep(300);
+	await click('#options-restore-confirm');
 	await sleep(2000);
 	// Reload for a clean single render (restoring over an existing grid otherwise
 	// leaves stale tile nodes) — also applies load-time prefs like the wallpaper.
@@ -161,19 +149,12 @@ async function restore(prefs, target) {
 	fs.rmSync(file, { force: true });
 }
 
-// Only the top few sites are PINNED; the rest of the grid fills from browsing
-// history (topSites), like a real user's new tab. EXTRAS are visited to give
-// topSites enough surplus to fill the grid without trailing gaps.
-const PIN_COUNT = 5;
-const EXTRAS = [
-	'https://www.theregister.com/', 'https://www.engadget.com/', 'https://www.reuters.com/',
-	'https://about.gitlab.com/', 'https://www.wired.com/', 'https://lobste.rs/',
-];
-const VISIT_URLS = [...SITES.map(s => s[0]), ...EXTRAS];
-const pinTiles = () => SITES.slice(0, PIN_COUNT).map(([url, title], i) => ({ type: 'url', url, title, favicon: null, id: i + 1, position: i }));
-const basePrefs = (wp, theme) => ({ backgroundUrl: wp, history: true, recent: true, locked: false, theme, themeAuto: false, tileAspect: 'fill', titleSize: 'medium' });
+// Default pins are injected via the restore payload.
+const PIN_COUNT = DEFAULT_PINS.length;
+const pinTiles = () => DEFAULT_PINS.map(({url, title}, i) => ({ type: 'url', url, title, favicon: null, id: i + 1, position: i }));
+const basePrefs = (wp, theme) => ({ backgroundUrl: wp, history: true, recent: true, locked: false, theme, themeAuto: false, tileAspect: 'fill', titleSize: 'medium', statType: 'none', titleBarSearch: true });
 const mediumPrefs = (wp, theme = 'light') => ({ ...basePrefs(wp, theme), columns: 4, rows: 4, spacing: 'medium', margin: ['medium', 'medium', 'medium', 'medium'], tileRadius: 'medium', opacity: 90 });
-const maxiPrefs = (wp, theme = 'light') => ({ ...basePrefs(wp, theme), columns: 3, rows: 3, spacing: 'large', margin: ['large', 'large', 'large', 'large'], tileRadius: 'large', opacity: 95 });
+const maxiPrefs = (wp, theme = 'light') => ({ ...basePrefs(wp, theme), columns: 3, rows: 3, spacing: 'large', margin: ['large', 'large', 'large', 'large'], tileRadius: 'large', opacity: 95, titleBarSearch: false, statType: 'visits' });
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 // Clean prior gallery so removed/renamed shots don't linger.
@@ -185,9 +166,8 @@ const env = {
 	...process.env,
 	UAT_VIEWPORT: '1280x800',
 	UAT_WINDOW: '1280x800',
-	UAT_SHOT_SCALE: '1',
 	UAT_PAGELOAD_MS: '15000',
-	UAT_SEED_URLS: 'https://example.com/',
+	UAT_SEED_URLS: VISIT_URLS.join(','),
 	ARTIFACTS_DIR: os.tmpdir(),
 };
 
@@ -196,19 +176,27 @@ const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit']
 
 let exitCode = 0;
 try {
-	await waitHealthy(120000);
+	await waitHealthy(300000);
+
+	// The daemon has already natively seeded the environment, built frecency,
+	// and installed the extension before reaching this point.
 
 	// fast passes just build frecency (history) — a bare navigation is enough and
 	// keeps the run short. The capture pass loads fully, dismisses cookie banners,
 	// and settles so the auto-captured thumbnail is clean and complete.
+	const CAPTURE_URLS = [...new Set([...VISIT_URLS, ...DEFAULT_PINS.map(p => p.url)])];
 	const visit = async (label, { fast = false } = {}) => {
-		console.log(`${label}: visiting ${VISIT_URLS.length} sites${fast ? ' (fast)' : ' (dismiss consent + settle)'}…`);
-		for (const url of VISIT_URLS) {
+		const list = fast ? VISIT_URLS : CAPTURE_URLS;
+		console.log(`${label}: visiting ${list.length} sites${fast ? ' (fast)' : ' (ad hiding + capture)'}…`);
+		for (const url of list) {
 			try { await call('/navigate', { url }); } catch { /* slow page */ }
 			if (fast) { await sleep(900); continue; }
-			await sleep(1200);
-			try { await call('/dismiss_consent', {}); } catch { /* best effort */ }
-			await sleep(1800); // let the capture finalize
+			
+			// The cookies are already gone (from pre-sweep). We just need to instantly
+			// execute the ad/whitespace removal script BEFORE the 2s capture timer fires!
+			try { await call('/dismiss_consent', {}); } catch {}
+			
+			await sleep(3500); // Wait for the extension to safely finalize the capture
 		}
 	};
 
@@ -216,41 +204,39 @@ try {
 	console.log(`pinning ${PIN_COUNT} favourites (rest fill from history)…`);
 	await restore(mediumPrefs(WP.balloons), PIN_COUNT);
 
-	// 2) Three visit passes to fill the grid AND its thumbnails. The auto-thumbnail
-	// capture gate (background.js) only fires for a URL that is in the new tab's
-	// tile cache at navigation time, and a URL only enters topSites after ~2 visits
-	// (frecency). So: passes 1+2 build frecency → topSites; a re-render then folds
-	// topSites into the capture cache; pass 3 actually triggers the captures.
-	// (Pins are always in the cache, so they capture from pass 1.)
-	await visit('pass 1 (build frecency)', { fast: true });
-	await call('/navigate', { url: NEWTAB }); await sleep(1500);
-	await visit('pass 2 (build frecency)', { fast: true });
-	await call('/navigate', { url: NEWTAB }); await sleep(1500); // fold topSites into the capture cache
+	// 2) Pass 3 (capture): Frecency is already built by the daemon's native seed passes.
+	// We just fold topSites into the capture cache and do the final visit pass
+	// which loads the clean sites, executes the ad-hider, and captures the thumbnails.
+	await call('/navigate', { url: NEWTAB }); await sleep(2500); // fold topSites into the capture cache
 	await visit('pass 3 (capture)');
 
-	// 3a) Populate the recently-closed row NOW (open a batch, then close it) so the
-	// row shows cards in the feature shots; getRecentlyClosed persists per session.
-	await call('/open_tabs', { urls: RECENT_TABS, settleMs: 1500 });
-	await call('/close_other_tabs', {});
+	// 3a) The daemon's native seed pass ALREADY populated recently-closed natively!
+	
+	console.log('resolving top stories for OPEN_TABS…');
+	const resolvedOpen = [];
+	for (const u of OPEN_TABS) { resolvedOpen.push(await resolveTopStory(u)); }
+	OPEN_TABS = resolvedOpen;
+
 	// 3b) Open the autocomplete batch and leave it open through shot 06.
 	await call('/open_tabs', { urls: OPEN_TABS, settleMs: 1500 });
 
-	// 4) Feature shots on the primary (4×4 medium light) layout.
-	await restore(mediumPrefs(WP.balloons), 16);
+	// 4) Feature shots on the primary layout, but with search bar disabled.
+	const featurePrefs = { ...mediumPrefs(WP.balloons), titleBarSearch: false };
+	await restore(featurePrefs, 16);
 
-	// 05 — settings drawer (Page panel)
 	await click('#options-toggle'); await sleep(300);
-	await click('[data-drawer-tab="page"]'); await sleep(500);
-	await shot('05-settings-drawer');
 
-	// 06 — add-tile autocomplete (Tile panel). "tech" matches several open tabs
-	// (Ars Technica, TechCrunch, The Verge/tech, BBC technology) plus history.
+	// 05 — add-tile autocomplete (Tile panel). "tech" matches several open tabs
 	await click('[data-drawer-tab="tile"]'); await sleep(400);
 	await ev('newTabTools.pinURLInput.focus(); newTabTools.pinURLInput.value = "tech"; newTabTools.autocomplete(); return true');
 	await sleep(1500);
 	console.log(`  (autocomplete suggestions: ${await ev('return newTabTools.pinURLAutocomplete.querySelectorAll(".autocomplete-title").length')})`);
-	await shot('06-add-tile-autocomplete');
+	await shot('05-add-tile-autocomplete');
 	await ev('newTabTools.pinURLInput.value = ""; newTabTools.autocomplete(); return true');
+
+	// 06 — settings drawer (Page panel)
+	await click('[data-drawer-tab="page"]'); await sleep(500);
+	await shot('06-settings-drawer');
 
 	// 07 — per-domain filter cap (Advanced panel) — do before closing tabs
 	await click('[data-drawer-tab="advanced"]'); await sleep(400);
@@ -266,15 +252,8 @@ try {
 	await shot('07-domain-filter');
 	await click('#options-toggle'); await sleep(400); // close drawer
 
-	// 08 — recently-closed row (close the article tabs; their deep URLs aren't
-	// grid tiles, so they survive the row's tile-dedup filter).
+	// (recently-closed row shot was dropped, just close the tabs to prepare for hero gallery)
 	await call('/close_other_tabs', {});
-	await call('/navigate', { url: NEWTAB }); await waitForAtLeast(6, 15000);
-	await ev('newTabTools.refreshRecent(); return true');
-	await sleep(2000);
-	const recentCards = await ev('return document.querySelectorAll(".ntt-recent-card").length');
-	console.log(`  (recently-closed cards: ${recentCards})`);
-	await shot('08-recently-closed');
 
 	// 5) Hero gallery LAST — auto-thumbnail captures accumulate in IDB (keyed by
 	// URL) over the run, so coverage is highest now. Thumbnails re-attach to each
@@ -284,10 +263,10 @@ try {
 	const total = await ev('return document.querySelectorAll(".newtab-site").length');
 	const thumbs = await ev('return [...document.querySelectorAll(".newtab-thumbnail")].filter(t => getComputedStyle(t).backgroundImage.includes("url")).length');
 	console.log(`  (grid: ${total} tiles, ${thumbs} with thumbnails)`);
-	await shot('01-grid-4x4-medium-light');
-	await restore(mediumPrefs(WP.darkLandscape, 'dark'), 16); await sleep(1200); await shot('02-grid-4x4-medium-dark');
-	await restore(maxiPrefs(WP.sandDunes, 'light'), 9); await sleep(1200); await shot('03-grid-3x3-maxi-light');
-	await restore(maxiPrefs(WP.starryCanyon, 'dark'), 9); await sleep(1200); await shot('04-grid-3x3-maxi-dark');
+	await hover('.newtab-site:nth-child(1)'); await sleep(400); await shot('01-grid-4x4-medium-light');
+	await restore(mediumPrefs(WP.darkLandscape, 'dark'), 16); await sleep(1200); await hover('.newtab-site:nth-child(1)'); await sleep(400); await shot('02-grid-4x4-medium-dark');
+	await restore(maxiPrefs(WP.sandDunes, 'light'), 9); await sleep(1200); await hover('.newtab-site:nth-child(1)'); await sleep(400); await shot('03-grid-3x3-maxi-light');
+	await restore(maxiPrefs(WP.starryCanyon, 'dark'), 9); await sleep(1200); await hover('.newtab-site:nth-child(1)'); await sleep(400); await shot('04-grid-3x3-maxi-dark');
 
 	console.log(`\namo-screenshots: done → ${OUT_DIR}/`);
 } catch (e) {

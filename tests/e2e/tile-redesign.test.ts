@@ -212,7 +212,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 		}
 	}, 60_000);
 
-	it('.ntt-actions container has 5 action buttons', async () => {
+	it('.ntt-actions container has 4 action buttons', async () => {
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);
 
@@ -223,12 +223,12 @@ describe('E2E: Tile redesign — new tile structure', () => {
 					const actions = document.querySelector('.ntt-actions');
 					if (!actions) {return false;}
 					const count = actions.querySelectorAll('.ntt-action-btn').length;
-					return count === 5 ? count : false;
+					return count === 4 ? count : false;
 				},
 				[],
-				{ timeout: 10_000, message: 'Expected 5 action buttons in .ntt-actions' }
+				{ timeout: 10_000, message: 'Expected 4 action buttons in .ntt-actions' }
 			);
-			expect(btnCount).toBe(5);
+			expect(btnCount).toBe(4);
 		} catch (e) {
 			await captureFailure(page, 'tile-redesign-actions');
 			throw e;
@@ -246,19 +246,19 @@ describe('E2E: Tile redesign — new tile structure', () => {
 				page,
 				() => {
 					// Scope to a SINGLE tile's action row — a page-wide
-					// `.ntt-action-btn` query returns N×5 buttons when more
+					// `.ntt-action-btn` query returns N×4 buttons when more
 					// than one tile is present (test-isolation races), which
 					// made the strict `toEqual` assertion intermittently fail.
 					const row = document.querySelector('.ntt-actions');
 					if (!row) { return false; }
 					const btns = row.querySelectorAll('.ntt-action-btn');
-					if (btns.length < 5) {return false;}
+					if (btns.length < 4) {return false;}
 					return Array.from(btns).map(b => b.getAttribute('data-action'));
 				},
 				[],
 				{ timeout: 10_000, message: 'Action buttons not found' }
 			);
-			expect(actions).toEqual(['edit', 'open', 'refresh', 'pin', 'remove']);
+			expect(actions).toEqual(['edit', 'refresh', 'pin', 'remove']);
 		} catch (e) {
 			await captureFailure(page, 'tile-redesign-action-attrs');
 			throw e;
@@ -475,46 +475,9 @@ describe('E2E: Tile redesign — new tile structure', () => {
 		}
 	}, 60_000);
 
-	it('open action button opens tile URL in new tab (§4.3)', async () => {
-		const page = await openNewTab(browser);
-		await waitForGridReady(page);
-
-		try {
-			await waitForCondition(
-				page,
-				(u) => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-				},
-				[TEST_URL],
-				{ timeout: 10_000, message: 'Test tile not in grid' }
-			);
-
-			const pagesBefore = (await browser.pages()).length;
-
-			await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
-				if (!site) {return;}
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="open"]');
-				if (btn) {(btn as HTMLElement).click();}
-			}, TEST_URL);
-
-			await new Promise(r => setTimeout(r, 2000));
-
-			const pagesAfter = (await browser.pages()).length;
-			expect(pagesAfter).toBeGreaterThan(pagesBefore);
-		} catch (e) {
-			await captureFailure(page, 'tile-action-open');
-			throw e;
-		} finally {
-			// Close any extra tabs
-			const pages = await browser.pages();
-			for (let i = pages.length - 1; i > 0; i--) {
-				await pages[i].close().catch(() => {});
-			}
-		}
-	}, 60_000);
+	// The "open in new tab" action was dropped in §3c — clicking the tile
+	// already opens it (middle-/⌘-click for a new tab), so the arrow was
+	// redundant. No action button or behaviour to assert anymore.
 
 	it('refresh action button sends Thumbnails.capture message (§4.3)', async () => {
 		const page = await openNewTab(browser);

@@ -271,34 +271,39 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		expect(document.documentElement.removeAttribute).toHaveBeenCalledWith('locked');
 	});
 
-	it('updateUI calls getThemedImageURL for lock icon', () => {
+	// Board A removed the titlebar padlock, so updateUI no longer fetches a
+	// lock/unlock icon — it only drives the `locked` attribute + the drawer
+	// checkbox. (Lock is controlled from the drawer now.)
+	it('updateUI sets the locked attribute and syncs the checkbox when locked', () => {
 		Prefs.locked = true;
 		const mockCheckbox = { checked: false };
 		document.querySelector = vi.fn(() => mockCheckbox) as any;
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
 		harness.updateUI(['locked']);
-		expect(harness.getThemedImageURL).toHaveBeenCalledWith('locked');
+		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('locked', 'true');
+		expect(mockCheckbox.checked).toBe(true);
 	});
 
-	it('updateUI calls getThemedImageURL for unlock icon when not locked', () => {
+	it('updateUI removes the locked attribute and syncs the checkbox when not locked', () => {
 		Prefs.locked = false;
-		const mockCheckbox = { checked: false };
+		const mockCheckbox = { checked: true };
 		document.querySelector = vi.fn(() => mockCheckbox) as any;
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
 		harness.updateUI(['locked']);
-		expect(harness.getThemedImageURL).toHaveBeenCalledWith('unlocked');
+		expect(document.documentElement.removeAttribute).toHaveBeenCalledWith('locked');
+		expect(mockCheckbox.checked).toBe(false);
 	});
 
 	// ==================== updateUI('history') ====================
 
-	it('updateUI sets history checkbox and filter disabled state', () => {
+	it('updateUI syncs the history toggle (aria-checked) and the filter disabled state', () => {
+		// History is a copper toggle now (§5/B1), not a native checkbox — updateUI
+		// drives it via _syncDrawerToggle and disables the filter when off.
 		Prefs.history = false;
-		const mockCheckbox = { checked: true };
+		const mockToggle = { setAttribute: vi.fn() };
 		const mockFilter = { disabled: false };
-		document.querySelector = vi.fn(() => mockCheckbox) as any;
+		document.querySelector = vi.fn(() => mockToggle) as any;
 		document.getElementById = vi.fn(() => mockFilter) as any;
 		harness.updateUI(['history']);
-		expect(mockCheckbox.checked).toBe(false);
+		expect(mockToggle.setAttribute).toHaveBeenCalledWith('aria-checked', 'false');
 		expect(mockFilter.disabled).toBe(true);
 	});
 

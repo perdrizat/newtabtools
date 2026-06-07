@@ -34,12 +34,12 @@ describe('Titlebar layout invariants — CSS rules', () => {
 
 	// Anchor to start-of-line so we match the standalone rule, not the
 	// dark-mode `:root[theme="dark"] #ntt-…` override that shares the selector.
-	it('the logo + buttons live in one content-width masthead box', () => {
-		// The two former half-cells are combined into #ntt-masthead, which
-		// hugs its content (flex 0 0 auto) rather than occupying fixed slots.
-		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m);
-		expect(masthead).not.toBeNull();
-		expect(masthead![0]).toMatch(/flex:\s*0\s+0\s+auto/);
+	it('the single Edit action button is content-width at the right (Board A §1)', () => {
+		// Board A drops the masthead/wordmark; the one titlebar action is the
+		// Edit button (#options-toggle), which hugs its content (flex 0 0 auto).
+		const edit = css.match(/^#options-toggle\s*\{[^}]*\}/m);
+		expect(edit).not.toBeNull();
+		expect(edit![0]).toMatch(/flex:\s*0\s+0\s+auto/);
 	});
 
 	it('search is a fixed-width box, decoupled from the card slot to avoid measurement feedback', () => {
@@ -52,31 +52,24 @@ describe('Titlebar layout invariants — CSS rules', () => {
 		expect(css).toMatch(/#ntt-titlebar-recent\s*\{/);
 	});
 
-	it('masthead is pinned to the right edge by the greedy recent container', () => {
-		// Keeps the brand + controls box at the right even when the row
-		// under-fills (search hidden by default, or fewer recent tabs). It is
-		// pinned right by the greedy recent-cards container, not an auto-margin.
-		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m);
-		expect(masthead![0]).not.toMatch(/margin-left:\s*auto/);
+	it('the Edit button is pinned to the right edge by the greedy recent container', () => {
+		// Keeps the Edit action at the right even when the row under-fills
+		// (search hidden, or fewer recent tabs). Pinned right by the greedy
+		// recent-cards container, not an auto-margin.
+		const edit = css.match(/^#options-toggle\s*\{[^}]*\}/m);
+		expect(edit![0]).not.toMatch(/margin-left:\s*auto/);
 		const recent = css.match(/#ntt-titlebar-recent\s*\{[^}]*\}/s);
 		expect(recent![0]).toMatch(/flex:\s*1 1 0/);
 	});
 
-	it('masthead carries the recent-card box visuals (surface bg + line shadow)', () => {
-		// The combined box reads as the same boxes as the recently-closed
-		// cards / search bar: surface fill, rounded, subtle 1px line shadow.
-		const masthead = css.match(/^#ntt-masthead\s*\{[^}]*\}/m)![0];
-		expect(masthead).toMatch(/background:\s*var\(--ntt-surface/);
-		expect(masthead).toMatch(/box-shadow:[^;]*var\(--ntt-line-soft/);
-		expect(masthead).toMatch(/border-radius:/);
-		expect(masthead).toMatch(/height:\s*38px/);
-	});
-
-	it('Powertools (wordmark line 2) uses the recent-card URL font (small mono mute)', () => {
-		const name2 = css.match(/^#ntt-wordmark-name2\s*\{[^}]*\}/m)![0];
-		expect(name2).toMatch(/font-size:\s*10px/);
-		expect(name2).toMatch(/font-family:\s*var\(--ntt-font-mono/);
-		expect(name2).toMatch(/color:\s*var\(--ntt-mute/);
+	it('the Edit button carries the titlebar box visuals (surface bg + line shadow, 38px)', () => {
+		// Reads as the same box as the recently-closed cards / search bar:
+		// surface fill, rounded, subtle 1px line shadow, level at 38px.
+		const edit = css.match(/^#options-toggle\s*\{[^}]*\}/m)![0];
+		expect(edit).toMatch(/background:\s*var\(--ntt-surface/);
+		expect(edit).toMatch(/box-shadow:[^;]*var\(--ntt-line-soft/);
+		expect(edit).toMatch(/border-radius:/);
+		expect(edit).toMatch(/height:\s*38px/);
 	});
 
 	it('titlebar separates slots by the tile gap (`gap: var(--ntt-gap)`)', () => {
@@ -102,8 +95,10 @@ describe('Titlebar layout invariants — CSS rules', () => {
 		expect(css).toMatch(/#ntt-titlebar\.large\s*\{[^}]*padding:\s*120px\s+120px\s+0/);
 	});
 
-	it('cogwheel and lock-toggle live in #ntt-titlebar-buttons (32×32 buttons)', () => {
-		expect(css).toMatch(/#ntt-titlebar-buttons\s+#options-toggle,\s*\n?\s*#ntt-titlebar-buttons\s+#locked-toggle\s*\{[^}]*width:\s*32px/);
+	it('the titlebar exposes exactly one action button — #options-toggle (Edit)', () => {
+		expect(css).toMatch(/^#options-toggle\s*\{/m);
+		expect(css).not.toMatch(/#ntt-titlebar-buttons/);
+		expect(css).not.toMatch(/#locked-toggle\s*\{/);
 	});
 
 	it('the legacy `#ntt-cogwheel-wrap` styles are gone', () => {

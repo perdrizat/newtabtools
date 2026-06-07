@@ -58,7 +58,10 @@ export function mountSite(
 				</a>
 				<span class="ntt-pin-stripe"></span>
 				<span class="ntt-stat-chip"></span>
+				<span class="ntt-actions-kebab"></span>
 				<span class="ntt-actions"></span>
+				<span class="ntt-drag-handle"></span>
+				<span class="ntt-add-tile"></span>
 				<span class="ntt-overlay">
 					<span class="ntt-favicon"></span>
 					<span class="newtab-title"></span>

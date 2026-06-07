@@ -191,9 +191,19 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 				{ timeout: 5000, message: 'restore button did not enable after file upload' },
 			);
 
-			// 5. Click restore
+			// 5. Click restore, then confirm the inline danger prompt (§7 — restore
+			//    overwrites the setup, so it gates behind a Confirm/Cancel row).
 			await page.evaluate(() => {
 				document.getElementById('options-restore')?.click();
+			});
+			await waitForCondition(
+				page,
+				() => !(document.getElementById('options-restore-confirm-row') as HTMLElement | null)?.hidden,
+				[],
+				{ timeout: 5000, message: 'restore confirm row did not appear' },
+			);
+			await page.evaluate(() => {
+				document.getElementById('options-restore-confirm')?.click();
 			});
 
 			// 6. Wait for tiles to appear — readZip clears tiles and re-adds them,

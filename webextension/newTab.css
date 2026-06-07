@@ -42,6 +42,10 @@
 	--ntt-line-soft: rgba(255, 255, 255, 0.18);
 	--ntt-ink: #ffffff;
 	--ntt-mute: rgba(255, 255, 255, 0.72);
+	/* §8: the light danger (#b14b27) is only ~2.7:1 on the HC black ground.
+	   Reuse the existing dark-theme danger (#e89279) — AAA on black, not a new
+	   colour — so destructive controls stay legible in high-contrast. */
+	--ntt-danger: #e89279;
 }
 body {
 	height: 100%;
@@ -175,6 +179,11 @@ body, #background-fake {
 #ntt-drawer-body table {
 	font-size: 11.5px;
 }
+/* Drawer links use the accent, not the browser-default blue — on-system, and
+   the blue was low-contrast on the near-black high-contrast drawer. */
+#ntt-drawer-body a {
+	color: var(--ntt-accent);
+}
 /* Tile editor (`#options-tile`) was authored for the old 752-px modal and
  * leaks horizontal space inside the 360-px drawer — the thumbnail wrap had
  * `padding: 0 1em`, the bg-colour row has 5 inline children, and the file
@@ -233,7 +242,7 @@ body, #background-fake {
 .ntt-form-group-help {
 	font-size: 10.5px;
 	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 }
 .ntt-segmented {
 	display: flex;
@@ -476,6 +485,60 @@ body, #background-fake {
 input[type="button"] {
 	cursor: pointer;
 }
+/* DRAWER ACTION BUTTONS — three-tier hierarchy (§5/B2). Ghost is the default
+   (transparent + hairline, ink text); one copper primary per group; destructive
+   actions use the danger role. The colour-swatch button is excluded. */
+#ntt-drawer-body .options-row button,
+#options-filter-set,
+.ntt-btn-ghost {
+	font-family: var(--ntt-font-ui);
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: -0.005em;
+	padding: 6px 12px;
+	border-radius: 7px;
+	border: 1px solid var(--ntt-line);
+	background: transparent;
+	color: var(--ntt-ink);
+	cursor: pointer;
+}
+#ntt-drawer-body .options-row button:hover,
+.ntt-btn-ghost:hover {
+	background: var(--ntt-surface-soft);
+}
+#ntt-drawer-body button.ntt-btn-primary {
+	background: var(--ntt-accent);
+	border-color: var(--ntt-accent);
+	color: #fff;
+}
+#ntt-drawer-body button.ntt-btn-primary:hover {
+	filter: brightness(1.06);
+}
+#ntt-drawer-body button.ntt-btn-danger {
+	color: var(--ntt-danger);
+	border-color: var(--ntt-danger);
+	background: transparent;
+}
+#ntt-drawer-body button.ntt-btn-danger:hover {
+	background: var(--ntt-danger);
+	color: #fff;
+}
+#ntt-drawer-body .options-row button[disabled] {
+	opacity: 0.5;
+	cursor: default;
+}
+/* Inline Confirm/Cancel for irreversible actions — Reset, Restore (§7). */
+.ntt-confirm-row {
+	gap: 8px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.ntt-confirm-prompt {
+	flex: 1;
+	min-width: 140px;
+	font-size: 11px;
+	color: var(--ntt-danger);
+}
 #database-error {
 	display: none;
 	flex-grow: 1;
@@ -497,7 +560,6 @@ input[type="button"] {
 /* `display: flex` (and friends) on ID-selectored titlebar elements outranks
    the UA `[hidden] { display: none }` rule. Force `[hidden]` to hide for the
    elements driven by titleBar* prefs. */
-#ntt-wordmark[hidden],
 #ntt-search[hidden] {
 	display: none;
 }
@@ -523,75 +585,39 @@ input[type="button"] {
 #ntt-titlebar.large {
 	padding: 120px 120px 0;
 }
-/* The masthead is the single box at the right end of the bar: the brand
- * wordmark plus the lock + cogwheel controls. It carries the recently-closed
- * card's box treatment (surface fill, rounded, 1px line shadow, dark-adaptive)
- * and is pinned to the right; `height: 38px` keeps it level with the search
- * box and the recent cards. */
-#ntt-masthead {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+/* Board A (§1): the single titlebar action is the Edit button
+ * (#options-toggle), pinned to the right by the greedy recent container. It
+ * carries the same box treatment as the recent cards / search bar (surface
+ * fill, rounded, 1px line shadow, dark-adaptive) and `height: 38px` keeps it
+ * level with the search box and the recent cards. The wordmark + lock padlock
+ * were removed. */
+#options-toggle {
 	flex: 0 0 auto;
 	height: 38px;
 	box-sizing: border-box;
-	padding: 0 6px 0 10px;
+	padding: 0 16px;
 	background: var(--ntt-surface);
+	border: none;
 	border-radius: 7px;
 	box-shadow: 0 0 0 1px var(--ntt-line-soft), 0 1px 2px rgba(20,15,10,0.03);
+	color: var(--ntt-ink);
+	font-family: var(--ntt-font-ui);
+	font-size: 13px;
+	font-weight: 500;
+	letter-spacing: -0.005em;
+	cursor: pointer;
 }
-:root[theme="dark"] #ntt-masthead {
+#options-toggle:hover {
+	box-shadow: 0 0 0 1px var(--ntt-line), 0 2px 4px rgba(20,15,10,0.06);
+}
+:root[theme="dark"] #options-toggle {
 	box-shadow: 0 0 0 1px var(--ntt-line-soft);
 }
-#ntt-wordmark {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	overflow: hidden;
-	min-width: 0;
-}
-#ntt-wordmark-icon {
-	width: 22px;
-	height: 22px;
-	border-radius: 5px;
-	background: linear-gradient(135deg, #d97757 0%, #b8492d 100%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
+/* Edit mode: the button reads "Done" and fills copper (§2). */
+:root[drawer-open] #options-toggle {
+	background: var(--ntt-accent);
 	color: #fff;
-	font-style: italic;
-	font-size: 16px;
-	font-weight: 600;
-	line-height: 1;
-	box-shadow: 0 1px 2px rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.18);
-}
-#ntt-wordmark-text {
-	display: flex;
-	flex-direction: column;
-	gap: 0;
-	line-height: 1.15;
-	min-width: 0;
-	overflow: hidden;
-}
-/* Line 1 "New Tab" uses the recent-card title style; line 2 "Powertools" uses
- * the recent-card URL style (smaller mono mute) so the two-line lockup fits a
- * 38px box, matching the recently-closed cards. */
-#ntt-wordmark-name {
-	font-size: 11.5px;
-	font-weight: 600;
-	color: var(--ntt-ink);
-	letter-spacing: -0.005em;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-#ntt-wordmark-name2 {
-	font-size: 10px;
-	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
+	box-shadow: 0 0 0 1px var(--ntt-accent);
 }
 #ntt-search {
 	/* Fixed width so it never feeds back into the greedy recent container's
@@ -640,6 +666,19 @@ input[type="button"] {
 #ntt-search-input::placeholder {
 	color: var(--ntt-sub);
 }
+/* Focus ring (§8 / B5) — the search input clears the UA outline, so a consistent
+   copper ring rides on its container on keyboard focus; the same ring applies to
+   the titlebar Edit button and the drawer controls. Stays visible in every
+   theme, including high-contrast. */
+#ntt-search:focus-within,
+#options-toggle:focus-visible,
+#ntt-drawer-body button:focus-visible,
+.ntt-toggle:focus-visible,
+.ntt-segmented button:focus-visible,
+.ntt-theme-card:focus-visible {
+	outline: 2px solid var(--ntt-accent);
+	outline-offset: 2px;
+}
 .ntt-search-kbd {
 	padding: 2px 6px;
 	border-radius: 4px;
@@ -682,7 +721,7 @@ input[type="button"] {
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 }
 .ntt-awesomebar-row {
 	display: flex;
@@ -723,7 +762,7 @@ input[type="button"] {
 .ntt-awesomebar-url {
 	font-size: 11px;
 	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -755,36 +794,6 @@ input[type="button"] {
 	flex: 1 1 0;
 	min-width: 0;
 }
-/* Buttons live inside the masthead now — a transparent sub-group, no box of
- * their own. */
-#ntt-titlebar-buttons {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	flex: 0 0 auto;
-}
-#ntt-titlebar-buttons button {
-	width: 32px;
-	height: 32px;
-	border-radius: 7px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: transparent;
-	color: var(--ntt-sub);
-	border: 1px solid transparent;
-	cursor: pointer;
-	padding: 0;
-}
-#ntt-titlebar-buttons button:hover {
-	background: var(--ntt-surface-soft);
-	border-color: var(--ntt-line);
-}
-#ntt-titlebar-buttons button svg {
-	pointer-events: none;
-}
-
-
 /* SCROLLBOX */
 #newtab-scrollbox {
 	display: flex;
@@ -792,8 +801,10 @@ input[type="button"] {
 	flex: 1;
 	flex-direction: column;
 	overflow: auto;
-	text-shadow: 0 0 3px var(--contrast-transp), 0 0 5px var(--contrast-transp);
-	--shadow-opaque: 0 0 3px var(--contrast-opaque), 0 0 5px var(--contrast-opaque);
+	/* v1 shipped a blanket white/black text glow here so titles read over an
+	   arbitrary wallpaper. v2 gives every text element its own backing (recent
+	   chips on a surface, tile titles on the overlay band), so the blanket glow
+	   only double-shadowed the chips and muddied the "+ Add tile" copy — removed. */
 }
 /* RECENT TABS — cards are titlebar slots; width tracks the JS-computed slot. */
 .ntt-recent-card {
@@ -855,7 +866,7 @@ input[type="button"] {
 .ntt-recent-url {
 	font-size: 10px;
 	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -863,7 +874,7 @@ input[type="button"] {
 .ntt-recent-age {
 	font-size: 9.5px;
 	color: var(--ntt-mute);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 	flex: 0 0 auto;
 }
 /* UNDO — a floating toast pinned to the bottom-centre of the viewport. Only
@@ -885,7 +896,7 @@ input[type="button"] {
 	border-radius: 9px;
 	box-shadow: 0 0 0 1px var(--ntt-line-soft), 0 6px 24px rgba(20, 15, 10, 0.14);
 	color: var(--ntt-ink);
-	font-family: var(--ntt-font-mono);
+	font-family: var(--ntt-font-ui);
 	font-size: 11px;
 	transition: opacity 200ms, display 0s 200ms;
 }
@@ -913,12 +924,6 @@ input[type="button"] {
 	background-position: center center;
 	background-repeat: no-repeat;
 	vertical-align: middle;
-}
-:root[spacing="medium"] #newtab-margin-bottom:is(.medium, .large) #locked-toggle {
-	margin-top: 8px;
-}
-:root[spacing="large"] #newtab-margin-bottom:is(.medium, .large) #locked-toggle {
-	margin-top: 18px;
 }
 #newtab-undo-container button:not(.close-button) {
 	min-width: 0;
@@ -1177,7 +1182,7 @@ svg {
 	right: 0;
 	bottom: 0;
 	padding: 32px 12px 14px;
-	background: linear-gradient(180deg, rgba(0,0,0,0) 20%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.85) 100%);
+	background: linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0.85) 100%);
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -1185,7 +1190,7 @@ svg {
 	pointer-events: none;
 }
 :root[theme="dark"] .ntt-overlay {
-	background: linear-gradient(180deg, rgba(0,0,0,0) 20%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.85) 100%);
+	background: linear-gradient(180deg, transparent 12%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0.85) 100%);
 }
 .ntt-favicon {
 	width: 16px;
@@ -1220,7 +1225,7 @@ svg {
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+	text-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
 :root[titlesize="hidden"] .ntt-overlay {
 	display: none;
@@ -1239,15 +1244,104 @@ svg {
 .newtab-site:hover .ntt-actions {
 	opacity: 1;
 }
-:root[locked="true"] .ntt-actions,
-:root[tile-actions="false"] .ntt-actions {
+/* Kebab rest affordance — a single dots glyph shown at rest; the hover row
+   replaces it (§3c). */
+.ntt-actions-kebab {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 1;
+	pointer-events: none;
+	color: rgba(0,0,0,0.55);
+	transition: opacity 100ms ease-out;
+}
+:root[theme="dark"] .ntt-actions-kebab {
+	color: rgba(255,255,255,0.7);
+}
+.newtab-site:hover .ntt-actions-kebab {
+	opacity: 0;
+}
+/* Hover actions + kebab are available in normal (locked) mode too — §3c says
+   they work whether or not Edit mode is on. Only the user's "show tile actions"
+   pref hides them; the board being locked does NOT. */
+:root[tile-actions="false"] .ntt-actions,
+:root[tile-actions="false"] .ntt-actions-kebab {
 	display: none;
 }
-.ntt-action-btn svg {
+.ntt-action-btn svg,
+.ntt-actions-kebab svg {
 	display: inline-block;
 	position: static;
 	width: var(--ntt-action-icon-size, 16px);
 	height: var(--ntt-action-icon-size, 16px);
+}
+/* Remove (✕) is the one destructive tile action — danger colour (§3c/§7). */
+.ntt-action-btn[data-action="remove"] {
+	color: var(--ntt-danger);
+}
+/* EDIT MODE (§2) — opening the drawer IS edit mode (`:root[drawer-open]`).
+   Pinned tiles get a persistent action row, a centred drag handle, and a dashed
+   accent (copper) outline = "selected/movable"; auto (non-pinned) tiles fade
+   back and offer "+ Add tile". The ✕ stays danger-red (set above) — two
+   colours, two meanings. */
+.ntt-drag-handle,
+.ntt-add-tile {
+	display: none;
+}
+:root[drawer-open] .newtab-site[pinned] {
+	outline: 2px dashed var(--ntt-accent);
+	outline-offset: -3px;
+}
+:root[drawer-open] .newtab-site[pinned] .ntt-actions {
+	opacity: 1;
+}
+:root[drawer-open] .newtab-site[pinned] .ntt-actions-kebab {
+	opacity: 0;
+}
+:root[drawer-open] .newtab-site[pinned] .ntt-drag-handle {
+	display: flex;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 2;
+	align-items: center;
+	justify-content: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 8px;
+	background: var(--ntt-surface);
+	color: var(--ntt-accent);
+	box-shadow: 0 0 0 1px var(--ntt-line), 0 2px 6px rgba(20,15,10,0.12);
+	pointer-events: none;
+}
+.ntt-drag-handle svg {
+	display: block;
+}
+:root[drawer-open] .newtab-site:not([pinned]) .newtab-thumbnail,
+:root[drawer-open] .newtab-site:not([pinned]) .ntt-overlay {
+	opacity: 0.25;
+}
+:root[drawer-open] .newtab-site:not([pinned]) .ntt-add-tile {
+	display: flex;
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	align-items: center;
+	justify-content: center;
+	/* Dark scrim so the copper "+ Add tile" copy reads regardless of the faded
+	   thumbnail behind it (and in high-contrast). */
+	background: rgba(8, 6, 4, 0.64);
+	color: var(--ntt-accent);
+	font-family: var(--ntt-font-ui);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	pointer-events: none;
 }
 .ntt-action-btn {
 	width: var(--ntt-action-btn-size, 33px);
@@ -1271,6 +1365,19 @@ svg {
 	background: rgba(20,18,15,0.72);
 	box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07);
 	color: rgba(255,255,255,0.85);
+}
+/* High-contrast: a solid black pill with a white icon + ring so the action
+   buttons stay clearly defined over any tile (esp. the persistent edit-mode
+   row), where the translucent light/dark pills would wash out. */
+:root[theme="contrast"] .ntt-action-btn {
+	background: #000;
+	color: #fff;
+	box-shadow: inset 0 0 0 1.5px #fff;
+}
+/* Keep the destructive ✕ coral even on the black HC pill, so the
+   copper-movable / red-delete two-colour distinction survives in HC (§2). */
+:root[theme="contrast"] .ntt-action-btn[data-action="remove"] {
+	color: var(--ntt-danger);
 }
 :root[theme="dark"] .ntt-action-btn:hover {
 	background: rgba(255,255,255,0.10);
@@ -1330,38 +1437,8 @@ svg {
 	background-color: #fff;
 	opacity: 0.01;
 }
-/* OPTIONS — cogwheel + lock toggle live in the titlebar (right side). */
 .newtab-margin-right {
 	justify-content: flex-start;
-}
-#ntt-titlebar-buttons #options-toggle,
-#ntt-titlebar-buttons #locked-toggle {
-	width: 32px;
-	height: 32px;
-	border-radius: 7px;
-	border: 1px solid transparent;
-	background-color: transparent;
-	background-position: center;
-	background-repeat: no-repeat;
-	background-size: 22px;
-	padding: 0;
-	cursor: pointer;
-	opacity: var(--opacity);
-}
-#options-toggle {
-	background-image: url("images/options-light.svg");
-}
-#locked-toggle {
-	background-image: url("images/unlocked-light.svg");
-}
-:root[locked="true"] #locked-toggle {
-	background-image: url("images/locked-light.svg");
-}
-#ntt-titlebar-buttons #options-toggle:hover,
-#ntt-titlebar-buttons #locked-toggle:hover {
-	opacity: 1;
-	background-color: var(--ntt-line-soft);
-	border-color: var(--ntt-line);
 }
 #options-tile {
 	width: 100%;
@@ -1532,23 +1609,52 @@ li.pinned .autocomplete-icon {
 #options-filter td:nth-child(3) {
 	white-space: nowrap;
 }
+/* Steppers restyled to match the segmented control (§5): a connected
+   [ − | value | + ] pill, same height/radius/border as `.ntt-segmented`. */
 .plus-button,
 .minus-button {
-	width: 18px;
-	height: 18px;
-	border: none;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--ntt-line);
 	background-color: transparent;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: 12px;
 	vertical-align: middle;
 	cursor: pointer;
 }
+.minus-button {
+	border-radius: 6px 0 0 6px;
+	border-right: none;
+	background-image: url("images/minus-light.svg");
+}
 .plus-button {
+	border-radius: 0 6px 6px 0;
+	border-left: none;
 	background-image: url("images/plus-light.svg");
 }
-.minus-button {
-	background-image: url("images/minus-light.svg");
+#options-filter td:nth-child(3) span {
+	display: inline-block;
+	min-width: 36px;
+	height: 22px;
+	line-height: 22px;
+	text-align: center;
+	vertical-align: middle;
+	border: 1px solid var(--ntt-line);
+	background: var(--ntt-surface-soft);
+	font-family: var(--ntt-font-mono);
+	font-size: 11px;
 }
 .minus-button[disabled] {
 	opacity: 0.5;
+}
+/* Domain table — drawer row rhythm + hairlines (§5). */
+#options-filter tbody tr {
+	border-bottom: 1px solid var(--ntt-line-soft);
+}
+#options-filter td,
+#options-filter th {
+	padding: 4px 6px;
 }
 #options-filter-host {
 	box-sizing: border-box;

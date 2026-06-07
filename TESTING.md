@@ -88,9 +88,6 @@ Only needed for the **UAT tier** (`pnpm test:uat`, pre-release). UAT runs on **r
 # 1. Release-channel Firefox. The Mozilla APT repo (added above for ESR) also
 #    provides the `firefox` package:
 sudo apt install firefox
-#    …or, if you can't/don't want it on PATH, drop the official tarball under
-#    /opt and point the UAT tools at it with FIREFOX_BIN (recommended on WSL):
-#      FIREFOX_BIN=/opt/firefox/firefox
 
 # 2. geckodriver — no manual step needed by default: Selenium Manager (bundled
 #    in selenium-webdriver) auto-downloads a matching geckodriver on first run
@@ -111,7 +108,7 @@ claude /login
 
 ```bash
 pnpm build
-FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
+node tests/uat/_tools/browser-smoke.mjs
 # expect: "new-tab grid rendered" + a screenshot under tests/uat/artifacts/
 ```
 
@@ -127,43 +124,7 @@ The repository uses GitHub Actions to automatically run the full test suite on e
 - **Artifacts:** If the E2E suite fails in CI, any failure screenshots captured by `captureFailure()` are automatically uploaded as a ZIP archive. To find them, go to the **Actions** tab, click on the failed run, and scroll down to the **Artifacts** section.
 - **UAT is *not* run in CI** — and shouldn't be on the normal push/PR path. Three blockers: (1) **auth** — `claude -p` uses the developer's Claude Code *subscription*; CI has no logged-in session, and the plan deliberately does not read `ANTHROPIC_API_KEY` (API-key mode is deferred). (2) **Non-determinism** — although the local runner gates its exit code on the report's assertions, those assertions include LLM *visual* judgments that aren't reproducible run-to-run, so UAT must never gate a merge. (3) **Cost** — every run spends model tokens. If UAT is ever automated, it should be a **separate, manually-triggered (`workflow_dispatch`) or scheduled pre-release** job that installs release Firefox + geckodriver, runs in **API-key mode against a budget**, uploads the `report.json`/`summary.md`/screenshots as artifacts, and **always exits 0** (advisory, non-blocking). Not the push/PR gate. Tracked in [`ROADMAP.md`](ROADMAP.md) under deferred CI automation.
 
-### Quick Start for Developers
 
-Once your environment is set up:
-
-1. **Clone and install:**
-   ```bash
-   git clone git@github.com:perdrizat/newtabtools.git
-   cd newtabtools
-   pnpm install
-   ```
-
-2. **Verify Firefox ESR is reachable:**
-   ```bash
-   firefox-esr --version       # should print "Mozilla Firefox 128.x" or your installed ESR version
-   which firefox-esr           # confirms the binary path the orchestrator will use
-   ```
-   On WSL/Linux, the test orchestrator calls `firefox-esr` by name, so the binary must be on `PATH`. If your distro names the package differently (e.g. `firefox` on Arch), symlink or alias as `firefox-esr`.
-
-   *Note:* The clone snippet above uses `pnpm install` — see the package-manager note in "Installing Node.js and dependencies" above for the corepack one-time setup.
-
-3. **Manual development:**
-   There are two ways to load the extension for interactive testing:
-
-   **Option A: Automatic (web-ext)**
-   ```bash
-   pnpm dev
-   ```
-   This is the fastest way to confirm the extension wires together cleanly. It launches a temporary Firefox instance with the extension pre-loaded. The profile is discarded on exit.
-
-   **Option B: Manual (about:debugging)**
-   If you want to test in your existing browser profile or use the full Firefox DevTools for the background page:
-   1. Open Firefox ESR.
-   2. Navigate to `about:debugging#/runtime/this-firefox`.
-   3. Click **Load Temporary Add-on...**.
-   4. Select any file inside the `webextension/` directory (e.g., `manifest.json`).
-   5. The extension will appear in the list. Click **Inspect** to open the background page's console/debugger.
-   6. To see changes, click **Reload** in the `about:debugging` entry.
 
 ## CLI Reference
 
@@ -181,6 +142,19 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm test:uat` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (pre-release) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
+
+### Running a subset (single file or name filter)
+
+**Vitest is never invoked directly** — no `npx vitest`, no `pnpm exec vitest`. Always go through the pnpm scripts so the correct Vitest project, jsdom/node environment, and (for E2E) the Firefox-ESR lifecycle are set up for you. To narrow a run, **append a filename or path substring** to the script and Vitest treats it as a test-file filter:
+
+| To run | Command |
+|---|---|
+| One fast-tier file by name | `pnpm test:fast typography` |
+| One integration file | `pnpm test:integration recent-tabs` |
+| One unit file | `pnpm test:unit url-validation` |
+| One E2E file (path) | `pnpm test:e2e tests/e2e/titlebar.test.js` |
+
+The filter is a substring match against the file path, so `pnpm test:fast titlebar` runs every fast file with "titlebar" in its name. This is the sanctioned way to run a single test during the TDD inner loop — reaching for raw `vitest`/`npx` skips the project/env setup the scripts provide.
 
 ## Project Context & Gotchas
 
@@ -279,15 +253,14 @@ Every user-facing feature should have at least one E2E test exercising the prima
 
 See [`ROADMAP.md`](ROADMAP.md) "Scope & North Star" for the differentiating-vs-parity framing that drives this E2E-depth split.
 
-**3. Visual and layout regression.**
-The extension's visual identity is a core differentiator — tiles that are *large* and that *fill the viewport* is a flagship benefit. E2E must verify appearance, not just function:
+**3. Structural layout validation.**
+The extension's visual identity is a core differentiator, but E2E focuses strictly on *structural and dimensional* correctness, leaving aesthetic judgments to UAT. E2E must verify layout math, not pixels:
 
-- **Tiles fill the viewport.** The grid should expand so tiles collectively cover the available window area. No large empty regions around or between tiles beyond the user-configured margin/spacing.
-- **Layout settings have visible effect.** Changing margin, spacing, title size, rows, or columns should produce a measurable change in the rendered layout (element positions, sizes, or visibility).
-- **Theme correctness.** Light theme uses a light background with dark text; dark theme uses a dark background with light text. No invisible-text situations.
-- **Responsive reflow.** Resizing the viewport should reflow tiles proportionally.
+- **Tiles fill the viewport.** Assert via JavaScript that grid calculations successfully allocate the available window area to the tiles (e.g., checking bounding client rects).
+- **Layout settings have visible effect.** Changing margin, spacing, or columns must produce a measurable change in the DOM element dimensions and coordinates.
+- **Responsive reflow.** Resizing the viewport should trigger reflow calculations that output proportionally correct DOM coordinate updates.
 
-Use **screenshot comparison** (`page.screenshot()` + pixel-diff or Vitest snapshot matching) for visual regression where practical. Store baseline images in `tests/e2e/screenshots/` and review diffs during PR review.
+**Do not use screenshot pixel-diffing in E2E.** Pixel-matching is brittle and generates false failures on CI due to minor OS-level font or rendering differences. Defer semantic visual checks (contrast, occlusion, "looks right") to the UAT tier.
 
 **4. Settings round-trip.**
 Every preference the user can change via the settings panel must survive a full round-trip: set it → reload `about:newtab` → assert the value is restored. This catches storage bugs, serialization mismatches, and migration regressions that mocks cannot surface.
@@ -336,12 +309,13 @@ document.querySelector('.newtab-site .newtab-control-pin');
 
 User Acceptance Testing tier driven by an LLM agent. Scenarios are written in plain English; an agent (Claude Code in headless mode) walks through each one, takes screenshots, and judges the rendered state against criteria stated in the scenario file. Produces a structured `report.json` + a `summary.md` + screenshot artifacts for human review. Catches the bug class that structural tests miss (occlusion, contrast, layering, "looks broken to a user").
 
-- **Status:** built and runnable (`pnpm test:uat`, optionally with scenario slugs to run a subset). Scenarios: `00-uat-init` (verify the seeded environment), `01-default-ui` (default layout/chrome/drawer + first-run auto-thumbnail & favicon capture), `02-config` (live config changes), `03-restore` (restore the known-good backup), `04-action-buttons` (tile hover action row). Tooling inventory + how to run in [`tests/uat/README.md`](tests/uat/README.md).
+- **Status:** built and runnable (`pnpm test:uat`, optionally with scenario slugs to run a subset). Scenarios are numbered by category — env/smoke `00-uat-init` / `01-default-ui`; tiles `10-tile-surface` / `11-action-buttons`; drawer `20-config` / `21-restore` / `22-advanced-tab` / `23-edit-mode-design`; design `30-typography` / `31-titlebar` / `32-high-contrast`. Tooling inventory + how to run in [`tests/uat/README.md`](tests/uat/README.md).
 - **Architecture — long-lived browser daemon + thin MCP client.** `tests/uat/_tools/browser-daemon.mjs` holds one **Selenium + geckodriver + release-channel Firefox** session for the whole run (a different stack from E2E's ESR + `web-ext` + Puppeteer-BiDi, by design): it pins the `moz-extension://` UUID, **seeds the environment** by real navigation (two passes over a merged US/global + Swiss URL set → `topSites`, accepting cookie banners; plus a top-article-per-news-site visit-then-close to seed the recently-closed row), installs the unsigned extension temporarily (`installAddon`, works on release) **after** the seed so the first render is a thumbnail-free new-user state, and serves an HTTP API on port 9876 (`$UAT_DAEMON_PORT`). `tests/uat/_tools/mcp-server.mjs` is a thin MCP server Claude spawns per scenario that forwards `browser_navigate/click/hover/evaluate/file_upload/take_screenshot/read_screenshot` to the daemon. The runner (`runner.mjs`) owns the daemon lifecycle and runs each scenario's `claude -p`.
-- **Screenshots:** rendered at Full HD (100%), saved downscaled (`$UAT_SHOT_SCALE`, default 0.5 → ~960px) to keep image-token cost low; `browser_take_screenshot` writes to disk and returns a path, `browser_read_screenshot` pulls one inline only when the agent must judge it. Each run writes a flat, timestamped `artifacts/<YYYYMMDD-HHMMSS>/` dir; files lead with their capture/creation time so a filename sort is capture order.
+- **Screenshots:** rendered at Full HD (100%), saved at full resolution by default (`$UAT_SHOT_SCALE`, default 1); `browser_take_screenshot` writes to disk and returns a path, `browser_read_screenshot` pulls one inline only when the agent must judge it. To reduce token cost, they can be downscaled (e.g. 0.5 → ~960px). Each run writes a flat, timestamped `artifacts/<YYYYMMDD-HHMMSS>/` dir; files lead with their capture/creation time so a filename sort is capture order.
 - **Why not `@playwright/mcp` / `@playwright/cli`?** Playwright's Firefox-extension support is Chromium-only (loading a FF extension needs an unsupported `policies.json` hack into Playwright's *patched* build), so it can't load our extension into a real release Firefox; Selenium does it in one supported call.
 - **Standard preamble + fixture:** every scenario starts by restoring `tests/uat/newtabtools_knowngood.zip` (a checked-in NTT backup) so findings reflect the code change, not profile drift. The restore flow is exercised on every run as a side effect — a broken restore fails UAT loudly.
 - **When to run:** Pre-release only (e.g. before AMO submission). **Never on PR / commit / CI** — non-deterministic, costs subscription quota, judgment-based by design; it does not gate merges.
+- **When to write a scenario:** Author a UAT scenario when a feature introduces new visual states (like dark mode, color pickers, or overlays) or complex visual interactions where structural DOM tests cannot prove the feature is aesthetically correct, accessible, or free of occlusion. If the feature is purely functional (e.g., a new keyboard shortcut), rely entirely on E2E.
 - **Pass/fail vs. observations.** Each scenario's `report.json` has `assertions[]` (structural + visual, which decide pass/fail) and `observations[]` ("passed, but a human should know"). The runner gates its exit code on the report verdict — a failed assertion fails the run — and prints failed assertions + observations to the terminal so nothing stays buried. A human still reviews the summary + screenshots before releasing.
 
 ## TDD Workflow per Task
@@ -370,5 +344,6 @@ For every task (feature or bug fix):
 - Do not run E2E on every save during TDD. It only runs at feature completion and on prepare-for-commit.
 - Do not assert on log output or DOM strings as a substitute for behaviour.
 - Do not add E2E coverage for logic that a Unit or Integration test could cover.
+- **Do not write pixel-perfect image comparison tests in E2E.** Delegate semantic visual judgments (contrast, occlusion, layering) to the UAT tier.
 - Do not introduce a second test framework, second mocking library, or a Chromium target. Cross-browser support is tracked in [`ROADMAP.md`](ROADMAP.md); raise it as a question, do not silently add it.
 - Do not skip tests, mark them pending, or weaken assertions to make a build pass. Never use `--no-verify`.

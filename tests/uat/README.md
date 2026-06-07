@@ -39,9 +39,14 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
 
-Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 03-restore`.
+Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 21-restore`.
 
-The suite walks, in order: `00-uat-init` (verify the seeded environment), `01-default-ui` (default layout/chrome/drawer + the first-run auto-thumbnail & favicon capture), `02-config` (live config changes), `03-restore` (restore the known-good backup), `04-action-buttons` (tile hover action row).
+Scenarios are numbered by category and run in filename order:
+
+- **00s — env / smoke:** `00-uat-init` (verify the seeded environment), `01-default-ui` (default layout/chrome/drawer + the first-run auto-thumbnail & favicon capture).
+- **10s — tiles:** `10-tile-surface` (overlay legibility, stat chip, hover action row, pin stripe), `11-action-buttons` (tile hover action row / occlusion).
+- **20s — drawer:** `20-config` (live config changes), `21-restore` (restore the known-good backup), `22-advanced-tab` (Advanced tab on-system + confirm steps), `23-edit-mode-design` (Edit/Done mode affordances).
+- **30s — design:** `30-typography` (font role discipline), `31-titlebar` (Board A bar + recent-chip identity), `32-high-contrast` (HC validation pass).
 
 ## Skill
 
@@ -67,13 +72,13 @@ image viewer and paging forward walks the run. Runs never overwrite each other.
 pnpm build
 
 # browser path only (no SDK needed):
-FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-smoke.mjs
+node tests/uat/_tools/browser-smoke.mjs
 
 # daemon HTTP-API contract (no SDK needed):
-FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/daemon-smoke.mjs
+node tests/uat/_tools/daemon-smoke.mjs
 
 # full MCP path + payload measurement:
-FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
+node tests/uat/_tools/mcp-smoke.mjs
 ```
 
 ## Dependencies

@@ -39,7 +39,6 @@ describe('Titlebar [hidden] overrides — display:none must win over display:fle
 	// so it has no `[hidden]` override on purpose. `#ntt-statusbar` is also
 	// absent — the status bar was deleted in Phase 5-1.
 	const elements = [
-		'#ntt-wordmark',
 		'#ntt-search',
 	];
 

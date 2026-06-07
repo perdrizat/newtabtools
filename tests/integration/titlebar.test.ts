@@ -134,41 +134,27 @@ describe('_layoutTitlebar — measures the card container and sets the slot widt
 	});
 });
 
-describe('Titlebar — pref toggling (wordmark + search; clock removed)', () => {
-	let wordmark: HTMLElement;
-	let search: HTMLElement;
+describe('Titlebar — Board A chrome (newTab.xhtml)', () => {
+	let xhtml: string;
 
-	beforeEach(() => {
-		document.body.innerHTML = `
-			<div id="ntt-titlebar">
-				<div id="ntt-titlebar-recent"></div>
-				<div id="ntt-search"></div>
-				<div id="ntt-masthead">
-					<div id="ntt-wordmark"></div>
-					<div id="ntt-titlebar-buttons"></div>
-				</div>
-			</div>
-		`;
-		wordmark = document.getElementById('ntt-wordmark')!;
-		search = document.getElementById('ntt-search')!;
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: titlebar structure
+		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8');
 	});
 
-	afterEach(() => {
-		document.body.innerHTML = '';
+	it('drops the wordmark, masthead, and lock/cogwheel button cluster (§1)', () => {
+		expect(xhtml).not.toContain('ntt-wordmark');
+		expect(xhtml).not.toContain('ntt-masthead');
+		expect(xhtml).not.toContain('ntt-titlebar-buttons');
+		expect(xhtml).not.toContain('locked-toggle');
+	});
+
+	it('keeps a single titlebar action button (#options-toggle) labelled Edit', () => {
+		expect(xhtml).toMatch(/<button id="options-toggle"[^>]*data-message="options_edit"/);
 	});
 
 	it('has no clock or divider element in the redesigned titlebar', () => {
-		expect(document.getElementById('ntt-clock')).toBeNull();
-		expect(document.querySelector('.ntt-titlebar-divider')).toBeNull();
-	});
-
-	it('wordmark is always shown inside the masthead (NTT-logo toggle removed)', () => {
-		expect(wordmark).not.toBeNull();
-		expect(wordmark.hidden).toBe(false);
-	});
-
-	it('hides search when titleBarSearch is false', () => {
-		search.hidden = true;
-		expect(search.hidden).toBe(true);
+		expect(xhtml).not.toContain('ntt-clock');
+		expect(xhtml).not.toContain('ntt-titlebar-divider');
 	});
 });

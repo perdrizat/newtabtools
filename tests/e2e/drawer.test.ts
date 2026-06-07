@@ -186,19 +186,22 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		});
 	}, 60_000);
 
-	it('the brand wordmark is always shown inside the masthead (NTT-logo toggle removed)', async () => {
-		// The titleBarWordmark toggle was removed; the wordmark now lives
-		// permanently in the right-end masthead box.
+	it('Board A: no wordmark/masthead — a single visible Edit button is the titlebar action', async () => {
+		// §1 removed the wordmark, masthead, and lock/cogwheel cluster; the one
+		// titlebar action is the Edit button (#options-toggle).
 		const result = await page.evaluate(() => {
-			const mast = document.getElementById('ntt-masthead');
-			const wm = document.getElementById('ntt-wordmark') as HTMLElement;
+			const edit = document.getElementById('options-toggle') as HTMLElement;
 			return {
-				inMasthead: !!(mast && mast.querySelector('#ntt-wordmark')),
-				visible: !!wm && wm.offsetWidth > 0,
+				noMasthead: !document.getElementById('ntt-masthead'),
+				noWordmark: !document.getElementById('ntt-wordmark'),
+				editText: edit ? (edit.textContent || '').trim() : null,
+				editVisible: !!edit && edit.offsetWidth > 0,
 			};
 		});
-		expect(result.inMasthead).toBe(true);
-		expect(result.visible).toBe(true);
+		expect(result.noMasthead).toBe(true);
+		expect(result.noWordmark).toBe(true);
+		expect(result.editText).toBe('Edit');
+		expect(result.editVisible).toBe(true);
 	}, 30_000);
 
 	it('regression: clicking the toggle row label flips the pref (delegation, not direct button click)', async () => {

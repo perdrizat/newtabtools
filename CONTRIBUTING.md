@@ -4,16 +4,16 @@
 
 ---
 
-## ~~Filing Bug Reports~~ (currently disabled)
+## Filing Bug Reports
 
-~~Help us help you! This guide shows you how to create a clear, actionable bug report (or "issue") so we can identify the problem and release a fix as quickly as possible. Please remember that the developers of New Tab Tools are human, with limited time and bills to pay.~~
+Help us help you! You can report bugs at [https://github.com/perdrizat/newtabtools/issues](https://github.com/perdrizat/newtabtools/issues). This guide shows you how to create a clear, actionable bug report (or "issue") so we can identify the problem and release a fix as quickly as possible. Please remember that the developers of New Tab Tools are human, with limited time and bills to pay.
 
-### ~~What to put in your bug report~~
-* ~~Did the problem start happening recently (e.g. after updating to a new version of New Tab Tools/Firefox) or was this always a problem?~~
-* ~~Which version of New Tab Tools are you using? You can get the exact version from the Firefox Add-On Manager.~~
-* ~~What's the name and version of the operating system you're using? What version of Firefox are you using? You can find this information by visiting `about:support` or clicking on Troubleshooting Information on the Help menu.~~
-* ~~Can you reliably reproduce the issue? If not, provide details about how often the problem happens and under which conditions it normally happens.~~
-* ~~Do you have another extension or theme installed that might cause the issue? (Because of the way New Tab Tools works, this can happen. *Classic Theme Restorer* and some themes are known to have caused problems.) Try disabling these other add-ons and see if the issue goes away.~~
+### What to put in your bug report
+* Did the problem start happening recently (e.g. after updating to a new version of New Tab Tools/Firefox) or was this always a problem?
+* Which version of New Tab Tools are you using? You can get the exact version from the Firefox Add-On Manager.
+* What's the name and version of the operating system you're using? What version of Firefox are you using? You can find this information by visiting `about:support` or clicking on Troubleshooting Information on the Help menu.
+* Can you reliably reproduce the issue? If not, provide details about how often the problem happens and under which conditions it normally happens.
+* Do you have another extension or theme installed that might cause the issue? (Because of the way New Tab Tools works, this can happen. *Classic Theme Restorer* and some themes are known to have caused problems.) Try disabling these other add-ons and see if the issue goes away.
 
 ---
 
@@ -78,7 +78,8 @@ For the MV3/Chrome forward-compatibility rules new code should also follow (prom
 - **Run `pnpm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**
 - **For user-visible UI changes, run the UAT tier** with `pnpm test:uat` and review the run's `summary.md` + screenshots before requesting review. UAT is pre-release / local-only (it spends Claude Code subscription tokens and never runs in CI) — it catches the "looks broken to a user" bug class deterministic tests miss. See [`TESTING.md`](TESTING.md#uat-tests-testsuat--see-uat_planmd) and [`tests/uat/README.md`](tests/uat/README.md).
 - If your new tests use `fs.readFileSync` on files under `webextension/`, the ESLint rule `ntt/no-source-grep` will flag it — add a disable comment with justification if the check is purely structural.
-- Update `CHANGELOG.md` under `[Unreleased]` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs.
+- **Daily patch bump.** The patch version bumps **once per day, on that day's first commit**: run `pnpm version patch`. It bumps `version` in `package.json` and makes a `vX.Y.Z` commit + tag; the next `pnpm build` mirrors the version into `manifest.json` via `scripts/sync-version.mjs` (so you never hand-edit the manifest version). `package.json` is the single source of truth. Run it on a clean tree — commit your in-progress work first, then bump. Later commits the same day reuse that day's version (no further bump until tomorrow).
+- Update `CHANGELOG.md` using [Keep a Changelog](https://keepachangelog.com/) format. **Keep entries to one line each** — concise like git commit messages, not paragraphs. Accumulate entries under `[Unreleased]` as you work; when you do the day's first commit + bump, **promote `[Unreleased]` into a version-led, dated section headed `## [X.Y.Z] — YYYY-MM-DD`** — where `X.Y.Z` is the version you just bumped to and the date is today. Same-day commits append to that one section (one heading per date — never add a second heading for a date that already exists, and don't re-add `[Unreleased]` until the next day's work).
 - After changing `package.json` or `pnpm-lock.yaml`, run `pnpm audit` and resolve any vulnerabilities before pushing. GitHub CI runs a dependency audit on every push and will fail the build if issues are found.
 
 ### Security-boundary changes require explicit acknowledgement

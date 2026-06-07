@@ -19,7 +19,9 @@ var Prefs = {
 	_actionIconSize: 'medium',
 	_tileActions: true,
 	_tileRadius: 'medium',
-	_locked: false,
+	// Board A / Edit mode (§2): the board is locked by default — tiles only move
+	// while editing (drawer open). openDrawer unlocks; closeDrawer re-locks.
+	_locked: true,
 	_history: true,
 	_recent: true,
 	_thumbnailSize: 600,
