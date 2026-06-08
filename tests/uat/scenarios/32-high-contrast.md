@@ -2,8 +2,10 @@
 
 A validation pass (DESIGNv2_REVIEW §8) — not new design. After the v2 redesign,
 confirm the High-contrast theme still holds up: (a) the tile title overlay band
-keeps titles legible over light AND dark thumbnails, (b) the danger red stays
-distinct against the HC background, (c) the focus ring stays visible.
+keeps titles legible over light AND dark thumbnails, (b) the destructive ✕ reads as
+the single filled red action button (the manual HC theme keeps the alarm-red hue;
+the white ring + icon carry legibility on black — only true OS forced-colors falls
+back to a hueless inverted treatment), (c) the focus ring stays visible.
 
 Use the standard preamble (navigate, `00-initial`). `browser_evaluate` must
 `return`.
@@ -34,13 +36,32 @@ Use the standard preamble (navigate, `00-initial`). `browser_evaluate` must
    ```
    Pass = `bg` contains `gradient` and `shadow` is a non-`none` text-shadow.
 
-4. **Danger role resolves to a colour** (used by the destructive buttons + the
-   trend-down stat). Open the drawer → Advanced, then:
+4. **Danger role resolves to a colour** (the drawer Reset/Restore buttons use the
+   alarm-red `#cc1633` hue). Open the drawer → Advanced, then:
    ```js
    return getComputedStyle(document.getElementById('options-reset-all')).color
    ```
-   Pass = a real colour (not transparent) — the danger tone is applied in HC.
-   Close the drawer afterwards.
+   Pass = a real colour (not transparent).
+
+5. **Tile action ✕ is the single filled red button (manual HC theme keeps the hue).**
+   The manual high-contrast theme controls its own palette, so the destructive ✕
+   renders as a filled red button (white icon + white ring keep it legible on black)
+   — the one filled button among the outlined neutral trio. The drawer is open (edit
+   mode) so the pinned-tile action row is present:
+   ```js
+   return (() => {
+     const x = document.querySelector('.ntt-action-btn[data-action="remove"]');
+     const other = document.querySelector('.ntt-action-btn[data-action="pin"], .ntt-action-btn[data-action="edit"], .ntt-action-btn[data-action="refresh"]');
+     if (!x || !other) { return 'no-action-row'; }
+     const bg = getComputedStyle(x).backgroundColor;
+     return { differs: bg !== getComputedStyle(other).backgroundColor, xBg: bg };
+   })()
+   ```
+   Pass = `differs` true and `xBg` is a red fill (not black/transparent) — the ✕ is
+   the standout destructive control, with the white ring/icon carrying legibility.
+   (True OS `@media (forced-colors: active)` is separate: there the OS strips custom
+   colour and the ✕ falls back to a system-colour inverted treatment.) Close the
+   drawer afterwards.
 
 ## Visual judgment (the core of §8)
 
@@ -49,8 +70,10 @@ Use the standard preamble (navigate, `00-initial`). `browser_evaluate` must
   - **Overlay legibility:** every tile title is clearly readable where it sits,
     including over light/white-topped thumbnails (the band gives the white text a
     floor). Flag any title that washes out.
-  - **Danger distinctness:** if any danger-tinted control is visible, it reads as
-    distinct against the HC background (note if the dark danger tone looks weak).
+  - **Destructive ✕ (HC):** enter edit mode and look at a pinned tile's action row —
+    the ✕ reads as the single **filled red** button among the outlined neutral trio,
+    with a white icon + white ring keeping it legible on the black ground. The drawer
+    Reset/Restore buttons share the same alarm red. Flag only if genuinely illegible.
 - Open the drawer → Advanced, `browser_take_screenshot` named `hc-advanced`, read
   it. Judge: the Reset/Restore danger buttons and the toggles/controls remain
   legible and distinct in HC.
@@ -62,8 +85,8 @@ Use the standard preamble (navigate, `00-initial`). `browser_evaluate` must
 
 ## Output
 
-- `report.json` — assertions 2–4 plus the three visual verdicts (overlay, danger,
+- `report.json` — assertions 2–5 plus the three visual verdicts (overlay, danger,
   focus ring).
-- `summary.md` — lead with the verdict; for each of overlay legibility, danger
-  distinctness, and focus-ring visibility, say whether HC holds or needs a bump
-  (e.g. the dark danger tone). This is advisory validation, not redesign.
+- `summary.md` — lead with the verdict; for each of overlay legibility, danger by
+  treatment (the ✕ is the inverted action button, not a hue cue), and focus-ring
+  visibility, say whether HC holds. This is advisory validation, not redesign.

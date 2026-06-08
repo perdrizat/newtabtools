@@ -5,8 +5,11 @@ import {
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
+	waitForCondition,
 	resetTestState,
 } from './_helpers.ts';
+
+const TEST_URL = 'https://edit-cue.example.com/';
 
 /**
  * Board A / Edit mode (DESIGNv2_REVIEW §2): there is no titlebar padlock and no
@@ -86,6 +89,130 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 			await page.close();
 		}
 	});
+
+	it('edit mode: the selected pinned tile shows the copper ring + drag handle + action row, no dashed', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			// Pin a tile (live grid update), then open edit mode and select it.
+			await page.evaluate((u) => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Edit Cue', url: u }, resolve);
+			}), TEST_URL);
+			await waitForCondition(
+				page,
+				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.find((s: any) => s && s.url === u && s.isPinned)); },
+				[TEST_URL],
+				{ timeout: 15_000, message: 'tile not pinned' }
+			);
+			await page.evaluate((u) => {
+				const w = window as any;
+				w.newTabTools.openDrawer();
+				w.newTabTools.switchDrawerTab('tile');
+				const site = w.Grid.sites.find((s: any) => s && s.url === u);
+				if (site && site.cell) { w.newTabTools.selectedSiteIndex = site.cell.index; }
+			}, TEST_URL);
+			await new Promise(r => setTimeout(r, 300));
+			// Hover the selected tile — the elevation shadow (.newtab-site:hover) is
+			// equal-specificity and later in the cascade, so the ring must survive
+			// hover (this is exactly where it regressed before).
+			await page.hover('.newtab-site[data-selected="true"]').catch(() => {});
+			await new Promise(r => setTimeout(r, 150));
+
+			const cues = await page.evaluate((u) => {
+				const w = window as any;
+				const site = w.Grid.sites.find((s: any) => s && s.url === u);
+				const node = site.node;
+				const cs = getComputedStyle(node);
+				const handle = node.querySelector('.ntt-drag-handle');
+				const actions = node.querySelector('.ntt-actions');
+				return {
+					selected: node.getAttribute('data-selected'),
+					ring: cs.boxShadow,
+					accent: getComputedStyle(document.documentElement).getPropertyValue('--ntt-accent').trim(),
+					outlineStyle: cs.outlineStyle,
+					handleDisplay: handle ? getComputedStyle(handle).display : 'none',
+					actionsOpacity: actions ? getComputedStyle(actions).opacity : '0',
+					doneBtn: (document.getElementById('options-toggle')!.textContent || '').trim(),
+				};
+			}, TEST_URL);
+
+			expect(cues.selected).toBe('true');
+			// The ring must be the copper accent (both accent hexes → rgb), NOT just the
+			// neutral elevation shadow — assert the accent colour is present.
+			const ACCENTS = ['rgb(201, 100, 66)', 'rgb(224, 122, 93)'];
+			expect(ACCENTS.some(a => cues.ring.includes(a)), `ring "${cues.ring}" lacks the accent`).toBe(true);
+			expect(cues.outlineStyle).not.toBe('dashed'); // no redundant dashed on pinned
+			expect(cues.handleDisplay).toBe('flex');      // drag handle visible
+			expect(parseFloat(cues.actionsOpacity)).toBe(1); // persistent action row
+			expect(cues.doneBtn).toBe('Done');
+
+			// cleanup so the pinned tile doesn't leak into later tests
+			await page.evaluate(() => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.clear' }, resolve);
+			}));
+		} catch (e) {
+			await captureFailure(page, 'edit-mode-cues');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+
+	it('edit mode: clicking a tile body opens the Tile dialog prefilled (from any drawer tab)', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			await page.evaluate((u) => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Edit Click', url: u }, resolve);
+			}), TEST_URL);
+			await waitForCondition(
+				page,
+				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.find((s: any) => s && s.url === u && s.isPinned)); },
+				[TEST_URL],
+				{ timeout: 15_000, message: 'tile not pinned' }
+			);
+			// Open the drawer to the ADVANCED tab — proves the tile click switches to
+			// the Tile tab rather than relying on it already being active.
+			await page.evaluate(() => {
+				const w = window as any;
+				w.newTabTools.openDrawer();
+				w.newTabTools.switchDrawerTab('advanced');
+			});
+			await new Promise(r => setTimeout(r, 300));
+			// Click the tile body (the link) — not an action button.
+			await page.evaluate((u) => {
+				const w = window as any;
+				const site = w.Grid.sites.find((s: any) => s && s.url === u);
+				(site.node.querySelector('.newtab-link') || site.node).click();
+			}, TEST_URL);
+			await new Promise(r => setTimeout(r, 300));
+
+			const state = await page.evaluate((u) => {
+				const w = window as any;
+				const site = w.Grid.sites.find((s: any) => s && s.url === u);
+				return {
+					tab: document.documentElement.getAttribute('drawer-tab'),
+					selected: site.node.getAttribute('data-selected'),
+					editorVisible: !(document.getElementById('options-tile') as HTMLElement).hidden,
+				};
+			}, TEST_URL);
+
+			expect(state.tab).toBe('tile');          // switched to the Tile menu
+			expect(state.selected).toBe('true');     // prefilled for this tile
+			expect(state.editorVisible).toBe(true);  // the tile editor is shown
+
+			await page.evaluate(() => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.clear' }, resolve);
+			}));
+		} catch (e) {
+			await captureFailure(page, 'edit-click-tile');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
 
 	it('hover actions remain available in normal (locked) mode — not gated on lock (§3c)', async () => {
 		const page = await openNewTab(browser);

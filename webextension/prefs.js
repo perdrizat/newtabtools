@@ -234,6 +234,28 @@ var Filters = {
 		}
 		return copy;
 	},
+	/**
+	 * Canonicalise a user-typed filter host so exact matching reliably fires.
+	 * Trims, lowercases, extracts the host from a pasted URL, maps a leading
+	 * `*.` wildcard to the leading-dot form (so the common `*.example.com`
+	 * convention behaves like the documented `.example.com`), strips a path
+	 * remainder and trailing FQDN dots while preserving a single leading
+	 * wildcard dot. Returns `''` when nothing usable remains.
+	 * @param {string} input
+	 * @returns {string}
+	 */
+	normalizeHost(input) {
+		let s = String(input == null ? '' : input).trim();
+		if (!s) {
+			return '';
+		}
+		if (/:\/\//.test(s)) {
+			try { s = new URL(s).host; } catch (e) { /* not a URL — fall through */ }
+		}
+		s = s.toLowerCase().replace(/^\*\./, '.').replace(/\/.*$/, '');
+		let lead = s.startsWith('.') ? '.' : '';
+		return lead + s.replace(/^\.+/, '').replace(/\.+$/, '');
+	},
 	setFilter(host, limit) {
 		if (limit == -1) {
 			delete this._list[host];

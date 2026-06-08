@@ -74,6 +74,40 @@ describe('tile surface — destructive action colour (§3c/§7)', () => {
 		expect(block).toBeTruthy();
 		expect(block![0]).toMatch(/var\(--ntt-danger/);
 	});
+
+	it('the Remove (✕) is a FILLED danger button with background-independent separators', () => {
+		const block = css.match(/\.ntt-action-btn\[data-action="remove"\][^{]*\{[^}]*\}/s);
+		expect(block).toBeTruthy();
+		// fill carries meaning; white ring saves it on dark/busy thumbs; drop shadow
+		// saves it on white/light thumbs.
+		expect(block![0]).toMatch(/background:\s*var\(--ntt-danger/);
+		expect(block![0]).toMatch(/box-shadow:[^;]*rgba\(255,\s*255,\s*255[^;]*rgba\(0,\s*0,\s*0/);
+		// larger than the trio (so it reads as the important one)
+		expect(block![0]).toMatch(/\+\s*2px/);
+	});
+
+	it('each action button carries its own surface (shared float shadow) — no unified bar behind the cluster', () => {
+		// The cluster container must NOT paint a scrim/bar behind all four buttons.
+		const cluster = css.match(/\.ntt-actions\s*\{[^}]*\}/s);
+		expect(cluster).toBeTruthy();
+		expect(cluster![0]).not.toMatch(/background:/);
+		// Each neutral button gets the shared ring + drop shadow token so it reads on
+		// any background (white-on-white / dark-on-dark).
+		const btn = css.match(/\.ntt-action-btn\s*\{[^}]*\}/s);
+		expect(btn).toBeTruthy();
+		expect(btn![0]).toMatch(/box-shadow:\s*var\(--ntt-float-shadow\)/);
+	});
+
+	it('action buttons, drag handle, and "+ Pin tile" all share the SAME float-shadow treatment', () => {
+		const usesFloat = (re: RegExp) => {
+			const m = css.match(re);
+			expect(m, `rule not found: ${re}`).toBeTruthy();
+			return /box-shadow:\s*var\(--ntt-float-shadow\)/.test(m![0]);
+		};
+		expect(usesFloat(/\.ntt-action-btn\s*\{[^}]*\}/s)).toBe(true);
+		expect(usesFloat(/:root\[drawer-open\]\s+\.newtab-site\[pinned\]\s+\.ntt-drag-handle\s*\{[^}]*\}/s)).toBe(true);
+		expect(usesFloat(/\.ntt-add-tile-chip\s*\{[^}]*\}/s)).toBe(true);
+	});
 });
 
 describe('tile surface — behavioral (§3c)', () => {

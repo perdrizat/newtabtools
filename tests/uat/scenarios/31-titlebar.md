@@ -56,6 +56,14 @@ is `true` (~5s budget).
    and a `domain` that does **not** start with `www.` and contains no `/`
    (registrable domain, not a path/title suffix).
 
+   **Stored-favicon note (advisory observation, not pass/fail):** a recent card uses
+   the closed tab's session favicon when present, and otherwise falls back to the
+   extension's **stored** favicon for that URL (collected during tile capture) before
+   the letter-block glyph. Note in `observations[]` whether any recent card shows a
+   real favicon `<img>` (`document.querySelector('.ntt-recent-favicon img')`) vs the
+   letter block — the seeded closed tabs are deep article URLs that often have no
+   stored favicon, so the glyph fallback here is expected, not a defect.
+
 4. **Equal padding on the sides + top (§1).**
    ```js
    return (() => {

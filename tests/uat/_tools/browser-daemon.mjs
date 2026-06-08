@@ -88,10 +88,12 @@ export const SITES = [
 	['https://www.bbc.com/news', 'BBC News'],
 	['https://www.digitec.ch/en', 'Digitec'],
 	['https://www.tomshardware.com/', 'Tom\'s Hardware'],
-	['https://www.ebay.com/', 'eBay'],
+	['https://hackaday.com/', 'Hackaday'],
+	['https://www.phoronix.com/', 'Phoronix'],
 	['https://www.adafruit.com/', 'Adafruit'],
 	['https://www.theregister.com/', 'The Register'],
-	['https://www.theblock.co/', 'The Block'],
+	['https://www.coindesk.com/', 'CoinDesk'],
+	['https://bitcoinmagazine.com/', 'Bitcoin Magazine'],
 ];
 
 export const VISIT_URLS = [...SITES.map(s => s[0])];
@@ -108,7 +110,7 @@ export const NEWS_URLS = (process.env.UAT_NEWS_URLS
 		'https://news.ycombinator.com/',
 		'https://techcrunch.com/',
 		'https://www.heise.de/newsticker/',
-		'https://www.theblock.co/',
+		'https://bitcoinmagazine.com/',
 	]);
 const SEED_PAGELOAD_TIMEOUT_MS = 8000;
 // Cap how long /navigate waits for full page load. Default high (so UAT's
@@ -147,12 +149,14 @@ function log(msg) {
 function resolveXpi() {
 	if (process.env.EXTENSION_XPI) { return process.env.EXTENSION_XPI; }
 	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
-	const f = fs.readdirSync(XPI_DIR)
+	const files = fs.readdirSync(XPI_DIR)
 		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
 		.map(n => path.join(XPI_DIR, n))
 		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!f.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${XPI_DIR}`); }
-	return f[0];
+	if (!files.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${XPI_DIR}`); }
+	
+	const uatBundle = files.find(f => f.includes('-uat.zip'));
+	return uatBundle || files[0];
 }
 
 async function makeDriver() {
@@ -492,13 +496,18 @@ async function resetToDefault() {
 	return { ok: true, resetCells };
 }
 
-const driver = await makeDriver();
-await seedEnvironment(driver);
-await installExtension(driver);
-await driver.get(NEWTAB_URL);
-await pinDefaultTiles();
-await captureDefaultPins();
-log('initial newTab.xhtml loaded (extension installed post-seed; default tiles pinned + imagery captured)');
+let driver;
+const isMain = process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]);
+
+if (isMain) {
+	driver = await makeDriver();
+	await seedEnvironment(driver);
+	await installExtension(driver);
+	await driver.get(NEWTAB_URL);
+	await pinDefaultTiles();
+	await captureDefaultPins();
+	log('initial newTab.xhtml loaded (extension installed post-seed; default tiles pinned + imagery captured)');
+}
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
 
@@ -627,9 +636,11 @@ server.on('error', (e) => {
 	void shutdown(1);
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-	log(`ready on http://127.0.0.1:${PORT}`);
-});
+if (isMain) {
+	server.listen(PORT, '127.0.0.1', () => {
+		log(`ready on http://127.0.0.1:${PORT}`);
+	});
+}
 
 // ─── lifecycle ────────────────────────────────────────────────────────────
 

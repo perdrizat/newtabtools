@@ -111,6 +111,8 @@ export default [
 			'webextension/lib/zip.js',
 			'tests/e2e/test-profile/**',
 			'tests/e2e/_artifacts/**',
+			'tests/uat/artifacts/**',
+			'dist/**',
 		],
 	},
 	js.configs.recommended,

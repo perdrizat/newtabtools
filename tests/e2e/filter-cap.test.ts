@@ -50,7 +50,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			});
 			await new Promise(r => setTimeout(r, 500));
 
-			// Filter panel is part of the Advanced tab and is visible.
+			// The Filter… button toggles the panel; one click opens (+ populates) it.
 			const filterVisible = await page.evaluate(() => {
 				const el = document.getElementById('options-filter') as HTMLElement;
 				return el && el.offsetParent !== null;
@@ -203,4 +203,118 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			await page.close();
 		}
 	}, 90_000);
+
+	it('the Filter… button toggles the panel open and closed', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
+			await new Promise(r => setTimeout(r, 500));
+			await page.evaluate(() => { (window as any).Prefs.history = true; });
+			await page.evaluate(() => {
+				(window as any).newTabTools.openDrawer();
+				(window as any).newTabTools.switchDrawerTab('advanced');
+			});
+			await new Promise(r => setTimeout(r, 300));
+
+			// Panel starts hidden (it's a toggle now, not always-visible).
+			const hiddenInitially = await page.evaluate(() =>
+				(document.getElementById('options-filter') as HTMLElement).hidden);
+			expect(hiddenInitially).toBe(true);
+
+			// First click → open + aria-expanded=true.
+			await page.evaluate(() => document.getElementById('historytiles-filter')!.click());
+			await new Promise(r => setTimeout(r, 300));
+			const afterOpen = await page.evaluate(() => {
+				const el = document.getElementById('options-filter') as HTMLElement;
+				return { hidden: el.hidden, expanded: document.getElementById('historytiles-filter')!.getAttribute('aria-expanded') };
+			});
+			expect(afterOpen.hidden).toBe(false);
+			expect(afterOpen.expanded).toBe('true');
+
+			// Second click → collapse + aria-expanded=false.
+			await page.evaluate(() => document.getElementById('historytiles-filter')!.click());
+			await new Promise(r => setTimeout(r, 300));
+			const afterClose = await page.evaluate(() => {
+				const el = document.getElementById('options-filter') as HTMLElement;
+				return { hidden: el.hidden, expanded: document.getElementById('historytiles-filter')!.getAttribute('aria-expanded') };
+			});
+			expect(afterClose.hidden).toBe(true);
+			expect(afterClose.expanded).toBe('false');
+		} catch (e) {
+			await captureFailure(page, 'filter-toggle');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+
+	it('the ✕ remove control deletes a filter entry and its row', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			await page.evaluate(() => { Filters.setFilter('remove.example.com', 2); });
+			await page.evaluate(() => document.getElementById('options-toggle')!.click());
+			await new Promise(r => setTimeout(r, 500));
+			await page.evaluate(() => { (window as any).Prefs.history = true; });
+			await page.evaluate(() => {
+				(window as any).newTabTools.openDrawer();
+				(window as any).newTabTools.switchDrawerTab('advanced');
+			});
+			await new Promise(r => setTimeout(r, 300));
+			await page.evaluate(() => document.getElementById('historytiles-filter')!.click());
+			await new Promise(r => setTimeout(r, 500));
+
+			// The filter row carries an explicit ✕ remove control.
+			const hasRemove = await page.evaluate(() => {
+				const tbody = document.querySelector('#options-filter tbody')!;
+				for (const row of tbody.querySelectorAll('tr')) {
+					if (row.cells[0]?.textContent === 'remove.example.com') {
+						return !!row.querySelector('.ntt-filter-remove');
+					}
+				}
+				return false;
+			});
+			expect(hasRemove).toBe(true);
+
+			// Click it → the filter entry is deleted and the row disappears.
+			await page.evaluate(() => {
+				const tbody = document.querySelector('#options-filter tbody')!;
+				for (const row of tbody.querySelectorAll('tr')) {
+					if (row.cells[0]?.textContent === 'remove.example.com') {
+						(row.querySelector('.ntt-filter-remove') as HTMLElement).click();
+						break;
+					}
+				}
+			});
+			await new Promise(r => setTimeout(r, 400));
+
+			const stored = await page.evaluate(() => Filters.getList());
+			expect(stored['remove.example.com']).toBeUndefined();
+
+			const rowGone = await page.evaluate(() => {
+				const tbody = document.querySelector('#options-filter tbody')!;
+				for (const row of tbody.querySelectorAll('tr')) {
+					if (row.cells[0]?.textContent === 'remove.example.com') { return false; }
+				}
+				return true;
+			});
+			expect(rowGone).toBe(true);
+		} catch (e) {
+			await captureFailure(page, 'filter-remove');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+
+	// NOTE: the host-match/limit logic lives in the BACKGROUND module (tiles.js;
+	// the page loads tiles-shim.js), so it is unit-tested at the Fast tier where
+	// tiles.js is loaded directly (tests/integration/filter-cap.test.ts —
+	// Tiles._hostFilteredOut + getAllTiles with mocked topSites). It is not
+	// reachable from this page context, and the E2E profile has no seeded
+	// history to drive a real reduction, so E2E here covers the page-side filter
+	// UI only (toggle, ✕ remove, add-via-UI, steppers).
 });

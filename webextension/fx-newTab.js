@@ -978,8 +978,14 @@ Site.prototype = {
 			}
 		}
 		let addTile = this._querySelector('.ntt-add-tile');
-		if (addTile && !addTile.textContent) {
-			addTile.textContent = newTabTools.getString('tile_add');
+		if (addTile && !addTile.querySelector('.ntt-add-tile-chip')) {
+			// The label is an opaque chip so it reads over any thumbnail (the slot
+			// keeps its real thumbnail under a light scrim — no opacity dim).
+			let chip = document.createElementNS(HTML_NAMESPACE, 'span');
+			chip.className = 'ntt-add-tile-chip';
+			chip.textContent = newTabTools.getString('tile_add');
+			addTile.textContent = '';
+			addTile.appendChild(chip);
 		}
 		// §3c order: Edit URL · Reload · Pin/Unpin · Remove. "Open in new tab"
 		// was dropped — clicking the tile already opens it (middle-/⌘-click for
@@ -1170,13 +1176,36 @@ Site.prototype = {
 			return;
 		}
 
-		// Tile-selection mode: when the drawer is open AND the Tile tab is
-		// active, clicking a tile selects it for editing instead of
-		// navigating.
+		// "+ Pin tile" (§7): clicking a candidate's add-tile slot pins it
+		// immediately (same effect as the Pin action) AND opens the Add-tile (Tile)
+		// menu with the now-pinned tile selected — so label and behaviour agree.
+		if (target.closest('.ntt-add-tile')) {
+			event.preventDefault();
+			let cellIndex = this.cell ? this.cell.index : null;
+			if (!this.isPinned) {
+				this.pin();
+			}
+			if (typeof newTabTools !== 'undefined') {
+				newTabTools.openDrawer();
+				newTabTools.switchDrawerTab('tile');
+				if (cellIndex != null) {
+					newTabTools.selectedSiteIndex = cellIndex;
+				}
+			}
+			return;
+		}
+
+		// Edit mode: clicking a tile body (anywhere but an action button / the
+		// "+ Pin tile" slot, both handled above) opens the Tile dialog PREFILLED for
+		// this tile — so the user can edit its URL, thumbnail, or background colour.
+		// Works from any drawer tab (not just the Tile tab); drag-to-Move is separate
+		// (the drag handler distinguishes a click from a drag).
 		let docEl = document.documentElement;
-		if (docEl.hasAttribute('drawer-open') && docEl.getAttribute('drawer-tab') === 'tile') {
+		if (docEl.hasAttribute('drawer-open')) {
 			event.preventDefault();
 			if (typeof newTabTools !== 'undefined' && this.cell) {
+				newTabTools.openDrawer();
+				newTabTools.switchDrawerTab('tile');
 				newTabTools.selectedSiteIndex = this.cell.index;
 			}
 			return;

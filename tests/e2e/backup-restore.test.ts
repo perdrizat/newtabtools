@@ -290,4 +290,56 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 			await page.close();
 		}
 	}, 90_000);
+
+	it('the Restore file picker is a themed label (native input hidden); filename shows on select', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			await page.evaluate(() => {
+				const w = window as any;
+				w.newTabTools.openDrawer();
+				w.newTabTools.switchDrawerTab('advanced');
+			});
+			await new Promise(r => setTimeout(r, 400));
+
+			// The native input is visually hidden; the styled <label> drives it.
+			const before = await page.evaluate(() => {
+				const input = document.getElementById('options-restore-file') as HTMLElement;
+				const label = document.querySelector('label[for="options-restore-file"]') as HTMLElement;
+				const nameEl = document.querySelector('#options-export .ntt-file-name, .ntt-file-name') as HTMLElement;
+				return {
+					inputHidden: input.offsetWidth <= 1 && input.offsetHeight <= 1,
+					labelVisible: !!label && label.offsetParent !== null,
+					labelThemed: !!label && getComputedStyle(label).borderTopStyle === 'solid',
+					nameText: nameEl ? nameEl.textContent : null,
+				};
+			});
+			expect(before.inputHidden).toBe(true);
+			expect(before.labelVisible).toBe(true);
+			expect(before.labelThemed).toBe(true);
+
+			// Selecting a file updates the themed filename display + enables Restore.
+			const fileInput = await page.$('#options-restore-file') as import('puppeteer-core').ElementHandle<HTMLInputElement> | null;
+			await fileInput!.uploadFile(zipFixturePath);
+			await waitForCondition(
+				page,
+				() => !(document.getElementById('options-restore') as HTMLInputElement | null)?.disabled,
+				[],
+				{ timeout: 5000, message: 'restore button did not enable' },
+			);
+			const after = await page.evaluate(() => {
+				// Scope to the restore row — the Tile tab now also has a .ntt-file-name.
+				const row = document.getElementById('options-restore-file')!.closest('.options-row');
+				const nameEl = row ? row.querySelector('.ntt-file-name') : null;
+				return nameEl ? nameEl.textContent : null;
+			});
+			expect(after).toMatch(/restore-fixture\.zip/);
+		} catch (e) {
+			await captureFailure(page, 'restore-file-label');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
 });

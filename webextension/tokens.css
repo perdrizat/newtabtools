@@ -19,7 +19,7 @@
 	--ntt-accent: #c96442;
 	--ntt-accent-tint: rgba(201, 100, 66, 0.16);
 	--ntt-success: #2e8c5b;
-	--ntt-danger: #b14b27;
+	--ntt-danger: #cc1633;
 
 	/* ── Spacing (user-adjustable defaults) ── */
 	--ntt-gap: 18px;
@@ -34,6 +34,10 @@
 	--ntt-shadow-tile-rest: 0 0 0 1px var(--ntt-line), 0 1px 2px rgba(20, 15, 10, 0.04);
 	--ntt-shadow-tile-hover: 0 0 0 1px var(--ntt-line), 0 8px 24px rgba(15, 12, 8, 0.12);
 	--ntt-shadow-tile-selected: 0 0 0 2px var(--ntt-accent), 0 0 0 5px rgba(201, 100, 66, 0.16), 0 6px 16px rgba(15, 12, 8, 0.10);
+	/* Shared "floating control" shadow — a hairline ring + drop shadow so a pill
+	   reads on any background. Used by the tile action buttons AND the edit-mode
+	   drag handle / "+ Pin tile" so all three match. */
+	--ntt-float-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.28);
 
 	/* ── Page background gradient (light) ── */
 	background:
@@ -55,11 +59,12 @@
 	--ntt-accent: #e07a5d;
 	--ntt-accent-tint: rgba(224, 122, 93, 0.20);
 	--ntt-success: #7ad19b;
-	--ntt-danger: #e89279;
+	--ntt-danger: #cc1633;
 
 	--ntt-shadow-tile-rest: 0 0 0 1px var(--ntt-line), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
 	--ntt-shadow-tile-hover: 0 0 0 1px var(--ntt-line), 0 8px 24px rgba(15, 12, 8, 0.12);
 	--ntt-shadow-tile-selected: 0 0 0 2px var(--ntt-accent), 0 0 0 5px rgba(224, 122, 93, 0.20), 0 6px 16px rgba(15, 12, 8, 0.10);
+	--ntt-float-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 2px 8px rgba(0, 0, 0, 0.55);
 
 	background:
 		radial-gradient(ellipse 80% 60% at 70% -20%, rgba(224, 122, 93, 0.10), transparent 60%),

@@ -1,10 +1,8 @@
 # NewTab PowerTools
 
-A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. Think of it as **PowerTools for your browser**—extending the new tab experience in creative ways, much like Microsoft PowerToys does for Windows.
+A new tab page for Firefox, built around the sites you actually visit and laid out the way you want — **PowerTools for your browser**, extending the new tab experience much like Microsoft PowerToys does for Windows.
 
-> **Status: preparing for AMO publication.** The original maintainer stepped back (see note below) and put the upstream repo in read-only mode. This repository is the working tree for a continuation effort. The codebase migration (cherry-pick + reference rewrite) is complete — all 22 features characterized, tested, and working, all 7 security findings resolved. The fork ships under the AMO ID `newtabtools@symlink.ch` (new listing, version 1.0.0); listing copy, privacy policy, MPL-2.0 `LICENSE`, and reviewer-facing submission notes are in place (`docs/amo-listing.md`, `PRIVACY.md`, `LICENSE`, `docs/amo-submission-notes.md`). Screenshots and the actual Developer Hub submission are the remaining steps. MV3 migration follows; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) for the plan.
->
-> **The "NTT v2" redesign has landed.** The UI was reworked to sit closer to the current Firefox new tab page in layout and behaviour while keeping NTT's power-user controls: a single titlebar row (recently-closed cards · search · brand/controls masthead), a slide-in **configuration drawer** (Tile / Page / Advanced tabs) replacing the old options modal, an **awesome bar** that searches your tiles, bookmarks, and history (and the default engine) from the titlebar, a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. The feature list below reflects the v2 UI.
+**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests against Firefox ESR (Puppeteer + WebDriver BiDi), plus an LLM-driven UAT tier — run on every change.
 
 ## Main features
 
@@ -21,29 +19,10 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 - `webextension/` — the extension source. Currently MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
 - [`MV3_MIGRATION.md`](MV3_MIGRATION.md) — the active migration plan for Manifest V3 (Firefox-only first, Chrome deferred).
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Three test tiers (Unit, Integration, E2E) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for the third, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — direction (Now / Next / Later), scope & non-goals, backlog, and the load-bearing decisions of record.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, AI-assisted contribution guardrails.
-
-## Project history
-
-**Completed:**
-- [x] License-compatibility confirmed (MPL-2.0 explicitly permits continuation).
-- [x] Testing strategy, bootstrap plan, and roadmap documented.
-- [x] Forked the repository; test infrastructure green in CI.
-- [x] Codebase strategy chosen: cherry-pick + reference rewrite (see [`ROADMAP.md`](ROADMAP.md)).
-- [x] Security: all 7 findings from the [pre-takeover review](audit/2026-05-04-security-review.md) resolved. [Post-takeover code review](audit/2026-05-11-code-review.md) completed.
-- [x] Test-first characterization sweep across all 22 features (the suite has since grown to ~890 unit/integration tests in 52 files plus 110 E2E tests in 28 files, run on every change).
-- [x] Codebase migration complete (cherry-pick + reference rewrite). Auto-thumbnail rewritten, drop sweep done, all features working.
-- [x] **"NTT v2" UI redesign** — titlebar with inline recently-closed cards, the awesome bar, the configuration drawer, the theme system, and on-tile favicons all shipped, each phase gated on the full E2E suite.
-**Next:**
-- [x] Contact the original maintainer about a possible ownership transfer (extension ID + user base). Email sent; fork proceeding under new ID in parallel.
-- [x] AMO listing copy + privacy policy + MPL-2.0 LICENSE + reviewer submission notes (`docs/amo-listing.md`, `PRIVACY.md`, `LICENSE`, `docs/amo-submission-notes.md`).
-- [ ] Capture marketing screenshots (5) from a clean Firefox profile loaded with the `tests/uat/newtabtools_knowngood.zip` fixture. See `docs/amo-listing.md` "Screenshots checklist".
-- [ ] First release on AMO.
-- [x] Open the issue tracker for new bug reports.
-- [ ] Manifest V3 migration (Firefox-only first). See [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 
 ## For developers
  
@@ -60,11 +39,16 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
    pnpm install
    ```
 
-3. **Run the extension locally:**
+3. **Build the XPI and load it in Firefox:**
    ```bash
-   pnpm dev
+   pnpm build
    ```
-   This launches a temporary Firefox instance with the extension pre-loaded. The profile is discarded on exit. To load it into your persistent browser profile, use `about:debugging` and load a temporary add-on from the `webextension/` directory.
+   This syncs the version into `manifest.json` and packages the add-on to `dist/newtab_powertools-<version>.zip` (a zip *is* an XPI — Firefox accepts either extension). To load it into your own browser profile via the debug interface:
+   1. Open `about:debugging#/runtime/this-firefox`.
+   2. Click **Load Temporary Add-on…**.
+   3. Select `dist/newtab_powertools-<version>.zip` — or pick `webextension/manifest.json` to load the unpacked source directly.
+
+   The add-on stays loaded until you restart Firefox. For a throwaway run in a fresh profile that's discarded on exit, use `pnpm dev` instead.
 
 ### Testing is mandatory
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:

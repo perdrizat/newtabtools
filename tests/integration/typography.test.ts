@@ -80,6 +80,12 @@ describe('typography role discipline (§6)', () => {
 		expect(ruleBody(css, '.ntt-form-group-help')).not.toMatch(/italic/);
 	});
 
+	it('the Add-tile autocomplete dropdown uses the UI sans (not the page system font)', () => {
+		// The page sets `font: message-box`, which leaks a system serif into the
+		// absolutely-positioned `#autocomplete` dropdown unless it sets the UI font.
+		expect(ruleBody(css, '#autocomplete')).toMatch(/--ntt-font-ui/);
+	});
+
 	it('no inline font-style:italic survives in the markup', () => {
 		// The Advanced-tab filter helptext, restore warning, and reset warning
 		// shipped as inline italic — the least legible combination in the UI.

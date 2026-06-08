@@ -41,8 +41,21 @@ describe('edit mode — CSS affordances (§2)', () => {
 		expect(block![0]).toMatch(/display:\s*none/);
 	});
 
-	it('pinned tiles get a dashed accent outline in edit mode', () => {
-		expect(css).toMatch(/:root\[drawer-open\]\s+\.newtab-site\[pinned\]\s*\{[^}]*outline:[^}]*dashed[^}]*var\(--ntt-accent/s);
+	it('pinned tiles do NOT get a dashed outline (the drag handle already signals movable)', () => {
+		expect(css).not.toMatch(/:root\[drawer-open\]\s+\.newtab-site\[pinned\]\s*\{[^}]*outline:[^}]*dashed/s);
+	});
+
+	it('dashed = "add here" — only the non-pinned (candidate) slots carry it', () => {
+		expect(css).toMatch(/:root\[drawer-open\]\s+\.newtab-site:not\(\[pinned\]\)\s*\{[^}]*outline:[^}]*dashed/s);
+	});
+
+	it('the open (selected) tile gets a single copper ring with a white-separator halo', () => {
+		// 2px white halo + 4px accent ring (readable on any thumbnail). The rule has
+		// a `,:hover` variant (so the elevation shadow can't override it), so allow
+		// extra selectors before the opening brace.
+		expect(css).toMatch(/\.newtab-site\[data-selected="true"\][^{]*\{[^}]*box-shadow:[^;]*#fff[^;]*var\(--ntt-accent/s);
+		// dark theme swaps the halo to a dark tone
+		expect(css).toMatch(/:root\[theme="dark"\][^{]*\.newtab-site\[data-selected="true"\][^{]*\{[^}]*box-shadow:[^;]*rgba\(0,\s*0,\s*0/s);
 	});
 
 	it('pinned tiles show the persistent action row + centred drag handle in edit mode', () => {
@@ -50,9 +63,34 @@ describe('edit mode — CSS affordances (§2)', () => {
 		expect(css).toMatch(/:root\[drawer-open\]\s+\.newtab-site\[pinned\]\s+\.ntt-drag-handle\s*\{[^}]*display:\s*flex/s);
 	});
 
-	it('auto (non-pinned) tiles fade and show "+ Add tile" in edit mode', () => {
+	it('non-pinned slots show the "+ Pin tile" chip WITHOUT dimming the thumbnail (no wallpaper bleed)', () => {
 		expect(css).toMatch(/:root\[drawer-open\]\s+\.newtab-site:not\(\[pinned\]\)[^{]*\.ntt-add-tile\s*\{[^}]*display:\s*flex/s);
-		expect(css).toMatch(/:root\[drawer-open\]\s+\.newtab-site:not\(\[pinned\]\)[^{]*(thumbnail|overlay)[^{]*\{[^}]*opacity:/s);
+		// the old opacity:0.25 dim on the thumbnail/overlay is gone
+		expect(css).not.toMatch(/:root\[drawer-open\]\s+\.newtab-site:not\(\[pinned\]\)[^{]*(thumbnail|overlay)[^{]*\{[^}]*opacity:\s*0\.25/s);
+		// the label is an opaque chip
+		expect(css).toMatch(/\.ntt-add-tile-chip\s*\{/s);
+	});
+
+	it('edit mode dims the page wallpaper so gaps go calm', () => {
+		expect(css).toMatch(/:root\[drawer-open\]\s+#background-fake\s*\{[^}]*brightness\(/s);
+	});
+
+	it('the drag handle + "+ Pin tile" scale with the tile (container-query sized, landscape)', () => {
+		// .newtab-site is a size container so affordances scale via cqmin.
+		expect(css).toMatch(/\.newtab-site\s*\{[^}]*container-type:\s*size/s);
+		// drag handle is a landscape pill — both axes scale via cqmin (width > height).
+		const handle = css.match(/:root\[drawer-open\]\s+\.newtab-site\[pinned\]\s+\.ntt-drag-handle\s*\{[^}]*\}/s);
+		expect(handle).toBeTruthy();
+		expect(handle![0]).toMatch(/width:[^;]*cqmin/);
+		expect(handle![0]).toMatch(/height:[^;]*cqmin/);
+		// the grip is rotated 90° to read landscape
+		expect(css).toMatch(/\.ntt-drag-handle svg[\s\S]{0,300}rotate\(90deg\)/s);
+		// "+ Pin tile" chip: scales (height + font via cqmin) and stays on one line.
+		const chip = css.match(/\.ntt-add-tile-chip\s*\{[^}]*\}/s);
+		expect(chip).toBeTruthy();
+		expect(chip![0]).toMatch(/height:[^;]*cqmin/);
+		expect(chip![0]).toMatch(/font-size:[^;]*cqmin/);
+		expect(chip![0]).toMatch(/white-space:\s*nowrap/);
 	});
 
 	it('the Done button (drawer-open) fills with the accent colour (§2)', () => {
@@ -102,11 +140,13 @@ describe('edit mode — per-tile rendering (§2)', () => {
 		cleanup();
 	});
 
-	it('renders an "+ Add tile" prompt on each tile', () => {
+	it('renders a "+ Pin tile" chip on each tile', () => {
 		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
 		const add = site.node.querySelector('.ntt-add-tile');
 		expect(add).toBeTruthy();
-		expect((add.textContent || '').length).toBeGreaterThan(0);
+		const chip = add.querySelector('.ntt-add-tile-chip');
+		expect(chip, 'add-tile label is an opaque chip').toBeTruthy();
+		expect((chip.textContent || '').length).toBeGreaterThan(0);
 		cleanup();
 	});
 });

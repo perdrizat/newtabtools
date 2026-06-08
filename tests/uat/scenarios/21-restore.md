@@ -30,15 +30,38 @@ to repopulate → close drawer). It leaves a
    ```
    must be `true` — these are the fixture's own tiles, not a default set.
 
+6. **Restore file picker is themed (not a native grey widget).** Re-open the drawer
+   → Advanced (`browser_click` `#options-toggle`, then `[data-drawer-tab="advanced"]`),
+   then:
+   ```js
+   return (() => {
+     const input = document.getElementById('options-restore-file');
+     const label = document.querySelector('label[for="options-restore-file"]');
+     const nameEl = document.querySelector('.ntt-file-name');
+     return {
+       inputHidden: input.offsetWidth <= 1 && input.offsetHeight <= 1,
+       labelThemed: !!label && getComputedStyle(label).borderTopStyle === 'solid',
+       fileName: nameEl ? nameEl.textContent : '',
+     };
+   })()
+   ```
+   Pass = `inputHidden` true and `labelThemed` true — the "Choose file…" control is a
+   themed `<label>` matching the drawer buttons, with the native input hidden;
+   `fileName` shows the restored fixture's filename. Take a `02-restore-control`
+   screenshot and `browser_read_screenshot` it.
+
 ## Visual judgment
 
 - Read `01-restored`. Judge: the nine tiles sit in a clean 4×4 grid (rows of
   4 / 4 / 1), no overlap or clipping, titles legible, **and** the Mozilla-CDN
   wallpaper is visibly rendered behind them. Pass = clean layout **and** visible
   wallpaper.
+- Read `02-restore-control`. Judge: the Restore row's "Choose file…" control is a
+  themed button (matches the other drawer buttons in the active theme — not a native
+  system-grey file widget), with the selected filename shown in themed type beside it.
 
 ## Output
 
-- `report.json` — the five structural assertions plus the visual verdict.
-- `summary.md` — lead with the verdict, then what the restored grid and wallpaper
-  looked like.
+- `report.json` — the six structural assertions plus the two visual verdicts.
+- `summary.md` — lead with the verdict, then what the restored grid + wallpaper
+  looked like, and that the Restore file control is themed (not native).

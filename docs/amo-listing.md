@@ -20,30 +20,28 @@ The summary deliberately spells "new tab" with a space so fuzzy search hits both
 
 ## Long description (HTML)
 
-```html
-<p>NewTab PowerTools replaces Firefox's built-in new tab page with one designed for the sites you actually visit and the layout you actually want. Think of it as <strong>PowerToys for your browser</strong> — extra controls and visual cues the default doesn't expose.</p>
+```markdown
+NewTab PowerTools replaces Firefox's built-in new tab page with one designed for the sites you actually visit and the layout you actually want. Think of it as **PowerToys for your browser** — extra controls and visual cues the default doesn't expose.
 
-<h3>What's different from Firefox's default</h3>
+### What's different from Firefox's default
 
-<ul>
-  <li><strong>Tiles you can actually see.</strong> Firefox's shortcuts stay small no matter how few you choose. NewTab PowerTools lets you pick a fixed grid — 2 × 3, 4 × 6, whatever fits — and tiles scale to fill the viewport.</li>
-  <li><strong>Tiles that look like the sites they link to.</strong> The extension auto-captures a thumbnail of each top site the way it actually appeared the last time you visited. Firefox's native shortcuts only accept manual image uploads.</li>
-  <li><strong>Pixel-level layout control.</strong> Pick exact rows and columns, lock a tile aspect ratio (16:9, 4:3, 1:1, 3:4 portrait, or fill viewport), tune opacity, title size, page margins, and grid spacing.</li>
-  <li><strong>Per-domain filter cap.</strong> Cap how many tiles a single host takes — including subdomain wildcards like <code>.example.com</code>. Firefox enforces a hard one-tile-per-domain rule and doesn't expose this.</li>
-  <li><strong>Per-tile background color.</strong> Native supports a custom image per tile, but not a custom solid color.</li>
-  <li><strong>Recently-closed-tabs row.</strong> A dedicated horizontal row of recently closed tabs sits below the grid for one-click restore.</li>
-  <li><strong>Backup and restore.</strong> Export your tiles, thumbnails, and settings to a single backup file. No Firefox Sync required.</li>
-</ul>
+- **Tiles you can actually see.** Firefox's shortcuts stay small no matter how few you choose. NewTab PowerTools lets you pick a fixed grid — 2 × 3, 4 × 6, whatever fits — and tiles scale to fill the viewport.
+- **Tiles that look like the sites they link to.** The extension auto-captures a thumbnail of each top site the way it actually appeared the last time you visited. Firefox's native shortcuts only accept manual image uploads.
+- **Pixel-level layout control.** Pick exact rows and columns, lock a tile aspect ratio (16:9, 4:3, 1:1, 3:4 portrait, or fill viewport), tune opacity, title size, page margins, and grid spacing.
+- **Per-domain filter cap.** Cap how many tiles a single host takes — including subdomain wildcards like `.example.com`. Firefox enforces a hard one-tile-per-domain rule and doesn't expose this.
+- **Per-tile background color.** Native supports a custom image per tile, but not a custom solid color.
+- **Recently-closed-tabs row.** A dedicated horizontal row of recently closed tabs sits below the grid for one-click restore.
+- **Backup and restore.** Export your tiles, thumbnails, and settings to a single backup file. No Firefox Sync required.
 
-<h3>Privacy</h3>
+### Privacy
 
-<p>All your data — tiles, thumbnails, settings — stays on your device in your browser's local storage. The extension has one outbound connection: to the Mozilla wallpapers service for the curated wallpaper catalog. No telemetry, no analytics, no third-party endpoints. Full privacy policy: <a href="https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md">PRIVACY.md</a>.</p>
+All your data — tiles, thumbnails, settings — stays on your device in your browser's local storage. The extension has one outbound connection: to the Mozilla wallpapers service for the curated wallpaper catalog. No telemetry, no analytics, no third-party endpoints. Full privacy policy: [PRIVACY.md](https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md).
 
-<h3>About</h3>
+### About
 
-<p>NewTab PowerTools is a continuation fork of Geoff Lankow's New Tab Tools, which the original maintainer placed in read-only mode in 2022. The codebase, the original feature set, and most of what makes the extension worth continuing are Geoff's — this fork carries forward the maintenance, security hardening, and the v2 UI redesign. License (MPL-2.0) explicitly permits the continuation.</p>
+NewTab PowerTools is a continuation fork of Geoff Lankow's New Tab Tools, which the original maintainer placed in read-only mode in 2022. The codebase, the original feature set, and most of what makes the extension worth continuing are Geoff's — this fork carries forward the maintenance, security hardening, and the v2 UI redesign. License (MPL-2.0) explicitly permits the continuation.
 
-<p>Source code, issues, and roadmap: <a href="https://github.com/perdrizat/newtabtools">github.com/perdrizat/newtabtools</a></p>
+Source code, issues, and roadmap: [github.com/perdrizat/newtabtools](https://github.com/perdrizat/newtabtools)
 ```
 
 ## Category
@@ -100,7 +98,7 @@ See [`amo-submission-notes.md`](./amo-submission-notes.md). Paste into the AMO D
 
 (Item 3 of the AMO submission plan; this section is the placeholder where image filenames + captions will live once the screenshots are taken.)
 
-Eight shots, native 1280×800 PNG. AMO shows the first as the primary; order them so a 4×4 hero leads. Captions ≤100 chars.
+Eight shots, native 2400×1800 PNG. AMO shows the first as the primary; order them so a 4×4 hero leads. Captions ≤100 chars.
 
 | Slot | File | Caption | Status |
 |---|---|---|---|
@@ -108,13 +106,12 @@ Eight shots, native 1280×800 PNG. AMO shows the first as the primary; order the
 | 2 | `assets/screenshots/02-grid-4x4-medium-dark.png` | The same grid in dark theme — follows your Firefox theme or set it yourself. | Captured |
 | 3 | `assets/screenshots/03-grid-3x3-maxi-light.png` | Go big: fewer columns, large spacing, margins and rounded corners. | Captured |
 | 4 | `assets/screenshots/04-grid-3x3-maxi-dark.png` | The large-tile layout in dark theme. | Captured |
-| 5 | `assets/screenshots/05-settings-drawer.png` | Settings drawer: rows × columns, tile aspect ratio, spacing, opacity. | Captured |
-| 6 | `assets/screenshots/06-add-tile-autocomplete.png` | "Add tile" with autocomplete suggestions from your open tabs. | Captured |
+| 5 | `assets/screenshots/05-add-tile-autocomplete.png` | "Add tile" with autocomplete suggestions from your open tabs. | Captured |
+| 6 | `assets/screenshots/06-settings-drawer.png` | Settings drawer: rows × columns, tile aspect ratio, spacing, opacity. | Captured |
 | 7 | `assets/screenshots/07-domain-filter.png` | Per-domain cap with a `.subdomain` wildcard in the settings panel. | Captured |
-| 8 | `assets/screenshots/08-recently-closed.png` | The recently-closed-tabs row for one-click restore. | Captured |
 
-Format: PNG, native **1280×800** (AMO's ideal; minimum 1000×750).
+Format: PNG, native **2400×1800** (AMO's maximum resolution).
 
 Reproducible via `node scripts/amo-screenshots.mjs` (needs `FIREFOX_BIN` + `pnpm build`). The script reproduces a real user's new tab: it **pins only the top 5 favourites** and lets the rest of the grid **fill from browsing history** (Firefox topSites). To get real thumbnails it browses the curated site list in **three passes** — two fast passes build frecency so each site enters topSites, then a re-render folds topSites into the extension's auto-capture cache, and a final pass (dismissing cookie banners, settling) triggers the captures. Thumbnails live in IndexedDB keyed by URL, so they re-attach to every layout. It then opens/closes deep article tabs (distinct from the tile homepages, so they survive the recently-closed row's tile-dedup filter) to populate the recently-closed row and the add-tile autocomplete, captures the feature shots, and renders the hero gallery **last** (when thumbnail coverage is highest) — 4×4 medium and 3×3 "maxi" (large spacing/margin/radius) grids in light and dark themes on different wallpapers.
 
-Tiles are popular, recognizable, tech-leaning US + international news/community/shopping (GitHub, Hacker News, Stack Overflow, Steam, Wikipedia pinned; The Verge, Ars Technica, TechCrunch, Reddit, MDN, Product Hunt, BBC, Slashdot, Tom's Hardware, eBay, Adafruit filling from history). Sites that bot-block headless (Amazon, YouTube, Newegg, AliExpress) are deliberately omitted. Typical result: ~15 of 16 tiles carry a real thumbnail; the odd one (e.g. Stack Overflow, whose topSites URL canonicalizes away from the pinned homepage) falls back to a clean letter tile, which reads as authentic. Edit the `SITES`, `RECENT_TABS`, and `OPEN_TABS` lists to adjust.
+Tiles are popular, recognizable, tech-leaning US + international news/community/shopping (GitHub, Hacker News, Stack Overflow, Steam, Wikipedia pinned; The Verge, TechCrunch, MDN, BBC, Tom's Hardware, Hackaday, Heise, CoinDesk, Bitcoin Magazine, Linux Hardware Reviews filling from history). Sites that bot-block headless (Amazon, YouTube, Newegg) or use un-dismissable cookie walls are deliberately omitted. Typical result: a flawless 16/16 grid carrying real thumbnails. Edit the `SITES`, `RECENT_TABS`, and `OPEN_TABS` lists in `tests/uat/_tools/browser-daemon.mjs` to adjust.

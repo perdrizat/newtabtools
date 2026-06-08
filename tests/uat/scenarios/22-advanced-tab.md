@@ -36,7 +36,9 @@ Use the standard preamble (navigate, `00-initial`). Open the drawer
    Pass = `restore` and `reset` share a colour (the danger hairline) that differs
    from `backup` (the neutral ghost hairline).
 
-4. **A copper primary exists.**
+4. **A copper primary exists (open the filter panel first).** The filter panel is
+   a toggle that starts hidden, so reveal it: `browser_click` `#historytiles-filter`,
+   then:
    ```js
    return getComputedStyle(document.getElementById('options-filter-set')).backgroundColor
    ```
@@ -60,20 +62,58 @@ Use the standard preamble (navigate, `00-initial`). Open the drawer
    ```
    Pass = `true` (row hidden again, still nothing reset).
 
+## Verify — history-tiles filter (structural)
+
+The "Filter…" button toggles a panel that caps how many unpinned (history) tiles a
+domain may show. The panel was opened in assertion 4.
+
+7. **Filter… is a toggle.**
+   ```js
+   return { hidden: document.getElementById('options-filter').hidden,
+            expanded: document.getElementById('historytiles-filter').getAttribute('aria-expanded') }
+   ```
+   Pass = `hidden` false, `expanded` `"true"`. Then `browser_click`
+   `#historytiles-filter` again and re-evaluate — `hidden` true, `expanded`
+   `"false"`. Finally `browser_click` `#historytiles-filter` once more to re-open it
+   for the remaining checks + screenshot.
+8. **Adding a filter shows an explicit ✕ remove on its row.** With the panel open:
+   ```js
+   const h = document.getElementById('options-filter-host');
+   const c = document.getElementById('options-filter-count');
+   h.value = 'www.example.com'; c.value = '2';
+   h.dispatchEvent(new Event('input', {bubbles:true}));
+   c.dispatchEvent(new Event('input', {bubbles:true}));
+   document.getElementById('options-filter-set').click();
+   const row = [...document.querySelectorAll('#options-filter tbody tr')].find(r => r.cells[0].textContent === 'www.example.com');
+   return !!(row && row.querySelector('.ntt-filter-remove'));
+   ```
+   Pass = `true` (the new filter row carries a ✕ remove control).
+9. **The helptext is left-aligned (design language, not centered).**
+   ```js
+   return getComputedStyle(document.querySelector('#options-filter [data-message="filter_helptext"]')).textAlign
+   ```
+   Pass = `left` or `start` (not `center`).
+
 ## Visual judgment
 
-- With the Advanced tab open, `browser_take_screenshot` named `advanced`, then
-  `browser_read_screenshot` it. Judge: the tab reads like the Page tab — a copper
-  toggle (not a native checkbox) for history, buttons with a clear hierarchy
-  (one copper primary, ghost secondaries, danger-tinted Reset/Restore), the
-  unpinned-count stepper styled like the segmented controls, and the domain table
-  on the drawer's row rhythm. No raw/native form controls survive.
-- Pass = Advanced looks like the same designer as Page; no native controls; clear
-  button hierarchy.
+- With the Advanced tab open **and the filter panel revealed**,
+  `browser_take_screenshot` named `advanced`, then `browser_read_screenshot` it.
+  Judge: the tab reads like the Page tab — a copper toggle (not a native checkbox)
+  for history, buttons with a clear hierarchy (one copper primary, ghost
+  secondaries, danger-tinted Reset/Restore), the unpinned-count stepper styled like
+  the segmented controls, and the domain table on the drawer's row rhythm. The
+  filter panel specifically: its header, helptext, and add-filter row read
+  **left-aligned** to the same rhythm (not centered/floating), the "Filter…" toggle
+  shows an open/closed affordance (caret), and filter rows carry a tidy ✕ remove
+  that sits on-system with the steppers. No raw/native form controls survive.
+- Pass = Advanced looks like the same designer as Page; the filter panel is
+  left-aligned and on-system (not the old centered layout); no native controls;
+  clear button hierarchy.
 
 ## Output
 
-- `report.json` — assertions 1–6 plus the visual verdict.
+- `report.json` — assertions 1–9 plus the visual verdict.
 - `summary.md` — lead with the verdict; describe the history toggle, the button
-  hierarchy, the steppers/table, and that Reset/Restore gate behind an inline
+  hierarchy, the steppers/table, the filter panel (toggle affordance, ✕ remove,
+  left-aligned design language), and that Reset/Restore gate behind an inline
   confirm (verified non-destructively).

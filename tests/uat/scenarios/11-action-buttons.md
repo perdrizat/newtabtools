@@ -50,17 +50,35 @@ then assert (each as a single `return`-ing expression):
    });
    ```
    must be `true`.
+6. **The destructive ✕ is the standout filled button.** While hovered:
+   ```
+   const cell = document.querySelector('.newtab-cell:nth-child(1) .newtab-site');
+   const x = cell.querySelector('.ntt-action-btn[data-action="remove"]');
+   const other = cell.querySelector('.ntt-action-btn[data-action="edit"], .ntt-action-btn[data-action="pin"], .ntt-action-btn[data-action="refresh"]');
+   const cs = getComputedStyle(x), co = getComputedStyle(other);
+   return {
+     filled: cs.backgroundColor !== co.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)',
+     larger: parseFloat(cs.width) > parseFloat(co.width),
+     separators: cs.boxShadow !== 'none',
+   };
+   ```
+   Pass = `filled` true (solid alarm-red fill, unlike the neutral trio), `larger`
+   true (~2px bigger), `separators` true (the white ring + drop shadow box-shadow).
 
 ## Evidence + visual judgment
 
 - Take a `02-hover` screenshot while the tile is hovered. Read it inline and judge:
   the action buttons are visible along the top edge of the hovered tile, the tile's
   title is still fully readable at the bottom, and the buttons are a small overlay
-  rather than a full-tile cover. Pass = action row visible **and** title legible
-  **and** no large-area occlusion.
+  rather than a full-tile cover. **The ✕ reads as a solid alarm-red button with a
+  white icon — clearly distinct from the copper accent — standing out from the
+  neutral edit/refresh/pin trio (which sit on a small dark scrim); the ✕ stays
+  legible whatever the thumbnail behind it.** Pass = action row visible, title
+  legible, no large-area occlusion, and the ✕ is the obvious destructive control.
 
 ## Output
 
-- `report.json` — the six structural assertions plus the visual verdict.
+- `report.json` — the seven structural assertions plus the visual verdict.
 - `summary.md` — lead with the verdict, then describe the hover state: where the
-  action row sits and whether it occludes the title.
+  action row sits, whether it occludes the title, and whether the ✕ reads as the
+  standout destructive control (filled alarm-red, ring + shadow) vs the neutral trio.

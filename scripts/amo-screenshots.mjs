@@ -16,7 +16,7 @@
  *      by URL) over the run, so coverage is highest at the end; they re-attach to
  *      each layout (4×4 medium, 3×3 "maxi") on restore without revisiting.
  *
- * Native 1280×800 PNG (AMO's ideal). Sites that bot-block headless are omitted.
+ * Native 2400×1800 PNG (AMO's maximum resolution). Sites that bot-block headless are omitted.
  *
  *   pnpm build
  *   FIREFOX_BIN=/opt/firefox/firefox node scripts/amo-screenshots.mjs
@@ -164,14 +164,14 @@ for (const f of fs.readdirSync(OUT_DIR)) { if (f.endsWith('.png')) { fs.rmSync(p
 // the daemon's default fixture is irrelevant here.
 const env = {
 	...process.env,
-	UAT_VIEWPORT: '1280x800',
-	UAT_WINDOW: '1280x800',
+	UAT_VIEWPORT: '2400x1800',
+	UAT_WINDOW: '2400x1800',
 	UAT_PAGELOAD_MS: '15000',
 	UAT_SEED_URLS: VISIT_URLS.join(','),
 	ARTIFACTS_DIR: os.tmpdir(),
 };
 
-console.log('amo-screenshots: starting daemon (native 1280×800)…');
+console.log('amo-screenshots: starting daemon (native 2400×1800)…');
 const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit'], env });
 
 let exitCode = 0;
@@ -242,13 +242,13 @@ try {
 	await click('[data-drawer-tab="advanced"]'); await sleep(400);
 	await ev(`
 		const h = document.querySelector('#options-filter-host');
-		h.value = '.reddit.com'; h.dispatchEvent(new Event('input', { bubbles: true }));
+		h.value = '.bitcoinmagazine.com'; h.dispatchEvent(new Event('input', { bubbles: true }));
 		const c = document.querySelector('#options-filter-count');
 		c.value = '2'; c.dispatchEvent(new Event('input', { bubbles: true }));
 		return true;
 	`);
 	await sleep(300);
-	await click('#options-filter-set'); await sleep(600);
+	await ev("document.querySelector('#options-filter-set').click()"); await sleep(600);
 	await shot('07-domain-filter');
 	await click('#options-toggle'); await sleep(400); // close drawer
 

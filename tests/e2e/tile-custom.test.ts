@@ -215,4 +215,103 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await page.close();
 		}
 	}, 90_000);
+
+	it('Title [Remove] clears the custom title (reverts toward the auto title)', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		const url = await getNewTabURL();
+		const TILE = 'https://title-revert.example.com/';
+
+		try {
+			await page.evaluate((u) => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Auto', url: u }, resolve);
+			}), TILE);
+			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+			await waitForCondition(
+				page,
+				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.some((s: any) => s && s.url === u)); },
+				[TILE], { timeout: 10_000, message: 'tile not in grid' }
+			);
+
+			// Select the tile + set a custom title.
+			await page.evaluate((u) => {
+				document.getElementById('options-toggle')!.click();
+				const i = window.Grid.sites.findIndex((s: any) => s && s.url === u);
+				if (i >= 0) { newTabTools.selectedSiteIndex = i; }
+			}, TILE);
+			await new Promise(r => setTimeout(r, 400));
+			await page.evaluate(() => {
+				(document.getElementById('options-title-input') as HTMLInputElement).value = 'Custom Revert Title';
+				document.getElementById('options-title-set')!.click();
+			});
+			await new Promise(r => setTimeout(r, 400));
+			const before = await page.evaluate((u) => {
+				const s = window.Grid.sites.find((x: any) => x && x.url === u);
+				return s && s.link.titleIsUserSet ? s.link.title : null;
+			}, TILE);
+			expect(before).toBe('Custom Revert Title');
+
+			// Remove → revert to auto (no history for this URL → no custom title).
+			await page.evaluate(() => document.getElementById('options-title-remove')!.click());
+			await new Promise(r => setTimeout(r, 600));
+			const after = await page.evaluate((u) => {
+				const s = window.Grid.sites.find((x: any) => x && x.url === u);
+				return { userSet: !!(s && s.link.titleIsUserSet), title: s ? s.link.title : null };
+			}, TILE);
+			expect(after.userSet).toBe(false);
+			expect(after.title).not.toBe('Custom Revert Title');
+
+			await page.evaluate((u) => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
+			}), TILE);
+		} catch (e) {
+			await captureFailure(page, 'tile-title-remove');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
+
+	it('URL [Remove] deletes/unpins the tile (same as the board ✕)', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+		const url = await getNewTabURL();
+		const TILE = 'https://url-remove.example.com/';
+
+		try {
+			await page.evaluate((u) => new Promise(resolve => {
+				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Doomed', url: u }, resolve);
+			}), TILE);
+			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+			await waitForCondition(
+				page,
+				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.some((s: any) => s && s.url === u && s.isPinned)); },
+				[TILE], { timeout: 10_000, message: 'tile not pinned' }
+			);
+
+			// Select the tile, then click the URL row's Remove.
+			await page.evaluate((u) => {
+				document.getElementById('options-toggle')!.click();
+				const i = window.Grid.sites.findIndex((s: any) => s && s.url === u);
+				if (i >= 0) { newTabTools.selectedSiteIndex = i; }
+			}, TILE);
+			await new Promise(r => setTimeout(r, 400));
+			await page.evaluate(() => document.getElementById('options-url-remove')!.click());
+
+			// The tile is removed/unpinned from the grid.
+			const gone = await waitForCondition(
+				page,
+				(u) => { const g = window.Grid; if (!g || !g.sites) { return false; } return !g.sites.some((s: any) => s && s.url === u && s.isPinned); },
+				[TILE], { timeout: 10_000, message: 'tile still pinned after url-remove' }
+			);
+			expect(gone).toBe(true);
+		} catch (e) {
+			await captureFailure(page, 'tile-url-remove');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
 });

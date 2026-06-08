@@ -85,6 +85,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						</template>
 					</div>
 				</div>
+				<hr class="ntt-drawer-divider" />
 				<div class="ntt-empty-state" data-tile-empty="" data-message="tile_empty_state"></div>
 				<div id="options-tile">
 					<div class="ntt-form-group">
@@ -94,19 +95,19 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<div id="options-thumbnail-wrap" class="options-row">
 							<div id="options-thumbnail" class="newtab-thumbnail"></div>
 						</div>
-						<label id="options-url"></label>
 						<div id="options-edit-url" class="options-row">
 							<input id="options-url-input" data-placeholder="tile_url_placeholder" />
 							<button id="options-url-set" class="ntt-btn-primary" data-message="tile_url_set"></button>
+							<button id="options-url-remove" class="ntt-btn-danger" data-message="tile_thumbnail_remove"></button>
 						</div>
-						<label class="options-row-label" for="options-savedthumb-input" data-message="tile_savedthumb_label"></label>
 						<div class="options-row">
 							<button id="options-savethumb" data-message="tile_savedthumb_savecurrent"></button>
+							<button id="options-savedthumb-remove" disabled="" data-message="tile_thumbnail_remove"></button>
 						</div>
 						<div class="options-row">
-							<input id="options-savedthumb-input" type="file" accept="image/*" />
+							<label for="options-savedthumb-input" class="ntt-btn-ghost ntt-file-label" data-message="tile_savedthumb_choose"></label><span class="ntt-file-name" data-message="backup_no_file"></span><input id="options-savedthumb-input" type="file" accept="image/*" class="ntt-visually-hidden" />
 							<button id="options-savedthumb-set" disabled="" data-message="tile_savedthumb_set"></button>
-							<button id="options-savedthumb-remove" disabled="" data-message="tile_thumbnail_remove"></button>
+							<button id="options-savedimg-clear" disabled="" data-message="tile_thumbnail_remove"></button>
 						</div>
 						<div class="options-row">
 							<label style="flex: 1" for="options-bgcolor-input" data-message="tile_thumbnail_bgcolor"></label>
@@ -117,10 +118,10 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 							<button id="options-bgcolor-set" data-message="tile_savedthumb_set"></button>
 							<button id="options-bgcolor-reset" data-message="tile_thumbnail_remove"></button>
 						</div>
-						<label class="options-row-label" for="options-title-input" data-message="tile_title_label"></label>
 						<div id="options-edit-title" class="options-row">
 							<input id="options-title-input" data-placeholder="tile_title_placeholder" />
 							<button id="options-title-set" class="ntt-btn-primary" data-message="tile_title_set"></button>
+							<button id="options-title-remove" data-message="tile_thumbnail_remove"></button>
 						</div>
 					</div>
 				</div>
@@ -296,10 +297,10 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<button type="button" role="switch" class="ntt-toggle" data-pref="history" aria-checked="true"></button>
 					</div>
 					<div class="options-row">
-						<button id="historytiles-filter" class="ntt-btn-ghost" data-message="filter_button"></button>
+						<button id="historytiles-filter" class="ntt-btn-ghost" aria-controls="options-filter" aria-expanded="false" data-message="filter_button"></button>
 					</div>
 				</div>
-				<div class="ntt-form-group" id="options-filter">
+				<div class="ntt-form-group" id="options-filter" hidden="">
 					<div class="ntt-form-group-head">
 						<span class="ntt-form-group-label" data-message="filter_title"></span>
 					</div>
@@ -328,7 +329,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 									</td>
 								</tr>
 								<tr>
-									<td colspan="3" style="text-align: center; line-height: 1.5;" data-message="filter_helptext"></td>
+									<td colspan="4" style="text-align: left; line-height: 1.5;" data-message="filter_helptext"></td>
 								</tr>
 							</tfoot>
 							<tbody>
@@ -357,7 +358,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 					<div class="ntt-form-group-help" data-message="restore_description"></div>
 					<div class="ntt-form-group-help" data-message="restore_warning"></div>
 					<div class="options-row">
-						<input id="options-restore-file" type="file" accept="application/zip" />
+						<label for="options-restore-file" class="ntt-btn-ghost ntt-file-label" data-message="restore_choose_file"></label><span class="ntt-file-name" data-message="backup_no_file"></span><input id="options-restore-file" type="file" accept="application/zip" class="ntt-visually-hidden" />
 						<button id="options-restore" class="ntt-btn-danger" disabled="" data-message="restore_button"></button>
 					</div>
 					<div class="options-row ntt-confirm-row" id="options-restore-confirm-row" hidden="">
@@ -386,14 +387,14 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 						<span class="ntt-form-group-label" data-message="options_about_header"></span>
 					</div>
 					<div class="ntt-form-group-help">
-						<strong data-message="extensionName"></strong> v<span data-version-slot=""></span>
+						<a class="ntt-about-brand" href="https://addons.mozilla.org/firefox/addon/newtab-powertools/" target="_blank" rel="noopener"><img class="ntt-about-logo" src="images/icon.svg" alt="" /><strong data-message="extensionName"></strong> <span class="ntt-about-version">v<span data-version-slot=""></span></span></a>
 					</div>
 					<div class="ntt-form-group-help" data-message="options_about_tagline"></div>
 					<div class="ntt-form-group-help" data-message="options_about_lineage"></div>
 					<div class="options-row">
-						<a href="https://github.com/perdrizat/newtabtools" data-message="github"></a>
-						<a href="https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md" data-message="options_about_privacy"></a>
-						<a href="https://github.com/perdrizat/newtabtools/blob/master/LICENSE" data-message="options_about_license"></a>
+						<a href="https://github.com/perdrizat/newtabtools" data-message="github" target="_blank" rel="noopener"></a>
+						<a href="https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md" data-message="options_about_privacy" target="_blank" rel="noopener"></a>
+						<a href="https://github.com/perdrizat/newtabtools/blob/master/LICENSE" data-message="options_about_license" target="_blank" rel="noopener"></a>
 					</div>
 				</div>
 			</section>

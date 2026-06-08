@@ -4,7 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.0.2] — 2026-06-08
+## [2.0.0] — 2026-06-08
+
+First Mozilla Add-ons (AMO) release of the continuation fork as **NewTab PowerTools**.
+
+### Added
+
+- History-tiles filter: an explicit ✕ remove control on each filter row (deletes the entry; the existing step-the-limit-to-"Unlimited" path still works); the "Filter…" button is now a real toggle (panel starts hidden, caret reflects open/closed) instead of a one-way reveal.
+- `Filters.normalizeHost()` + `Tiles._hostFilteredOut()` (extracted, unit-tested matching predicate — semantics unchanged).
+- About section is now the brand home: the logo + title link to the AMO listing (opens in a new tab), with a separate "Source on GitHub" link; the whole block is left-aligned and all external links carry `rel="noopener"`.
+- OS forced-colors support: an `@media (forced-colors: active)` block styles the tile action buttons with system-color keywords so they honour the user's HC palette.
+
+### Changed
+
+- High-contrast: the manual contrast theme renders the destructive ✕ with the same red fill (`#cc1633`) as light/dark — the white icon + white ring carry legibility on the black ground; the neutral trio are outlined max-contrast buttons. Only true OS `@media (forced-colors: active)` drops the hue (the OS strips custom colours), falling back to a system-colour inverted ✕ treatment.
+- Restore "Choose file…" picker is now a themed `<label>` (the native `<input type=file>` is visually hidden) so it matches the drawer buttons in every theme; the selected filename shows in themed type.
+- Edit mode: clicking a tile body (not an action button) opens the Tile dialog prefilled for that tile (edit URL / thumbnail / bg colour) from any drawer tab; drag still = Move.
+- Recently-closed cards fall back to the extension's stored favicon (collected during tile capture) when the session record carries none, before the letter-block glyph.
+- About links row is left-aligned (was centered).
+- Add-tile autocomplete dropdown now uses the UI sans font — the page's `font: message-box` was leaking a system serif into it (the rest of the drawer already overrode it).
+- Tile editor: the thumbnail "Choose image…" picker is now a themed `<label>` (native `<input type=file>` hidden), matching Backup/Restore; secondary (ghost) drawer buttons gained a subtle filled surface so Set/Remove read as buttons in every theme (were near-invisible transparent outlines); "Save current thumbnail" renamed to "Pin current thumbnail" (it pins the current capture so auto-refresh won't overwrite it).
+- Tile tab reworked: the two sections are now "Pin next tile:" and "Update current tile:" (split by a separator). The edit rows are uniform — content left-aligned, [Set]/[Remove] right-aligned: URL ([Change URL] [Set] [Remove → deletes/unpins the tile]), Title ([Change title] [Set] [Remove → reverts to the auto title]), Pin current thumbnail ([Remove → reverts to the auto thumbnail]), Choose image ([Set] [Remove → clears the file pick]), and Background colour. The redundant "Saved image:" / "Title:" labels and the read-only URL line were dropped (the input shows + edits the URL).
+- Page tab: the wallpaper row is now [Choose wallpaper] (left) / [Remove] (right). Advanced tab: the "Filter…" button is left-aligned.
+- Edit-mode affordances scale with the tile: the drag handle and the "+ Pin tile" control are matching **landscape** pills sized to ~26% of the tile's shorter side tall (capped), with the grip rotated 90° to fit and the "+ Pin tile" font scaling (kept on one line). `.newtab-site` is now a CSS size container (`container-type: size`) to drive this via `cqmin`. The drag handle, "+ Pin tile", and the tile action buttons all share one `--ntt-float-shadow` token (theme-adaptive ring + drop shadow) so they match.
+- Recently-closed letter-fallback favicon now derives from the registrable domain (same as tiles), not the page title.
+- History-tiles filter host input is normalized on set (trim/lowercase, extract host from a pasted URL, map `*.example.com`→`.example.com`, strip path/trailing-dot) so exact-host filters reliably match. Exact-host semantics unchanged: `www.example.com` limits only that host, `.example.com` spans all subdomains. The filter panel's helptext/layout is left-aligned to the Advanced-tab rhythm (was centered).
+- Edit-mode selection cue (regression fix): the redundant dashed outline is dropped from pinned tiles; the single copper **selection ring** (white-separator halo, readable on any thumbnail) now marks the one tile open in the Tile tab; dashed is reserved for the candidate ("add here") slots.
+- Edit-mode candidate slots: stop dimming the thumbnail (`opacity:0.25` removed — no wallpaper bleed); keep the full thumbnail under a light scrim with an opaque "+ Pin tile" chip; the page wallpaper dims (~40%) in edit mode so gaps go calm.
+- "+ Add tile" → "+ Pin tile": clicking it now pins the history candidate immediately (same as the Pin action) and opens the Tile menu with that tile selected.
+- Danger colour moved to a cooler alarm red `#cc1633` (hue ~353°) in light/dark — ~22° off the copper accent (was a near-copper red that blurred with the Edit-mode selection ring). The destructive ✕ action button is now a filled danger button with background-independent separators (white icon + translucent-white ring + drop shadow), slightly larger and gapped from the neutral trio, so it stays legible on any thumbnail in both themes. Each neutral button (edit/refresh/unpin) carries its own surface — a hairline ring + drop shadow — instead of a shared bar behind the cluster, so every button reads on white-on-white / dark-on-dark thumbnails. Accent untouched.
+- Renamed user-facing copy/links to "NewTab PowerTools" (the Geoff Lankow lineage credit keeps "New Tab Tools"). Internal identifiers (extension id, storage/pref keys) unchanged.
+
+## [1.0.2] — 2026-06-07
 
 ### Changed
 

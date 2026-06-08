@@ -9,6 +9,30 @@ var Tiles = {
 	_ready: false,
 	_cache: [],
 	_list: [],
+	/**
+	 * Decide whether a history host is filtered out under the current (mutated)
+	 * per-host budget. Exact host keys match only that host; keys with a leading
+	 * `.` match the apex and any subdomain. A matched host that still has budget
+	 * decrements it; at zero it is dropped. `filters` is mutated in place (the
+	 * caller passes a fresh `Filters.getList()` copy).
+	 * @param {string} host
+	 * @param {Record<string, number>} filters  host→remaining-limit
+	 * @param {string[]} dotFilters  the `.`-prefixed keys of `filters`
+	 * @returns {boolean} true ⇒ drop this host
+	 */
+	_hostFilteredOut(host, filters, dotFilters) {
+		let match = host in filters ? host : dotFilters.find(
+			f => host == f.substring(1) || host.endsWith(f)
+		);
+		if (!match) {
+			return false;
+		}
+		if (filters[match] === 0) {
+			return true;
+		}
+		filters[match]--;
+		return false;
+	},
 	ensureReady() {
 		let promise = this._ready ? Promise.resolve(null) : this.getAllTiles();
 		return promise.then(() => {
@@ -75,14 +99,8 @@ var Tiles = {
 
 						let isNew = !urls.includes(s.url);
 						if (isNew) {
-							let match = url.host in filters ? url.host : dotFilters.find(
-								f => url.host == f.substring(1) || url.host.endsWith(f)
-							);
-							if (match) {
-								if (filters[match] === 0) {
-									return false;
-								}
-								filters[match]--;
+							if (Tiles._hostFilteredOut(url.host, filters, dotFilters)) {
+								return false;
 							}
 							urls.push(s.url);
 						} else {

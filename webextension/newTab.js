@@ -233,12 +233,17 @@ var newTabTools = {
 				if (this.setTitleInput) {
 					this.setTitleInput.value = link.title || '';
 				}
-				if (this.siteURL) {
-					this.siteURL.textContent = link.url;
-				}
 			});
 			break;
 		}
+		case 'options-url-remove':
+			// Per the redesign, the URL row's Remove deletes/unpins the tile —
+			// the same effect as the board's ✕ action.
+			if (this.selectedSite && typeof this.selectedSite.block === 'function') {
+				this.selectedSite.block().catch(e => console.error('remove tile failed:', e));
+			}
+			this.selectedSiteIndex = null;
+			break;
 		case 'options-savethumb':
 			let link = this.selectedSite.link;
 			let siteURL = link.url;
@@ -265,6 +270,18 @@ var newTabTools = {
 			this.removeThumbnail(this.selectedSite);
 			this.removeSavedThumbButton.disabled = true;
 			break;
+		case 'options-savedimg-clear': {
+			// Clear the chosen file in the "Choose image" picker (not the applied
+			// image — the Pin-row Remove reverts that).
+			this.setSavedThumbInput.value = '';
+			let setBtn = document.getElementById('options-savedthumb-set');
+			if (setBtn) { setBtn.disabled = true; }
+			event.target.disabled = true;
+			let row = event.target.closest('.options-row');
+			let nameEl = row && row.querySelector('.ntt-file-name');
+			if (nameEl) { nameEl.textContent = this.getString('backup_no_file'); }
+			break;
+		}
 		case 'options-bgcolor-display':
 		case 'options-bgcolor-displaybutton':
 			this.setBgColourInput.click();
@@ -292,24 +309,55 @@ var newTabTools = {
 			this.selectedSite.addTitle();
 			Tiles.putTile(this.selectedSite.link);
 			break;
+		case 'options-title-remove': {
+			// Clear the custom title → revert to the page's history/auto title.
+			if (!this.selectedSite) { return; }
+			let tlink = this.selectedSite.link;
+			delete tlink.title;
+			tlink.titleIsUserSet = false;
+			this.historyTitleFor(tlink.url).then(historyTitle => {
+				if (historyTitle) { tlink.title = historyTitle; }
+				this.selectedSite.addTitle();
+				Tiles.putTile(tlink);
+				if (this.setTitleInput) { this.setTitleInput.value = tlink.title || ''; }
+			});
+			break;
+		}
 		case 'options-wallpaper-btn':
 			this.openWallpaperPicker();
 			break;
 		case 'options-bg-remove':
 			this.resetWallpaper();
 			break;
-		case 'historytiles-filter':
-			this.fillFilterUI();
+		case 'historytiles-filter': {
+			// Toggle the filter panel (it starts hidden); only (re)populate when
+			// opening so a second click cleanly collapses it.
+			let opening = this.optionsFilter.hidden;
+			this.optionsFilter.hidden = !opening;
+			event.target.setAttribute('aria-expanded', String(opening));
+			if (opening) {
+				this.fillFilterUI();
+			}
 			return;
-		case 'options-filter-set':
-			Filters.setFilter(this.optionsFilterHost.value, parseInt(this.optionsFilterCount.value, 10));
+		}
+		case 'options-filter-set': {
+			// Normalize the host so exact matching reliably fires (trims/lowercases,
+			// extracts host from a pasted URL, maps `*.x`→`.x`). Re-derive validity
+			// here rather than trusting the button's disabled state.
+			let host = Filters.normalizeHost(this.optionsFilterHost.value);
+			let count = parseInt(this.optionsFilterCount.value, 10);
+			if (!host || isNaN(count)) {
+				return;
+			}
+			Filters.setFilter(host, count);
 			Updater.updateGrid();
-			this.fillFilterUI(this.optionsFilterHost.value);
+			this.fillFilterUI(host);
 			this.optionsFilterHost.value = '';
 			this.optionsFilterCount.value = '';
 			this.optionsFilterHost.focus();
 			this.optionsFilterSet.disabled = true;
 			return;
+		}
 		case 'options-backup':
 			chrome.permissions.request({permissions: ['downloads']}, function() {
 				chrome.runtime.sendMessage({name: 'Export:backup'});
@@ -339,6 +387,17 @@ var newTabTools = {
 			return;
 		case 'options-reset-cancel':
 			this._hideConfirm('options-reset-confirm-row');
+			return;
+		}
+
+		if (classList.contains('ntt-filter-remove')) {
+			// Explicit removal of a filter entry (distinct from stepping the limit
+			// down to "Unlimited", which also deletes it). Only filter rows carry
+			// this control — pinned-only rows don't (see fillFilterUI).
+			let row = event.target.closest('tr');
+			Filters.setFilter(row.cells[0].textContent, -1);
+			Updater.updateGrid();
+			this.fillFilterUI();
 			return;
 		}
 
@@ -1138,6 +1197,7 @@ var newTabTools = {
 				}
 			}
 			let seen = new Set();
+			let needFavicon = [];
 
 			for (let item of undoItems) {
 				if (added >= cap) {
@@ -1187,7 +1247,9 @@ var newTabTools = {
 
 				let fav = document.createElementNS(HTML_NAMESPACE, 'span');
 				fav.className = 'ntt-recent-favicon';
-				let glyph = displayTitle.charAt(0).toUpperCase();
+				// Letter fallback from the registrable domain (same logic as the
+				// tiles), not the page title — `H` for heise.de, not the headline.
+				let glyph = (domain.charAt(0) || displayTitle.charAt(0) || '?').toUpperCase();
 				let hue = (url.length * 7 + glyph.charCodeAt(0) * 13) % 360;
 				fav.style.backgroundColor = 'hsl(' + hue + ', 50%, 40%)';
 				if (favIconUrl && newTabTools.isValidURL(favIconUrl)) {
@@ -1197,6 +1259,11 @@ var newTabTools = {
 					fav.appendChild(img);
 				} else {
 					fav.appendChild(document.createTextNode(glyph));
+					// No favicon in the session record — try the extension's stored
+					// favicon once the row is built. Favicons are per-site, but a
+					// recently-closed tab is usually a deep article URL that won't
+					// exact-match a stored tile/homepage URL, so match by host.
+					needFavicon.push({ host: domain, fav });
 				}
 				card.appendChild(fav);
 
@@ -1224,6 +1291,41 @@ var newTabTools = {
 				added++;
 			}
 			strip.hidden = !added;
+
+			// §3c: cards that fell back to the letter glyph use the extension's
+			// stored favicon (collected during tile capture) when one exists —
+			// closed-tab session data often carries no favIconUrl. Match by host
+			// (favicons are per-site) so a deep article URL reuses the site's
+			// stored favicon.
+			if (needFavicon.length) {
+				let hosts = [...new Set(needFavicon.map(n => n.host).filter(Boolean))];
+				chrome.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, favicons => {
+					if (!favicons || typeof favicons.get !== 'function') {
+						return;
+					}
+					for (let { host, fav } of needFavicon) {
+						let favicon = host && favicons.get(host);
+						let src = null;
+						if (favicon instanceof Blob) {
+							src = URL.createObjectURL(favicon);
+						} else if (typeof favicon === 'string' && newTabTools.isValidURL(favicon)) {
+							src = favicon;
+						}
+						if (!src) {
+							continue;
+						}
+						let img = document.createElement('img');
+						img.onerror = function() { this.remove(); };
+						img.src = src;
+						for (let node of [...fav.childNodes]) {
+							if (node.nodeType === Node.TEXT_NODE) {
+								node.remove();
+							}
+						}
+						fav.appendChild(img);
+					}
+				});
+			}
 		});
 	},
 	trimRecent() {
@@ -1353,9 +1455,6 @@ var newTabTools = {
 			this.siteThumbnail.style.backgroundImage =
 				this.siteThumbnail.style.backgroundColor =
 				this.setBgColourDisplay.style.backgroundColor = null;
-			this.siteURL.textContent = this.getString('tileurl_empty');
-			this.siteURL.hidden = false;
-			this.editSiteURLRow.hidden = true;
 			this.setTitleInput.value = '';
 			this.saveCurrentThumbButton.disabled =
 				this.removeSavedThumbButton.disabled =
@@ -1381,10 +1480,9 @@ var newTabTools = {
 			this.removeSavedThumbButton.disabled = true;
 		}
 
-		this.siteURL.textContent = site.url;
+		// The URL is shown (and edited) in the input; no separate read-only label.
+		// The edit row is always available now (editing an auto tile's URL pins it).
 		this.siteURLInput.value = site.url;
-		this.siteURL.hidden = site.isPinned;
-		this.editSiteURLRow.hidden = !site.isPinned;
 		let backgroundColor = site.link.backgroundColor;
 		this.siteThumbnail.style.backgroundColor =
 			this.setBgColourInput.value =
@@ -1752,8 +1850,17 @@ var newTabTools = {
 			row.cells[0].textContent = k;
 			row.cells[1].textContent = pinned[k] || 0;
 			row.cells[2].querySelector('span').textContent = k in filters ? filters[k] : this.getString('filter_unlimited');
+			// An explicit remove (✕) on real filter rows only — appended into the
+			// limit cell so it doesn't add a column that would overflow the drawer.
+			// Pinned-only rows (a pinned tile with no limit) have no filter to
+			// remove; those are managed by unpinning on the board.
 			if (k in filters) {
 				row.querySelector('.minus-button').disabled = false;
+				let removeBtn = document.createElement('button');
+				removeBtn.className = 'ntt-filter-remove';
+				removeBtn.textContent = '✕';
+				removeBtn.title = this.getString('filter_remove');
+				row.cells[2].append(removeBtn);
 			}
 			table.tBodies[0].append(row);
 			if (highlightHost && k == highlightHost) {
@@ -1921,8 +2028,6 @@ var newTabTools = {
 		'pinURLButton': 'options-pinURL',
 		'pinURLAutocomplete': 'autocomplete',
 		'siteThumbnail': 'options-thumbnail',
-		'siteURL': 'options-url',
-		'editSiteURLRow': 'options-edit-url',
 		'siteURLInput': 'options-url-input',
 		'setURLButton': 'options-url-set',
 		'saveCurrentThumbButton': 'options-savethumb',
@@ -1987,6 +2092,19 @@ var newTabTools = {
 	for (let c of newTabTools.drawerEl.querySelectorAll('input[type="file"]')) {
 		c.addEventListener('change', function() {
 			c.nextElementSibling.disabled = !c.files.length;
+			let row = c.parentNode;
+			// Themed file controls (e.g. Restore): reflect the chosen filename in the
+			// `.ntt-file-name` span beside the styled <label>, since the native input
+			// (and its "No file selected." text) is visually hidden.
+			let nameEl = row && row.querySelector('.ntt-file-name');
+			if (nameEl) {
+				nameEl.textContent = c.files.length
+					? c.files[0].name
+					: newTabTools.getString('backup_no_file');
+			}
+			// The "Choose image" row's Clear button is enabled only with a pending file.
+			let clear = row && row.querySelector('#options-savedimg-clear');
+			if (clear) { clear.disabled = !c.files.length; }
 		});
 	}
 	newTabTools.setBgColourInput.addEventListener('change', function() {

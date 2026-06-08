@@ -42,10 +42,14 @@
 	--ntt-line-soft: rgba(255, 255, 255, 0.18);
 	--ntt-ink: #ffffff;
 	--ntt-mute: rgba(255, 255, 255, 0.72);
-	/* §8: the light danger (#b14b27) is only ~2.7:1 on the HC black ground.
-	   Reuse the existing dark-theme danger (#e89279) — AAA on black, not a new
-	   colour — so destructive controls stay legible in high-contrast. */
-	--ntt-danger: #e89279;
+	/* Same cooler alarm red as light/dark (#cc1633), kept distinct from the copper
+	   accent. The destructive ✕ button uses it as a fill with a white icon + white
+	   ring, which carry the legibility on the black ground; the drawer Reset/Restore
+	   danger buttons use it as text/border. (OS forced-colors strips this and falls
+	   back to system colours — see the @media block.) */
+	--ntt-danger: #cc1633;
+	/* White-ish ring so floating pills (drag handle / "+ Pin tile") read on black. */
+	--ntt-float-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.45), 0 2px 8px rgba(0, 0, 0, 0.55);
 }
 body {
 	height: 100%;
@@ -184,6 +188,30 @@ body, #background-fake {
 #ntt-drawer-body a {
 	color: var(--ntt-accent);
 }
+/* ABOUT — the brand home now the wordmark is off the new-tab surface: one clean
+   left edge, the logo inline with the title, both linking to the AMO listing. */
+#options-about {
+	text-align: left;
+}
+.ntt-about-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	text-decoration: none;
+	color: var(--ntt-ink);
+}
+.ntt-about-brand:hover {
+	text-decoration: underline;
+}
+.ntt-about-logo {
+	width: 22px;
+	height: 22px;
+	flex: 0 0 auto;
+}
+.ntt-about-version {
+	color: var(--ntt-mute);
+	font-weight: 400;
+}
 /* Tile editor (`#options-tile`) was authored for the old 752-px modal and
  * leaks horizontal space inside the 360-px drawer — the thumbnail wrap had
  * `padding: 0 1em`, the bg-colour row has 5 inline children, and the file
@@ -210,6 +238,33 @@ body, #background-fake {
 #ntt-drawer-body #options-tile .options-row {
 	flex-wrap: wrap;
 	min-width: 0;
+}
+/* Tile editor rows (redesign): content left-aligned, [Set]/[Remove] pushed right.
+   The leading input/filename flexes to fill so trailing buttons sit at the right
+   edge; the Pin-row Remove (no flexing lead) uses an auto margin. The bg-colour
+   row already has a flex:1 label that does the same. */
+#options-tile #options-url-input,
+#options-tile #options-title-input {
+	flex: 1;
+	min-width: 0;
+}
+#options-tile .ntt-file-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+#options-tile .options-row > #options-savedthumb-remove {
+	margin-left: auto;
+}
+/* Page tab: [Choose wallpaper] left-aligned, [Remove] right-aligned. */
+#options-bg-remove {
+	margin-left: auto;
+}
+/* Advanced tab: the Filter… button is left-aligned. */
+#historytiles-filter {
+	margin-right: auto;
 }
 #ntt-drawer-footer {
 	display: flex;
@@ -475,20 +530,31 @@ body, #background-fake {
 	color: var(--ntt-mute);
 }
 
-/* Selected-tile ring (driven by `[data-selected="true"]` on .newtab-site). */
-.newtab-site[data-selected="true"] {
-	box-shadow:
-		0 0 0 2px var(--ntt-accent, #c96442),
-		0 0 0 5px rgba(201, 100, 66, 0.18);
+/* Selected-tile ring (driven by `[data-selected="true"]` on .newtab-site) — the
+   ONE border that carries unique info: "this is the tile I'm editing". A solid
+   copper ring with a white-separator halo so it reads on ANY thumbnail. */
+/* The `:hover` variants are required: `.newtab-site:hover` (the elevation shadow)
+   has equal specificity and comes later in the file, so without them the ring is
+   lost the moment the pointer rests on the selected tile. */
+.newtab-site[data-selected="true"],
+.newtab-site[data-selected="true"]:hover {
+	box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ntt-accent);
 	border-radius: var(--ntt-radius, 10px);
+}
+:root[theme="dark"] .newtab-site[data-selected="true"],
+:root[theme="dark"] .newtab-site[data-selected="true"]:hover {
+	box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5), 0 0 0 4px var(--ntt-accent);
 }
 input[type="button"] {
 	cursor: pointer;
 }
-/* DRAWER ACTION BUTTONS — three-tier hierarchy (§5/B2). Ghost is the default
-   (transparent + hairline, ink text); one copper primary per group; destructive
-   actions use the danger role. The colour-swatch button is excluded. */
+/* DRAWER ACTION BUTTONS — three-tier hierarchy (§5/B2). Secondary (ghost) is the
+   default: a subtle filled surface + a clear hairline so it unmistakably reads as a
+   button in every theme (a transparent fill made the tile-editor Set/Remove buttons
+   hard to recognise). One copper primary per group; destructive actions use danger.
+   The colour-swatch button is excluded. */
 #ntt-drawer-body .options-row button,
+#ntt-drawer-body .options-row .ntt-file-label,
 #options-filter-set,
 .ntt-btn-ghost {
 	font-family: var(--ntt-font-ui);
@@ -498,13 +564,37 @@ input[type="button"] {
 	padding: 6px 12px;
 	border-radius: 7px;
 	border: 1px solid var(--ntt-line);
-	background: transparent;
+	background: var(--ntt-surface-soft);
 	color: var(--ntt-ink);
 	cursor: pointer;
 }
 #ntt-drawer-body .options-row button:hover,
+#ntt-drawer-body .options-row .ntt-file-label:hover,
 .ntt-btn-ghost:hover {
-	background: var(--ntt-surface-soft);
+	background: var(--ntt-line);
+}
+/* A native <input type=file> ignores the theme (system grey). Hide it and drive it
+   from the themed .ntt-file-label so it inherits the drawer button styling; show the
+   chosen filename in themed type. */
+.ntt-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+.ntt-file-label {
+	display: inline-block;
+}
+.ntt-file-name {
+	font-family: var(--ntt-font-ui);
+	font-size: 12px;
+	color: var(--ntt-mute);
+	align-self: center;
 }
 #ntt-drawer-body button.ntt-btn-primary {
 	background: var(--ntt-accent);
@@ -1055,6 +1145,11 @@ input[type="button"] {
 	box-shadow: var(--ntt-shadow-tile-rest);
 	transition: 100ms ease-out;
 	transition-property: top, left, opacity, box-shadow;
+	/* Size container so edit-mode affordances (drag handle / "+ Pin tile") can size
+	   relative to the tile via `cqmin` (50% of the shorter side). The tile's size
+	   comes from the grid track (1fr) → flex:1, never from its content, so size
+	   containment is safe here. */
+	container-type: size;
 }
 .newtab-site:hover {
 	box-shadow: var(--ntt-shadow-tile-hover);
@@ -1236,10 +1331,13 @@ svg {
 	top: 8px;
 	right: 8px;
 	display: flex;
+	align-items: center;
 	gap: 6px;
 	z-index: 3;
 	opacity: 0;
 	transition: opacity 100ms ease-out;
+	/* No unified bar behind the cluster — each button carries its own surface +
+	   ring + drop shadow (below) so it stays legible on any thumbnail. */
 }
 .newtab-site:hover .ntt-actions {
 	opacity: 1;
@@ -1279,20 +1377,22 @@ svg {
 	width: var(--ntt-action-icon-size, 16px);
 	height: var(--ntt-action-icon-size, 16px);
 }
-/* Remove (✕) is the one destructive tile action — danger colour (§3c/§7). */
-.ntt-action-btn[data-action="remove"] {
-	color: var(--ntt-danger);
-}
 /* EDIT MODE (§2) — opening the drawer IS edit mode (`:root[drawer-open]`).
-   Pinned tiles get a persistent action row, a centred drag handle, and a dashed
-   accent (copper) outline = "selected/movable"; auto (non-pinned) tiles fade
-   back and offer "+ Add tile". The ✕ stays danger-red (set above) — two
-   colours, two meanings. */
+   Pinned tiles get a persistent action row + a centred drag handle (the handle
+   already signals "movable" — no redundant outline). The single copper selection
+   ring (above) marks the one tile open in the Tile tab. Non-pinned candidate
+   slots get a dashed border (= "add here") + a "+ Pin tile" chip. The whole
+   wallpaper dims so the gaps go calm. */
 .ntt-drag-handle,
 .ntt-add-tile {
 	display: none;
 }
-:root[drawer-open] .newtab-site[pinned] {
+/* Calm the wallpaper while editing so tile gaps don't compete for attention. */
+:root[drawer-open] #background-fake {
+	filter: blur(2px) brightness(0.6);
+}
+/* Dashed = "add here" — only the empty/candidate (non-pinned) slots. */
+:root[drawer-open] .newtab-site:not([pinned]) {
 	outline: 2px dashed var(--ntt-accent);
 	outline-offset: -3px;
 }
@@ -1311,21 +1411,29 @@ svg {
 	z-index: 2;
 	align-items: center;
 	justify-content: center;
-	width: 34px;
-	height: 34px;
+	/* A scaled-back LANDSCAPE pill that grows with the tile: ~26% of the shorter
+	   side tall, ~1.9× wide, capped so big tiles stay sane. */
+	height: clamp(22px, 26cqmin, 46px);
+	width: clamp(40px, 48cqmin, 88px);
 	border-radius: 8px;
 	background: var(--ntt-surface);
 	color: var(--ntt-accent);
-	box-shadow: 0 0 0 1px var(--ntt-line), 0 2px 6px rgba(20,15,10,0.12);
+	box-shadow: var(--ntt-float-shadow);
 	pointer-events: none;
 }
 .ntt-drag-handle svg {
+	/* Override the global `svg { position: fixed }` so the grip sits in-flow and
+	   scales with the handle. The grip is 2×3 dots (portrait); rotate it 90° so it
+	   reads landscape and fits the pill. */
 	display: block;
+	position: static;
+	transform: rotate(90deg);
+	width: clamp(16px, 18cqmin, 32px);
+	height: clamp(16px, 18cqmin, 32px);
 }
-:root[drawer-open] .newtab-site:not([pinned]) .newtab-thumbnail,
-:root[drawer-open] .newtab-site:not([pinned]) .ntt-overlay {
-	opacity: 0.25;
-}
+/* No opacity dim — the thumbnail/fallback stays fully opaque so the page wallpaper
+   never bleeds through the tile. The candidate slot keeps its real thumbnail under
+   a light scrim, with a centred opaque chip. */
 :root[drawer-open] .newtab-site:not([pinned]) .ntt-add-tile {
 	display: flex;
 	position: absolute;
@@ -1333,14 +1441,36 @@ svg {
 	z-index: 2;
 	align-items: center;
 	justify-content: center;
-	/* Dark scrim so the copper "+ Add tile" copy reads regardless of the faded
-	   thumbnail behind it (and in high-contrast). */
-	background: rgba(8, 6, 4, 0.64);
+	/* Light scrim (~30%) calms the thumbnail without hiding it; the page stays
+	   recognizable, no muddy wallpaper bleed. */
+	background: rgba(255, 255, 255, 0.30);
+	/* Clickable in edit mode: pins the candidate + opens the Tile menu (§7). */
+	pointer-events: auto;
+	cursor: pointer;
+}
+:root[theme="dark"] .newtab-site:not([pinned]) .ntt-add-tile {
+	background: rgba(0, 0, 0, 0.30);
+}
+/* The label is an opaque LANDSCAPE pill that reads over any thumbnail — same
+   height + shape as the pinned tile's drag handle, so the two edit affordances
+   match. `nowrap` keeps "+ Pin tile" on one line (it was wrapping too early), and
+   the font scales with the tile down to a small floor so it still fits small tiles. */
+.ntt-add-tile-chip {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	height: clamp(22px, 26cqmin, 46px);
+	padding: 0 clamp(8px, 5cqmin, 16px);
+	white-space: nowrap;
+	background: var(--ntt-surface);
 	color: var(--ntt-accent);
 	font-family: var(--ntt-font-ui);
-	font-size: 13px;
+	font-size: clamp(9px, 11cqmin, 17px);
 	font-weight: 600;
 	letter-spacing: -0.005em;
+	border-radius: 8px;
+	box-shadow: var(--ntt-float-shadow);
 	pointer-events: none;
 }
 .ntt-action-btn {
@@ -1355,7 +1485,10 @@ svg {
 	cursor: pointer;
 	border: none;
 	padding: 0;
-	box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+	/* Each button stands on its own surface, NOT a shared bar: the shared float
+	   shadow (ring + drop shadow, theme-adaptive) so the pill reads on any
+	   background. Same token as the drag handle / "+ Pin tile". */
+	box-shadow: var(--ntt-float-shadow);
 	color: rgba(0,0,0,0.7);
 }
 .ntt-action-btn:hover {
@@ -1363,8 +1496,23 @@ svg {
 }
 :root[theme="dark"] .ntt-action-btn {
 	background: rgba(20,18,15,0.72);
-	box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07);
 	color: rgba(255,255,255,0.85);
+}
+/* Remove (✕) — the one destructive tile action. A fill that carries meaning plus
+   two background-independent separators, so it stays legible on ANY thumbnail in
+   light AND dark themes: alarm-red fill + white icon, a translucent-white ring
+   (saves it on dark/busy thumbnails) and a drop shadow (saves it on white/light
+   ones). Slightly larger + gapped from the neutral trio so it reads as the
+   important one. Scoped to both themes so it beats the per-theme `.ntt-action-btn`
+   base specificity; HC + forced-colors override this below (treatment, not hue). */
+.ntt-action-btn[data-action="remove"],
+:root[theme="dark"] .ntt-action-btn[data-action="remove"] {
+	background: var(--ntt-danger);
+	color: #fff;
+	box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+	width: calc(var(--ntt-action-btn-size, 33px) + 2px);
+	height: calc(var(--ntt-action-btn-size, 33px) + 2px);
+	margin-left: 5px;
 }
 /* High-contrast: a solid black pill with a white icon + ring so the action
    buttons stay clearly defined over any tile (esp. the persistent edit-mode
@@ -1374,10 +1522,36 @@ svg {
 	color: #fff;
 	box-shadow: inset 0 0 0 1.5px #fff;
 }
-/* Keep the destructive ✕ coral even on the black HC pill, so the
-   copper-movable / red-delete two-colour distinction survives in HC (§2). */
+/* The manual high-contrast THEME is the extension's own palette (not OS
+   forced-colors), so it can still render the red destructive button — the white
+   icon + white ring keep it legible on the black ground, same treatment as
+   light/dark. (Width/height/gap come from the shared remove rule above.) Only true
+   `@media (forced-colors: active)` below drops the hue, where the OS strips custom
+   colours and we fall back to a system-colour inverted treatment. */
 :root[theme="contrast"] .ntt-action-btn[data-action="remove"] {
-	color: var(--ntt-danger);
+	background: var(--ntt-danger);
+	color: #fff;
+	box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+/* OS forced-colors mode overrides custom colours entirely — honour the user's real
+   HC palette with system-color keywords. Same treatment cue: all four buttons are
+   outlined (ButtonFace fill, ButtonText border + icon); the ✕ is the one inverted
+   (ButtonText fill, ButtonFace icon) — the lone filled button = "dangerous". */
+@media (forced-colors: active) {
+	.ntt-action-btn {
+		background: ButtonFace;
+		color: ButtonText;
+		border: 1.5px solid ButtonText;
+		box-shadow: none;
+		backdrop-filter: none;
+	}
+	.ntt-action-btn[data-action="remove"] {
+		background: ButtonText;
+		color: ButtonFace;
+		/* Drop the light/dark ring + drop-shadow here — forced-colors carries the
+		   cue via the inverted system colours + border, not custom rgba shadows. */
+		box-shadow: none;
+	}
 }
 :root[theme="dark"] .ntt-action-btn:hover {
 	background: rgba(255,255,255,0.10);
@@ -1460,7 +1634,8 @@ svg {
  * `.options-row` wrappers. They look better aligned with their fieldset's
  * left edge than centred under their description text. */
 #options-export .options-row,
-#options-reset-group .options-row {
+#options-reset-group .options-row,
+#options-about .options-row {
 	justify-content: flex-start;
 }
 .options-row[hidden] {
@@ -1540,6 +1715,14 @@ a {
 	z-index: 1;
 	border: 1px #b2aeaa solid;
 	box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.25);
+	/* On-system font (the page's `font: message-box` otherwise leaks a system
+	   serif into this dropdown — the rest of the drawer uses the UI sans). */
+	font-family: var(--ntt-font-ui);
+	font-size: 12px;
+}
+/* Buttons don't inherit font-family — keep the Continue/permission button on-system. */
+#autocomplete button {
+	font-family: var(--ntt-font-ui);
 }
 #autocomplete li:not([hidden]) {
 	cursor: pointer;
@@ -1601,10 +1784,14 @@ li.pinned .autocomplete-icon {
 #options-filter tbody {
 	line-height: 24px;
 }
+/* Keep the table within the drawer width so the limit column + ✕ never clip. */
+#options-filter table {
+	width: 100%;
+}
 #options-filter td:nth-child(1) {
 	text-overflow: ellipsis;
 	overflow-x: hidden;
-	max-width: 180px;
+	max-width: 120px;
 }
 #options-filter td:nth-child(3) {
 	white-space: nowrap;
@@ -1647,6 +1834,41 @@ li.pinned .autocomplete-icon {
 }
 .minus-button[disabled] {
 	opacity: 0.5;
+}
+/* Filter panel is a toggle (starts hidden); the id+attr selector beats the
+   .ntt-form-group{display:flex} base. */
+#options-filter[hidden] {
+	display: none;
+}
+/* Toggle caret on the "Filter…" button, flips when the panel is open. */
+#historytiles-filter::after {
+	content: "▾";
+	margin-left: 6px;
+	font-size: 9px;
+	display: inline-block;
+}
+#historytiles-filter[aria-expanded="true"]::after {
+	transform: rotate(180deg);
+}
+/* Explicit per-row remove (✕) — ghost icon button matching the steppers; only
+   rendered on real filter rows (see fillFilterUI). Sits in the limit cell next to
+   the stepper (no extra column, so the table stays within the drawer width). */
+.ntt-filter-remove {
+	width: 22px;
+	height: 22px;
+	margin-left: 6px;
+	vertical-align: middle;
+	border: 1px solid var(--ntt-line);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--ntt-mute);
+	font-size: 12px;
+	line-height: 1;
+	cursor: pointer;
+}
+.ntt-filter-remove:hover {
+	color: var(--ntt-danger);
+	border-color: var(--ntt-danger);
 }
 /* Domain table — drawer row rhythm + hairlines (§5). */
 #options-filter tbody tr {

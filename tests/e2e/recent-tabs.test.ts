@@ -144,4 +144,48 @@ describe('E2E: Recently-closed-tabs row (slot 24)', () => {
 			await page.close();
 		}
 	}, 90_000);
+
+	it('uses the extension-stored favicon when the session record carries none', async () => {
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			// A closed tab with NO session favIconUrl, plus a stubbed background
+			// favicon store that HAS a (Blob) favicon for that URL — the card should
+			// render the stored favicon image rather than the letter glyph.
+			const hasImg = await page.evaluate(async () => {
+				const w = window as any;
+				// A deep article URL (host stored-fav.example) with NO session favicon —
+				// the host-keyed stored-favicon lookup should still find the site favicon.
+				w.chrome.sessions.getRecentlyClosed = (cb: any) => cb([
+					{ tab: { url: 'https://stored-fav.example/2024/06/some-article', title: 'Stored Fav', sessionId: 'sf', favIconUrl: null, incognito: false, lastModified: 0 } },
+				]);
+				const orig = w.chrome.runtime.sendMessage;
+				w.chrome.runtime.sendMessage = function(msg: any, cb: any) {
+					if (msg && msg.name === 'Thumbnails.getFaviconsByHost') {
+						const m = new Map();
+						for (const h of msg.hosts) {
+							m.set(h, new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"></svg>'], { type: 'image/svg+xml' }));
+						}
+						if (cb) { cb(m); }
+						return;
+					}
+					return orig.apply(this, arguments as any);
+				};
+				w.Prefs.recent = true;
+				w.newTabTools.refreshRecent();
+				await new Promise(r => setTimeout(r, 700));
+				const card = document.querySelector('#ntt-titlebar-recent .ntt-recent-card[data-session-id="sf"]')
+					|| document.querySelector('#ntt-titlebar-recent .ntt-recent-card');
+				const fav = card && card.querySelector('.ntt-recent-favicon');
+				return !!(fav && fav.querySelector('img'));
+			});
+			expect(hasImg).toBe(true);
+		} catch (e) {
+			await captureFailure(page, 'recent-stored-favicon');
+			throw e;
+		} finally {
+			await page.close();
+		}
+	}, 90_000);
 });

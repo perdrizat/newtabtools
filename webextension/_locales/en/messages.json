@@ -12,7 +12,7 @@
 		"message": "Backup…"
 	},
 	"backup_description": {
-		"message": "New Tab Tools will create a file containing your settings, pinned tiles, and background image."
+		"message": "NewTab PowerTools will create a file containing your settings, pinned tiles, and background image."
 	},
 	"backup_header": {
 		"message": "Backup:"
@@ -36,7 +36,7 @@
 		"message": "Edit this tile"
 	},
 	"contextmenu_options": {
-		"message": "New Tab Tools options"
+		"message": "NewTab PowerTools options"
 	},
 	"contextmenu_pin": {
 		"message": "Pin this tile"
@@ -54,17 +54,17 @@
 		}
 	},
 	"database_error_history_settings": {
-		"message": "New Tab Tools cannot start if Firefox is set to \"never remember history\" or \"always open in private browsing mode\"."
+		"message": "NewTab PowerTools cannot start if Firefox is set to \"never remember history\" or \"always open in private browsing mode\"."
 	},
 	"database_error_indexeddb": {
 		"description": "Words between ` characters will be placed in HTML <code> blocks",
 		"message": "Go to `about:config` and check `dom.indexedDB.enabled` is set to true."
 	},
 	"database_error_message": {
-		"message": "New Tab Tools couldn't start properly. Try these:"
+		"message": "NewTab PowerTools couldn't start properly. Try these:"
 	},
 	"database_error_restart": {
-		"message": "You will need to restart New Tab Tools (or just restart Firefox) for these changes to have an effect."
+		"message": "You will need to restart NewTab PowerTools (or just restart Firefox) for these changes to have an effect."
 	},
 	"extensionDescription": {
 		"message": "A configurable new tab page for Firefox. Auto-captures tile thumbnails of pages you visit, with full layout control and a recently-closed tabs row."
@@ -96,6 +96,9 @@
 	"filter_placeholder_limit": {
 		"message": "Limit"
 	},
+	"filter_remove": {
+		"message": "Remove filter"
+	},
 	"filter_set": {
 		"message": "Set"
 	},
@@ -106,7 +109,7 @@
 		"message": "unlimited"
 	},
 	"github": {
-		"message": "New Tab Tools on GitHub"
+		"message": "Source on GitHub"
 	},
 	"newtab_pageTitle": {
 		"message": "New Tab"
@@ -288,7 +291,7 @@
 		"message": "Done"
 	},
 	"tile_add": {
-		"message": "+ Add tile"
+		"message": "+ Pin tile"
 	},
 	"confirm_yes": {
 		"message": "Confirm"
@@ -366,10 +369,10 @@
 		"message": "Add"
 	},
 	"pin_url_header": {
-		"message": "Add tile:"
+		"message": "Pin next tile:"
 	},
 	"pin_url_permissions": {
-		"message": "New Tab Tools requires extra permissions to use your history and bookmarks."
+		"message": "NewTab PowerTools requires extra permissions to use your history and bookmarks."
 	},
 	"pin_url_placeholder": {
 		"message": "Type or select a URL"
@@ -380,11 +383,17 @@
 	"recently_closed_tabs": {
 		"message": "Recently Closed"
 	},
+	"backup_no_file": {
+		"message": "No file selected."
+	},
 	"restore_button": {
 		"message": "Restore"
 	},
+	"restore_choose_file": {
+		"message": "Choose file…"
+	},
 	"restore_description": {
-		"message": "Select a New Tab Tools backup file to import from."
+		"message": "Select a NewTab PowerTools backup file to import from."
 	},
 	"restore_header": {
 		"message": "Restore:"
@@ -405,7 +414,7 @@
 		"message": "Refresh thumbnail"
 	},
 	"tile_header": {
-		"message": "Tiles:"
+		"message": "Update current tile:"
 	},
 	"tile_pin": {
 		"message": "Pin this site at its current position"
@@ -413,11 +422,14 @@
 	"tile_removethumbnail": {
 		"message": "Remove thumbnail"
 	},
+	"tile_savedthumb_choose": {
+		"message": "Choose image…"
+	},
 	"tile_savedthumb_label": {
 		"message": "Saved image:"
 	},
 	"tile_savedthumb_savecurrent": {
-		"message": "Save current thumbnail"
+		"message": "Pin current thumbnail"
 	},
 	"tile_savedthumb_set": {
 		"message": "Set"
@@ -444,7 +456,7 @@
 		"message": "Title:"
 	},
 	"tile_title_placeholder": {
-		"message": "Type a new tile title"
+		"message": "Change title"
 	},
 	"tile_title_set": {
 		"message": "Set"
@@ -456,7 +468,7 @@
 		"message": "Empty Tile"
 	},
 	"tile_url_placeholder": {
-		"message": "Type a new tile URL"
+		"message": "Change URL"
 	},
 	"tile_url_set": {
 		"message": "Set"

@@ -60,7 +60,11 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 		const optionsOnClick = extractMethod(source, 'optionsOnClick');
 
 		globalThis.Prefs = { rows: 3, columns: 3 };
-		globalThis.Filters = { setFilter: vi.fn() };
+		globalThis.Filters = {
+			setFilter: vi.fn(),
+			// default normalizer: trim/lowercase/`*.`→`.` (overridden per-test where needed)
+			normalizeHost: (v: string) => String(v).trim().toLowerCase().replace(/^\*\./, '.'),
+		};
 		globalThis.Updater = { updateGrid: vi.fn() };
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
 		globalThis.Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
@@ -248,6 +252,49 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 		expect(Filters.setFilter).toHaveBeenCalledWith('example.com', 0);
 		expect(unpinnedSpan.textContent).toBe(0);
 	});
+
+	// The host is normalized on set (so exact matching actually fires): a pasted
+	// URL / mixed case / `*.` wildcard becomes the canonical key.
+	it('options-filter-set stores the NORMALIZED host', () => {
+		(globalThis as any).Filters.normalizeHost = (v: string) => v.trim().toLowerCase().replace(/^\*\./, '.');
+		harness.optionsFilterHost.value = '  WWW.LinkedIn.COM ';
+		harness.optionsFilterCount.value = '2';
+		harness.optionsOnClick({ target: { id: 'options-filter-set', disabled: false, classList: { contains: vi.fn(() => false) } } });
+		expect(Filters.setFilter).toHaveBeenCalledWith('www.linkedin.com', 2);
+	});
+
+	it('ntt-filter-remove deletes the filter (setFilter host, -1) and refreshes', () => {
+		harness.fillFilterUI = vi.fn();
+		const row = { cells: [{ textContent: 'www.linkedin.com' }] };
+		const event = {
+			target: {
+				id: '',
+				disabled: false,
+				classList: { contains: vi.fn((cls: string) => cls === 'ntt-filter-remove') },
+				closest: vi.fn(() => row),
+			},
+		};
+		harness.optionsOnClick(event);
+		expect(Filters.setFilter).toHaveBeenCalledWith('www.linkedin.com', -1);
+		expect(Updater.updateGrid).toHaveBeenCalled();
+		expect(harness.fillFilterUI).toHaveBeenCalled();
+	});
+
+	it('historytiles-filter toggles the panel open/closed and fills only on open', () => {
+		harness.fillFilterUI = vi.fn();
+		harness.optionsFilter = { hidden: true };
+		const btn = { id: 'historytiles-filter', disabled: false, classList: { contains: vi.fn(() => false) }, setAttribute: vi.fn() };
+		// first click → opens + fills
+		harness.optionsOnClick({ target: btn });
+		expect(harness.optionsFilter.hidden).toBe(false);
+		expect(btn.setAttribute).toHaveBeenCalledWith('aria-expanded', 'true');
+		expect(harness.fillFilterUI).toHaveBeenCalledTimes(1);
+		// second click → closes, no re-fill
+		harness.optionsOnClick({ target: btn });
+		expect(harness.optionsFilter.hidden).toBe(true);
+		expect(btn.setAttribute).toHaveBeenCalledWith('aria-expanded', 'false');
+		expect(harness.fillFilterUI).toHaveBeenCalledTimes(1);
+	});
 });
 
 // ==================== Filter matching logic tests ====================
@@ -403,5 +450,128 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 		expect(urls).not.toContain('chrome://settings');
 		expect(urls).not.toContain('about:blank');
 		expect(urls).toContain('https://ok.com/');
+	});
+
+	// Exact-host narrowness (the behaviour the user wants): an exact-host filter
+	// must NOT spill onto other subdomains, and a bare apex filter must NOT catch
+	// `www.`. The dot-prefix form is the only way to span subdomains.
+	it('exact host filter limits ONLY that host, not other subdomains', async () => {
+		Filters._list['www.linkedin.com'] = 2;
+		setupTopSites([
+			{ url: 'https://www.linkedin.com/feed/', title: 'Feed' },
+			{ url: 'https://www.linkedin.com/jobs/', title: 'Jobs' },
+			{ url: 'https://www.linkedin.com/in/me', title: 'Me' },
+			{ url: 'https://m.linkedin.com/', title: 'Mobile' },
+		]);
+		const result = await Tiles.getAllTiles();
+		const urls = result.filter((s: any) => s).map((s: any) => s.url);
+		const www = urls.filter((u: string) => u.includes('www.linkedin.com'));
+		expect(www).toHaveLength(2);
+		// m.linkedin.com is a different host — untouched by the www filter.
+		expect(urls).toContain('https://m.linkedin.com/');
+	});
+
+	it('bare apex filter does NOT catch the www subdomain', async () => {
+		Filters._list['linkedin.com'] = 0;
+		setupTopSites([
+			{ url: 'https://linkedin.com/', title: 'Apex' },
+			{ url: 'https://www.linkedin.com/feed/', title: 'WWW' },
+		]);
+		const result = await Tiles.getAllTiles();
+		const urls = result.filter((s: any) => s).map((s: any) => s.url);
+		expect(urls).not.toContain('https://linkedin.com/');
+		expect(urls).toContain('https://www.linkedin.com/feed/');
+	});
+
+	it('two filters decrement independently (multi-host independence)', async () => {
+		Filters._list['a.com'] = 1;
+		Filters._list['b.com'] = 1;
+		setupTopSites([
+			{ url: 'https://a.com/1', title: 'A1' },
+			{ url: 'https://a.com/2', title: 'A2' },
+			{ url: 'https://b.com/1', title: 'B1' },
+			{ url: 'https://b.com/2', title: 'B2' },
+		]);
+		const result = await Tiles.getAllTiles();
+		const urls = result.filter((s: any) => s).map((s: any) => s.url);
+		expect(urls.filter((u: string) => u.includes('a.com'))).toHaveLength(1);
+		expect(urls.filter((u: string) => u.includes('b.com'))).toHaveLength(1);
+	});
+
+	// Direct unit tests of the extracted match-and-decrement predicate.
+	describe('Tiles._hostFilteredOut predicate', () => {
+		const dot = (f: Record<string, number>) => Object.keys(f).filter(k => k[0] === '.');
+
+		it('exact host hit decrements; drops at zero', () => {
+			const f = { 'www.linkedin.com': 2 };
+			expect(Tiles._hostFilteredOut('www.linkedin.com', f, dot(f))).toBe(false);
+			expect(f['www.linkedin.com']).toBe(1);
+			expect(Tiles._hostFilteredOut('www.linkedin.com', f, dot(f))).toBe(false);
+			expect(Tiles._hostFilteredOut('www.linkedin.com', f, dot(f))).toBe(true);
+		});
+
+		it('exact host filter does not match a different subdomain', () => {
+			const f = { 'www.linkedin.com': 0 };
+			expect(Tiles._hostFilteredOut('m.linkedin.com', f, dot(f))).toBe(false);
+		});
+
+		it('bare apex filter does not match www', () => {
+			const f = { 'linkedin.com': 0 };
+			expect(Tiles._hostFilteredOut('www.linkedin.com', f, dot(f))).toBe(false);
+			expect(Tiles._hostFilteredOut('linkedin.com', f, dot(f))).toBe(true);
+		});
+
+		it('dot-prefix wildcard matches apex and any subdomain', () => {
+			const f = { '.linkedin.com': 0 };
+			expect(Tiles._hostFilteredOut('linkedin.com', f, dot(f))).toBe(true);
+			expect(Tiles._hostFilteredOut('www.linkedin.com', f, dot(f))).toBe(true);
+			expect(Tiles._hostFilteredOut('deep.sub.linkedin.com', f, dot(f))).toBe(true);
+		});
+
+		it('no matching filter lets the host through', () => {
+			const f = { 'other.com': 0 };
+			expect(Tiles._hostFilteredOut('example.com', f, dot(f))).toBe(false);
+		});
+	});
+});
+
+// ==================== Host normalization tests ====================
+
+describe('Filter host normalization — prefs.js Filters.normalizeHost', () => {
+	let Filters: any;
+
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
+		const prefsSrc = fs.readFileSync(path.resolve(__dirname, '../../webextension/prefs.js'), 'utf8');
+		(globalThis as any).chrome = (globalThis as any).chrome || {};
+		(globalThis as any).chrome.storage = { local: { set: vi.fn(), get: vi.fn() } };
+		vm.runInThisContext(prefsSrc, { filename: 'prefs.js' });
+		Filters = (globalThis as any).Filters;
+	});
+
+	it('trims and lowercases', () => {
+		expect(Filters.normalizeHost('  WWW.LinkedIn.COM ')).toBe('www.linkedin.com');
+	});
+
+	it('extracts the host from a pasted URL (scheme + path)', () => {
+		expect(Filters.normalizeHost('https://www.linkedin.com/feed/')).toBe('www.linkedin.com');
+	});
+
+	it('maps a leading *. wildcard to the leading-dot form', () => {
+		expect(Filters.normalizeHost('*.linkedin.com')).toBe('.linkedin.com');
+	});
+
+	it('strips a trailing FQDN dot but preserves a leading wildcard dot', () => {
+		expect(Filters.normalizeHost('linkedin.com.')).toBe('linkedin.com');
+		expect(Filters.normalizeHost('.linkedin.com')).toBe('.linkedin.com');
+	});
+
+	it('strips a bare host/path remainder', () => {
+		expect(Filters.normalizeHost('www.linkedin.com/jobs')).toBe('www.linkedin.com');
+	});
+
+	it('returns empty string for unusable input', () => {
+		expect(Filters.normalizeHost('   ')).toBe('');
+		expect(Filters.normalizeHost('')).toBe('');
 	});
 });

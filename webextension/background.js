@@ -222,6 +222,33 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		};
 		return true;
 
+	case 'Thumbnails.getFaviconsByHost':
+		// Like Thumbnails.getFavicons, but keyed by registrable host (leading
+		// `www.` dropped) instead of exact URL. Favicons are per-site, so a
+		// recently-closed deep article URL can reuse the favicon stored for any
+		// page on the same site. Returns a `host -> (Blob | string)` map.
+		let faviconsByHost = new Map();
+		let wantedHosts = new Set(message.hosts || []);
+		db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+			let cursor = this.result;
+			if (cursor) {
+				let row = cursor.value;
+				let host = null;
+				try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
+				if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
+					if (row.favicon) {
+						faviconsByHost.set(host, row.favicon);
+					} else if (row.faviconUrl) {
+						faviconsByHost.set(host, row.faviconUrl);
+					}
+				}
+				cursor.continue();
+			} else {
+				sendResponse(faviconsByHost);
+			}
+		};
+		return true;
+
 	case 'Thumbnails.delete':
 		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
