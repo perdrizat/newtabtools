@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.1] — 2026-06-09
+
+### Added
+
+- Translator workflow: `pnpm i18n:check` (untranslated keys), `pnpm i18n:stale` (dead keys), and `pnpm i18n:purge` (remove dead keys) CLI tools, plus a "Translating" guide in CONTRIBUTING.
+- German (`de`) translation substantially expanded toward full coverage.
+- `ntt/no-hardcoded-text` ESLint rule + a Vitest XHTML check, preventing literal `.textContent` assignments and raw markup text from eroding i18n coverage.
+- i18n regression guards: a cross-locale placeholder-integrity test (all 22 locales — catches a named `$NAME$`/`$1$` token with no `placeholders` block), an E2E render smoke (no raw message keys or `$N`/`__MSG_` leaks in the live page), and a text-integrity observation folded into the config/advanced/titlebar UAT scenarios.
+
+### Changed
+
+- Remaining hardcoded English extracted to `messages.json` and resolved via i18n: the drawer title/tabs, the awesomebar section headers (`SECTION_LABELS`) + search placeholder, and the wallpaper-dialog strings.
+- Stale locale keys (in a translation but not `en`) are no longer a CI-gating test — maintenance drift handled by `pnpm i18n:stale`/`pnpm i18n:purge`, completeness by `pnpm i18n:check`; runtime-breaking i18n issues stay gated.
+
+### Fixed
+
+- CI flake: the `favicon-real-sites` E2E test (the only test that hits live third-party sites) now runs by default everywhere except GitHub Actions — gated on `GITHUB_ACTIONS` so every contributor exercises the live favicon path locally with no setup, while GitHub CI skips it; the §1.1 favicon logic stays covered deterministically at the Fast tier.
+
 ## [2.0.0] — 2026-06-08
 
 First Mozilla Add-ons (AMO) release of the continuation fork as **NewTab PowerTools**.

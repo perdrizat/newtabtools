@@ -31,6 +31,11 @@ screenshot of the unobstructed grid.
   `02-reconfigured`: the unobstructed page shows a wider grid (5 across), dark theme,
   and no search bar. Pass = the drawer is visibly captured **and** all three changes
   are reflected, with the layout still clean (no overlap/clipping).
+- **Text integrity (i18n):** every visible drawer label, section heading, and
+  button is human-readable English. Flag any raw `snake_case` message key (e.g.
+  `options_columns` showing instead of "Columns"), blank/empty control,
+  `$1`/`$NAME$`/`__MSG_…__` substitution leftover, or text clipped/overflowing
+  its control.
 
 ## Output
 

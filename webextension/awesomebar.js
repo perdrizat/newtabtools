@@ -16,12 +16,13 @@
 var AwesomeBar = {
 	HTML_NS: 'http://www.w3.org/1999/xhtml',
 
-	// Per-section human labels for the dropdown headers.
+	// Per-section dropdown-header labels, as i18n message keys (resolved via
+	// newTabTools.getString at render time — never store display text here).
 	SECTION_LABELS: {
-		top: 'Top match',
-		match: 'Bookmarks & tiles',
-		history: 'History',
-		web: 'Search the web',
+		top: 'awesomebar_section_top',
+		match: 'awesomebar_section_match',
+		history: 'awesomebar_section_history',
+		web: 'awesomebar_section_web',
 	},
 
 	// ---- pure result model -------------------------------------------------
@@ -289,7 +290,8 @@ var AwesomeBar = {
 				lastSection = r.section;
 				let header = document.createElementNS(this.HTML_NS, 'div');
 				header.className = 'ntt-awesomebar-section';
-				header.textContent = this.SECTION_LABELS[r.section] || r.section;
+				let labelKey = this.SECTION_LABELS[r.section];
+				header.textContent = labelKey ? newTabTools.getString(labelKey) : r.section;
 				this.dropdown.appendChild(header);
 			}
 
@@ -305,7 +307,7 @@ var AwesomeBar = {
 			text.className = 'ntt-awesomebar-text';
 			let title = document.createElementNS(this.HTML_NS, 'span');
 			title.className = 'ntt-awesomebar-title';
-			title.textContent = r.type === 'search' ? `Search the web for “${r.query}”` : r.title;
+			title.textContent = r.type === 'search' ? newTabTools.getString('search_prompt', r.query) : r.title;
 			text.appendChild(title);
 			if (r.url) {
 				let url = document.createElementNS(this.HTML_NS, 'span');

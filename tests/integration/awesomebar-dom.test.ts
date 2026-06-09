@@ -38,6 +38,7 @@ describe('AwesomeBar — DOM wiring', () => {
 		};
 		(globalThis as any).newTabTools = {
 			isValidURL: (u: string) => { try { return ['http:', 'https:'].includes(new URL(u).protocol); } catch { return false; } },
+			getString: (k: string, p?: string) => p ? `Search the web for “${p}”` : k,
 		};
 	});
 
@@ -92,9 +93,32 @@ describe('AwesomeBar — DOM wiring', () => {
 		expect(dd.hidden).toBe(false);
 		expect(document.documentElement.hasAttribute('awesomebar-open')).toBe(true);
 		const sections = [...dd.querySelectorAll('.ntt-awesomebar-section')].map(s => s.textContent);
-		expect(sections).toContain('Top match');
-		expect(sections).toContain('Search the web');
+		// Headers must be the i18n-resolved values (the mock getString echoes the
+		// message key), never a raw English literal baked into awesomebar.js.
+		expect(sections).toContain(newTabTools.getString('awesomebar_section_top'));
+		expect(sections).toContain(newTabTools.getString('awesomebar_section_web'));
+		expect(sections).not.toContain('Top match');
+		expect(sections).not.toContain('Search the web');
 		expect(dd.querySelectorAll('.ntt-awesomebar-row').length).toBeGreaterThan(1);
+	});
+
+	it('section labels are i18n message keys present in en/messages.json, not hardcoded English', () => {
+		// The dropdown section headers were once a literal English map
+		// (SECTION_LABELS: { top: 'Top match', … }) assigned via a computed
+		// `OBJ[key] || key` lookup — a shape the ntt/no-hardcoded-text ESLint
+		// rule cannot see statically. This guards the class at the contract
+		// level: every label value must resolve to a real message key.
+		// eslint-disable-next-line ntt/no-source-grep -- structural i18n contract check, not a behavioural source-grep
+		const messages = JSON.parse(fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/_locales/en/messages.json'), 'utf8'));
+		const labels = AwesomeBar.SECTION_LABELS as Record<string, string>;
+		expect(Object.keys(labels).length).toBeGreaterThan(0);
+		for (const [section, value] of Object.entries(labels)) {
+			expect(
+				messages,
+				`SECTION_LABELS.${section} ("${value}") must be a key in en/messages.json, not literal text`,
+			).toHaveProperty(value);
+		}
 	});
 
 	it('the first row is selected on render', () => {

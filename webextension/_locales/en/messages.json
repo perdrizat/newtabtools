@@ -8,26 +8,29 @@
 	"action_pin": {
 		"message": "Pin to the New Tab page"
 	},
+	"awesomebar_section_history": {
+		"message": "History"
+	},
+	"awesomebar_section_match": {
+		"message": "Bookmarks & tiles"
+	},
+	"awesomebar_section_top": {
+		"message": "Top match"
+	},
+	"awesomebar_section_web": {
+		"message": "Search the web"
+	},
 	"backup_button": {
 		"message": "Backup…"
 	},
 	"backup_description": {
 		"message": "NewTab PowerTools will create a file containing your settings, pinned tiles, and background image."
 	},
-	"backup_header": {
-		"message": "Backup:"
-	},
-	"backup_restore_button": {
-		"message": "Backup/Restore…"
-	},
 	"bg_header": {
 		"message": "Page background image:"
 	},
 	"bg_remove": {
 		"message": "Remove"
-	},
-	"bg_set": {
-		"message": "Set"
 	},
 	"contextmenu_block": {
 		"message": "Remove this tile"
@@ -100,7 +103,7 @@
 		"message": "Remove filter"
 	},
 	"filter_set": {
-		"message": "Set"
+		"message": "OK"
 	},
 	"filter_title": {
 		"message": "Browsing History Tiles:"
@@ -126,17 +129,8 @@
 	"newtab_undo_undoButton": {
 		"message": "Undo"
 	},
-	"options_columns": {
-		"message": "Columns"
-	},
 	"options_foreground_opacity": {
 		"message": "Foreground opacity"
-	},
-	"options_grid_margin": {
-		"message": "Grid margin"
-	},
-	"options_grid_spacing": {
-		"message": "Grid spacing"
 	},
 	"options_grid_header": {
 		"message": "Grid"
@@ -239,17 +233,25 @@
 	},
 	"autosaved_relative_minutes": {
 		"message": "$MINUTES$m ago",
-		"placeholders": { "minutes": { "content": "$1" } }
+		"placeholders": {
+			"minutes": {
+				"content": "$1"
+			}
+		}
 	},
 	"autosaved_relative_hours": {
 		"message": "$HOURS$h ago",
-		"placeholders": { "hours": { "content": "$1" } }
+		"placeholders": {
+			"hours": {
+				"content": "$1"
+			}
+		}
 	},
 	"options_theme_help": {
 		"message": "inherits Firefox by default"
 	},
 	"options_theme_system_sub": {
-		"message": "follows OS theme"
+		"message": "follows Firefox theme"
 	},
 	"options_theme_light_sub": {
 		"message": "maximal contrast"
@@ -269,20 +271,8 @@
 	"bg_choose": {
 		"message": "Choose wallpaper"
 	},
-	"options_header": {
-		"message": "Options:"
-	},
 	"options_historytiles": {
 		"message": "Tiles from your browsing history"
-	},
-	"options_launcher_hidden": {
-		"message": "Do not show"
-	},
-	"options_locked": {
-		"message": "Prevent tiles being dragged"
-	},
-	"options_button": {
-		"message": "Settings"
 	},
 	"options_edit": {
 		"message": "Edit"
@@ -301,12 +291,6 @@
 	},
 	"restore_confirm": {
 		"message": "Restore from backup? This replaces your current tiles and settings."
-	},
-	"options_recent": {
-		"message": "Recently closed tabs"
-	},
-	"options_rows": {
-		"message": "Rows"
 	},
 	"options_size_large": {
 		"message": "Large"
@@ -344,32 +328,17 @@
 	"options_about_tagline": {
 		"message": "A configurable new tab page for Firefox."
 	},
-	"options_thumb_titlesize": {
-		"message": "Tile title size"
-	},
 	"options_tile_aspect": {
 		"message": "Tile aspect ratio"
 	},
 	"options_tile_aspect_fill": {
 		"message": "Fill"
 	},
-	"options_tile_aspect_16_9": {
-		"message": "16:9"
-	},
-	"options_tile_aspect_4_3": {
-		"message": "4:3"
-	},
-	"options_tile_aspect_1_1": {
-		"message": "1:1"
-	},
-	"options_tile_aspect_3_4": {
-		"message": "3:4"
-	},
 	"pin_url_button": {
 		"message": "Add"
 	},
 	"pin_url_header": {
-		"message": "Pin next tile:"
+		"message": "Pin to next available tile:"
 	},
 	"pin_url_permissions": {
 		"message": "NewTab PowerTools requires extra permissions to use your history and bookmarks."
@@ -379,9 +348,6 @@
 	},
 	"pin_url_request": {
 		"message": "Continue…"
-	},
-	"recently_closed_tabs": {
-		"message": "Recently Closed"
 	},
 	"backup_no_file": {
 		"message": "No file selected."
@@ -407,9 +373,6 @@
 	"tile_edit_url": {
 		"message": "Change URL"
 	},
-	"tile_open_newtab": {
-		"message": "Open in new tab"
-	},
 	"tile_refresh_thumbnail": {
 		"message": "Refresh thumbnail"
 	},
@@ -419,32 +382,14 @@
 	"tile_pin": {
 		"message": "Pin this site at its current position"
 	},
-	"tile_removethumbnail": {
-		"message": "Remove thumbnail"
-	},
 	"tile_savedthumb_choose": {
 		"message": "Choose image…"
-	},
-	"tile_savedthumb_label": {
-		"message": "Saved image:"
 	},
 	"tile_savedthumb_savecurrent": {
 		"message": "Pin current thumbnail"
 	},
 	"tile_savedthumb_set": {
-		"message": "Set"
-	},
-	"tile_selection_next_tooltip": {
-		"message": "Next tile"
-	},
-	"tile_selection_nextrow_tooltip": {
-		"message": "Next row"
-	},
-	"tile_selection_previous_tooltip": {
-		"message": "Previous tile"
-	},
-	"tile_selection_previousrow_tooltip": {
-		"message": "Previous row"
+		"message": "OK"
 	},
 	"tile_thumbnail_bgcolor": {
 		"message": "Background color:"
@@ -452,25 +397,54 @@
 	"tile_thumbnail_remove": {
 		"message": "Remove"
 	},
-	"tile_title_label": {
-		"message": "Title:"
-	},
 	"tile_title_placeholder": {
 		"message": "Change title"
 	},
 	"tile_title_set": {
-		"message": "Set"
+		"message": "OK"
 	},
 	"tile_unpin": {
 		"message": "Unpin this site"
-	},
-	"tileurl_empty": {
-		"message": "Empty Tile"
 	},
 	"tile_url_placeholder": {
 		"message": "Change URL"
 	},
 	"tile_url_set": {
-		"message": "Set"
+		"message": "OK"
+	},
+	"drawer_title": {
+		"message": "Configure"
+	},
+	"drawer_tab_tile": {
+		"message": "Tile"
+	},
+	"drawer_tab_page": {
+		"message": "Page"
+	},
+	"drawer_tab_advanced": {
+		"message": "Advanced"
+	},
+	"wallpaper_dialog_title": {
+		"message": "Choose Wallpaper"
+	},
+	"wallpaper_reset": {
+		"message": "No Background"
+	},
+	"wallpaper_upload": {
+		"message": "Upload Image"
+	},
+	"wallpaper_error": {
+		"message": "Unable to load Firefox wallpapers."
+	},
+	"search_placeholder": {
+		"message": "Search the web, jump to a tile, or paste a URL…"
+	},
+	"search_prompt": {
+		"message": "Search the web for “$QUERY$”",
+		"placeholders": {
+			"query": {
+				"content": "$1"
+			}
+		}
 	}
 }

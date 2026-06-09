@@ -298,8 +298,8 @@ describe('Tile dialog redesign — Pin next / Update current, rows, alignment', 
 		messages = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../webextension/_locales/en/messages.json'), 'utf8'));
 	});
 
-	it('section headers are renamed: "Pin next tile:" + "Update current tile:"', () => {
-		expect(messages.pin_url_header.message).toBe('Pin next tile:');
+	it('section headers are renamed: "Pin to next available tile:" + "Update current tile:"', () => {
+		expect(messages.pin_url_header.message).toBe('Pin to next available tile:');
 		expect(messages.tile_header.message).toBe('Update current tile:');
 	});
 

@@ -618,9 +618,9 @@ var newTabTools = {
 		picker.hidden = false;
 		this.fetchFirefoxWallpapers().then(wallpapers => {
 			this.renderWallpaperGrid(wallpapers);
-		}).catch(function() {
+		}).catch(() => {
 			let grid = document.getElementById('wallpaper-grid');
-			grid.textContent = 'Unable to load curated wallpapers.';
+			grid.textContent = this.getString('wallpaper_error');
 		});
 	},
 	closeWallpaperPicker() {

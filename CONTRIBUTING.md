@@ -17,6 +17,41 @@ Help us help you! You can report bugs at [https://github.com/perdrizat/newtabtoo
 
 ---
 
+## Translating
+
+If you're comfortable working with Git, you can help translate NewTab PowerTools into your language!
+
+1. **Test Locally:** Clone the repo to your machine. You can install it in Firefox temporarily by visiting `about:debugging` -> "This Firefox" -> "Load Temporary Add-on", and selecting any file inside the `webextension/` directory. This is the easiest way to test your translations live, and you can reload the extension as you go.
+2. **Finding the Files:** Locales live in the `webextension/_locales/` directory. To start, copy the `en/messages.json` file into your language's directory (e.g., `de/messages.json` for German).
+3. **Locating Strings:** The strings are organized logically. For example, `options_...` strings appear in the Settings drawer, while `tile_...` strings appear on individual grid tiles or in their edit menus.
+4. **Simplifying Placeholders (Pro-tip):** When translating strings that contain variables, you don't need to copy the entire verbose `placeholders` object from the English file. You can reduce complicated blocks to just the message string using positional variables (`$1`). 
+   For example, this:
+   ```json
+   "autosaved_relative_minutes": {
+       "message": "$MINUTES$m ago",
+       "placeholders": { "minutes": { "content": "$1" } }
+   }
+   ```
+   Can be cleanly reduced in your translation file to just:
+   ```json
+   "autosaved_relative_minutes": {
+       "message": "$1m ago"
+   }
+   ```
+5. **Fallback Behavior:** If you want to keep the English version of a string, simply **remove that key from your file entirely**. Firefox will automatically fall back to the English string.
+
+### Translation Utilities
+
+We provide several CLI tools to make maintaining translations easy. You will need [Node.js and pnpm](TESTING.md#environment-setup) installed to run them:
+
+- **Find Missing Keys:** Run `pnpm i18n:check <locale>` (e.g., `pnpm i18n:check de`). This compares your language file against the master English file and prints a list of any keys you haven't translated yet.
+- **Find Dead Strings:** Run `pnpm i18n:stale <locale>`. This checks against the master English file to find old, unused translation keys that are no longer referenced.
+- **Clean Up:** Run `pnpm i18n:purge <locale>` (e.g., `pnpm i18n:purge de`). This automatically deletes any known dead strings from your language's `messages.json` file, keeping it clean and lightweight.
+
+If you have any questions, feel free to open an issue!
+
+---
+
 ## Developer Guide
 
 All development on this project is test-driven. Before writing any code, please ensure your environment is set up according to the **[Environment Setup](TESTING.md#environment-setup)** in the testing guide.

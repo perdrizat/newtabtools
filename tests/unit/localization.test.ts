@@ -11,7 +11,10 @@
  *   - every key referenced in code (JS getString/getMessage, XHTML data-* attrs,
  *     manifest __MSG_*__) exists in the en locale
  *   - every non-en locale has valid JSON and the two manifest-required keys
- *   - no locale has orphan keys absent from en (possible stale translations)
+ *
+ * Stale keys (in a locale but not en) are deliberately left ungated — they are
+ * maintenance drift handled by `pnpm i18n:stale` / `pnpm i18n:purge`, not a
+ * build failure. See the note on the final test below.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -165,17 +168,12 @@ describe('Localization — _locales/ smoke test (Phase 1 slot 5)', () => {
 		expect(missingDescription).toEqual(['bg']);
 	});
 
-	it('no non-en locale has keys absent from en (stale translations)', () => {
-		const stale: string[] = [];
-		for (const locale of locales) {
-			if (locale === 'en') {continue;}
-			const messages = readJSON(path.join(LOCALES_DIR, locale, 'messages.json'));
-			for (const key of Object.keys(messages)) {
-				if (!enKeys.has(key)) {
-					stale.push(`${locale}/${key}`);
-				}
-			}
-		}
-		expect(stale, `Stale keys: ${stale.join(', ')}`).toEqual([]);
-	});
+	// NOTE: stale keys (present in a non-en locale but absent from en) are
+	// intentionally NOT gated here. They accumulate as natural maintenance drift
+	// when en evolves and are a translator's housekeeping concern, not a build
+	// failure — surfaced by `pnpm i18n:stale [locale]` and removed by
+	// `pnpm i18n:purge <locale>` (scripts/i18n-{stale,purge}.mjs). Translation
+	// *completeness* (keys missing from a locale) is likewise reported by
+	// `pnpm i18n:check`, not gated. Runtime *breakage* (the class that would
+	// actually ship a broken UI) stays gated, in i18n-placeholders.test.ts.
 });

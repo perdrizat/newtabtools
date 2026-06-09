@@ -16,7 +16,25 @@
  * This test pins both URLs, navigates to each so the capture pipeline runs,
  * asserts a favicon (Blob or URL string) is recorded, then reloads and asserts
  * the tile's overlay badge ends up with an `<img>`.
+ *
+ * NETWORK-GATED: this is the only E2E test that depends on the *public
+ * internet* — it visits live third-party sites and waits for Firefox to fetch
+ * their real favicons within the capture window. That makes it inherently
+ * non-deterministic on CI runners (network latency / a site being slow can
+ * leave `tab.favIconUrl` unpopulated before the ≤2 s capture deadline).
+ *
+ * So it runs **by default everywhere except GitHub Actions**: every contributor
+ * exercises the live favicon path with no extra setup (`pnpm test:e2e`), but it
+ * is skipped on GitHub CI. GitHub Actions always sets `GITHUB_ACTIONS=true` and
+ * nothing else does, so that env var is a 100%-reliable "are we on GitHub CI?"
+ * signal. The §1.1 favicon *logic* (data: → Blob, remote → stored URL string,
+ * page-side <img> render) is additionally covered deterministically at the
+ * Fast/integration tier, so GitHub never loses real coverage.
  */
+
+// GitHub Actions sets GITHUB_ACTIONS=true on every runner; no local shell or
+// other CI sets it. Skip there, run everywhere else.
+const IN_GITHUB_CI = process.env.GITHUB_ACTIONS === 'true';
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser } from 'puppeteer-core';
@@ -34,7 +52,7 @@ import {
 const HEISE = 'https://www.heise.de/';
 const TECHCRUNCH = 'https://techcrunch.com/';
 
-describe('E2E: real favicons for third-party HTTPS sites', () => {
+describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', () => {
 	let browser: Browser;
 
 	beforeAll(async () => {

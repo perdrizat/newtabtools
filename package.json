@@ -1,6 +1,6 @@
 {
   "name": "newtabtools",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "type": "module",
   "description": "A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. PowerTools for your New Tab page.",
@@ -23,6 +23,9 @@
     "test:uat": "node tests/uat/_tools/runner.mjs",
     "test": "pnpm test:fast && pnpm test:e2e",
     "verify": "pnpm lint && pnpm typecheck && pnpm lint:webext && pnpm test:fast && pnpm build",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:stale": "node scripts/i18n-stale.mjs",
+    "i18n:purge": "node scripts/i18n-purge.mjs",
     "update-zip": "VER=$(node -p \"require('@zip.js/zip.js/package.json').version\") && printf '/*\\n * @zip.js/zip.js v%s — zip-core.min.js\\n * Source: https://github.com/gildas-lormeau/zip.js\\n * License: BSD-3-Clause\\n * Installed as devDependency; copied via: pnpm update-zip\\n */\\n' \"$VER\" | cat - node_modules/@zip.js/zip.js/dist/zip-core.min.js > webextension/lib/zip.js"
   },
   "repository": {

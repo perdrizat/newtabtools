@@ -17,7 +17,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 			<div id="ntt-titlebar">
 				<div id="ntt-titlebar-recent" hidden=""></div>
 				<div id="ntt-search">
-					<input id="ntt-search-input" type="text" placeholder="Search the web, jump to a tile, or paste a URL…" autocomplete="off" />
+					<input id="ntt-search-input" type="text" data-placeholder="search_placeholder" autocomplete="off" />
 					<span class="ntt-search-kbd">/</span>
 				</div>
 				<button id="options-toggle" type="button" data-message="options_edit"></button>
@@ -47,13 +47,13 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	</div>
 	<aside id="ntt-drawer" aria-hidden="true" tabindex="-1">
 		<header id="ntt-drawer-header">
-			<span id="ntt-drawer-title">Configure</span>
+			<span id="ntt-drawer-title" data-message="drawer_title"></span>
 			<button id="ntt-drawer-close" class="close-button" type="button" aria-label="Close"></button>
 		</header>
 		<nav id="ntt-drawer-tabs" role="tablist">
-			<button type="button" role="tab" data-drawer-tab="tile" data-active="false">Tile</button>
-			<button type="button" role="tab" data-drawer-tab="page" data-active="true">Page</button>
-			<button type="button" role="tab" data-drawer-tab="advanced" data-active="false">Advanced</button>
+			<button type="button" role="tab" data-drawer-tab="tile" data-active="false" data-message="drawer_tab_tile"></button>
+			<button type="button" role="tab" data-drawer-tab="page" data-active="true" data-message="drawer_tab_page"></button>
+			<button type="button" role="tab" data-drawer-tab="advanced" data-active="false" data-message="drawer_tab_advanced"></button>
 		</nav>
 		<div id="ntt-drawer-body">
 			<section data-drawer-panel="tile" hidden="">
@@ -431,14 +431,14 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	</svg>
 	<script type="text/javascript" src="common.js"></script>
 	<div id="wallpaper-picker" hidden="">
-		<div id="wallpaper-picker-header">
-			<h2>Choose Wallpaper</h2>
+		<div id="wallpaper-header">
+			<h2 data-message="wallpaper_dialog_title"></h2>
 			<button id="wallpaper-close" class="close-button"></button>
 		</div>
 		<div id="wallpaper-actions">
-			<button id="wallpaper-reset">No Background</button>
+			<button id="wallpaper-reset" data-message="wallpaper_reset"></button>
 			<label id="wallpaper-upload-label">
-				Upload Image
+				<span data-message="wallpaper_upload"></span>
 				<input id="wallpaper-upload" type="file" accept="image/*" />
 			</label>
 		</div>

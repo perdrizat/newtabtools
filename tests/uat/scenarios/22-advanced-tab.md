@@ -106,6 +106,10 @@ domain may show. The panel was opened in assertion 4.
   **left-aligned** to the same rhythm (not centered/floating), the "Filter…" toggle
   shows an open/closed affordance (caret), and filter rows carry a tidy ✕ remove
   that sits on-system with the steppers. No raw/native form controls survive.
+- **Text integrity (i18n):** every label, heading, button, and the filter
+  helptext/placeholders are human-readable English. Flag any raw `snake_case`
+  message key, blank control, `$1`/`$NAME$`/`__MSG_…__` substitution leftover, or
+  text clipped/overflowing its control.
 - Pass = Advanced looks like the same designer as Page; the filter panel is
   left-aligned and on-system (not the old centered layout); no native controls;
   clear button hierarchy.

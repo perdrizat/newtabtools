@@ -84,6 +84,37 @@ const nttPlugin = {
 				};
 			},
 		},
+		'no-hardcoded-text': {
+			meta: {
+				type: 'problem',
+				messages: {
+					avoid: 'Do not assign hardcoded strings to textContent/innerText/innerHTML. Use browser.i18n.getMessage() instead.',
+				},
+			},
+			create(context) {
+				return {
+					AssignmentExpression(node) {
+						if (node.left.type === 'MemberExpression') {
+							const propName = node.left.property.name;
+							if (['textContent', 'innerText', 'innerHTML'].includes(propName)) {
+								// Check if right side is a literal string with alphabetical chars
+								if (node.right.type === 'Literal' && typeof node.right.value === 'string') {
+									if (/[a-zA-Z]/.test(node.right.value)) {
+										context.report({ node, messageId: 'avoid' });
+									}
+								}
+								// Check if right side is a template literal with alphabetical chars
+								if (node.right.type === 'TemplateLiteral') {
+									if (node.right.quasis.some(q => /[a-zA-Z]/.test(q.value.raw))) {
+										context.report({ node, messageId: 'avoid' });
+									}
+								}
+							}
+						}
+					},
+				};
+			},
+		},
 	},
 };
 
@@ -125,7 +156,13 @@ export default [
 			sourceType: 'script',
 			globals: webExtGlobals,
 		},
-		rules: projectRules,
+		plugins: {
+			'ntt': nttPlugin,
+		},
+		rules: {
+			...projectRules,
+			'ntt/no-hardcoded-text': 2,
+		},
 	},
 	{
 		// Extracted ES modules under webextension/lib/. Our own code (not the

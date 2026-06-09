@@ -1,12 +1,36 @@
 {
+	"action_captureThumbnail": {
+		"message": "Thumbnail aufnehmen"
+	},
+	"action_isPinned": {
+		"message": "An „Neuer Tab“ angeheftet"
+	},
+	"action_pin": {
+		"message": "An „Neuer Tab“ anheften"
+	},
+	"awesomebar_section_history": {
+		"message": "Chronik"
+	},
+	"awesomebar_section_match": {
+		"message": "Lesezeichen & Kacheln"
+	},
+	"awesomebar_section_top": {
+		"message": "Bester Treffer"
+	},
+	"awesomebar_section_web": {
+		"message": "Im Web suchen"
+	},
+	"backup_button": {
+		"message": "Backup…"
+	},
+	"backup_description": {
+		"message": "NewTab PowerTools erstellt eine Backup-Datei mit Ihren Einstellungen, angehefteten Kacheln und dem Hintergrundbild."
+	},
 	"bg_header": {
 		"message": "Hintergrundbild:"
 	},
 	"bg_remove": {
-		"message": "Entfernen"
-	},
-	"bg_set": {
-		"message": "Übernehmen"
+		"message": "Löschen"
 	},
 	"contextmenu_block": {
 		"message": "Kachel entfernen"
@@ -23,11 +47,62 @@
 	"contextmenu_unpin": {
 		"message": "Kachel ablösen"
 	},
+	"database_error_cookies": {
+		"message": "Wenn Cookies deaktiviert sind, fügen Sie eine Ausnahme für $1 hinzu."
+	},
+	"database_error_history_settings": {
+		"message": "NewTab PowerTools kann nicht gestartet werden, wenn Firefox auf „Chronik niemals anlegen“ oder „Immer den privaten Modus verwenden“ eingestellt ist."
+	},
+	"database_error_indexeddb": {
+		"message": "Gehen Sie zu about:config und stellen Sie sicher, dass dom.indexedDB.enabled auf 'true' gesetzt ist."
+	},
+	"database_error_message": {
+		"message": "NewTab PowerTools konnte nicht richtig gestartet werden. Versuchen Sie Folgendes:"
+	},
+	"database_error_restart": {
+		"message": "Sie müssen Firefox neu starten, damit diese Änderungen wirksam werden."
+	},
 	"extensionDescription": {
 		"message": "Passt die Neuer-Tab-Seite an. Sie können neue Schaltflächen anlegen, die Schnellstartleiste versetzen, oder ein Hintergrundbild verwenden. Außerdem sind nun die Bilder der Schaltflächen und die Titel veränderbar."
 	},
 	"extensionName": {
 		"message": "NewTab PowerTools"
+	},
+	"filter_button": {
+		"message": "Filtern…"
+	},
+	"filter_header_add": {
+		"message": "Filter hinzufügen:"
+	},
+	"filter_header_domain": {
+		"message": "Domain"
+	},
+	"filter_header_pinned": {
+		"message": "Angeheftete Kacheln"
+	},
+	"filter_header_unpinned": {
+		"message": "Limit für unangeheftete Kacheln"
+	},
+	"filter_helptext": {
+		"message": "Um eine Domain und all ihre Subdomains zu filtern, setzen Sie einen Punkt vor die Domain, so wie hier: .example.com"
+	},
+	"filter_placeholder_host": {
+		"message": "Domain eingeben oder auswählen"
+	},
+	"filter_placeholder_limit": {
+		"message": "Limit"
+	},
+	"filter_remove": {
+		"message": "Filter löschen"
+	},
+	"filter_set": {
+		"message": "OK"
+	},
+	"filter_title": {
+		"message": "Kacheln aus der Chronik:"
+	},
+	"filter_unlimited": {
+		"message": "unbegrenzt"
 	},
 	"github": {
 		"message": "Neuer-Tab-Tools auf GitHub"
@@ -47,35 +122,158 @@
 	"newtab_undo_undoButton": {
 		"message": "Rückgängig"
 	},
-	"options_columns": {
-		"message": "Spalten"
-	},
 	"options_foreground_opacity": {
 		"message": "Vordergrunddeckkraft"
 	},
-	"options_grid_margin": {
-		"message": "Raster - Äußerer Rand"
+	"options_grid_header": {
+		"message": "Raster"
 	},
-	"options_grid_spacing": {
-		"message": "Raster - Zwischenräume"
+	"options_grid_help": {
+		"message": "Spalten × Zeilen"
 	},
-	"options_header": {
-		"message": "Einstellungen:"
+	"options_spacing_header": {
+		"message": "Abstände"
+	},
+	"options_spacing_help": {
+		"message": "Abstände"
+	},
+	"options_spacing_gap": {
+		"message": "Kachelabstand"
+	},
+	"options_spacing_padding": {
+		"message": "Äußerer Rand"
+	},
+	"options_spacing_radius": {
+		"message": "Eckenradius"
+	},
+	"options_titlebar_recent": {
+		"message": "Kürzlich geschlossen"
+	},
+	"options_titlebar_header": {
+		"message": "Titelleiste"
+	},
+	"options_titlebar_help": {
+		"message": "ein- / ausblenden"
+	},
+	"options_titlebar_search": {
+		"message": "Suchen"
+	},
+	"options_tilechrome_header": {
+		"message": "Kachel-UI"
+	},
+	"options_tilechrome_overlay": {
+		"message": "Unteres Titel-Overlay"
+	},
+	"options_tilechrome_overlay_sub": {
+		"message": "Favicon + Name schattiert für Lesbarkeit"
+	},
+	"options_tilechrome_actions": {
+		"message": "Quick Actions beim Hovern"
+	},
+	"options_tilechrome_actions_sub": {
+		"message": "öffnen · aktualisieren · anheften · bearbeiten · löschen"
+	},
+	"options_stat_header": {
+		"message": "Kachel-Statistiken"
+	},
+	"options_stat_help": {
+		"message": "eine pro Kachel · Details beim Hovern"
+	},
+	"options_stat_none": {
+		"message": "Keine"
+	},
+	"options_stat_visits": {
+		"message": "Besuche"
+	},
+	"options_stat_last": {
+		"message": "Zuletzt"
+	},
+	"options_stat_trend": {
+		"message": "Trend"
+	},
+	"options_stat_rank": {
+		"message": "Rang"
+	},
+	"options_stat_fresh": {
+		"message": "Aktualität"
+	},
+	"options_actionsize_header": {
+		"message": "Größe der Aktions-Icons"
+	},
+	"options_autosaved": {
+		"message": "Automatisch gespeichert"
+	},
+	"backup_restore_header": {
+		"message": "Backup & Restore"
+	},
+	"reset_header": {
+		"message": "Zurücksetzen"
+	},
+	"reset_description": {
+		"message": "Alle angehefteten Kacheln, blockierten Seiten, Chronikfilter und Einstellungen löschen."
+	},
+	"reset_warning": {
+		"message": "Dies kann nicht rückgängig gemacht werden."
+	},
+	"reset_button": {
+		"message": "Alles zurücksetzen"
+	},
+	"reset_confirm": {
+		"message": "Alles zurücksetzen? Alle angehefteten Kacheln, blockierten Seiten, Chronikfilter und Einstellungen werden gelöscht. Dies kann nicht rückgängig gemacht werden."
+	},
+	"autosaved_relative_now": {
+		"message": "gerade eben"
+	},
+	"autosaved_relative_minutes": {
+		"message": "Vor $1m"
+	},
+	"autosaved_relative_hours": {
+		"message": "Vor $1h"
+	},
+	"options_theme_help": {
+		"message": "übernimmt standardmäßig Firefox-Einstellungen"
+	},
+	"options_theme_system_sub": {
+		"message": "verwendet System-Einstellungen"
+	},
+	"options_theme_light_sub": {
+		"message": "maximaler Kontrast"
+	},
+	"options_theme_dark_sub": {
+		"message": "OLED-freundlich"
+	},
+	"options_theme_contrast": {
+		"message": "Hoher Kontrast"
+	},
+	"options_theme_contrast_sub": {
+		"message": "WCAG AAA"
+	},
+	"tile_empty_state": {
+		"message": "Kachel anklicken zum Bearbeiten"
+	},
+	"bg_choose": {
+		"message": "Hintergrundbild auswählen"
 	},
 	"options_historytiles": {
 		"message": "Kacheln aus der Chronik"
 	},
-	"options_launcher_hidden": {
-		"message": "Nicht anzeigen"
+	"options_edit": {
+		"message": "Bearbeiten"
 	},
-	"options_locked": {
-		"message": "Verhindere das Ziehen von Kacheln"
+	"options_done": {
+		"message": "Fertig"
 	},
-	"options_recent": {
-		"message": "Geschlossene Tabs"
+	"tile_add": {
+		"message": "+ Kachel anheften"
 	},
-	"options_rows": {
-		"message": "Reihen"
+	"confirm_yes": {
+		"message": "Bestätigen"
+	},
+	"confirm_cancel": {
+		"message": "Abbrechen"
+	},
+	"restore_confirm": {
+		"message": "Aus Backup wiederherstellen? Dies ersetzt Ihre aktuellen Kacheln und Einstellungen."
 	},
 	"options_size_large": {
 		"message": "Groß"
@@ -95,8 +293,29 @@
 	"options_theme_light": {
 		"message": "Helles Design"
 	},
-	"options_thumb_titlesize": {
-		"message": "Titel des Vorschaubildes"
+	"options_theme_system": {
+		"message": "System"
+	},
+	"options_about_header": {
+		"message": "Über"
+	},
+	"options_about_lineage": {
+		"message": "Eine Fortsetzung von New Tab Tools von Geoff Lankow."
+	},
+	"options_about_license": {
+		"message": "Lizenz (MPL-2.0)"
+	},
+	"options_about_privacy": {
+		"message": "Datenschutzrichtlinie"
+	},
+	"options_about_tagline": {
+		"message": "Ein anpassbarer „Neuer Tab“ für Firefox."
+	},
+	"options_tile_aspect": {
+		"message": "Kachel-Seitenverhältnis"
+	},
+	"options_tile_aspect_fill": {
+		"message": "Ausfüllen"
 	},
 	"pin_url_button": {
 		"message": "Hinzufügen"
@@ -104,14 +323,41 @@
 	"pin_url_header": {
 		"message": "Kachel hinzufügen:"
 	},
+	"pin_url_permissions": {
+		"message": "NewTab PowerTools benötigt zusätzliche Berechtigungen, um Ihre Chronik und Lesezeichen zu verwenden."
+	},
 	"pin_url_placeholder": {
 		"message": "Adresse eingeben oder auswählen"
 	},
-	"recently_closed_tabs": {
-		"message": "Geschlossene Tabs:"
+	"pin_url_request": {
+		"message": "Weiter…"
+	},
+	"backup_no_file": {
+		"message": "Keine Datei ausgewählt."
+	},
+	"restore_button": {
+		"message": "Wiederherstellen"
+	},
+	"restore_choose_file": {
+		"message": "Datei auswählen…"
+	},
+	"restore_description": {
+		"message": "Wählen Sie eine NewTab PowerTools Backup-Datei für den Import."
+	},
+	"restore_header": {
+		"message": "Wiederherstellen:"
+	},
+	"restore_warning": {
+		"message": "Dies überschreibt Ihre vorhandenen Einstellungen, angehefteten Kacheln und das Hintergrundbild. Es kann nicht rückgängig gemacht werden."
 	},
 	"tile_block": {
 		"message": "Seite entfernen"
+	},
+	"tile_edit_url": {
+		"message": "URL ändern"
+	},
+	"tile_refresh_thumbnail": {
+		"message": "Thumbnail aktualisieren"
 	},
 	"tile_header": {
 		"message": "Kacheln:"
@@ -119,43 +365,64 @@
 	"tile_pin": {
 		"message": "Seite immer an aktueller Position anzeigen"
 	},
-	"tile_savedthumb_label": {
-		"message": "Gespeichertes Bild:"
+	"tile_savedthumb_choose": {
+		"message": "Bild auswählen…"
+	},
+	"tile_savedthumb_savecurrent": {
+		"message": "Aktuelles Thumbnail anheften"
 	},
 	"tile_savedthumb_set": {
-		"message": "Übernehmen"
-	},
-	"tile_selection_next_tooltip": {
-		"message": "Nächste Kachel"
-	},
-	"tile_selection_nextrow_tooltip": {
-		"message": "Nächste Reihe"
-	},
-	"tile_selection_previous_tooltip": {
-		"message": "Vorherige Kachel"
-	},
-	"tile_selection_previousrow_tooltip": {
-		"message": "Vorherige Reihe"
+		"message": "OK"
 	},
 	"tile_thumbnail_bgcolor": {
 		"message": "Hintergrundfarbe:"
 	},
 	"tile_thumbnail_remove": {
-		"message": "Entfernen"
-	},
-	"tile_title_label": {
-		"message": "Titel:"
+		"message": "Löschen"
 	},
 	"tile_title_placeholder": {
 		"message": "Neuen Titel eingeben"
 	},
 	"tile_title_set": {
-		"message": "Übernehmen"
+		"message": "OK"
 	},
 	"tile_unpin": {
 		"message": "Seitenposition nicht mehr merken"
 	},
-	"tileurl_empty": {
-		"message": "Leere Kachel"
+	"tile_url_placeholder": {
+		"message": "URL ändern"
+	},
+	"tile_url_set": {
+		"message": "OK"
+	},
+	"drawer_title": {
+		"message": "Konfigurieren"
+	},
+	"drawer_tab_tile": {
+		"message": "Kachel"
+	},
+	"drawer_tab_page": {
+		"message": "Seite"
+	},
+	"drawer_tab_advanced": {
+		"message": "Erweitert"
+	},
+	"wallpaper_dialog_title": {
+		"message": "Hintergrundbild auswählen"
+	},
+	"wallpaper_reset": {
+		"message": "Kein Hintergrund"
+	},
+	"wallpaper_upload": {
+		"message": "Bild hochladen"
+	},
+	"wallpaper_error": {
+		"message": "Firefox-Hintergrundbilder konnten nicht geladen werden."
+	},
+	"search_placeholder": {
+		"message": "Im Web suchen, zu einer Kachel springen oder URL einfügen…"
+	},
+	"search_prompt": {
+		"message": "Im Web suchen nach „$1“"
 	}
 }

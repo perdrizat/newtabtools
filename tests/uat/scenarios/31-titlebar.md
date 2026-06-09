@@ -88,6 +88,10 @@ is `true` (~5s budget).
   line), the search box, and a single `Edit` button at the right. Confirm there
   is **no** wordmark, padlock, cogwheel, or clock, and the chips fill the row
   rather than leaving a large dead gap.
+- **Text integrity (i18n):** the `Edit` button, the search placeholder, and each
+  recently-closed chip's title/domain are human-readable English. Flag any raw
+  `snake_case` message key, blank label, `$1`/`$NAME$`/`__MSG_…__` leftover, or
+  clipped/overflowing text.
 - Pass = minimal Board A bar + page-level chip identity (favicon + domain) +
   single Edit action.
 

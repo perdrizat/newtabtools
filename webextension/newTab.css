@@ -1901,13 +1901,13 @@ li.pinned .autocomplete-icon {
 #wallpaper-picker[hidden] {
 	display: none;
 }
-#wallpaper-picker-header {
+#wallpaper-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	margin-bottom: 1em;
 }
-#wallpaper-picker-header h2 {
+#wallpaper-header h2 {
 	margin: 0;
 	font-size: 16px;
 }
