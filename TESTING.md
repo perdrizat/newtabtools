@@ -19,7 +19,10 @@ Prefer **behavioral tests** that load the module via `vm.runInThisContext` or `v
 - **`loadModule(path, sandbox?)`** — loads a production JS file into an isolated `vm.createContext` sandbox with sensible default mocks. Returns the populated sandbox.
 - **`mountSite(linkData)`** — one-liner to construct a `Site` instance with the full tile environment (template, icons.js, fx-newTab.js, global mocks). Returns `{ site, node, cleanup }`.
 
-Source-grep is acceptable for purely structural checks (template element presence, CSS rule existence, deprecated symbol absence). These are flagged by the **`ntt/no-source-grep`** ESLint rule — add an `eslint-disable-next-line` comment with a brief justification when the check is intentional.
+Source-grep is acceptable for purely structural checks (template element presence, CSS rule existence, deprecated symbol absence). These are flagged by the **`ntt/no-source-grep`** ESLint rule — add an `eslint-disable-next-line` comment with a brief justification when the check is intentional. Two boundaries on that exemption (audit 2026-06-10 §5.6):
+
+- **A source-string match may never be the sole coverage for a functional behavior.** "The markup carries the danger class" does not prove the confirm gate fires on click — if a behavior is named in a test file's description, a behavioral test (this tier, E2E, or UAT) must exist somewhere for it.
+- **The justification comment must say why a behavioral test isn't possible** (e.g. "jsdom can't resolve the stylesheet cascade"), not just what is being checked.
 
 ## Environment Setup
 
@@ -35,13 +38,21 @@ These tools must be present on your host machine to develop and test this extens
 | **geckodriver** | latest | **UAT tier** Selenium driver (auto-fetched by Selenium Manager on first run) | `geckodriver --version` |
 | **Claude Code CLI** | latest | **UAT tier** agent driver (`claude -p`) | `claude --version` |
 
-> The bottom three are **only** needed to run `pnpm test:uat` (pre-release tier). The Unit/Integration/E2E tiers don't require them, and CI doesn't install them. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing the UAT tooling" below.
+> The bottom three are **only** needed to run `pnpm test:uat` (pre-release tier). The Unit/Integration/E2E tiers don't require them, and CI doesn't install them. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing Firefox (ESR + release) and the UAT tooling" below.
 
 ### Installing Node.js and dependencies
 
 We recommend using a version manager like [`fnm`](https://github.com/Schniz/fnm) or [`nvm`](https://github.com/nvm-sh/nvm) to manage Node.js versions. Both honor the `.node-version` file in the repo root.
 
 ```bash
+# 0. Install a Node version manager if you don't have one (fnm shown; nvm works
+#    too — both honor .node-version). On a fresh Ubuntu/WSL box, install its
+#    prerequisites first, then fnm itself:
+sudo apt update && sudo apt install -y curl unzip
+curl -fsSL https://fnm.vercel.app/install | bash
+#    Restart your shell (or `source ~/.bashrc`) so `fnm` is on PATH and its
+#    shell hook is active before the next step.
+
 # 1. Install Node (the version comes from .node-version — currently 22)
 fnm install   # or: nvm install
 fnm use       # or: nvm use
@@ -59,60 +70,38 @@ pnpm --version    # >= v10
 pnpm install
 ```
 
-### Installing Firefox ESR (Ubuntu/WSL)
+### Installing the E2E & UAT (Firefox) and verify tooling
 
-To ensure consistency, all developers should use the same Firefox ESR version. On Ubuntu/WSL, install it via the official Mozilla APT repository to avoid Snap-related issues:
+Firefox **ESR** is the canonical **E2E** target; **release-channel** Firefox is the **UAT** target. They're deliberately different stacks — E2E drives ESR via `web-ext` + WebDriver BiDi, UAT drives release Firefox via Selenium + geckodriver (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)). Both install from the same Mozilla APT repository and coexist fine. The UAT-only pieces (release Firefox, geckodriver, the Claude Code CLI) are needed **only** for `pnpm test:uat` — the Unit/Integration/E2E tiers and CI don't use them.
+
+On Ubuntu/WSL, install from the official Mozilla APT repository (avoids Snap-related issues and pins everyone to the same builds):
 
 ```bash
-# 1. Add the Mozilla APT repository
+# 1. Add the Mozilla APT repository (provides both firefox-esr and firefox)
 sudo install -d -m 0755 /etc/apt/keyrings
 wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | sudo tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
 
-# 2. Configure package priority
+# 2. Prefer Mozilla's builds over the Ubuntu Snap repackage
 echo '
 Package: *
 Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 ' | sudo tee /etc/apt/preferences.d/mozilla
 
-# 3. Install Firefox ESR
-sudo apt update && sudo apt install firefox-esr
-```
+# 3. Install Firefox ESR (E2E target) and release Firefox (UAT target)
+sudo apt update && sudo apt install -y firefox-esr firefox
 
-### Installing the UAT tooling (release Firefox + geckodriver)
-
-Only needed for the **UAT tier** (`pnpm test:uat`, pre-release). UAT runs on **release-channel Firefox** via Selenium + geckodriver — deliberately a different stack from E2E's `firefox-esr` + `web-ext` + BiDi (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)). Release Firefox and ESR coexist fine; the UAT tools point at the release binary explicitly.
-
-```bash
-# 1. Release-channel Firefox. The Mozilla APT repo (added above for ESR) also
-#    provides the `firefox` package:
-sudo apt install firefox
-
-# 2. geckodriver — no manual step needed by default: Selenium Manager (bundled
-#    in selenium-webdriver) auto-downloads a matching geckodriver on first run
-#    (needs network; cached under ~/.cache/selenium). To pin it yourself instead,
-#    grab the linux64 build from https://github.com/mozilla/geckodriver/releases
-#    and put `geckodriver` on PATH.
-
-# 3. devDependencies (pinned, per CONTRIBUTING supply-chain guardrails):
-pnpm install   # brings in selenium-webdriver; add @modelcontextprotocol/sdk when wiring the MCP server
-pnpm audit
-
-# 4. Claude Code CLI (the agent driver) — install per https://docs.claude.com/claude-code
-#    and authenticate once:
-claude /login
-```
-
-**Verify the UAT browser path** (no MCP/SDK needed — this just proves Selenium can drive release Firefox with the extension):
-
-```bash
-pnpm build
+# 4. Verify E2E & UAT tooling**
+firefox-esr --version    # E2E target present (Firefox ESR)
+firefox --version        # UAT target present (release-channel Firefox)
+claude /login            # UAT agent — Claude Code CLI signed in (one-time; re-run to confirm the session)
+pnpm build               # build the extension .xpi
 node tests/uat/_tools/browser-smoke.mjs
 # expect: "new-tab grid rendered" + a screenshot under tests/uat/artifacts/
 ```
 
-The .xpi lives under `dist/` (git-ignored — the canonical build output, same artifact UAT installs and AMO uploads consume). UAT-specific evidence (screenshots, scenario reports) lives under `tests/uat/artifacts/` (also git-ignored). Nothing the UAT tier writes touches `/tmp`. See [`tests/uat/README.md`](tests/uat/README.md) for the full tool inventory and the `mcp-smoke.mjs` payload check.
+The .xpi lives under `dist/`, UAT-specific evidence (screenshots, scenario reports) lives under `tests/uat/artifacts/` (all git-ignored). See [`tests/uat/README.md`](tests/uat/README.md) for the full tool inventory.
 
 ### Continuous Integration (GitHub Actions)
 

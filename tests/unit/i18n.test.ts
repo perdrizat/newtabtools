@@ -3,13 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// eslint-disable-next-line ntt/no-source-grep
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const filesToCheck = ['newTab.xhtml', 'action.html'];
 
 for (const file of filesToCheck) {
 	test(`${file} should not contain hardcoded English text nodes`, () => {
-		// eslint-disable-next-line ntt/no-source-grep
 		const content = fs.readFileSync(path.join(__dirname, '../../webextension', file), 'utf-8');
 		
 		const errors: string[] = [];

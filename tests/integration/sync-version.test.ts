@@ -19,7 +19,6 @@ const ROOT = path.resolve(__dirname, '../..');
 
 describe('Version sync — package.json ⇄ webextension/manifest.json', () => {
 	it('package.json and manifest.json carry identical versions', () => {
-		// eslint-disable-next-line ntt/no-source-grep -- regression guard for version drift between the two release-relevant files
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 		// eslint-disable-next-line ntt/no-source-grep -- regression guard for version drift between the two release-relevant files
 		const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'webextension/manifest.json'), 'utf8'));
@@ -36,7 +35,6 @@ describe('Version sync — package.json ⇄ webextension/manifest.json', () => {
 	});
 
 	it('package.json build script runs sync-version as a prebuild step', () => {
-		// eslint-disable-next-line ntt/no-source-grep -- structural assertion on package.json's build script wiring
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 		expect(pkg.scripts.build).toContain('sync-version');
 	});

@@ -53,11 +53,14 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
+		// Object-URL hygiene helpers (audit §4.3) used by refreshBackgroundImage.
+		const fresh = extractMethod(source, '_freshObjectURL');
+		const drop = extractMethod(source, '_dropObjectURL');
 
 		globalThis.Background = { getBackground: vi.fn() };
 		globalThis.Prefs = { backgroundUrl: '' };
 
-		const code = `var newTabTools = { ${refreshBackgroundImage}, backgroundFake: { style: {} }, removeBackgroundButton: { disabled: false, blur: function(){} } };`;
+		const code = `var newTabTools = { ${refreshBackgroundImage}, ${fresh}, ${drop}, _objectURLs: {}, backgroundFake: { style: {} }, removeBackgroundButton: { disabled: false, blur: function(){} } };`;
 		vm.runInThisContext(code, { filename: 'background-render-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -67,6 +70,8 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 		(globalThis as any).Prefs.backgroundUrl = '';
 		harness.backgroundFake = { style: { backgroundImage: null } };
 		harness.removeBackgroundButton = { disabled: false, blur: vi.fn() };
+		harness._objectURLs = {};
+		globalThis.URL.revokeObjectURL = vi.fn();
 		document.body.style.backgroundImage = '';
 	});
 

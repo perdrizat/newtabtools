@@ -67,6 +67,12 @@ function harnessShell() {
 	// setter — keep this as a plain object so we can attach `parentNode`.
 	t.setBgColourDisplay = { style: { backgroundColor: null }, parentNode: { disabled: false } };
 	t.getString = () => '';
+	// Object-URL hygiene (audit §4.3): the selectedSiteIndex setter routes
+	// thumbnail URLs through these; revocation itself is covered behaviorally
+	// in objecturl-revoke.test.ts, so plain stubs suffice here.
+	t._objectURLs = {};
+	t._freshObjectURL = () => 'blob:stub';
+	t._dropObjectURL = () => {};
 	return t;
 }
 

@@ -515,6 +515,11 @@ var newTabTools = {
 			canvas.height = image.height * scale;
 			let ctx = canvas.getContext('2d');
 			ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+			// The decode-source object URL (file-picker blob) is one-shot —
+			// once drawn to the canvas it has no further consumer (§4.3).
+			if (src.startsWith('blob:')) {
+				URL.revokeObjectURL(src);
+			}
 
 			let link = site.link;
 			canvas.toBlob(function(blob) {
@@ -522,7 +527,7 @@ var newTabTools = {
 				delete link.imageIsThumbnail;
 				site.refreshThumbnail();
 
-				let thumbnailURL = URL.createObjectURL(link.image);
+				let thumbnailURL = newTabTools._freshObjectURL('editorThumb', link.image);
 				newTabTools.siteThumbnail.style.backgroundImage = 'url("' + thumbnailURL + '")';
 				newTabTools.siteThumbnail.classList.add('custom-thumbnail');
 				newTabTools.saveCurrentThumbButton.disabled = true;
@@ -532,6 +537,9 @@ var newTabTools = {
 		};
 		image.onerror = function(error) {
 			console.error(error);
+			if (src.startsWith('blob:')) {
+				URL.revokeObjectURL(src);
+			}
 		};
 		image.src = src;
 	},
@@ -546,6 +554,24 @@ var newTabTools = {
 
 		Tiles.putTile(link);
 	},
+	// Object-URL hygiene (audit 2026-06-10 §4.3): blob URLs are only freed on
+	// document unload, so repeated-render sites revoke their prior URL before
+	// creating a replacement (the fx-newTab.js refreshThumbnail pattern).
+	// Each key names one owner surface (e.g. 'background', 'editorThumb') —
+	// never stash a URL another surface still displays.
+	_objectURLs: {},
+	_freshObjectURL(key, blob) {
+		this._dropObjectURL(key);
+		let url = URL.createObjectURL(blob);
+		this._objectURLs[key] = url;
+		return url;
+	},
+	_dropObjectURL(key) {
+		if (this._objectURLs[key]) {
+			URL.revokeObjectURL(this._objectURLs[key]);
+			delete this._objectURLs[key];
+		}
+	},
 	refreshBackgroundImage() {
 		// CDN wallpaper takes priority over IDB blob. Apply the
 		// `background_position` Firefox publishes alongside each record so
@@ -557,11 +583,13 @@ var newTabTools = {
 		if (Prefs.backgroundUrl) {
 			document.body.style.backgroundImage =
 				this.backgroundFake.style.backgroundImage = 'url("' + Prefs.backgroundUrl + '")';
+			this._dropObjectURL('background');
 			this.removeBackgroundButton.disabled = false;
 			return Promise.resolve();
 		}
 		if (Prefs.backgroundColor) {
 			document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = '';
+			this._dropObjectURL('background');
 			this.removeBackgroundButton.disabled = false;
 			return Promise.resolve();
 		}
@@ -569,13 +597,14 @@ var newTabTools = {
 		return Background.getBackground().then(background => {
 			if (!background) {
 				document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = null;
+				this._dropObjectURL('background');
 				this.removeBackgroundButton.disabled = true;
 				this.removeBackgroundButton.blur();
 				return;
 			}
 
 			document.body.style.backgroundImage =
-				this.backgroundFake.style.backgroundImage = 'url("' + URL.createObjectURL(background) + '")';
+				this.backgroundFake.style.backgroundImage = 'url("' + this._freshObjectURL('background', background) + '")';
 			this.removeBackgroundButton.disabled = false;
 		});
 	},
@@ -1183,6 +1212,13 @@ var newTabTools = {
 				strip.removeChild(element);
 			}
 
+			// The cards are rebuilt from scratch — revoke the prior render's
+			// favicon blob URLs before this render creates new ones (§4.3).
+			for (let staleURL of newTabTools._recentFaviconURLs || []) {
+				URL.revokeObjectURL(staleURL);
+			}
+			newTabTools._recentFaviconURLs = [];
+
 			function card_onclick() {
 				chrome.sessions.restore(this.dataset.sessionId);
 				return false;
@@ -1308,6 +1344,7 @@ var newTabTools = {
 						let src = null;
 						if (favicon instanceof Blob) {
 							src = URL.createObjectURL(favicon);
+							newTabTools._recentFaviconURLs.push(src);
 						} else if (typeof favicon === 'string' && newTabTools.isValidURL(favicon)) {
 							src = favicon;
 						}
@@ -1452,6 +1489,7 @@ var newTabTools = {
 			this.setBgColourDisplay.parentNode.disabled = disabled;
 
 		if (disabled) {
+			this._dropObjectURL('editorThumb');
 			this.siteThumbnail.style.backgroundImage =
 				this.siteThumbnail.style.backgroundColor =
 				this.setBgColourDisplay.style.backgroundColor = null;
@@ -1464,7 +1502,7 @@ var newTabTools = {
 		}
 
 		if (site.link.image) {
-			let thumbnailURL = URL.createObjectURL(site.link.image);
+			let thumbnailURL = this._freshObjectURL('editorThumb', site.link.image);
 			this.siteThumbnail.style.backgroundImage = 'url("' + thumbnailURL + '")';
 			if (site.link.imageIsThumbnail) {
 				this.siteThumbnail.classList.remove('custom-thumbnail');
@@ -1474,6 +1512,9 @@ var newTabTools = {
 			this.saveCurrentThumbButton.disabled = true;
 			this.removeSavedThumbButton.disabled = false;
 		} else {
+			// Borrowed URL: the tile owns it (s._thumbnailObjectURL) — the
+			// editor only drops its own stale preview URL here (§4.3).
+			this._dropObjectURL('editorThumb');
 			this.siteThumbnail.style.backgroundImage = site.thumbnail.style.backgroundImage;
 			this.siteThumbnail.classList.remove('custom-thumbnail');
 			this.saveCurrentThumbButton.disabled = !this.siteThumbnail.style.backgroundImage;
@@ -1960,7 +2001,14 @@ var newTabTools = {
 				if (!link.image) {
 					let thumb = thumbs.get(link.url);
 					if (thumb) {
-						let css = 'url(' + URL.createObjectURL(thumb) + ')';
+						// Stash on the site under the same key fx-newTab's
+						// refreshThumbnail uses, so whichever path re-renders
+						// the tile next revokes the other's URL (§4.3).
+						if (s._thumbnailObjectURL) {
+							URL.revokeObjectURL(s._thumbnailObjectURL);
+						}
+						s._thumbnailObjectURL = URL.createObjectURL(thumb);
+						let css = 'url(' + s._thumbnailObjectURL + ')';
 						s.thumbnail.style.backgroundImage = css;
 						let logoFallback = s.thumbnail.querySelector('.ntt-logo-fallback');
 						if (logoFallback) {

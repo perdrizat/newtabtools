@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2] — 2026-06-10
+
+### Added
+
+- `audit/2026-06-10-code-review.md` — post-2.0.x deep review; §8 dev response disputed five findings (two disproven by cross-tier test search), §9 reviewer adjudication upheld all five, §10 closes with the agreed action list (executed below).
+- Behavioral tests: Reset click→confirm-reveal gate (`confirm-gate.test.ts`), toolbar-popup button→message glue (`action-popup.test.ts` — E2E can't open browser-action popups), and object-URL revocation contracts (`objecturl-revoke.test.ts`).
+
+### Changed
+
+- TESTING.md "Test Design Principles": source-grep exemption bounded — a source-string match may never be the sole coverage for a functional behavior, and the `ntt/no-source-grep` justification must say why a behavioral test isn't possible (CONTRIBUTING "Before Committing" points at it).
+
+### Fixed
+
+- Object-URL leak (audit §4.3): all six `URL.createObjectURL` sites in `newTab.js` now revoke prior URLs (owner-keyed `_freshObjectURL`/`_dropObjectURL` helpers; per-site stash shared with `fx-newTab.js`'s `refreshThumbnail`; batch revoke for recently-closed favicons; one-shot decode-source revoke).
+- `console.exception` → `console.error` in `fx-newTab.js` (deprecated non-standard alias; forward-compat nit per audit §9.3).
+- Lint to zero warnings: removed 4 stale `eslint-disable` directives (audit §4.2).
+
 ## [2.0.1] — 2026-06-09
 
 ### Added
@@ -17,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - Remaining hardcoded English extracted to `messages.json` and resolved via i18n: the drawer title/tabs, the awesomebar section headers (`SECTION_LABELS`) + search placeholder, and the wallpaper-dialog strings.
 - Stale locale keys (in a translation but not `en`) are no longer a CI-gating test — maintenance drift handled by `pnpm i18n:stale`/`pnpm i18n:purge`, completeness by `pnpm i18n:check`; runtime-breaking i18n issues stay gated.
+- TESTING.md setup: added the Node-version-manager (`fnm`) install prerequisite before `fnm install`, and merged the Firefox-ESR + UAT-tooling install steps into one section with a "Verify E2E & UAT tooling" box (`firefox-esr`/`firefox`/`claude` checks).
 
 ### Fixed
 

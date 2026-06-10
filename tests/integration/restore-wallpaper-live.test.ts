@@ -47,7 +47,10 @@ describe('restore applies the wallpaper live (no reload)', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const updateUI = extractMethod(source, 'updateUI');
 		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
-		const code = `globalThis.__nt = { ${updateUI}, ${refreshBackgroundImage},`
+		// Object-URL hygiene helpers (audit §4.3) used by refreshBackgroundImage.
+		const fresh = extractMethod(source, '_freshObjectURL');
+		const drop = extractMethod(source, '_dropObjectURL');
+		const code = `globalThis.__nt = { ${updateUI}, ${refreshBackgroundImage}, ${fresh}, ${drop}, _objectURLs: {},`
 			+ ' backgroundFake: { style: {} }, removeBackgroundButton: {} };';
 		vm.runInThisContext(code, { filename: 'wallpaper-live-harness.js' });
 		nt = (globalThis as any).__nt;

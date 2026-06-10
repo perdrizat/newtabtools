@@ -2159,7 +2159,7 @@ var Updater = {
 			});
 		})).then(function() {
 			newTabTools.getThumbnails();
-		}).then(callback).catch(console.exception);
+		}).then(callback).catch(console.error);
 	}
 };
 
