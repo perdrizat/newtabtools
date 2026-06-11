@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.3] — 2026-06-11
+
+### Added
+
+- `.github/dependabot.yml` — security-only: version-bump PRs suppressed (`open-pull-requests-limit: 0`) to honor the hard-pin policy, security fixes grouped. Requires the repo "Dependabot security updates" toggle to activate.
+
+### Security
+
+- Pin `shell-quote` to 1.8.4 via `pnpm.overrides`, closing critical advisory GHSA-w7jw-789q-3m8p (transitive via `web-ext` > `fx-runner`; dev-tooling only, but CI's `pnpm audit --audit-level=high` gates on it).
+
+### Changed
+
+- CONTRIBUTING "Before Committing": `pnpm audit --audit-level=high` is now an unconditional pre-commit step (advisories surface against unchanged deps), not only after touching `package.json`/`pnpm-lock.yaml`.
+- CONTRIBUTING: new "Keeping dependencies current" subsection — the manual `pnpm outdated` update ritual + quarterly cadence, the security-vs-staleness split, and Dependabot's security-only scope.
+
 ## [2.0.2] — 2026-06-10
 
 ### Added

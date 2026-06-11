@@ -56,5 +56,10 @@
     "typescript": "6.0.3",
     "vitest": "4.1.5",
     "web-ext": "10.3.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "shell-quote": "1.8.4"
+    }
   }
 }

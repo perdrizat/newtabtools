@@ -1,0 +1,34 @@
+# Dependabot — SECURITY-ONLY by intent.
+#
+# This repo exact-pins every dependency (no ^/~) with a tracked pnpm-lock.yaml
+# and updates them manually (see CONTRIBUTING "Keeping dependencies current").
+# So we do NOT want Dependabot's version-bump PR noise — only its security fixes.
+#
+# IMPORTANT: this file alone does nothing. Dependabot security updates are a
+# repo toggle: Settings → Code security → enable "Dependabot alerts" AND
+# "Dependabot security updates". This file only (a) suppresses version-update
+# PRs and (b) shapes/groups the security PRs once the toggle is on.
+#
+# Scope note: Dependabot can auto-open a fix PR only for a DIRECT dependency.
+# A transitive advisory (e.g. the shell-quote precedent, reached via web-ext)
+# it can only ALERT on — apply the pnpm.overrides fix by hand and re-audit.
+version: 2
+updates:
+  - package-ecosystem: "npm" # covers pnpm — parses pnpm-lock.yaml
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Suppress version-update PRs entirely (honors the hard-pin policy).
+    # Security-update PRs are exempt from this limit and still flow.
+    open-pull-requests-limit: 0
+    # Batch multiple security fixes into one PR instead of one-per-advisory.
+    groups:
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "fix"
+    labels:
+      - "dependencies"
+      - "security"
