@@ -1,6 +1,6 @@
 {
   "name": "newtabtools",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "private": true,
   "type": "module",
   "description": "A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. PowerTools for your New Tab page.",
