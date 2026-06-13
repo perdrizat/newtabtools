@@ -11,6 +11,7 @@
   },
   "scripts": {
     "preinstall": "node scripts/check-pnpm.js",
+    "version": "node scripts/sync-version.mjs && git add webextension/manifest.json",
     "dev": "web-ext run --source-dir webextension/",
     "build": "node scripts/sync-version.mjs && web-ext build --source-dir webextension/ --artifacts-dir dist --overwrite-dest && node scripts/build-uat.mjs",
     "lint": "eslint webextension/ tests/",

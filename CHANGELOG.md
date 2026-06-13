@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.4] — 2026-06-13
+
+### Fixed
+
+- Version-sync CI failure: `manifest.json` had drifted to `2.0.1` while `package.json` was `2.0.3` (the 2.0.2/2.0.3 bumps committed without the prebuild manifest sync); today's bump realigns both.
+
+### Added
+
+- `version` lifecycle script — `pnpm version` now runs `scripts/sync-version.mjs` and stages `manifest.json` into the bump commit, so the manifest can't drift from `package.json` again.
+
 ## [2.0.3] — 2026-06-11
 
 ### Added
