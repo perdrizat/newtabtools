@@ -129,6 +129,7 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm test:e2e` | Run full E2E suite against Firefox ESR | Validation |
 | `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
 | `pnpm test:uat` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (pre-release) |
+| `pnpm test:uat:preflight` | Validate the UAT environment only (Node/pnpm versions, release Firefox reports a clean `--version`, built `.xpi`, fixture hash, `claude` CLI, daemon port) without running scenarios or spending tokens | UAT (env check) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 

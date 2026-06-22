@@ -81,6 +81,22 @@ node tests/uat/_tools/daemon-smoke.mjs
 node tests/uat/_tools/mcp-smoke.mjs
 ```
 
+## Troubleshooting (preflight failures)
+
+`pnpm test:uat:preflight` (also the first step of `pnpm test:uat`) prints `[ok]`/`[warn]`/`[fail]` per check. Fixes for the `[fail]`s:
+
+| Preflight failure | Fix |
+|---|---|
+| **Node — need ≥ 24** | `fnm install && fnm use` (honors `.node-version`), or the `nvm` equivalent. |
+| **pnpm — need ≥ 11** | `corepack enable && corepack prepare pnpm@11.6.0 --activate`. |
+| **Firefox — did not report a Firefox version**, or **emits wrapper noise (`xdg-settings`)** | The release `firefox` is the Ubuntu **snap** shim and is broken/noisy for geckodriver. Either `sudo apt install xdg-utils` (un-break the wrapper), or — preferred — install the **Mozilla APT** build so `firefox` is a real binary, or point `$FIREFOX_BIN` at one. |
+| **Firefox — not found** | Install release Firefox (Mozilla APT) or set `$FIREFOX_BIN`. |
+| **Built .xpi — not found / older than manifest** | `pnpm build` (writes `dist/newtab_powertools-<version>.zip`). |
+| **UAT fixture — sha256 mismatch** | Unintentional: restore `newtabtools_knowngood.zip` from git. Intentional regen: bump `fixtureVersion` + update the hash here and in `preflight.mjs`. |
+| **claude CLI — not found** | Install per <https://docs.claude.com/claude-code>, then `claude /login`. |
+| **@modelcontextprotocol/sdk — not resolvable** | `pnpm install`. |
+| **UAT daemon port — in use / collides with 9222** | Stop the other process, or set `$UAT_DAEMON_PORT` to a free port ≠ 9222. |
+
 ## Dependencies
 
 - `selenium-webdriver@4.44.0` (pinned per CONTRIBUTING supply-chain guardrails).
@@ -110,5 +126,3 @@ field) invalidates the comparison baseline scenarios assume.
 > release; written by `pnpm build`). UAT-specific evidence (screenshots, scenario reports)
 > lives under `tests/uat/artifacts/`. Both are git-ignored. Override resolution via
 > `XPI_DIR=` (where the tools look for the .xpi) or `EXTENSION_XPI=` (explicit path).
-> Pinned dependency versions and a troubleshooting section (keyed to preflight failure
-> messages) get added here as the tier is built out.

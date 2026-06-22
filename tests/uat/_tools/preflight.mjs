@@ -47,10 +47,10 @@ console.log();
 // 1. Node version
 {
 	const major = parseInt(process.version.slice(1).split('.')[0], 10);
-	if (major >= 22) {
-		ok('Node', `${process.version} (≥ 22)`);
+	if (major >= 24) {
+		ok('Node', `${process.version} (≥ 24)`);
 	} else {
-		fail('Node', `${process.version} — need ≥ 22 (see .node-version); update via fnm/nvm`);
+		fail('Node', `${process.version} — need ≥ 24 (see .node-version); update via fnm/nvm`);
 	}
 }
 
@@ -59,31 +59,53 @@ console.log();
 	try {
 		const out = execSync('pnpm --version', { encoding: 'utf8' }).trim();
 		const major = parseInt(out.split('.')[0], 10);
-		if (major >= 10) {
-			ok('pnpm', `${out} (≥ 10)`);
+		if (major >= 11) {
+			ok('pnpm', `${out} (≥ 11)`);
 		} else {
-			fail('pnpm', `${out} — need ≥ 10; corepack prepare pnpm@10.0.0 --activate`);
+			fail('pnpm', `${out} — need ≥ 11; corepack prepare pnpm@11.6.0 --activate`);
 		}
 	} catch {
-		fail('pnpm', 'not found on PATH — corepack enable && corepack prepare pnpm@10.0.0 --activate');
+		fail('pnpm', 'not found on PATH — corepack enable && corepack prepare pnpm@11.6.0 --activate');
 	}
 }
 
-// 3. Firefox release binary
+// 3. Firefox release binary — must exist AND report a clean version. geckodriver
+//    validates the binary by parsing `<bin> --version`; a wrapper that emits noise
+//    (e.g. Ubuntu's snap shim with xdg-utils missing → "xdg-settings: not found")
+//    makes geckodriver reject it as "binary is not a Firefox executable". We catch
+//    that here with an actionable message instead of a daemon-startup stack trace.
 {
 	const envBin = process.env.FIREFOX_BIN;
+	let bin = null;
 	if (envBin) {
 		if (fs.existsSync(envBin)) {
-			ok('Firefox (release)', `${envBin} (via $FIREFOX_BIN)`);
+			bin = envBin;
 		} else {
 			fail('Firefox (release)', `$FIREFOX_BIN points to ${envBin} but file does not exist`);
 		}
 	} else {
-		const ff = which('firefox');
-		if (ff) {
-			ok('Firefox (release)', `${ff} (PATH)`);
+		bin = which('firefox');
+		if (!bin) {
+			fail('Firefox (release)', 'not found — set $FIREFOX_BIN or install via the Mozilla APT repo');
+		}
+	}
+	if (bin) {
+		const r = spawnSync(bin, ['--version'], { encoding: 'utf8' });
+		const combined = `${r.stdout || ''}${r.stderr || ''}`;
+		const versionLine = (r.stdout || '').match(/Mozilla Firefox \d+\.\S+/);
+		const wrapperNoise = /xdg-settings|requires the firefox snap|: not found/i.test(combined);
+		const where = envBin ? 'via $FIREFOX_BIN' : 'PATH';
+		if (r.status !== 0 || !versionLine) {
+			fail('Firefox (release)', `${bin} did not report a Firefox version via \`--version\` ` +
+				`(got: ${combined.trim().slice(0, 120) || 'no output'}). The binary may be a broken wrapper — ` +
+				'use the Mozilla APT build or point $FIREFOX_BIN at a real Firefox binary.');
+		} else if (wrapperNoise) {
+			const noise = combined.trim().split('\n').filter(l => l && !/Mozilla Firefox/.test(l)).join(' | ');
+			fail('Firefox (release)', `${bin} runs, but \`--version\` emits wrapper noise that makes ` +
+				`geckodriver reject it ("binary is not a Firefox executable"):\n         ${noise}\n         ` +
+				'Likely the Ubuntu snap shim with xdg-utils missing — install xdg-utils, use the Mozilla APT build, or set $FIREFOX_BIN.');
 		} else {
-			fail('Firefox (release)', 'not found — set $FIREFOX_BIN or install via Mozilla APT repo');
+			ok('Firefox (release)', `${versionLine[0]} (${bin}, ${where})`);
 		}
 	}
 }

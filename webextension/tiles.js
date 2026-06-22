@@ -49,7 +49,7 @@ var Tiles = {
 			op.onerror = reject;
 		});
 	},
-	getAllTiles() { // TODO: This is a silly name.
+	getAllTiles() { // NOTE: misleading name — returns the rows×columns grid-fit subset, not all tiles; rename deferred to the MV3 tiles.js module-extraction (audit/2026-06-10 §4.5).
 		this._ready = true;
 		let count = Prefs.rows * Prefs.columns;
 		return new Promise(resolve => {

@@ -6,7 +6,7 @@
   "description": "A new tab page for Firefox, built around the sites you actually visit and laid out the way you want. PowerTools for your New Tab page.",
   "packageManager": "pnpm@11.6.0",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=24.0.0",
     "pnpm": ">=11.0.0"
   },
   "scripts": {
@@ -22,6 +22,7 @@
     "test:fast": "vitest run --project fast",
     "test:e2e": "tests/e2e/run_esr_tests.sh",
     "test:uat": "node tests/uat/_tools/runner.mjs",
+    "test:uat:preflight": "node tests/uat/_tools/preflight.mjs",
     "test": "pnpm test:fast && pnpm test:e2e",
     "verify": "pnpm lint && pnpm typecheck && pnpm lint:webext && pnpm test:fast && pnpm build",
     "i18n:check": "node scripts/i18n-check.mjs",

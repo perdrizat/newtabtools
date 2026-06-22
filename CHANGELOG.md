@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.6] — 2026-06-23
+
+### Changed
+
+- `engines.node` floor raised to `>=24` (drops the untested Node 22 claim; matches `.node-version`).
+- UAT preflight now rejects a Firefox whose `--version` isn't clean — catching the Ubuntu snap-wrapper / missing-`xdg-utils` breakage with an actionable message instead of a geckodriver stack trace — aligns its Node/pnpm floors to ≥24/≥11, and is runnable standalone via `pnpm test:uat:preflight`.
+- `tile-redesign.test.ts`: replaced the redundant fx-newTab.js source-string assertions with behavioral coverage (stat-chip fresh/non-fresh, favicon glyph via the shared `siteGlyph`), keeping one controller-wiring check.
+- E2E `connectToFirefox` now retries the WebDriver-BiDi handshake (bounded) to cut transient CI connect flakes.
+- UAT runner writes an aggregate `summary.md` (scenario×verdict table + "needs attention") alongside `report.json`; UAT README gained a preflight-failure troubleshooting section.
+
+### Added
+
+- `tests/integration/stats.test.ts` — edge-case coverage for `TileStats` (`formatCount`/`formatAge`/`compute`): huge counts, clock-skew negative age, zero visits, future-visitTime, and the stat-type branches.
+
+### Security
+
+- Removed the temporary `minimumReleaseAgeExclude: [undici]`: undici 7.28.0 has cleared the 7-day window, so the supply-chain guard now applies to it with no carve-out.
+
 ## [2.0.5] — 2026-06-22
 
 ### Changed

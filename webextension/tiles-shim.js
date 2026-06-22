@@ -9,7 +9,7 @@ var Tiles = {
 	isPinned(url) {
 		return this._list.includes(url);
 	},
-	getAllTiles() { // TODO: This is a silly name.
+	getAllTiles() { // NOTE: misleading name — see tiles.js getAllTiles; rename deferred to MV3 tiles.js module-extraction (audit/2026-06-10 §4.5).
 		return new Promise((resolve, reject) => {
 			chrome.runtime.sendMessage({ name: 'Tiles.getAllTiles' }, response => {
 				if (response === null) {

@@ -29,12 +29,30 @@ function verbose(...args: unknown[]) {
 
 /**
  * Connect to the running Firefox ESR instance via WebDriver BiDi.
+ *
+ * Retries a bounded number of times: the BiDi session handshake can lose a race
+ * with `web-ext`'s Firefox startup on slow/loaded CI runners even after the port
+ * is reachable (see audit/2026-05-11 §4.3). Each E2E file's `beforeAll` calls
+ * this, so a transient first-attempt failure would otherwise fail a whole file.
+ * Retrying the connect is safe — it does not retry test assertions.
  */
-export async function connectToFirefox(): Promise<Browser> {
-	return puppeteer.connect({
-		browserWSEndpoint: BIDI_ENDPOINT,
-		protocol: 'webDriverBiDi',
-	});
+export async function connectToFirefox(attempts = 5, delayMs = 1000): Promise<Browser> {
+	let lastErr: unknown;
+	for (let attempt = 1; attempt <= attempts; attempt++) {
+		try {
+			return await puppeteer.connect({
+				browserWSEndpoint: BIDI_ENDPOINT,
+				protocol: 'webDriverBiDi',
+			});
+		} catch (err) {
+			lastErr = err;
+			verbose(`[connect] attempt ${attempt}/${attempts} failed: ${(err as Error).message}`);
+			if (attempt < attempts) {
+				await new Promise(r => setTimeout(r, delayMs));
+			}
+		}
+	}
+	throw new Error(`connectToFirefox: failed after ${attempts} attempts — ${(lastErr as Error)?.message}`);
 }
 
 /**

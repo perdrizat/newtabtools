@@ -109,6 +109,40 @@ function readReport(reportPath) {
 	};
 }
 
+// Render an aggregate human-readable summary.md from the run report (the same
+// data report.json carries) — a scenario×verdict table plus a "needs attention"
+// section, so a reviewer scans one file instead of N per-scenario reports.
+function renderSummaryMd(report) {
+	const lines = [];
+	lines.push(`# UAT run ${report.runStamp}`, '');
+	lines.push(`**${report.passed}/${report.scenarioCount} scenarios passed**${report.failed ? ` — ${report.failed} failed` : ''}.`);
+	lines.push(`Started ${report.startedAt}, finished ${report.finishedAt}.`, '');
+	lines.push('| Scenario | Verdict | Time | Shots | Failed | Obs |');
+	lines.push('|---|---|---|---|---|---|');
+	for (const r of report.scenarios) {
+		lines.push(`| ${r.slug} | ${r.passed ? '✅ pass' : '❌ FAIL'} | ${r.elapsedSec}s | ${r.screenshots?.length || 0} | ${r.failedAssertions?.length || 0} | ${r.observations?.length || 0} |`);
+	}
+	lines.push('');
+	const attention = report.scenarios.filter(r => !r.passed || r.failedAssertions?.length || r.observations?.length);
+	if (!attention.length) {
+		lines.push('_All assertions passed; no observations._');
+		return lines.join('\n') + '\n';
+	}
+	lines.push('## Needs attention', '');
+	for (const r of attention) {
+		lines.push(`### ${r.passed ? '✅' : '❌'} ${r.slug}`);
+		for (const a of r.failedAssertions || []) {
+			const detail = a.expected !== undefined ? ` — expected \`${a.expected}\`, got \`${a.actual}\`` : '';
+			lines.push(`- ❌ **${a.name}**${detail}`);
+		}
+		for (const o of r.observations || []) {
+			lines.push(`- ⚠ ${o}`);
+		}
+		lines.push('');
+	}
+	return lines.join('\n') + '\n';
+}
+
 async function waitHealthy(timeoutMs) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -361,6 +395,8 @@ const report = {
 };
 const reportPath = path.join(RUN_DIR, 'report.json');
 fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+const summaryPath = path.join(RUN_DIR, 'summary.md');
+fs.writeFileSync(summaryPath, renderSummaryMd(report));
 
 const totalShots = results.reduce((n, r) => n + (r.screenshots?.length || 0), 0);
 const totalObs = results.reduce((n, r) => n + (r.observations?.length || 0), 0);
@@ -383,6 +419,7 @@ if (needsAttention.length) {
 
 console.log(`Run dir:     ${RUN_DIR}/  (timestamped; this run's artifacts, kept indefinitely)`);
 console.log(`Report:      ${reportPath}`);
+console.log(`Summary:     ${summaryPath}`);
 console.log(`Screenshots: ${totalShots} total in ${RUN_DIR}/ (named <capture-time>-<scenario>-<shot>.png, sort in capture order)`);
 console.log(`Daemon log:  ${path.join(RUN_DIR, 'daemon.log')}`);
 

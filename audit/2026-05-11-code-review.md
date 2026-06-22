@@ -99,11 +99,15 @@ The JSDoc-on-production / TypeScript-on-tests split is a pragmatic choice that a
 
 Stabilizing CI E2E should be a pre-AMO priority. Options: increase connection/startup timeouts, add retry logic to `run_esr_tests.sh` for connection setup (not for test assertions), pin the exact Firefox ESR version in CI via the Mozilla APT repo, or split the E2E suite into a "critical path" subset for every push and a "full" suite for PR merge.
 
+> **Decision (2026-06-22) — "pin the exact Firefox ESR version" is permanently declined.** It conflicts with the project's deliberate policy of tracking the latest ESR from the Mozilla APT repo so ESR security updates land automatically; freezing the version to chase determinism trades a real security benefit for marginal flake reduction. The other levers here (timeout tuning, a BiDi-connect retry in `connectToFirefox`/`run_esr_tests.sh`, critical-path split) remain open if E2E flakiness recurs.
+
 ### 4.4 Coverage gaps
 
 - **No code coverage metrics.** Adding `vitest --coverage` (no gate, just visibility) would help identify blind spots.
 - **No accessibility testing.** For an extension that replaces the new tab page, a11y matters — screen reader users, keyboard navigation, focus management during drag-drop.
+  > **Decision (2026-06-22) — won't do.** A dedicated accessibility test tier (automated a11y, screen-reader / keyboard-nav / focus-management coverage) is out of scope for this single-maintainer fork and is not planned. A11y remains a known, accepted gap; ad-hoc keyboard/focus checks can ride UAT if a specific regression is reported.
 - **Optional permission flows untested in E2E.** Bookmarks/history autocomplete, downloads permission for export. Tracked as deferred in MIGRATION.md slot 4.
+  > **Decision (2026-06-22) — permanently declined as an E2E target.** `browser.permissions.request()` must run synchronously from a user gesture (see `newTab.js:1670` + the `drawer-permissions.test.ts` regression); Puppeteer's `page.evaluate()` is not a gesture, and there is no WebDriver-BiDi API to pre-grant optional permissions, so a headless `web-ext` + BiDi run cannot drive the grant flow. The permission *logic* is covered at the integration tier (`drawer-permissions.test.ts`); the end-to-end grant flow is out of scope for E2E.
 
 ---
 
@@ -170,6 +174,8 @@ Thumbnails of authenticated pages (banking, webmail, intranet) are persisted in 
 - Consider a "never capture" list (configurable, defaulting to known sensitive domains).
 - Consider a warning in the export UI that backup zips contain cached page captures.
 
+> **Decision (2026-06-22).** The **"never capture" list** is the one we'll build — tracked as GH issue [#1](https://github.com/perdrizat/newtabtools/issues/1). The other two (AMO-description disclosure; export-UI warning) are **won't-do** — out of scope, not planned.
+
 ### 6.2 `<all_urls>` permission justification
 
 AMO reviewers will scrutinize this. The justification is sound (needed for `captureVisibleTab` on any URL the user has pinned), but prepare a clear explanation for the review. During MV3 research, investigate whether `activeTab` could replace `<all_urls>` for the capture flow.
@@ -225,7 +231,7 @@ Based on the code review, four specific things will not survive MV3 migration un
 8. **Add code coverage reporting** — `vitest --coverage` with no gate, just visibility.
 9. **Begin module extraction** — Extract pure functions from `newTab.js`/`fx-newTab.js` into `lib/` modules. Use a light bundler to produce the MV2-compatible concatenated script. This de-risks the MV3 migration.
 10. **Normalize async patterns opportunistically** — When touching any function, convert to `async/await` with `browser.*` promises. Don't do a sweep; do it under test coverage.
-11. **Accessibility audit** — Keyboard navigation, focus management, screen reader labels.
+11. **Accessibility audit** — Keyboard navigation, focus management, screen reader labels. **(Declined 2026-06-22 — out of scope for this fork; see §4.4.)**
 
 ### 8.3 MV3 research checklist
 

@@ -91,6 +91,7 @@ No `.catch` on: [`background.js:608`](../webextension/background.js) (favicon-fe
 
 - Two commented-out `console.log`s: [`background.js:43,53`](../webextension/background.js).
 - Duplicated `// TODO: This is a silly name` on `getAllTiles`: [`tiles.js:52`](../webextension/tiles.js), [`tiles-shim.js:12`](../webextension/tiles-shim.js).
+  > **Decision (2026-06-22) — not a standalone task; removed from the loose backlog.** `getAllTiles` is misleadingly named (it returns the grid-fit subset, `rows×columns`, not all tiles). Rename it during **MV3 Phase 1's `tiles.js` ES-module extraction**, when its export surface is being redefined anyway — doing a 51-ref/IPC-string/39-test rename standalone now is pure churn on a file MV3 will restructure. Or simply drop it (cosmetic). The in-code TODOs were reworded to NOTEs so they stop reading as open tasks.
 
 ---
 
@@ -102,6 +103,7 @@ Coverage is strong and behavioral. Worthwhile gaps, in priority order:
 2. **`stats.js` edge cases** — `formatCount`/`formatAge` are pure and trivially unit-testable but only covered indirectly. Missing: 0 visits, very large counts, clock-skew negative ms.
 3. **`action.js`** (toolbar-popup pin/capture entry point) — no E2E; the primary "pin current tab" path from the Firefox toolbar is exercised only through mocks. **[Narrowed to low — see §9.6/§10: the `Tiles.pinTile` message is covered; the untested part is the popup's button→message glue, and the realistic tier for it is integration, not E2E.]**
 4. **Flaky-by-design selectors** — several E2E tests query `document.querySelector('.newtab-site')` against the live DOM (e.g. [`css-grid-layout.test.ts:194`](../tests/e2e/css-grid-layout.test.ts)). They pass because `resetTestState` makes runs hermetic, but they assume a tile is rendered — the same pattern that broke CI earlier in the project. Convert to a `<template>` query or `Grid.sites` lookup. *(Low risk while test order holds.)*
+   > **Decision (2026-06-22) — permanently declined.** A sweep found ~25 `.newtab-site`/`.newtab-cell` selectors, but most are legitimate cell *counts*, geometry, or `[pinned]`/`[data-selected]` state checks — not identity-flaky; only a few "first tile I created" sites qualify. With `resetTestState` keeping runs hermetic the risk is latent, and a correct conversion needs per-site triage + a new `Grid.sites` helper + an E2E re-run per change. Not worth the churn/risk for the current payoff; revisit only if order-dependent flakiness actually recurs.
 
 None block AMO. The network-idle test covers a real silent-failure mode and is the one to write soon.
 
@@ -132,6 +134,7 @@ The two failure modes these create, both live in this codebase: (1) a selector t
 ## 6. Coding standards & MV3 debt
 
 - **JSDoc is uneven.** `fx-newTab.js` is well-annotated; the 2200-line `newTabTools` controller in `newTab.js`, plus `export.js` (`makeZip`/`readZip`) and `stats.js` (`compute`), have almost none. `checkJs:true` still type-checks them, but the public surface of the largest file is undocumented. Backfill signatures on exported methods incrementally.
+  > **Decision (2026-06-22) — not a scheduled standalone item; removed from the loose backlog.** Handle "type-as-you-touch" (annotate a method when you edit it), and JSDoc the specific `newTab.js` areas MV3 modifies **just-in-time during the migration** (typed code is safer to refactor; the JS+JSDoc choice persists through MV3, so it's not throwaway). A blanket pre-MV3 pass on 2,258 lines isn't worth blocking shipping; a dedicated bundle would just bloat the migration.
 - **MV3 migration debt** (deferred per `MV3_MIGRATION.md`, logged here for the specific spots):
   - `background.js` uses DOM APIs — `Image`, `canvas`, `document.createElement` in `resizeThumbnail`/`isBlank` ([`:335-468`](../webextension/background.js)). MV3 service workers have no DOM; these are migration-blockers.
   - Persistent-background state held as module globals (`db`, `captureSessions`, `networkIdleWatchers`) assumes a page that stays alive; under MV3 it must be persisted/reconstructed on wake.

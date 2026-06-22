@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -11,7 +11,6 @@ import { mountSite } from './_helpers';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
-const FX_JS_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
 
 describe('Tile redesign — template (newTab.xhtml)', () => {
 	let xhtml: string;
@@ -183,82 +182,75 @@ describe('Tile redesign — logo-emanation fallback (newTab.css)', () => {
 	});
 });
 
-describe('Tile redesign — JS (fx-newTab.js)', () => {
-	let fxSource: string;
+// The fx-newTab.js behaviours that used to be asserted as source-string matches
+// (`expect(fxSource).toContain('_renderActions')`, etc.) are now covered
+// behaviorally: action buttons + the removed "open" action in the §4.2 suite
+// below, brand-color sanitisation there too, and objectURL revocation in
+// objecturl-revoke.test.ts. The two stat-chip checks and the siteGlyph-sharing
+// claim had no behavioral counterpart — they're real tests now.
+describe('Tile redesign — stat chip + favicon glyph (behavioral, §3.2/§3.4)', () => {
+	const tick = () => new Promise(r => setTimeout(r, 0));
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: JS source strings
-		fxSource = fs.readFileSync(FX_JS_PATH, 'utf8');
+	function mountWithStat(stat: unknown) {
+		(globalThis as any).Prefs = (globalThis as any).Prefs || {};
+		(globalThis as any).Prefs.statType = 'visits';
+		(globalThis as any).TileStats = (globalThis as any).TileStats || {};
+		(globalThis as any).TileStats.compute = vi.fn().mockResolvedValue(stat);
+		return mountSite({ url: 'https://example.com/', title: 'Example' });
+	}
+
+	afterEach(() => {
+		// Restore the shared globals so later blocks see the default 'none'.
+		if ((globalThis as any).Prefs) { (globalThis as any).Prefs.statType = 'none'; }
+		if ((globalThis as any).TileStats) { (globalThis as any).TileStats.compute = vi.fn().mockResolvedValue(null); }
 	});
 
-	it('Site._render calls _renderActions to create action buttons', () => {
-		expect(fxSource).toContain('_renderActions');
+	it('a fresh stat sets [data-stat-fresh] and shows no text', async () => {
+		const { site, cleanup } = mountWithStat({ type: 'fresh' });
+		await tick();
+		const chip = site.node.querySelector('.ntt-stat-chip');
+		expect(chip.hasAttribute('data-stat-fresh')).toBe(true);
+		expect(chip.textContent).toBe('');
+		cleanup();
 	});
 
-	it('_renderActions creates buttons using NttIcons', () => {
-		expect(fxSource).toContain('NttIcons.create');
+	it('a non-fresh (trend) stat clears [data-stat-fresh] and shows the value', async () => {
+		const { site, cleanup } = mountWithStat({ type: 'trend', dir: 'up', value: 5 });
+		await tick();
+		const chip = site.node.querySelector('.ntt-stat-chip');
+		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
+		expect(chip.textContent).toBe('↑5');
+		cleanup();
 	});
 
-	it('_onClick handles ntt-action-btn clicks by data-action attribute', () => {
-		expect(fxSource).toContain('data-action');
+	it('statType none leaves the chip empty with no [data-stat-fresh]', () => {
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const chip = site.node.querySelector('.ntt-stat-chip');
+		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
+		expect(chip.textContent).toBe('');
+		cleanup();
 	});
 
-	it('refreshThumbnail creates logo-emanation fallback when no image', () => {
-		expect(fxSource).toContain('ntt-logo-fallback');
+	it('_renderFavicon renders the domain glyph via the shared siteGlyph helper', () => {
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const favicon = site.node.querySelector('.ntt-favicon');
+		// Same glyph the logo-fallback test asserts (siteGlyph is shared by both).
+		expect(favicon.textContent).toBe('E');
+		cleanup();
 	});
+});
 
-	it('updateAttributes sets pinned attribute on .newtab-site (not old control)', () => {
-		expect(fxSource).toMatch(/this\._node\.setAttribute\('pinned'/);
-	});
-
-	it('the "open in new tab" action is removed (§3c — redundant with click)', () => {
-		expect(fxSource).not.toMatch(/case\s+'open'/);
-		expect(fxSource).not.toMatch(/action:\s*'open'/);
-	});
-
-	it('fresh stat uses data-stat-fresh attribute, not inline styles (§3.2)', () => {
-		expect(fxSource).toContain('data-stat-fresh');
-		expect(fxSource).not.toMatch(/chip\.style\.width\s*=\s*'7px'/);
-		expect(fxSource).not.toMatch(/chip\.style\.borderRadius\s*=\s*'50%'/);
-	});
-
-	it('refreshThumbnail revokes previous objectURL before creating new one (§3.5)', () => {
-		expect(fxSource).toMatch(/revokeObjectURL/);
-		const refreshMethod = fxSource.match(/refreshThumbnail\(\)\s*\{[\s\S]*?\n\t\},/);
-		expect(refreshMethod).toBeTruthy();
-		expect(refreshMethod![0]).toContain('revokeObjectURL');
-	});
-
-	it('siteGlyph helper is used by both _renderFavicon and _renderLogoFallback (§3.4)', () => {
-		expect(fxSource).toMatch(/function\s+siteGlyph\s*\(/);
-		const faviconMethod = fxSource.match(/_renderFavicon\(\)\s*\{[\s\S]*?\n\t\},/);
-		expect(faviconMethod).toBeTruthy();
-		expect(faviconMethod![0]).toContain('siteGlyph');
-		const fallbackMethod = fxSource.match(/_renderLogoFallback\(\)\s*\{[\s\S]*?\n\t\},/);
-		expect(fallbackMethod).toBeTruthy();
-		expect(fallbackMethod![0]).toContain('siteGlyph');
-	});
-
-	it('_renderStatChip clears data-stat-fresh on non-fresh stats (§3.2)', () => {
-		expect(fxSource).toMatch(/removeAttribute\('data-stat-fresh'\)/);
-	});
-
-	it('updateUI handles statType change to re-render stat chips (§3.1)', () => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: JS source strings
+describe('Tile redesign — controller wiring (newTab.js, §3.1)', () => {
+	it('updateUI re-renders stat chips when the statType pref changes', () => {
+		// Structural wiring check on the controller: updateUI must branch on a
+		// statType key change and call the per-tile stat renderer — there's no
+		// behavioral seam without booting the full newTabTools controller.
+		// eslint-disable-next-line ntt/no-source-grep -- controller wiring, not behavior-substitutable
 		const jsSource = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.js'), 'utf8'
 		);
 		expect(jsSource).toMatch(/keys\.includes\('statType'\)/);
 		expect(jsSource).toMatch(/_renderStatChip/);
-	});
-
-	it('_renderLogoFallback uses setProperty for --ntt-brand instead of string interpolation (§1.1)', () => {
-		expect(fxSource).toContain('setProperty(\'--ntt-brand\'');
-		expect(fxSource).not.toMatch(/`[^`]*\$\{brandColor\}[^`]*`/);
-	});
-
-	it('_renderLogoFallback validates brandColor against hex regex (§1.1)', () => {
-		expect(fxSource).toMatch(/\/\^#\[0-9a-f\]\{3,8\}\$\/i\.test/);
 	});
 });
 
