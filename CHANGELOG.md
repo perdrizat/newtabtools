@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.5] — 2026-06-22
+
+### Changed
+
+- Toolchain upgraded to Node 24 (`.node-version`) and pnpm 11.6.0 (`packageManager`, `engines.pnpm >=11`); pnpm-native settings moved from `.npmrc`/package.json to `pnpm-workspace.yaml`.
+- Dev deps bumped: web-ext 10.4.0, puppeteer-core 25.1.0, @types/node 24.13.2, eslint 10.5.0, @typescript-eslint/{eslint-plugin,parser} 8.61.0, vitest 4.1.8, globals 17.6.0.
+
+### Security
+
+- Closed pre-existing high advisories in transitive test deps via overrides: undici → 7.28.0 (GHSA-vmh5-mc38-953g / -vxpw-j846-p89q / -hm92-r4w5-c3mj, via jsdom) and hono → 4.12.25 (GHSA-88fw-hqm2-52qc, via @modelcontextprotocol/sdk).
+- Supply-chain age guard now actually enforced: `minimum-release-age` was inert under pnpm 10.0.0; reconfigured as `minimumReleaseAge: 10080` (minutes — the old `604800` was seconds) in `pnpm-workspace.yaml`, enforced by pnpm 11, with a scoped `minimumReleaseAgeExclude: [undici]` for the freshly-published fix.
+
+### Removed
+
+- shell-quote `pnpm.overrides` pin — web-ext 10.4.0 (→ fx-runner 1.5.0) ships shell-quote 1.8.4 natively.
+
 ## [2.0.4] — 2026-06-13
 
 ### Fixed
