@@ -30,12 +30,13 @@ NewTab PowerTools replaces Firefox's built-in new tab page with one designed for
 - **Pixel-level layout control.** Pick exact rows and columns, lock a tile aspect ratio (16:9, 4:3, 1:1, 3:4 portrait, or fill viewport), tune opacity, title size, page margins, and grid spacing.
 - **Per-domain filter cap.** Cap how many tiles a single host takes — including subdomain wildcards like `.example.com`. Firefox enforces a hard one-tile-per-domain rule and doesn't expose this.
 - **Per-tile background color.** Native supports a custom image per tile, but not a custom solid color.
+- **Never-capture list.** Exclude any site from auto-thumbnail capture — one click on a tile, or manage the list in the Advanced drawer (exact host, or `.example.com` for subdomains). Adding a host also deletes captures already stored for it. Keep banking, webmail, and intranets out of your tile imagery and backups.
 - **Recently-closed-tabs row.** A dedicated horizontal row of recently closed tabs sits below the grid for one-click restore.
 - **Backup and restore.** Export your tiles, thumbnails, and settings to a single backup file. No Firefox Sync required.
 
 ### Privacy
 
-All your data — tiles, thumbnails, settings — stays on your device in your browser's local storage. The extension has one outbound connection: to the Mozilla wallpapers service for the curated wallpaper catalog. No telemetry, no analytics, no third-party endpoints. Full privacy policy: [PRIVACY.md](https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md).
+All your data — tiles, thumbnails, settings — stays on your device in your browser's local storage. Thumbnail capture never runs in private windows, and a per-site **never-capture list** lets you exclude any host (banking, webmail, intranets) from capture entirely. The extension has one outbound connection: to the Mozilla wallpapers service for the curated wallpaper catalog. No telemetry, no analytics, no third-party endpoints. Full privacy policy: [PRIVACY.md](https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md).
 
 ### About
 
@@ -57,8 +58,9 @@ Source code, issues, and roadmap: [github.com/perdrizat/newtabtools](https://git
 - `tiles`
 - `thumbnails`
 - `productivity`
+- `privacy`
 
-(Optional; AMO lets up to ~10. Keeping to 5 to avoid tag spam.)
+(Optional; AMO lets up to ~10. Keeping the list tight to avoid tag spam.)
 
 ## Support URL
 

@@ -326,6 +326,8 @@ export async function resetTestState(browser: Browser): Promise<void> {
 		}));
 
 		// Reset all prefs in one write + read-back fence.
+		// Also clears neverCaptureHosts so tests that exercise the never-capture
+		// feature start from a known-empty list.
 		await page.evaluate(() => new Promise<void>(resolve => {
 			chrome.storage.local.set({
 				rows: 3, columns: 3, locked: false,
@@ -333,6 +335,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
 				titleSize: 'small', tileAspect: 'fill', spacing: 'small',
 				margin: ['small', 'small', 'small', 'small'],
 				history: true, recent: true, titleBarSearch: true,
+				neverCaptureHosts: [],
 			}, () => {
 				// Fence: chrome.storage serialises operations, so this
 				// get callback fires after all pending sets complete.

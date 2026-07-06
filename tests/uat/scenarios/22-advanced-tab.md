@@ -62,6 +62,73 @@ Use the standard preamble (navigate, `00-initial`). Open the drawer
    ```
    Pass = `true` (row hidden again, still nothing reset).
 
+## Verify — never-capture group (structural)
+
+The never-capture section in the Advanced tab lets the user manage a list of host
+patterns for which the extension will never take automatic screenshots. The group
+is `#options-nevercapture` and mirrors the filter panel's visual language.
+
+6b. **Never-capture group heading and controls are visible.**
+   ```js
+   const group = document.getElementById('options-nevercapture');
+   const input = document.getElementById('options-nevercapture-host');
+   const addBtn = document.getElementById('options-nevercapture-add');
+   return {
+     groupVisible: !!group && group.offsetParent !== null,
+     inputVisible: !!input && input.offsetParent !== null,
+     addBtnVisible: !!addBtn && addBtn.offsetParent !== null,
+   }
+   ```
+   Pass = all three `true`.
+
+6c. **Adding a host via the UI produces a list row with a remove control.**
+   ```js
+   const input = document.getElementById('options-nevercapture-host');
+   const addBtn = document.getElementById('options-nevercapture-add');
+   input.value = 'uat-test.example.com';
+   input.dispatchEvent(new Event('input', {bubbles: true}));
+   addBtn.click();
+   return new Promise(resolve => {
+     setTimeout(() => {
+       const rows = document.querySelectorAll('#options-nevercapture-list .ntt-nevercapture-row');
+       const found = Array.from(rows).find(r => {
+         const span = r.querySelector('span');
+         return span && span.textContent.trim() === 'uat-test.example.com';
+       });
+       resolve(!!(found && found.querySelector('.ntt-nevercapture-remove')));
+     }, 600);
+   });
+   ```
+   Pass = `true` (row appears with a remove control).
+
+6d. **The add-host row is left-aligned to the drawer rhythm (not centered).**
+   The input + Add button must sit flush with the group's left edge, like every
+   other Advanced control — not floating in the centre.
+   ```js
+   const row = document.querySelector('#options-nevercapture .options-row');
+   const group = document.getElementById('options-nevercapture');
+   return {
+     justify: getComputedStyle(row).justifyContent,
+     // input's left edge within ~2px of the group's content-left edge
+     flushLeft: Math.abs(row.getBoundingClientRect().left - group.getBoundingClientRect().left) < 24,
+   }
+   ```
+   Pass = `justify` is `"flex-start"` (or `"start"`) **and** `flushLeft` is `true`.
+
+6e. **The helptext is concise — at most 2 rendered lines.**
+   Long explanatory copy that wraps to 3+ lines reads as clutter in the narrow
+   drawer. Measure the rendered height against the line height.
+   ```js
+   const help = document.querySelector('#options-nevercapture .ntt-form-group-help');
+   const cs = getComputedStyle(help);
+   let lh = parseFloat(cs.lineHeight);
+   if (Number.isNaN(lh)) { lh = parseFloat(cs.fontSize) * 1.2; }
+   const lines = Math.round(help.getBoundingClientRect().height / lh);
+   return { lines, height: Math.round(help.getBoundingClientRect().height), lineHeight: lh };
+   ```
+   Pass = `lines` ≤ 2. (Report the value even on pass, and flag as an observation
+   if it is exactly 2 and visually tight.)
+
 ## Verify — history-tiles filter (structural)
 
 The "Filter…" button toggles a panel that caps how many unpinned (history) tiles a
@@ -105,19 +172,25 @@ domain may show. The panel was opened in assertion 4.
   filter panel specifically: its header, helptext, and add-filter row read
   **left-aligned** to the same rhythm (not centered/floating), the "Filter…" toggle
   shows an open/closed affordance (caret), and filter rows carry a tidy ✕ remove
-  that sits on-system with the steppers. No raw/native form controls survive.
+  that sits on-system with the steppers. The never-capture group reads like its
+  neighbor (the filter group): heading in the same form-group style, a text input
+  and primary Add button in a row, and list rows with a tidy ✕ remove control.
+  No raw/native form controls survive.
 - **Text integrity (i18n):** every label, heading, button, and the filter
   helptext/placeholders are human-readable English. Flag any raw `snake_case`
   message key, blank control, `$1`/`$NAME$`/`__MSG_…__` substitution leftover, or
-  text clipped/overflowing its control.
+  text clipped/overflowing its control. Verify the never-capture heading, helptext,
+  input placeholder, and Add button are all human-readable (not raw i18n keys).
 - Pass = Advanced looks like the same designer as Page; the filter panel is
-  left-aligned and on-system (not the old centered layout); no native controls;
-  clear button hierarchy.
+  left-aligned and on-system (not the old centered layout); the never-capture group
+  matches the filter group's visual rhythm; no native controls; clear button hierarchy.
 
 ## Output
 
-- `report.json` — assertions 1–9 plus the visual verdict.
+- `report.json` — assertions 1–9 (including 6b–6e) plus the visual verdict.
 - `summary.md` — lead with the verdict; describe the history toggle, the button
   hierarchy, the steppers/table, the filter panel (toggle affordance, ✕ remove,
-  left-aligned design language), and that Reset/Restore gate behind an inline
+  left-aligned design language), the never-capture group (heading/input/Add/list
+  row with ✕ remove, **left-aligned add-row and ≤2-line helptext**, visually
+  consistent with the filter group), and that Reset/Restore gate behind an inline
   confirm (verified non-destructively).

@@ -356,9 +356,6 @@
 	"tile_edit_url": {
 		"message": "URL ändern"
 	},
-	"tile_refresh_thumbnail": {
-		"message": "Thumbnail aktualisieren"
-	},
 	"tile_header": {
 		"message": "Kacheln:"
 	},

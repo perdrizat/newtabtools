@@ -64,6 +64,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 	let mockTiles: Record<string, ReturnType<typeof vi.fn> | unknown>;
 	let mockStorageLocal: Record<string, ReturnType<typeof vi.fn>>;
 	let mockDownloads: Record<string, ReturnType<typeof vi.fn>>;
+	let mockPurgeNeverCaptureHost: ReturnType<typeof vi.fn>;
 
 	beforeAll(() => {
 		// --- Mock zip library (modern v2.x Promise-based API) ---
@@ -128,6 +129,24 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 		}
 
+		// --- Stub Filters (prefs.js is not loaded by the harness) ---
+		(globalThis as any).Filters = {
+			normalizeHost(input: unknown): string {
+				let s = String(input == null ? '' : input).trim();
+				if (!s) { return ''; }
+				if (/:\/\//.test(s)) {
+					try { s = new URL(s).host; } catch (e) { /* fall through */ }
+				}
+				s = s.toLowerCase().replace(/^\*\./, '.').replace(/\/.*$/, '');
+				const lead = s.startsWith('.') ? '.' : '';
+				return lead + s.replace(/^\.+/, '').replace(/\.+$/, '');
+			},
+		};
+
+		// --- Stub purgeNeverCaptureHost (background.js is the real owner) ---
+		mockPurgeNeverCaptureHost = vi.fn().mockResolvedValue({ thumbnails: 0, tiles: 0 });
+		(globalThis as any).purgeNeverCaptureHost = mockPurgeNeverCaptureHost;
+
 		// Save the default ZipReader for restoration in beforeEach.
 		DefaultZipReader = (globalThis as any).zip.ZipReader;
 
@@ -154,6 +173,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		mockStorageLocal.get.mockClear();
 		mockStorageLocal.set.mockClear();
 		mockDownloads.download.mockClear();
+		mockPurgeNeverCaptureHost.mockClear();
 	});
 
 	// ======================== makeZip ========================
@@ -537,6 +557,84 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 	});
 
 	// ======================== Helper ========================
+
+	// ======================== readZip — neverCaptureHosts ========================
+
+	describe('readZip — neverCaptureHosts restore', () => {
+		it('validates and normalizes neverCaptureHosts entries, drops bad ones', async () => {
+			// 42 (non-string), 'javascript:alert(1)' (bad pattern), '' (empty),
+			// 'Sub.Example.COM' (uppercased) are all sanitized.
+			// Valid entries: 'example.com', '.corp.example', 'sub.example.com' (normalized).
+			const prefs = {
+				neverCaptureHosts: ['example.com', '.corp.example', 42, 'javascript:alert(1)', '', 'Sub.Example.COM'],
+			};
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs).toHaveProperty('neverCaptureHosts');
+			expect(storedPrefs.neverCaptureHosts).toEqual(
+				expect.arrayContaining(['example.com', '.corp.example', 'sub.example.com']),
+			);
+			expect(storedPrefs.neverCaptureHosts).toHaveLength(3);
+		});
+
+		it('drops the neverCaptureHosts key when the value is not an array (object)', async () => {
+			const prefs = { theme: 'dark', neverCaptureHosts: {} };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.theme).toBe('dark');
+			expect(storedPrefs).not.toHaveProperty('neverCaptureHosts');
+		});
+
+		it('drops the neverCaptureHosts key when the value is a string', async () => {
+			const prefs = { neverCaptureHosts: 'x' };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs).not.toHaveProperty('neverCaptureHosts');
+		});
+
+		it('calls purgeNeverCaptureHost once per stored entry after storage.set', async () => {
+			const prefs = { neverCaptureHosts: ['example.com', '.corp.example'] };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			// storage.set must have been called before any purge
+			expect(mockStorageLocal.set).toHaveBeenCalledTimes(1);
+			expect(mockPurgeNeverCaptureHost).toHaveBeenCalledTimes(2);
+			expect(mockPurgeNeverCaptureHost).toHaveBeenCalledWith('example.com');
+			expect(mockPurgeNeverCaptureHost).toHaveBeenCalledWith('.corp.example');
+		});
+
+		it('does not call purgeNeverCaptureHost when neverCaptureHosts is absent from backup', async () => {
+			const prefs = { theme: 'light' };
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify(prefs)),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs).not.toHaveProperty('neverCaptureHosts');
+			expect(mockPurgeNeverCaptureHost).not.toHaveBeenCalled();
+		});
+	});
 
 	// Store the default ZipReader class for restoration.
 	let DefaultZipReader: any;

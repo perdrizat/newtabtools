@@ -143,9 +143,20 @@ function renderSummaryMd(report) {
 	return lines.join('\n') + '\n';
 }
 
-async function waitHealthy(timeoutMs) {
+// `isDead` returns the daemon's {code, signal} once it has exited, else null.
+// Watching it lets us abort the moment the daemon crashes on startup (e.g.
+// Firefox/geckodriver can't launch) instead of polling a dead process for the
+// full timeout — the difference between a ~1s clear failure and a 300s hang.
+async function waitHealthy(timeoutMs, isDead) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
+		const dead = isDead ? isDead() : null;
+		if (dead) {
+			throw new Error(
+				`browser daemon exited before becoming healthy (code ${dead.code}, signal ${dead.signal}).\n` +
+				'Its output is above (stdio is inherited). Almost always Firefox/geckodriver could not launch — ' +
+				'run `pnpm test:uat:preflight` to diagnose.');
+		}
 		try {
 			const h = await daemonCall('/health');
 			if (h.ready) { return h; }
@@ -229,6 +240,10 @@ const daemon = spawn('node', [DAEMON], {
 	env: { ...process.env, UAT_DAEMON_PORT: String(PORT), ARTIFACTS_DIR: RUN_DIR },
 });
 
+// Record an early exit so waitHealthy can fail fast instead of polling a corpse.
+let daemonExit = null;
+daemon.on('exit', (code, signal) => { daemonExit = { code, signal }; });
+
 let daemonStopped = false;
 async function stopDaemon() {
 	if (daemonStopped) { return; }
@@ -246,7 +261,7 @@ const results = [];
 let anyFailed = false;
 
 try {
-	await waitHealthy(HEALTH_TIMEOUT_MS);
+	await waitHealthy(HEALTH_TIMEOUT_MS, () => daemonExit);
 	console.log('runner: daemon healthy.\n');
 
 	// ─── 4. run each scenario ─────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 Verify the main tile elements work as designed (DESIGNv2_REVIEW §3): the bottom
 title overlay keeps titles legible, the quick-actions affordance is a kebab at
-rest that expands to a 4-action row on hover (Edit URL · Reload · Pin/Unpin ·
+rest that expands to a 4-action row on hover (Edit URL · Never-capture · Pin/Unpin ·
 Remove, no "open in new tab"), the Remove (✕) is the lone destructive action, the
 pinned stripe shows when a tile is pinned, and a tile shows at most one stat
 (off by default).
@@ -39,8 +39,10 @@ CSS `:hover`).
      };
    })()
    ```
-   Pass = `actions` equals `["edit","refresh","pin","remove"]` (exactly — no
-   `"open"`) and `rowOpacity` is `"1"`.
+   Pass = `actions` equals `["edit","never-capture","pin","remove"]` (exactly — no
+   `"open"`, no `"refresh"`) and `rowOpacity` is `"1"`. The second action is the
+   never-capture toggle (crossed-out camera icon); the old Reload/refresh action
+   was removed.
 
 3. **Remove (✕) carries the danger colour.** Still hovered:
    ```js

@@ -175,6 +175,8 @@ Thumbnails of authenticated pages (banking, webmail, intranet) are persisted in 
 - Consider a warning in the export UI that backup zips contain cached page captures.
 
 > **Decision (2026-06-22).** The **"never capture" list** is the one we'll build — tracked as GH issue [#1](https://github.com/perdrizat/newtabtools/issues/1). The other two (AMO-description disclosure; export-UI warning) are **won't-do** — out of scope, not planned.
+>
+> **Delivered (2026-07-05, v2.0.7).** The never-capture list shipped: per-tile toggle + Advanced-drawer editor, capture-pipeline guards at every write path, purge-on-add, and backup/restore round-trip. It does **not** default to a preset domain list (users add their own). The restore allow-list widening is acknowledged in [`audit/2026-07-05-never-capture-restore-allowlist.md`](2026-07-05-never-capture-restore-allowlist.md). Closes #1.
 
 ### 6.2 `<all_urls>` permission justification
 

@@ -81,6 +81,13 @@ export function mountSite(
 		(globalThis as any).Prefs = (globalThis as any).Prefs || { statType: 'none' };
 		(globalThis as any).Tiles = (globalThis as any).Tiles || { isPinned: vi.fn(() => false) };
 		(globalThis as any).Blocked = (globalThis as any).Blocked || { _list: [] };
+		(globalThis as any).NeverCapture = (globalThis as any).NeverCapture || {
+			matches: () => false,
+			matchingEntry: () => undefined,
+			add: vi.fn().mockResolvedValue(undefined),
+			remove: vi.fn().mockResolvedValue(undefined),
+			getList: () => [],
+		};
 		(globalThis as any).newTabTools = (globalThis as any).newTabTools || {
 			getString: (name: string) => name,
 			isValidURL: (url: string) => {

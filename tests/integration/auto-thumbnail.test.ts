@@ -158,7 +158,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			_cache: ['https://example.com'],
 		};
 
-		// --- Background / Prefs / Blocked / Filters ---
+		// --- Background / Prefs / Blocked / Filters / NeverCapture ---
 		(globalThis as any).Background = {
 			getBackground: vi.fn().mockResolvedValue({ data: 'bg-data' }),
 			setBackground: vi.fn().mockResolvedValue(undefined),
@@ -171,6 +171,29 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		};
 		(globalThis as any).Blocked = { _list: [] };
 		(globalThis as any).Filters = { _list: Object.create(null) };
+		// NeverCapture default: empty list (no URLs opted-out). Tests that need
+		// a listed host mutate _list directly or stub .matches in beforeEach.
+		(globalThis as any).NeverCapture = {
+			_list: [] as string[],
+			matches(url: string) {
+				try {
+					const host = new URL(url).host;
+					return this.matchingEntry(host) !== undefined;
+				} catch { return false; }
+			},
+			matchingEntry(host: string) {
+				const dots = this._list.filter((e: string) => e.startsWith('.'));
+				return this._list.includes(host) ? host : dots.find(
+					(e: string) => host === e.substring(1) || host.endsWith(e)
+				);
+			},
+			hostMatchesPattern(host: string, pattern: string) {
+				if (pattern.startsWith('.')) {
+					return host === pattern.substring(1) || host.endsWith(pattern);
+				}
+				return host === pattern;
+			},
+		};
 		(globalThis as any).makeZip = vi.fn().mockResolvedValue(new Blob(['zip-data']));
 		(globalThis as any).readZip = vi.fn().mockResolvedValue(undefined);
 
@@ -612,6 +635,67 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		expect(storedObj.url).toBe('https://example.com');
 		expect(storedObj.image).toBeInstanceOf(Blob);
 	});
+
+	// --- NeverCapture guards ---
+
+	describe('NeverCapture guards', () => {
+		beforeEach(() => {
+			(globalThis as any).chrome.tabs.captureVisibleTab.mockClear();
+			thumbnailStore.put.mockClear();
+			(mockDB.transaction as ReturnType<typeof vi.fn>).mockClear();
+			getCaptureSessions().clear();
+			getPendingCaptures().clear();
+			getNetworkIdleWatchers().clear();
+			// Reset NeverCapture to empty before each test
+			(globalThis as any).NeverCapture._list = [];
+		});
+
+		it('Thumbnails.capture message for a listed host — startCaptureSession bails, captureVisibleTab never called', async () => {
+			// List the example.com host
+			(globalThis as any).NeverCapture._list = ['example.com'];
+			const sender = {
+				id: EXTENSION_ID,
+				tab: { id: 42, windowId: 1, url: 'https://example.com' },
+			};
+			onMessageListener({ name: 'Thumbnails.capture' }, sender, vi.fn());
+			await vi.advanceTimersByTimeAsync(0);
+			// Guard fires: no capture session started, no captureVisibleTab call
+			expect(captureCallCount()).toBe(0);
+			expect(getCaptureSessions().has(42)).toBe(false);
+		});
+
+		it('Thumbnails.capture for an unlisted host still starts a session', async () => {
+			(globalThis as any).NeverCapture._list = ['other.com'];
+			const sender = {
+				id: EXTENSION_ID,
+				tab: { id: 42, windowId: 1, url: 'https://example.com' },
+			};
+			onMessageListener({ name: 'Thumbnails.capture' }, sender, vi.fn());
+			await vi.advanceTimersByTimeAsync(0);
+			expect(captureCallCount()).toBe(1);
+		});
+
+		it('webNavigation.onCompleted for a listed cached URL — no capture session, no pendingCaptures entry (active tab)', async () => {
+			(globalThis as any).NeverCapture._list = ['example.com'];
+			// example.com is in the Tiles cache (see beforeAll setup)
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(captureCallCount()).toBe(0);
+			expect(getCaptureSessions().has(42)).toBe(false);
+			expect(getPendingCaptures().has(42)).toBe(false);
+		});
+
+		it('webNavigation.onCompleted for a listed cached URL — no pendingCaptures entry (inactive tab)', async () => {
+			(globalThis as any).NeverCapture._list = ['example.com'];
+			(globalThis as any).chrome.tabs.get.mockImplementationOnce(
+				(_tabId: number, cb: Function) => cb({ active: false, windowId: 1, incognito: false })
+			);
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0);
+			expect(captureCallCount()).toBe(0);
+			expect(getPendingCaptures().has(42)).toBe(false);
+		});
+	});
 });
 
 // ===========================================================================
@@ -632,8 +716,10 @@ describe('Thumbnail action buttons — fx-newTab.js (behavioral)', () => {
 		expect(fxSource).toContain('data-action');
 	});
 
-	it('refresh action sends Thumbnails.capture message', () => {
-		expect(fxSource).toContain('Thumbnails.capture');
+	it('never-capture action sends Thumbnails.purgeHost message', () => {
+		// The refresh action (Thumbnails.capture) was removed with the refresh
+		// button; behavioral coverage for the purge lives in tile-redesign.test.ts.
+		expect(fxSource).toContain('Thumbnails.purgeHost');
 	});
 });
 

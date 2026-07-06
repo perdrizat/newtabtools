@@ -81,6 +81,10 @@ describe('resetAllSettings — destructive factory reset', () => {
 		};
 		(globalThis as any).Blocked = { _list: ['https://blocked.example/'], _saveList: vi.fn() };
 		(globalThis as any).Filters = { _list: { 'example.com': 2 }, _saveList: vi.fn() };
+		(globalThis as any).NeverCapture = {
+			_list: ['example.com'],
+			clear: vi.fn(function(this: any) { this._list = []; return Promise.resolve(); }),
+		};
 	});
 
 	it('runs without a window.confirm prompt — the inline Confirm row gates it now (§7)', async () => {
@@ -119,11 +123,16 @@ describe('resetAllSettings — destructive factory reset', () => {
 		);
 	});
 
-	it('clears in-memory Blocked + Filters, then chrome.storage.local, then reloads', async () => {
+	it('clears in-memory Blocked + Filters + NeverCapture, then chrome.storage.local, then reloads', async () => {
 		window.confirm = vi.fn().mockReturnValue(true);
 		await harness.resetAllSettings();
 		expect((globalThis as any).Blocked._list).toEqual([]);
 		expect((globalThis as any).Filters._list).toEqual({});
+		// Behavioral coverage for the resetAllSettings → NeverCapture.clear()
+		// wiring: the real reset body runs clear() and empties the list (not a
+		// source-string grep).
+		expect((globalThis as any).NeverCapture.clear).toHaveBeenCalledTimes(1);
+		expect((globalThis as any).NeverCapture._list).toEqual([]);
 		expect(storageClear).toHaveBeenCalledTimes(1);
 		expect(reloadSpy).toHaveBeenCalledTimes(1);
 	});

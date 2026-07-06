@@ -85,6 +85,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 	let mockMakeZip: ReturnType<typeof vi.fn>;
 	let mockReadZip: ReturnType<typeof vi.fn>;
 	let thumbnailStore: Record<string, ReturnType<typeof vi.fn>>;
+	let tilesStore: Record<string, ReturnType<typeof vi.fn>>;
 	let mockDB: Record<string, unknown>;
 
 	// Senders
@@ -124,9 +125,32 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			columns: 3,
 		};
 
-		// --- Blocked / Filters (referenced by prefs.js globals comment) ---
+		// --- Blocked / Filters / NeverCapture ---
 		(globalThis as any).Blocked = { _list: [] };
 		(globalThis as any).Filters = { _list: Object.create(null) };
+		// NeverCapture default: list is empty (no URLs blocked from capture).
+		// Tests that need a listed host set NeverCapture._list or stub .matches.
+		(globalThis as any).NeverCapture = {
+			_list: [] as string[],
+			matches(url: string) {
+				try {
+					const host = new URL(url).host;
+					return this.matchingEntry(host) !== undefined;
+				} catch { return false; }
+			},
+			matchingEntry(host: string) {
+				const dots = this._list.filter((e: string) => e.startsWith('.'));
+				return this._list.includes(host) ? host : dots.find(
+					(e: string) => host === e.substring(1) || host.endsWith(e)
+				);
+			},
+			hostMatchesPattern(host: string, pattern: string) {
+				if (pattern.startsWith('.')) {
+					return host === pattern.substring(1) || host.endsWith(pattern);
+				}
+				return host === pattern;
+			},
+		};
 
 		// --- makeZip / readZip ---
 		mockMakeZip = vi.fn().mockResolvedValue(new Blob(['zip-data']));
@@ -144,12 +168,13 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			openCursor: vi.fn(() => mockCursorIteration([])),
 			index: vi.fn(() => ({ openCursor: vi.fn(() => mockCursorIteration([])) })),
 		};
+		tilesStore = {
+			put: vi.fn(), get: vi.fn(), getAll: vi.fn(),
+			openCursor: vi.fn(() => mockCursorIteration([])), createIndex: vi.fn(),
+			indexNames: { contains: () => true } as unknown as ReturnType<typeof vi.fn>,
+		};
 		const stores: Record<string, unknown> = {
-			tiles: {
-				put: vi.fn(), get: vi.fn(), getAll: vi.fn(),
-				openCursor: vi.fn(), createIndex: vi.fn(),
-				indexNames: { contains: () => true },
-			},
+			tiles: tilesStore,
 			thumbnails: thumbnailStore,
 			background: { put: vi.fn(), get: vi.fn() },
 		};
@@ -515,6 +540,166 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			const result = listener({ name: undefined }, validSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
+		});
+	});
+
+	// ======================== THUMBNAILS.SAVE — NeverCapture guard ========================
+
+	describe('Thumbnails.save — NeverCapture guard', () => {
+		beforeEach(() => {
+			(mockDB.transaction as ReturnType<typeof vi.fn>).mockClear();
+			thumbnailStore.put.mockClear();
+			// Reset NeverCapture list
+			(globalThis as any).NeverCapture._list = [];
+		});
+
+		it('skips IDB write when the url host is in the never-capture list', () => {
+			(globalThis as any).NeverCapture._list = ['f.com'];
+			const result = listener(
+				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(false);
+			expect(thumbnailStore.put).not.toHaveBeenCalled();
+		});
+
+		it('still writes when the url host is NOT in the never-capture list', () => {
+			(globalThis as any).NeverCapture._list = ['other.com'];
+			const result = listener(
+				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(false);
+			expect(thumbnailStore.put).toHaveBeenCalledWith(
+				expect.objectContaining({ url: 'https://f.com' }),
+			);
+		});
+	});
+
+	// ======================== THUMBNAILS.PURGEHOST ========================
+
+	describe('Thumbnails.purgeHost', () => {
+		beforeEach(() => {
+			(mockDB.transaction as ReturnType<typeof vi.fn>).mockClear();
+			thumbnailStore.put.mockClear();
+			thumbnailStore.openCursor.mockClear();
+			tilesStore.openCursor.mockClear();
+			// Reset NeverCapture list
+			(globalThis as any).NeverCapture._list = [];
+		});
+
+		it('invalid host (missing) → responds null, opens no cursor', async () => {
+			const result = listener(
+				{ name: 'Thumbnails.purgeHost' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+			expect(thumbnailStore.openCursor).not.toHaveBeenCalled();
+		});
+
+		it('empty host string → responds null, opens no cursor', async () => {
+			const result = listener(
+				{ name: 'Thumbnails.purgeHost', host: '' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+			expect(thumbnailStore.openCursor).not.toHaveBeenCalled();
+		});
+
+		it('non-string host → responds null', async () => {
+			const result = listener(
+				{ name: 'Thumbnails.purgeHost', host: 42 },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+		});
+
+		it('deletes matching thumbnail records and keeps non-matching', async () => {
+			const thumbEntries = [
+				{ url: 'https://example.com/a', image: new Blob(['a']) },
+				{ url: 'https://sub.example.com/b', image: new Blob(['b']) },
+				{ url: 'https://other.com/', image: new Blob(['c']) },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(thumbEntries));
+			// Tiles pass: empty
+			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
+
+			const result = listener(
+				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+			const response = sendResponse.mock.calls[0][0];
+			// 2 matching thumbnails deleted
+			expect(response.thumbnails).toBe(2);
+			expect(response.tiles).toBe(0);
+		});
+
+		it('tiles pass: removes image+imageIsThumbnail from matching tiles with auto-thumbnail', async () => {
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
+			const tileEntries = [
+				{ url: 'https://example.com/a', image: new Blob(['img']), imageIsThumbnail: true },
+				{ url: 'https://other.com/', image: new Blob(['custom']) }, // no imageIsThumbnail
+				{ url: 'https://example.com/b', image: new Blob(['img2']), imageIsThumbnail: true },
+			];
+			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration(tileEntries));
+
+			const result = listener(
+				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+			const response = sendResponse.mock.calls[0][0];
+			expect(response.thumbnails).toBe(0);
+			// 2 tiles with imageIsThumbnail updated (image fields stripped)
+			expect(response.tiles).toBe(2);
+		});
+
+		it('tiles with custom image (no imageIsThumbnail) are untouched', async () => {
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
+			const tileEntries = [
+				{ url: 'https://example.com/page', image: new Blob(['custom']) },
+				// No imageIsThumbnail → must NOT be updated
+			];
+			const cursorReq = mockCursorIteration(tileEntries);
+			tilesStore.openCursor.mockReturnValueOnce(cursorReq);
+
+			listener(
+				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
+				validSender, sendResponse,
+			);
+
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+			const response = sendResponse.mock.calls[0][0];
+			// Custom image → not counted as purged
+			expect(response.tiles).toBe(0);
+		});
+
+		it('responds with {thumbnails, tiles} counts on success', async () => {
+			const thumbEntries = [
+				{ url: 'https://example.com/x', image: new Blob(['x']) },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(thumbEntries));
+			const tileEntries = [
+				{ url: 'https://example.com/y', image: new Blob(['y']), imageIsThumbnail: true },
+			];
+			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration(tileEntries));
+
+			listener(
+				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
+				validSender, sendResponse,
+			);
+
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+			const response = sendResponse.mock.calls[0][0];
+			expect(response).toMatchObject({ thumbnails: 1, tiles: 1 });
 		});
 	});
 });

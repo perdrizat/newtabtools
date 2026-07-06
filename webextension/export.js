@@ -3,7 +3,7 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported makeZip, readZip */
-/* globals Background, Tiles, zip */
+/* globals Background, Filters, Tiles, purgeNeverCaptureHost, zip */
 
 zip.configure({ useWebWorkers: false });
 
@@ -70,6 +70,12 @@ async function readZip(file) {
 	let prefs = await getAsJSON('prefs.json');
 	let tiles = await getAsJSON('tiles.json');
 
+	// Hosts restored into the never-capture list, captured here so the purge can
+	// run AFTER tiles are restored (below) — a backup's own tiles may carry
+	// auto-captured images for a listed host, so purging before the tile restore
+	// would leave those re-inserted images behind.
+	let restoredNeverCaptureHosts = [];
+
 	let backgroundFile = entries.find(e => e.filename == 'background');
 	if (backgroundFile) {
 		Background.setBackground(await getAsBlob(backgroundFile));
@@ -84,7 +90,8 @@ async function readZip(file) {
 			'titleBarSearch',
 			'actionIconSize', 'tileActions', 'tileRadius',
 			'locked', 'history', 'recent', 'blocked', 'filters',
-			'backgroundUrl', 'backgroundPosition', 'backgroundColor'];
+			'backgroundUrl', 'backgroundPosition', 'backgroundColor',
+			'neverCaptureHosts'];
 		let filtered = {};
 		for (let k of allowedKeys) {
 			if (k in prefs) {
@@ -104,10 +111,44 @@ async function readZip(file) {
 				delete filtered.backgroundUrl;
 			}
 		}
+		// `neverCaptureHosts` is a list of host patterns the extension must never
+		// screenshot. Validate at this data boundary: must be an Array; each entry
+		// is normalised via Filters.normalizeHost (lowercases, strips scheme/path)
+		// with any :port stripped (the canonical entry is a port-less hostname —
+		// matching keys on URL.hostname), then matched against the allowed
+		// host-pattern shape (optional leading dot, then label-dot-label…).
+		// Non-strings, empty results, and anything that looks like a URL scheme or
+		// injection payload are dropped. The list is deduped before storage.
+		if ('neverCaptureHosts' in filtered) {
+			if (!Array.isArray(filtered.neverCaptureHosts)) {
+				delete filtered.neverCaptureHosts;
+			} else {
+				let safeHostPattern = /^\.?[a-z0-9-]+(\.[a-z0-9-]+)*$/;
+				let seen = new Set();
+				let cleaned = [];
+				for (let entry of filtered.neverCaptureHosts) {
+					if (typeof entry !== 'string') {
+						continue;
+					}
+					let normalized = Filters.normalizeHost(entry).replace(/:\d+$/, '');
+					if (normalized && safeHostPattern.test(normalized) && !seen.has(normalized)) {
+						seen.add(normalized);
+						cleaned.push(normalized);
+					}
+				}
+				filtered.neverCaptureHosts = cleaned;
+			}
+		}
 		await chrome.storage.local.set(filtered);
+		restoredNeverCaptureHosts = filtered.neverCaptureHosts || [];
 	}
 
 	if (!tiles) {
+		// No tiles to restore, but a prefs-only backup can still have added
+		// never-capture hosts — purge their pre-existing stored captures.
+		for (let host of restoredNeverCaptureHosts) {
+			await purgeNeverCaptureHost(host);
+		}
 		return;
 	}
 
@@ -138,6 +179,14 @@ async function readZip(file) {
 			delete t.backgroundColor;
 		}
 		await Tiles.putTile(t);
+	}
+
+	// Purge captured screenshots for restored never-capture hosts. Runs AFTER the
+	// tile restore so it also strips auto-captured images (imageIsThumbnail) that
+	// the backup's own tiles just re-inserted — the never-capture invariant must
+	// hold even for imagery captured before this backup was made.
+	for (let host of restoredNeverCaptureHosts) {
+		await purgeNeverCaptureHost(host);
 	}
 
 	for (let v of views) {

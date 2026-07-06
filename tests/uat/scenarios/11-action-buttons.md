@@ -50,11 +50,11 @@ then assert (each as a single `return`-ing expression):
    });
    ```
    must be `true`.
-6. **The destructive ✕ is the standout filled button.** While hovered:
+6. **The destructive X is the standout filled button.** While hovered:
    ```
    const cell = document.querySelector('.newtab-cell:nth-child(1) .newtab-site');
    const x = cell.querySelector('.ntt-action-btn[data-action="remove"]');
-   const other = cell.querySelector('.ntt-action-btn[data-action="edit"], .ntt-action-btn[data-action="pin"], .ntt-action-btn[data-action="refresh"]');
+   const other = cell.querySelector('.ntt-action-btn[data-action="edit"], .ntt-action-btn[data-action="never-capture"], .ntt-action-btn[data-action="pin"]');
    const cs = getComputedStyle(x), co = getComputedStyle(other);
    return {
      filled: cs.backgroundColor !== co.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)',
@@ -65,20 +65,65 @@ then assert (each as a single `return`-ing expression):
    Pass = `filled` true (solid alarm-red fill, unlike the neutral trio), `larger`
    true (~2px bigger), `separators` true (the white ring + drop shadow box-shadow).
 
+## Verify — never-capture toggle (structural)
+
+Hover the tile. The action row now shows four buttons: edit, never-capture, pin,
+and remove (no refresh button). Verify the never-capture toggle:
+
+7. **Never-capture button present with camera-off icon at rest (host not listed):**
+   ```
+   const btn = document.querySelector('.newtab-cell:nth-child(1) .ntt-action-btn[data-action="never-capture"]');
+   return btn ? btn.getAttribute('data-icon') : null;
+   ```
+   Pass = `'camera-off'`.
+8. **Clicking never-capture flips icon to camera and adds host to storage:**
+   ```
+   const site = document.querySelector('.newtab-cell:nth-child(1) .newtab-site');
+   const btn = site.querySelector('.ntt-action-btn[data-action="never-capture"]');
+   if (btn) { btn.click(); }
+   return new Promise(resolve => {
+     setTimeout(() => {
+       chrome.storage.local.get('neverCaptureHosts', result => {
+         const list = result.neverCaptureHosts || [];
+         resolve({ icon: btn.getAttribute('data-icon'), hasHost: list.length > 0 });
+       });
+     }, 800);
+   });
+   ```
+   Pass = `icon` is `'camera'` and `hasHost` is `true`.
+9. **Clicking again reverts icon to camera-off and clears the host:**
+   Click the never-capture button again, then:
+   ```
+   const btn = document.querySelector('.newtab-cell:nth-child(1) .ntt-action-btn[data-action="never-capture"]');
+   if (btn) { btn.click(); }
+   return new Promise(resolve => {
+     setTimeout(() => {
+       chrome.storage.local.get('neverCaptureHosts', result => {
+         const list = result.neverCaptureHosts || [];
+         resolve({ icon: btn.getAttribute('data-icon'), listEmpty: list.length === 0 });
+       });
+     }, 800);
+   });
+   ```
+   Pass = `icon` is `'camera-off'` and `listEmpty` is `true`.
+
 ## Evidence + visual judgment
 
 - Take a `02-hover` screenshot while the tile is hovered. Read it inline and judge:
   the action buttons are visible along the top edge of the hovered tile, the tile's
   title is still fully readable at the bottom, and the buttons are a small overlay
-  rather than a full-tile cover. **The ✕ reads as a solid alarm-red button with a
+  rather than a full-tile cover. **The X reads as a solid alarm-red button with a
   white icon — clearly distinct from the copper accent — standing out from the
-  neutral edit/refresh/pin trio (which sit on a small dark scrim); the ✕ stays
-  legible whatever the thumbnail behind it.** Pass = action row visible, title
-  legible, no large-area occlusion, and the ✕ is the obvious destructive control.
+  neutral edit/never-capture/pin trio (which sit on a small dark scrim); the X stays
+  legible whatever the thumbnail behind it. The never-capture button shows a
+  camera-with-off-slash icon at rest (host not listed) and a plain camera icon when
+  active (host listed).** Pass = action row visible, title legible, no large-area
+  occlusion, and the X is the obvious destructive control.
 
 ## Output
 
-- `report.json` — the seven structural assertions plus the visual verdict.
+- `report.json` — the nine structural assertions plus the visual verdict.
 - `summary.md` — lead with the verdict, then describe the hover state: where the
-  action row sits, whether it occludes the title, and whether the ✕ reads as the
-  standout destructive control (filled alarm-red, ring + shadow) vs the neutral trio.
+  action row sits, whether it occludes the title, whether the X reads as the
+  standout destructive control (filled alarm-red, ring + shadow) vs the neutral trio,
+  and that the never-capture toggle behaves as described (icon flips, storage updated).

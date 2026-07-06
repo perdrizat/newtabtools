@@ -1635,7 +1635,8 @@ svg {
  * left edge than centred under their description text. */
 #options-export .options-row,
 #options-reset-group .options-row,
-#options-about .options-row {
+#options-about .options-row,
+#options-nevercapture .options-row {
 	justify-content: flex-start;
 }
 .options-row[hidden] {

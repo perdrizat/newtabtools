@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.7] — 2026-07-06
+
+### Added
+
+- Never-capture privacy list (GH #1): listed hosts are never screenshotted; per-tile camera toggle + Advanced-drawer host editor; adding a host purges its stored captures (`Thumbnails.purgeHost`).
+- Capture-pipeline never-capture guards at every write path (`startCaptureSession`, `onCompleted`, `Thumbnails.save`, `pickAndStore`); `NeverCapture` model reuses the filter-row host semantics.
+- Backup restore carries `neverCaptureHosts` (validated, normalized, purged per entry after tiles restore) — restore allow-list grew; boundary acknowledged in `audit/2026-07-05-never-capture-restore-allowlist.md`.
+- Fast/E2E/UAT coverage for the never-capture feature (new `never-capture*.test.ts` files; scenarios 11 + 22 updated).
+
+### Changed
+
+- Docs: README, PRIVACY (new "Controlling thumbnail capture" section, last-updated 2026-07-05), and AMO listing/reviewer notes cover the never-capture list; README dev prereqs corrected to Node ≥24 / pnpm ≥11.
+- Never-capture Advanced UI polish: shorter (≤2-line) helptext and a left-aligned add-host row; UAT scenario 22 now asserts both.
+- Test harness fails fast on a bad Firefox env: UAT preflight adds a real geckodriver+Firefox launch handshake (catches the snap-geckodriver/wrong-binary class in ~1.5s instead of a 300s daemon hang), the UAT runner aborts the health-wait the moment the daemon exits, and `run_esr_tests.sh` validates the ESR binary up front and aborts the port-wait if web-ext dies. Both tiers honor a `$FIREFOX_ESR_BIN`/`$FIREFOX_BIN` override.
+
+### Removed
+
+- Per-tile Refresh action button; its on-demand title-refresh-from-history had no general replacement (titles still refresh on Set-URL and first-pin). Toolbar-popup capture unchanged.
+
 ## [2.0.6] — 2026-06-23
 
 ### Changed

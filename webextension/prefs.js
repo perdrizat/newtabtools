@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported Prefs, Blocked, Filters */
+/* exported Prefs, Blocked, Filters, NeverCapture */
 /* globals Grid, newTabTools, Updater */
 
 var Prefs = {
@@ -153,6 +153,19 @@ var Prefs = {
 		if ('filters' in prefs && typeof prefs.filters == 'object') {
 			Filters._list = prefs.filters;
 		}
+		// Re-sync whenever the key is present in this change set. A removal
+		// (newValue null/undefined, e.g. a storage reset) clears the in-memory
+		// list so it stops suppressing captures the user no longer opted out of;
+		// a present-but-corrupt (non-array) value is ignored, leaving the list
+		// unchanged.
+		if ('neverCaptureHosts' in prefs) {
+			let value = prefs.neverCaptureHosts;
+			if (Array.isArray(value)) {
+				NeverCapture._list = value.filter(h => typeof h === 'string' && h.length > 0);
+			} else if (value == null) {
+				NeverCapture._list = [];
+			}
+		}
 		if ('version' in prefs && typeof prefs.version == 'number' || typeof prefs.version == 'string') {
 			this._version = prefs.version;
 		}
@@ -268,4 +281,143 @@ var Filters = {
 		this._list = Object.create(null);
 		this._saveList();
 	}
+};
+
+/**
+ * NeverCapture — per-host opt-out list for auto-thumbnail capture.
+ *
+ * Entry format mirrors Tiles._hostFilteredOut:
+ *   'example.com'  — exact host match only
+ *   '.example.com' — matches the apex host AND any subdomain
+ *
+ * The list is persisted under the storage key 'neverCaptureHosts'.
+ */
+var NeverCapture = {
+	/** @type {string[]} */
+	_list: [],
+
+	/**
+	 * Persist the current list to chrome.storage.local.
+	 * @returns {Promise<void>}
+	 */
+	_saveList() {
+		return new Promise(resolve => {
+			chrome.storage.local.set({ 'neverCaptureHosts': this._list }, resolve);
+		});
+	},
+
+	/**
+	 * Canonicalise user input into a port-less host pattern. Runs
+	 * Filters.normalizeHost (trims, lowercases, extracts host from a pasted URL,
+	 * maps `*.x.com` → `.x.com`) then strips any trailing `:port` — the canonical
+	 * entry is a bare hostname, matching how matches() keys on URL.hostname.
+	 * @param {string} input
+	 * @returns {string}
+	 */
+	_normalize(input) {
+		return Filters.normalizeHost(input).replace(/:\d+$/, '');
+	},
+
+	/**
+	 * Return a shallow copy of the host-pattern list.
+	 * Callers may mutate the copy freely without affecting internal state.
+	 * @returns {string[]}
+	 */
+	getList() {
+		return this._list.slice();
+	},
+
+	/**
+	 * Return the stored entry that matches `host`, or undefined if none.
+	 * Exact entries match only the identical host; dot-prefixed entries match
+	 * the apex and all subdomains (same rule as Tiles._hostFilteredOut).
+	 * @param {string} host
+	 * @returns {string | undefined}
+	 */
+	matchingEntry(host) {
+		let dotEntries = this._list.filter(e => e.startsWith('.'));
+		return this._list.includes(host) ? host : dotEntries.find(
+			e => host === e.substring(1) || host.endsWith(e)
+		);
+	},
+
+	/**
+	 * Return true when the URL's hostname (port-less) is covered by any entry.
+	 * Returns false on unparseable URLs and when the list is empty.
+	 * @param {string} url
+	 * @returns {boolean}
+	 */
+	matches(url) {
+		try {
+			let host = new URL(url).hostname;
+			return this.matchingEntry(host) !== undefined;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	/**
+	 * Return true when `host` is covered by `pattern`.
+	 * Helper exposed for background.js cursor passes.
+	 * @param {string} host
+	 * @param {string} pattern
+	 * @returns {boolean}
+	 */
+	hostMatchesPattern(host, pattern) {
+		if (pattern.startsWith('.')) {
+			return host === pattern.substring(1) || host.endsWith(pattern);
+		}
+		return host === pattern;
+	},
+
+	/**
+	 * Add a host pattern to the list.
+	 * Normalizes `input` to a port-less host pattern. Empty / garbage input and
+	 * already-listed hosts are no-ops. Always returns a Promise so callers can
+	 * chain `.then()` unconditionally.
+	 * @param {string} input
+	 * @returns {Promise<void>}
+	 */
+	add(input) {
+		let host = this._normalize(input);
+		if (!host || this._list.includes(host)) {
+			return Promise.resolve();
+		}
+		this._list.push(host);
+		return this._saveList();
+	},
+
+	/**
+	 * Remove the entry that covers `input` from the list.
+	 * First normalizes `input` to a host pattern, then removes the matching
+	 * stored entry (which may differ — e.g. input 'a.example.com' removes
+	 * the stored entry '.example.com' if that pattern covers the host).
+	 * @param {string} input
+	 * @returns {Promise<void>}
+	 */
+	remove(input) {
+		let host = this._normalize(input);
+		let entry = host ? this.matchingEntry(host) : undefined;
+		// Fall back to exact match against the raw normalized value in case
+		// no matchingEntry logic applies (direct pattern removal).
+		if (entry === undefined) {
+			entry = this._list.includes(host) ? host : undefined;
+		}
+		if (entry !== undefined) {
+			let index = this._list.indexOf(entry);
+			if (index >= 0) {
+				this._list.splice(index, 1);
+			}
+		}
+		return this._saveList();
+	},
+
+	/**
+	 * Clear the entire list and persist.
+	 * @returns {Promise<void>}
+	 */
+	clear() {
+		this._list.length = 0;
+		return this._saveList();
+	},
 };

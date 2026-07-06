@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals AwesomeBar, Background, Blocked, compareVersions, Filters, Grid, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
+/* globals AwesomeBar, Background, Blocked, compareVersions, Filters, Grid, NeverCapture, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
 
 var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
@@ -358,6 +358,22 @@ var newTabTools = {
 			this.optionsFilterSet.disabled = true;
 			return;
 		}
+		case 'options-nevercapture-add': {
+			// Normalize the host via the same helper as the history filter (trims,
+			// lowercases, extracts host from a full URL, maps `*.x`→`.x`).
+			let host = Filters.normalizeHost(this.optionsNeverCaptureHost.value);
+			if (!host) {
+				return;
+			}
+			NeverCapture.add(host).then(() => {
+				chrome.runtime.sendMessage({name: 'Thumbnails.purgeHost', host}, () => {
+					Grid.refresh().then(() => this.getThumbnails());
+				});
+				this.optionsNeverCaptureHost.value = '';
+				this.fillNeverCaptureUI();
+			});
+			return;
+		}
 		case 'options-backup':
 			chrome.permissions.request({permissions: ['downloads']}, function() {
 				chrome.runtime.sendMessage({name: 'Export:backup'});
@@ -398,6 +414,16 @@ var newTabTools = {
 			Filters.setFilter(row.cells[0].textContent, -1);
 			Updater.updateGrid();
 			this.fillFilterUI();
+			return;
+		}
+
+		if (classList.contains('ntt-nevercapture-remove')) {
+			// Remove the entry from the never-capture list (no purge — the user is
+			// only un-suppressing auto-capture, not deleting existing screenshots).
+			let entry = event.target.dataset.entry || '';
+			NeverCapture.remove(entry).then(() => {
+				this.fillNeverCaptureUI();
+			});
 			return;
 		}
 
@@ -1087,6 +1113,22 @@ var newTabTools = {
 			&& document.documentElement.getAttribute('drawer-tab') === 'tile') {
 			this.resizeOptionsThumbnail();
 		}
+
+		if (keys && keys.includes('neverCaptureHosts')) {
+			// Re-populate the never-capture drawer panel when the stored list changes
+			// (e.g. the per-tile toggle on the grid flips an entry).
+			if (this.optionsNeverCaptureList) {
+				this.fillNeverCaptureUI();
+			}
+			// Refresh each rendered tile's never-capture button state.
+			if ('Grid' in window && Grid.sites) {
+				Grid.sites.forEach(site => {
+					if (site && site.updateNeverCaptureButton) {
+						site.updateNeverCaptureButton(NeverCapture.matches(site.url));
+					}
+				});
+			}
+		}
 	},
 	_initTitlebar() {
 		let searchEl = document.getElementById('ntt-search');
@@ -1394,11 +1436,12 @@ var newTabTools = {
 		await new Promise(resolve => {
 			chrome.runtime.sendMessage({ name: 'Background.setBackground', file: null }, () => resolve());
 		});
-		// Blocked + Filters live inside chrome.storage.local, so clearing
-		// it wipes them along with prefs. We zero the in-memory copies too
-		// so anything reading them before reload sees the cleared state.
+		// Blocked + Filters + NeverCapture live inside chrome.storage.local, so
+		// clearing it wipes them along with prefs. We zero the in-memory copies
+		// too so anything reading them before reload sees the cleared state.
 		Blocked._list = [];
 		Filters._list = Object.create(null);
+		if (typeof NeverCapture !== 'undefined') { NeverCapture.clear(); }
 		await new Promise(resolve => chrome.storage.local.clear(resolve));
 		// Reload so every component picks up the cleared state from a
 		// known-clean start.
@@ -1753,6 +1796,9 @@ var newTabTools = {
 		if (name === 'tile') {
 			this._autoSelectFirstTileIfNeeded();
 		}
+		if (name === 'advanced' && typeof this.fillNeverCaptureUI === 'function') {
+			this.fillNeverCaptureUI();
+		}
 	},
 	_autoSelectFirstTileIfNeeded() {
 		// Only on the Tile tab — Page/Advanced don't depend on a selection.
@@ -1935,6 +1981,31 @@ var newTabTools = {
 			});
 		}
 	},
+	fillNeverCaptureUI() {
+		// Render the never-capture host list — mirrors fillFilterUI's style but
+		// uses a flat div list instead of a table (no pinned-count column needed).
+		let container = this.optionsNeverCaptureList;
+		if (!container) {
+			return;
+		}
+		while (container.firstChild) {
+			container.firstChild.remove();
+		}
+		for (let entry of NeverCapture.getList()) {
+			let row = document.createElement('div');
+			row.className = 'ntt-nevercapture-row';
+			let text = document.createElement('span');
+			text.textContent = entry;  // textContent only — no innerHTML
+			let removeBtn = document.createElement('button');
+			removeBtn.className = 'ntt-nevercapture-remove';
+			removeBtn.textContent = '✕';
+			removeBtn.title = this.getString('nevercapture_remove');
+			removeBtn.dataset.entry = entry;
+			row.appendChild(text);
+			row.appendChild(removeBtn);
+			container.appendChild(row);
+		}
+	},
 	startup() {
 		if (!window.chrome) {
 			// The page couldn't be loaded properly because WebExtensions is too slow. Sad.
@@ -2096,6 +2167,10 @@ var newTabTools = {
 		'optionsFilterHostAutocomplete': 'host-autocomplete',
 		'optionsFilterCount': 'options-filter-count',
 		'optionsFilterSet': 'options-filter-set',
+		'optionsNeverCapture': 'options-nevercapture',
+		'optionsNeverCaptureHost': 'options-nevercapture-host',
+		'optionsNeverCaptureAdd': 'options-nevercapture-add',
+		'optionsNeverCaptureList': 'options-nevercapture-list',
 		'databaseError': 'database-error',
 		'contextMenu': 'context-menu',
 		'contextMenuPin': 'newtabtools-pintile',

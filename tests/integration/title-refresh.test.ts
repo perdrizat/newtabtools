@@ -3,15 +3,18 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Regression tests for title-refresh behaviour. Three distinct rules:
+ * Regression tests for title-refresh behaviour. Two distinct rules:
  *
  *   1. `Set Title` in the per-tile editor marks `link.titleIsUserSet = true`
  *      so subsequent screenshot refreshes don't overwrite the user's title.
  *   2. `Set URL` clears the existing title (since it belonged to the old
  *      URL) and consults `historyTitleFor` to populate a fresh one.
- *   3. The tile-action `refresh` button (the action row's circular arrow)
- *      also pulls a fresh title from history — but ONLY when
- *      `link.titleIsUserSet` is falsy.
+ *
+ * (The per-tile refresh button was removed in slice 3 of the tile redesign.
+ * Its on-demand "pull a fresh title from history" side effect went with it —
+ * there is no general replacement; titles now refresh only on Set-URL (rule 2
+ * above) and on first-pin of a title-less tile via Tiles.getAllTiles. This was
+ * an accepted consequence of removing the button.)
  */
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
@@ -22,7 +25,6 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -181,82 +183,8 @@ describe('Set URL clears title, calls historyTitleFor, applies fresh title', () 
 	});
 });
 
-describe('Tile refresh action — refreshes title only when not user-set', () => {
-	let onClickBody: string;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
-		onClickBody = extractMethod(source, '_onClick');
-	});
-
-	function buildSiteHarness(linkExtras: Record<string, unknown>) {
-		const tilePut = vi.fn();
-		const historyTitleFor = vi.fn().mockResolvedValue('Fresh From History');
-		const addTitle = vi.fn();
-		const link = { url: 'https://example.com/', title: 'Old Title', ...linkExtras };
-		const site: any = {
-			link,
-			addTitle,
-			cell: { index: 0 },
-		};
-		(globalThis as any).Tiles = { putTile: tilePut };
-		(globalThis as any).chrome = {
-			runtime: { sendMessage: vi.fn() },
-			permissions: undefined,
-		};
-		(globalThis as any).newTabTools = {
-			historyTitleFor,
-			selectedSite: null,
-			setTitleInput: { value: '' },
-		};
-		// Build a per-call invoker — re-evaluating onClickBody as a function
-		// the test can call against the mocked site.
-		const code = `var _siteShell = { ${onClickBody} };`;
-		vm.runInThisContext(code, { filename: 'site-onclick-harness.js' });
-		const shell = (globalThis as any)._siteShell;
-		return {
-			invokeRefresh() {
-				const target = document.createElement('div');
-				target.classList.add('ntt-action-btn');
-				target.setAttribute('data-action', 'refresh');
-				shell._onClick.call(site, {
-					target,
-					preventDefault() {},
-				});
-			},
-			historyTitleFor,
-			tilePut,
-			addTitle,
-			link,
-		};
-	}
-
-	it('with titleIsUserSet=false, refreshes the title from history', async () => {
-		const { invokeRefresh, historyTitleFor, tilePut, addTitle, link } = buildSiteHarness({});
-		invokeRefresh();
-		await new Promise(r => setTimeout(r, 0));
-		expect(historyTitleFor).toHaveBeenCalledWith('https://example.com/');
-		expect(link.title).toBe('Fresh From History');
-		expect(addTitle).toHaveBeenCalled();
-		expect(tilePut).toHaveBeenCalledWith(link);
-	});
-
-	it('with titleIsUserSet=true, does NOT touch the title (user-set wins)', async () => {
-		const { invokeRefresh, historyTitleFor, tilePut, addTitle, link } = buildSiteHarness({ titleIsUserSet: true });
-		invokeRefresh();
-		await new Promise(r => setTimeout(r, 0));
-		expect(historyTitleFor).not.toHaveBeenCalled();
-		expect(link.title).toBe('Old Title');
-		expect(addTitle).not.toHaveBeenCalled();
-		expect(tilePut).not.toHaveBeenCalled();
-	});
-
-	it('still triggers the screenshot capture (`Thumbnails.capture` message) in either case', async () => {
-		const { invokeRefresh } = buildSiteHarness({ titleIsUserSet: true });
-		invokeRefresh();
-		expect((globalThis as any).chrome.runtime.sendMessage).toHaveBeenCalledWith(
-			expect.objectContaining({ name: 'Thumbnails.capture', url: 'https://example.com/' })
-		);
-	});
-});
+// NOTE: The 'Tile refresh action' describe block was removed in slice 3 of the
+// tile redesign. The per-tile refresh button (case 'refresh' in _onClick) was
+// deleted; its on-demand title-refresh-from-history side effect was not
+// replaced (accepted consequence — see header). The title-refresh-via-Set-URL
+// path is still tested above.

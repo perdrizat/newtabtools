@@ -110,6 +110,42 @@ console.log();
 	}
 }
 
+// 3b. Real geckodriver+Firefox launch handshake — the EXACT path the daemon uses
+//     (`new Builder().forBrowser('firefox').build()`). A passing `firefox
+//     --version` does NOT guarantee this works: geckodriver applies stricter
+//     binary validation AND is a second dependency check #3 never touches. The
+//     classic trap is a snap-confined geckodriver (on PATH as
+//     /snap/bin/geckodriver) that cannot launch a Firefox outside its sandbox
+//     and rejects it as "binary is not a Firefox executable". Launch headless →
+//     about:blank → quit, so this failure class surfaces here in seconds instead
+//     of as a 300s daemon-startup timeout.
+{
+	let driver = null;
+	try {
+		const { Builder } = await import('selenium-webdriver');
+		const firefox = (await import('selenium-webdriver/firefox.js')).default;
+		const opts = new firefox.Options();
+		if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
+		opts.addArguments('-headless');
+		const t0 = Date.now();
+		driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+		await driver.get('about:blank');
+		ok('Firefox launch (geckodriver)', `headless launch OK in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+	} catch (e) {
+		const msg = (e && e.message ? e.message : String(e)).split('\n')[0];
+		fail('Firefox launch (geckodriver)',
+			`Selenium could not start Firefox via geckodriver: ${msg}\n` +
+			'         This is the exact launch path the UAT daemon uses. Common causes:\n' +
+			'         • a snap-confined geckodriver on PATH (/snap/bin/geckodriver) cannot launch a\n' +
+			'           Firefox outside its sandbox — remove it so Selenium Manager auto-downloads a\n' +
+			'           non-snap geckodriver, or put a non-snap one earlier on PATH;\n' +
+			'         • a geckodriver/Firefox version mismatch;\n' +
+			'         • selenium-webdriver not installed — run `pnpm install`.');
+	} finally {
+		if (driver) { try { await driver.quit(); } catch { /* already down */ } }
+	}
+}
+
 // 4. .xpi built for current manifest version
 {
 	const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));

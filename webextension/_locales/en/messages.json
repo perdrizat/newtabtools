@@ -111,6 +111,21 @@
 	"filter_unlimited": {
 		"message": "unlimited"
 	},
+	"nevercapture_add": {
+		"message": "Add"
+	},
+	"nevercapture_helptext": {
+		"message": "Never screenshot these sites; adding one also deletes stored captures."
+	},
+	"nevercapture_placeholder_host": {
+		"message": "example.com or .example.com"
+	},
+	"nevercapture_remove": {
+		"message": "Remove"
+	},
+	"nevercapture_title": {
+		"message": "Never-capture list"
+	},
 	"github": {
 		"message": "Source on GitHub"
 	},
@@ -373,8 +388,11 @@
 	"tile_edit_url": {
 		"message": "Change URL"
 	},
-	"tile_refresh_thumbnail": {
-		"message": "Refresh thumbnail"
+	"tile_never_capture": {
+		"message": "Never screenshot this site"
+	},
+	"tile_allow_capture": {
+		"message": "Allow screenshots of this site"
 	},
 	"tile_header": {
 		"message": "Update current tile:"

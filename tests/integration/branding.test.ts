@@ -128,6 +128,8 @@ describe('About section — brand home', () => {
 	});
 
 	it('the About links row is left-aligned (not centered)', () => {
-		expect(css).toMatch(/#options-about \.options-row\s*\{[^}]*justify-content:\s*flex-start/s);
+		// `[^{]*` (not `\s*`) tolerates the selector living in a comma-separated
+		// group — it shares one rule with the other left-aligned Advanced rows.
+		expect(css).toMatch(/#options-about \.options-row[^{]*\{[^}]*justify-content:\s*flex-start/s);
 	});
 });

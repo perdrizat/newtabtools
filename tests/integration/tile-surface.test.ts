@@ -123,7 +123,7 @@ describe('tile surface — behavioral (§3c)', () => {
 		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
 		const actions = Array.from(site.node.querySelectorAll('.ntt-action-btn'))
 			.map((b: any) => b.getAttribute('data-action'));
-		expect(actions).toEqual(['edit', 'refresh', 'pin', 'remove']);
+		expect(actions).toEqual(['edit', 'never-capture', 'pin', 'remove']);
 		cleanup();
 	});
 });

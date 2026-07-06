@@ -258,7 +258,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 				[],
 				{ timeout: 10_000, message: 'Action buttons not found' }
 			);
-			expect(actions).toEqual(['edit', 'refresh', 'pin', 'remove']);
+			expect(actions).toEqual(['edit', 'never-capture', 'pin', 'remove']);
 		} catch (e) {
 			await captureFailure(page, 'tile-redesign-action-attrs');
 			throw e;
@@ -479,53 +479,173 @@ describe('E2E: Tile redesign — new tile structure', () => {
 	// already opens it (middle-/⌘-click for a new tab), so the arrow was
 	// redundant. No action button or behaviour to assert anymore.
 
-	it('refresh action button sends Thumbnails.capture message (§4.3)', async () => {
+	// The "refresh" action button was removed in the tile redesign. The
+	// never-capture toggle replaces it in the action row.
+
+	it('never-capture action button toggles host list and purges thumbnail', async () => {
+		const CAPTURE_URL = 'https://never-capture-toggle.example.com/';
 		const page = await openNewTab(browser);
+		const newTabURL = await getNewTabURL();
 		await waitForGridReady(page);
 
 		try {
+			// Pin a tile for the test URL.
+			await page.evaluate((u) => {
+				return new Promise(resolve => {
+					chrome.runtime.sendMessage({
+						name: 'Tiles.pinTile',
+						title: 'NeverCapture Test',
+						url: u,
+					}, resolve);
+				});
+			}, CAPTURE_URL);
+
+			// Seed a thumbnail via Thumbnails.save so the tile has backgroundImage.
+			await page.evaluate((u) => {
+				// Create a minimal 1×1 PNG Blob to seed as the thumbnail image.
+				const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+				const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+				const blob = new Blob([bytes], { type: 'image/png' });
+				chrome.runtime.sendMessage({ name: 'Thumbnails.save', url: u, image: blob });
+			}, CAPTURE_URL);
+
+			// Reload so the grid picks up the pinned tile and thumbnail.
+			await page.goto(newTabURL, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await waitForGridReady(page);
+
+			// Wait until the tile has a backgroundImage (thumbnail applied).
 			await waitForCondition(
 				page,
 				(u) => {
 					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
+					if (!g || !g.sites) { return false; }
+					const site = g.sites.find((s: any) => s && s.url === u);
+					if (!site) { return false; }
+					const bg = site.thumbnail.style.backgroundImage;
+					return bg && bg.startsWith('url(') ? bg : false;
 				},
-				[TEST_URL],
-				{ timeout: 10_000, message: 'Test tile not in grid' }
+				[CAPTURE_URL],
+				{ timeout: 15_000, message: 'Seeded thumbnail backgroundImage not applied to tile' }
 			);
 
-			// Spy on chrome.runtime.sendMessage
-			const captured = await page.evaluate((u) => {
+			// Click the never-capture button.
+			await page.evaluate((u) => {
 				const g = window.Grid;
 				const site = g.sites.find((s: any) => s && s.url === u);
-				if (!site) {return null;}
+				if (!site) { return; }
+				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
+				if (btn) { btn.click(); }
+			}, CAPTURE_URL);
 
-				let capturedMsg: any = null;
-				const origSendMessage = chrome.runtime.sendMessage;
-				chrome.runtime.sendMessage = function(msg: any, ...rest: any[]) {
-					if (msg && msg.name === 'Thumbnails.capture') {
-						capturedMsg = msg;
-					}
-					return origSendMessage.call(chrome.runtime, msg, ...rest);
-				};
+			// Wait for storage to reflect the added host.
+			const host = new URL(CAPTURE_URL).host;
+			await waitForCondition(
+				page,
+				(h) => {
+					return new Promise(resolve => {
+						chrome.storage.local.get('neverCaptureHosts', (result: Record<string, unknown>) => {
+							const list: string[] = (result.neverCaptureHosts as string[]) || [];
+							resolve(list.includes(h as string) ? list : false);
+						});
+					});
+				},
+				[host],
+				{ timeout: 10_000, message: 'neverCaptureHosts storage not updated after click' }
+			);
 
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="refresh"]');
-				if (btn) {(btn as HTMLElement).click();}
+			// Button flips to the listed state (camera icon + never-capture
+			// attribute). Polled, not single-sampled: the post-purge Grid.refresh()
+			// empties all cells synchronously and re-renders after an async
+			// Tiles.getAllTiles round-trip, so a one-shot evaluate can land in the
+			// empty-grid window and find no site.
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) { return false; }
+					const site = g.sites.find((s: any) => s && s.url === u);
+					if (!site) { return false; }
+					const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+					return !!btn && btn.getAttribute('data-icon') === 'camera'
+						&& site.node.hasAttribute('never-capture');
+				},
+				[CAPTURE_URL],
+				{ timeout: 10_000, message: 'never-capture button did not flip to listed state after click' }
+			);
 
-				chrome.runtime.sendMessage = origSendMessage;
-				return capturedMsg;
-			}, TEST_URL);
+			// Thumbnail should have been purged — wait for grid to refresh.
+			await waitForCondition(
+				page,
+				(u) => {
+					const g = window.Grid;
+					if (!g || !g.sites) { return false; }
+					const site = g.sites.find((s: any) => s && s.url === u);
+					if (!site) { return false; }
+					const bg = site.thumbnail.style.backgroundImage;
+					// After purge + grid.refresh() the tile should show no blob URL.
+					return (!bg || !bg.startsWith('url(blob:')) ? true : false;
+				},
+				[CAPTURE_URL],
+				{ timeout: 10_000, message: 'Thumbnail not purged after never-capture click' }
+			);
 
-			expect(captured).toBeTruthy();
-			expect(captured.name).toBe('Thumbnails.capture');
-			expect(captured.url).toBe(TEST_URL);
+			// Click again to remove host from list.
+			await page.evaluate((u) => {
+				const g = window.Grid;
+				const site = g.sites.find((s: any) => s && s.url === u);
+				if (!site) { return; }
+				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
+				if (btn) { btn.click(); }
+			}, CAPTURE_URL);
+
+			// List should now be empty.
+			await waitForCondition(
+				page,
+				(h) => {
+					return new Promise(resolve => {
+						chrome.storage.local.get('neverCaptureHosts', (result: Record<string, unknown>) => {
+							const list: string[] = (result.neverCaptureHosts as string[]) || [];
+							resolve(!list.includes(h as string) ? true : false);
+						});
+					});
+				},
+				[host],
+				{ timeout: 10_000, message: 'Host not removed from neverCaptureHosts after second click' }
+			);
+
+			// Icon should revert to camera-off.
+			const iconAfterRemove = await page.evaluate((u) => {
+				const g = window.Grid;
+				const site = g.sites.find((s: any) => s && s.url === u);
+				if (!site) { return null; }
+				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+				return btn ? btn.getAttribute('data-icon') : null;
+			}, CAPTURE_URL);
+			expect(iconAfterRemove).toBe('camera-off');
+
+			// Thumbnail should NOT be resurrected (no recapture on toggle-off).
+			const bgAfterRemove = await page.evaluate((u) => {
+				const g = window.Grid;
+				const site = g.sites.find((s: any) => s && s.url === u);
+				if (!site) { return ''; }
+				return site.thumbnail.style.backgroundImage;
+			}, CAPTURE_URL);
+			expect(bgAfterRemove).not.toMatch(/^url\(blob:/);
 		} catch (e) {
-			await captureFailure(page, 'tile-action-refresh');
+			await captureFailure(page, 'tile-action-never-capture');
 			throw e;
 		} finally {
+			// Clean up: unpin and clear neverCaptureHosts.
+			await page.evaluate((u) => {
+				return new Promise<void>(resolve => {
+					chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => {
+						chrome.storage.local.remove('neverCaptureHosts', () => resolve());
+					});
+				});
+			}, CAPTURE_URL);
 			await page.close();
 		}
-	}, 60_000);
+	}, 90_000);
 
 	// ── Visual sanity: rendered visibility checks ──
 

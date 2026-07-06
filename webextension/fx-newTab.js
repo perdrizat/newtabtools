@@ -3,7 +3,7 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Page */
-/* globals Blocked, newTabTools, NttIcons, Prefs, Tiles, TileStats */
+/* globals Blocked, NeverCapture, newTabTools, NttIcons, Prefs, Tiles, TileStats */
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -872,6 +872,35 @@ Site.prototype = {
 	},
 
 	/**
+	 * Flips the never-capture button icon/title and toggles the node attribute
+	 * to match the new listed state. Modeled on updateAttributes (pin swap).
+	 * @param {boolean} listed Whether the site is now in the never-capture list.
+	 */
+	updateNeverCaptureButton(listed) {
+		if (listed) {
+			this._node.setAttribute('never-capture', 'true');
+		} else {
+			this._node.removeAttribute('never-capture');
+		}
+		let btn = this._querySelector('.ntt-action-btn[data-action="never-capture"]');
+		if (btn) {
+			let nextIcon = listed ? 'camera' : 'camera-off';
+			let nextTitle = listed ? 'tile_allow_capture' : 'tile_never_capture';
+			btn.setAttribute('data-icon', nextIcon);
+			btn.setAttribute('title', newTabTools.getString(nextTitle));
+			let existing = btn.firstElementChild;
+			let svg = NttIcons.create(nextIcon, 16);
+			if (svg) {
+				if (existing) {
+					btn.replaceChild(svg, existing);
+				} else {
+					btn.appendChild(svg);
+				}
+			}
+		}
+	},
+
+	/**
 	   * Renders the site's data (fills the HTML fragment).
 	   */
 	_render() {
@@ -987,12 +1016,18 @@ Site.prototype = {
 			addTile.textContent = '';
 			addTile.appendChild(chip);
 		}
-		// §3c order: Edit URL · Reload · Pin/Unpin · Remove. "Open in new tab"
+		// §3c order: Edit URL · Never-capture · Pin/Unpin · Remove. "Open in new tab"
 		// was dropped — clicking the tile already opens it (middle-/⌘-click for
 		// a new tab).
+		let neverCaptureActive = NeverCapture.matches(this.url);
+		if (neverCaptureActive) {
+			this._node.setAttribute('never-capture', 'true');
+		} else {
+			this._node.removeAttribute('never-capture');
+		}
 		let actions = [
 			{ action: 'edit', icon: 'edit', title: 'tile_edit_url' },
-			{ action: 'refresh', icon: 'refresh', title: 'tile_refresh_thumbnail' },
+			{ action: 'never-capture', icon: neverCaptureActive ? 'camera' : 'camera-off', title: neverCaptureActive ? 'tile_allow_capture' : 'tile_never_capture' },
 			{ action: 'pin', icon: this.isPinned ? 'unpin' : 'pin', title: this.isPinned ? 'tile_unpin' : 'tile_pin' },
 			{ action: 'remove', icon: 'close', title: 'tile_block' },
 		];
@@ -1143,26 +1178,31 @@ Site.prototype = {
 					this.pin();
 				}
 				break;
-			case 'refresh':
-				chrome.runtime.sendMessage({ name: 'Thumbnails.capture', url: this.link.url });
-				// Also refresh the title from browsing history (unless the
-				// user explicitly set it via Set Title in the editor).
-				if (!this.link.titleIsUserSet
-					&& typeof newTabTools !== 'undefined'
-					&& typeof newTabTools.historyTitleFor === 'function') {
-					newTabTools.historyTitleFor(this.link.url).then(historyTitle => {
-						if (!historyTitle || historyTitle === this.link.title) {
-							return;
-						}
-						this.link.title = historyTitle;
-						this.addTitle();
-						Tiles.putTile(this.link);
-						if (newTabTools.selectedSite === this && newTabTools.setTitleInput) {
-							newTabTools.setTitleInput.value = historyTitle;
-						}
+			case 'never-capture': {
+				// Derive host (port-less, matching NeverCapture semantics); bail
+				// silently on non-parseable URLs.
+				let host;
+				try {
+					host = new URL(this.link.url).hostname;
+				} catch (_) {
+					break;
+				}
+				if (NeverCapture.matches(this.link.url)) {
+					// Currently listed — remove and flip button back.
+					NeverCapture.remove(host);
+					this.updateNeverCaptureButton(false);
+				} else {
+					// Not listed — add, purge stored screenshots, flip button.
+					// No undo toast by design: purged screenshots must not be
+					// restorable; toggle-off does not recapture (next visit does).
+					NeverCapture.add(host);
+					chrome.runtime.sendMessage({ name: 'Thumbnails.purgeHost', host }, () => {
+						Grid.refresh().then(() => newTabTools.getThumbnails());
 					});
+					this.updateNeverCaptureButton(true);
 				}
 				break;
+			}
 			case 'edit':
 				if (typeof newTabTools !== 'undefined') {
 					newTabTools.openDrawer();

@@ -127,7 +127,7 @@ const RESTORE_TILES = [
 	{ id: 102, url: 'https://restored-b.example.com/', title: 'Restored B', position: 1 },
 ];
 
-const RESTORE_PREFS = { theme: 'dark', rows: 3 };
+const RESTORE_PREFS = { theme: 'dark', rows: 3, neverCaptureHosts: ['example.com'] };
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -290,6 +290,37 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 			await page.close();
 		}
 	}, 90_000);
+
+	it('neverCaptureHosts key survives the backup/restore round-trip', async () => {
+		// Relies on the restore performed in the first test of this suite.
+		// RESTORE_PREFS includes neverCaptureHosts: ['example.com'].
+		const page = await openNewTab(browser);
+		await waitForGridReady(page);
+
+		try {
+			const storedList = await waitForCondition(
+				page,
+				() => new Promise(resolve => {
+					chrome.storage.local.get('neverCaptureHosts', (result: Record<string, unknown>) => {
+						const list: string[] = (result.neverCaptureHosts as string[]) || [];
+						resolve(list.includes('example.com') ? list : false);
+					});
+				}),
+				[],
+				{ timeout: 10_000, message: 'neverCaptureHosts not restored from backup' }
+			);
+			expect(storedList).toContain('example.com');
+		} catch (e) {
+			await captureFailure(page, 'backup-restore-nevercapture');
+			throw e;
+		} finally {
+			// Clean up the restored never-capture list so other test suites start clean.
+			await page.evaluate(() => new Promise<void>(resolve => {
+				chrome.storage.local.remove('neverCaptureHosts', () => resolve());
+			}));
+			await page.close();
+		}
+	}, 60_000);
 
 	it('the Restore file picker is a themed label (native input hidden); filename shows on select', async () => {
 		const page = await openNewTab(browser);

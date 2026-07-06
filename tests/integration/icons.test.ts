@@ -20,7 +20,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ICONS_PATH = path.resolve(__dirname, '../../webextension/icons.js');
 
 const ALL_ICON_NAMES = [
-	'search', 'settings', 'pin', 'refresh', 'edit', 'close', 'plus',
+	'search', 'settings', 'pin', 'camera', 'camera-off', 'edit', 'close', 'plus',
 	'open', 'arrow-up', 'arrow-down', 'arrow-right', 'chevron-right',
 	'chevron-down', 'history', 'bookmark', 'kebab', 'cmd', 'sun',
 	'moon', 'sparkline', 'dot', 'grid', 'layers', 'sliders',

@@ -54,12 +54,17 @@ var NttIcons = (() => {
 				el('path', { d: 'M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h12' }),
 			];
 		},
-		refresh() {
+		camera() {
 			return [
-				el('path', { d: 'M3 12a9 9 0 0 1 15.5-6.3L21 8' }),
-				el('path', { d: 'M21 3v5h-5' }),
-				el('path', { d: 'M21 12a9 9 0 0 1-15.5 6.3L3 16' }),
-				el('path', { d: 'M3 21v-5h5' }),
+				el('path', { d: 'M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z' }),
+				el('circle', { cx: 12, cy: 13, r: 3 }),
+			];
+		},
+		'camera-off'() {
+			return [
+				el('path', { d: 'M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z' }),
+				el('circle', { cx: 12, cy: 13, r: 3 }),
+				el('line', { x1: 2, y1: 2, x2: 22, y2: 22 }),
 			];
 		},
 		edit() {

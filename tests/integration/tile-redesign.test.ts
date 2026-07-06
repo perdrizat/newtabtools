@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -302,7 +302,7 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		const btns = site.node.querySelectorAll('.ntt-action-btn');
 		expect(btns.length).toBe(4);
 		const actions = Array.from(btns).map((b: any) => b.getAttribute('data-action'));
-		expect(actions).toEqual(['edit', 'refresh', 'pin', 'remove']);
+		expect(actions).toEqual(['edit', 'never-capture', 'pin', 'remove']);
 		cleanup();
 	});
 
@@ -332,6 +332,89 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		expect(brand).not.toMatch(/attacker/);
 		// And the fallback shape is a deterministic safe oklch() value.
 		expect(brand).toMatch(/^oklch\(65% 0\.13 \d+(\.\d+)?\)$/);
+		cleanup();
+	});
+});
+
+describe('Tile redesign — never-capture action button (slice 4)', () => {
+	beforeEach(() => {
+		// Reset NeverCapture to default (not listed) before each test.
+		(globalThis as any).NeverCapture = {
+			matches: vi.fn(() => false),
+			matchingEntry: vi.fn(() => undefined),
+			add: vi.fn().mockResolvedValue(undefined),
+			remove: vi.fn().mockResolvedValue(undefined),
+			getList: vi.fn(() => []),
+		};
+		// Reset sendMessage spy.
+		(globalThis as any).chrome.runtime.sendMessage = vi.fn();
+	});
+
+	it('never-capture button has data-action="never-capture", data-icon="camera-off", correct title, and no never-capture attribute when not listed', () => {
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+		expect(btn).toBeTruthy();
+		expect(btn.getAttribute('data-icon')).toBe('camera-off');
+		expect(btn.getAttribute('title')).toBe('tile_never_capture');
+		expect(site.node.hasAttribute('never-capture')).toBe(false);
+		cleanup();
+	});
+
+	it('never-capture button shows camera icon and allow title when site is listed', () => {
+		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+		expect(btn).toBeTruthy();
+		expect(btn.getAttribute('data-icon')).toBe('camera');
+		expect(btn.getAttribute('title')).toBe('tile_allow_capture');
+		expect(site.node.hasAttribute('never-capture')).toBe(true);
+		cleanup();
+	});
+
+	it('click when unlisted calls NeverCapture.add with host and sends purgeHost message', () => {
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
+		btn.click();
+		expect((globalThis as any).NeverCapture.add).toHaveBeenCalledWith('example.com');
+		expect((globalThis as any).chrome.runtime.sendMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'Thumbnails.purgeHost', host: 'example.com' }),
+			expect.any(Function),
+		);
+		cleanup();
+	});
+
+	it('click when unlisted flips button to camera icon and sets never-capture attribute', () => {
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
+		btn.click();
+		// After click the site is now listed; button should reflect listed state.
+		expect(btn.getAttribute('data-icon')).toBe('camera');
+		expect(btn.getAttribute('title')).toBe('tile_allow_capture');
+		expect(site.node.hasAttribute('never-capture')).toBe(true);
+		cleanup();
+	});
+
+	it('click when listed calls NeverCapture.remove and does NOT send purgeHost message', () => {
+		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
+		btn.click();
+		expect((globalThis as any).NeverCapture.remove).toHaveBeenCalledWith('example.com');
+		expect((globalThis as any).chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ name: 'Thumbnails.purgeHost' }),
+			expect.anything(),
+		);
+		cleanup();
+	});
+
+	it('click when listed flips button back to camera-off icon and removes never-capture attribute', () => {
+		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
+		btn.click();
+		expect(btn.getAttribute('data-icon')).toBe('camera-off');
+		expect(btn.getAttribute('title')).toBe('tile_never_capture');
+		expect(site.node.hasAttribute('never-capture')).toBe(false);
 		cleanup();
 	});
 });

@@ -13,7 +13,7 @@ Copy and paste this brief summary into the AMO Developer Hub's "Notes to Reviewe
 * Used exclusively for **auto-thumbnail capture** of pages the user visits.
 * The background script listens for `webNavigation.onCompleted`. If the loaded URL matches a tile in the user's grid, it calls `chrome.tabs.captureVisibleTab()`.
 * **Why not `activeTab`?** We need to capture thumbnails automatically as the user browses, without requiring an explicit user click/gesture on every tab load.
-* **Privacy:** We inject no content scripts. Captured screenshots are stored locally in IndexedDB and are never transmitted off-device (which is enforced by our strict CSP).
+* **Privacy:** We inject no content scripts. Captured screenshots are stored locally in IndexedDB and are never transmitted off-device (which is enforced by our strict CSP). Capture never runs in private-browsing windows, and users can add any host to a **never-capture list** (per-tile button or the Advanced settings drawer) to exclude it from capture entirely; adding a host also purges any captures already stored for it.
 
 **Project History:**
 * This is an active continuation fork of Geoff Lankow's "New Tab Tools" (which is currently in read-only mode). It uses a new AMO ID to avoid collision with the original listing.

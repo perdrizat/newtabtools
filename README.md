@@ -13,6 +13,7 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - **Pixel-level layout control.** Pick exact rows and columns, lock a tile aspect ratio (16:9, 4:3, 1:1, 3:4 portrait, or fill-viewport), tune foreground opacity, tile title size, page margins, and grid spacing — then lock the grid so you don't reorder it by accident. None of these knobs are exposed in Firefox's native page.
 - **Top sites that aren't dominated by one domain.** Cap how many tiles a single host can take (with subdomain wildcards like `.example.com`), hide auto-generated history tiles entirely, or pull pin suggestions from your open tabs, bookmarks, and history via autocomplete. Native Firefox enforces a hard "one tile per domain" rule and offers no autocomplete in its Add Shortcut form.
 - **Per-tile personalization.** Set a custom background color per tile (native supports a custom *image* but not a *color*), edit titles and URLs, manually upload a thumbnail when auto-capture isn't an option (login walls, dark pages, sites you haven't visited yet).
+- **Never-capture list (privacy).** Exclude any site from auto-thumbnail capture — one click on a tile's ✕-camera button, or manage the list in the Advanced drawer (exact host, or `.example.com` to cover subdomains). Listed hosts are never screenshotted, and adding one deletes any captures already stored for it. Keep banking, webmail, and intranets out of your tile imagery and backups. Firefox's native page has no such control.
 - **Recovery and portability.** A row of recently closed tabs lives in the titlebar for one-click restore — Firefox's native "Recent activity" surfaces visited pages and bookmarks, but not closed-tab session restore. Export your tiles, thumbnails, and settings to a single backup file and restore on another machine, no Firefox Sync required.
 
 ## What's in this repo
@@ -30,7 +31,7 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
 ### Quick Start
 
-1. **Environment Setup:** You will need Node.js >= 22, `pnpm` >= 10, and Firefox ESR. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and Firefox ESR. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
 
 2. **Clone and install:**
    ```bash

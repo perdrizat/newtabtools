@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, makeZip, Prefs, readZip, Tiles */
+/* globals Background, makeZip, NeverCapture, Prefs, readZip, Tiles */
 
 Promise.all([
 	Prefs.init(),
@@ -163,7 +163,8 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
 	case 'Thumbnails.save':
 		let {url, image} = message;
-		if (url && image) {
+		// Never-capture guard: refuse to store a thumbnail for a listed host.
+		if (url && image && !NeverCapture.matches(url)) {
 			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
 				url,
 				image,
@@ -252,6 +253,19 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	case 'Thumbnails.delete':
 		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
+
+	case 'Thumbnails.purgeHost':
+		// Validate: host must be a non-empty string.
+		if (typeof message.host !== 'string' || !message.host) {
+			sendResponse(null);
+			return true;
+		}
+		// purgeNeverCaptureHost awaits DB readiness internally.
+		purgeNeverCaptureHost(message.host).then(sendResponse).catch(function(event) {
+			console.error('Thumbnails.purgeHost failed:', event);
+			sendResponse(null);
+		});
+		return true;
 
 	case 'Thumbnails.clear':
 		// Wipe every stored screenshot + cached favicon. Used by the drawer's
@@ -488,6 +502,14 @@ var pendingCaptures = new Map();
  * to the tab, since SPAs often only render after activation.
  */
 function startCaptureSession(tabId, windowId, url) {
+	// Privacy guard: never capture sites the user has opted-out of.
+	// Accepted millisecond startup race (same class as Blocked/Filters): if the
+	// list is updated concurrently with a navigation the guard may miss one
+	// capture — acceptable given the infrequency of list mutations.
+	if (NeverCapture.matches(url)) {
+		return;
+	}
+
 	// Clean up any prior session for this tab (SPA navigations can trigger
 	// multiple onCompleted events for the same tabId).
 	let oldSession = captureSessions.get(tabId);
@@ -595,6 +617,14 @@ function pickAndStore(tabId) {
 	}
 
 	let url = session.url;
+
+	// Re-check never-capture list. Closes the in-flight-session race: if the
+	// user added the host to the list after the session started, we must not
+	// store the capture that was taken before the list update landed.
+	if (NeverCapture.matches(url)) {
+		captureSessions.delete(tabId);
+		return;
+	}
 	let favIconUrl = session.favIconUrl || null;
 	let captures = session.captures;
 	captureSessions.delete(tabId);
@@ -664,6 +694,10 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	Tiles.ensureReady().then(function({cache}) {
 		if (cache.includes(details.url)) {
+			// Never-capture privacy guard: skip both paths for listed hosts.
+			if (NeverCapture.matches(details.url)) {
+				return;
+			}
 			chrome.tabs.get(details.tabId, function(tab) {
 				if (tab.incognito) {
 					return;
@@ -753,6 +787,70 @@ function cleanupThumbnails() {
 			cursor.continue();
 		}
 	};
+}
+
+/**
+ * Purge all captured data for a single host pattern from both the thumbnails
+ * and tiles stores.
+ *
+ * Two sequential cursor passes:
+ *   1. thumbnails — delete every record whose URL matches `pattern`.
+ *   2. tiles — for every matching tile that holds an auto-captured thumbnail
+ *      (`imageIsThumbnail: true`), strip the `image` and `imageIsThumbnail`
+ *      fields and update the record in place (the tile itself is kept).
+ *      Tiles with a custom image (no `imageIsThumbnail`) are untouched.
+ *
+ * Unparseable URLs in either store are skipped silently (same idiom used by
+ * `Thumbnails.getFaviconsByHost` at background.js:237). Host matching keys on
+ * URL.hostname (no port) — the canonical never-capture entry is a port-less
+ * host, so a listed `example.com` also covers `example.com:8443`.
+ *
+ * Awaits DB readiness internally so callers on the restore path (readZip, which
+ * runs without a preceding waitForDB) can't crash on an uninitialised db.
+ *
+ * @param {string} pattern  A NeverCapture host pattern, e.g. '.example.com' or 'example.com'.
+ * @returns {Promise<{thumbnails: number, tiles: number}>}
+ */
+function purgeNeverCaptureHost(pattern) {
+	return waitForDB().then(() => new Promise(function(resolve) {
+		let thumbCount = 0;
+		let tileCount = 0;
+
+		// Pass 1: thumbnails store — delete matching records.
+		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
+			let cursor = this.result;
+			if (cursor) {
+				let row = cursor.value;
+				let host = null;
+				try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
+				if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
+					cursor.delete();
+					thumbCount++;
+				}
+				cursor.continue();
+			} else {
+				// Pass 2: tiles store — strip auto-thumbnail image from matching tiles.
+				db.transaction('tiles', 'readwrite').objectStore('tiles').openCursor().onsuccess = function() {
+					let tileCursor = this.result;
+					if (tileCursor) {
+						let row = tileCursor.value;
+						let host = null;
+						try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
+						if (host && NeverCapture.hostMatchesPattern(host, pattern)
+							&& row.image && row.imageIsThumbnail) {
+							delete row.image;
+							delete row.imageIsThumbnail;
+							tileCursor.update(row);
+							tileCount++;
+						}
+						tileCursor.continue();
+					} else {
+						resolve({ thumbnails: thumbCount, tiles: tileCount });
+					}
+				};
+			}
+		};
+	}));
 }
 
 function idleListener(state) {
