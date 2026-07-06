@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Docs: README, PRIVACY (new "Controlling thumbnail capture" section, last-updated 2026-07-05), and AMO listing/reviewer notes cover the never-capture list; README dev prereqs corrected to Node ≥24 / pnpm ≥11.
 - Never-capture Advanced UI polish: shorter (≤2-line) helptext and a left-aligned add-host row; UAT scenario 22 now asserts both.
 - Test harness fails fast on a bad Firefox env: UAT preflight adds a real geckodriver+Firefox launch handshake (catches the snap-geckodriver/wrong-binary class in ~1.5s instead of a 300s daemon hang), the UAT runner aborts the health-wait the moment the daemon exits, and `run_esr_tests.sh` validates the ESR binary up front and aborts the port-wait if web-ext dies. Both tiers honor a `$FIREFOX_ESR_BIN`/`$FIREFOX_BIN` override.
+- Migrated 6 transient/dialog components (wallpaper picker, pin-URL autocomplete, undo-toast buttons, shared close-button, awesomebar, database-error) onto `--ntt-*` design tokens with dark/contrast/forced-colors coverage; removed hardcoded `#b2aeaa`/`#0a84ff`; added `tests/integration/ui-consistency.test.ts` as a regression guard.
 
 ### Removed
 

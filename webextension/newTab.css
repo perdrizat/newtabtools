@@ -638,6 +638,8 @@ input[type="button"] {
 	font-size: 15px;
 	line-height: 2;
 	max-width: 55em;
+	font-family: var(--ntt-font-ui);
+	color: var(--ntt-ink);
 }
 #database-error ul {
 	margin: 0;
@@ -646,6 +648,9 @@ input[type="button"] {
 	font-size: smaller;
 	white-space: nowrap;
 	padding: 2px 5px;
+	background: var(--ntt-kbd-bg);
+	color: var(--ntt-kbd-ink);
+	border-radius: 4px;
 }
 /* `display: flex` (and friends) on ID-selectored titlebar elements outranks
    the UA `[hidden] { display: none }` rule. Force `[hidden]` to hide for the
@@ -765,7 +770,9 @@ input[type="button"] {
 #ntt-drawer-body button:focus-visible,
 .ntt-toggle:focus-visible,
 .ntt-segmented button:focus-visible,
-.ntt-theme-card:focus-visible {
+.ntt-theme-card:focus-visible,
+.close-button:focus-visible,
+#newtab-undo-container button:not(.close-button):focus-visible {
 	outline: 2px solid var(--ntt-accent);
 	outline-offset: 2px;
 }
@@ -803,6 +810,17 @@ input[type="button"] {
 }
 :root[theme="dark"] #ntt-awesomebar {
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--ntt-line-soft);
+}
+/* In high-contrast mode the accent-tint background (12% opacity) vanishes on the
+   near-black surface; use the accent itself as a visible background so the top row
+   stays legible. White text keeps the WCAG AA contrast ratio on the copper ground. */
+:root[theme="contrast"] .ntt-awesomebar-row.top,
+:root[theme="contrast"] .ntt-awesomebar-row.top.selected {
+	background: var(--ntt-accent);
+	color: #fff;
+}
+:root[theme="contrast"] .ntt-awesomebar-row.top svg {
+	color: #fff;
 }
 .ntt-awesomebar-section {
 	padding: 8px 10px 4px;
@@ -1014,12 +1032,30 @@ input[type="button"] {
 	background-position: center center;
 	background-repeat: no-repeat;
 	vertical-align: middle;
+	border-radius: 5px;
+}
+.close-button:hover {
+	background-color: var(--ntt-line-soft);
 }
 #newtab-undo-container button:not(.close-button) {
 	min-width: 0;
-	padding: 0 2px;
+	padding: 2px 6px;
 	font-size: 12px;
 	margin: 0 2px;
+	font-family: var(--ntt-font-ui);
+	border: none;
+	background: transparent;
+	border-radius: 5px;
+	cursor: pointer;
+}
+#newtab-undo-container button:not(.close-button):hover {
+	background: var(--ntt-surface-soft);
+}
+#newtab-undo-container #newtab-undo-button {
+	color: var(--ntt-accent);
+}
+#newtab-undo-container #newtab-undo-restore-button {
+	color: var(--ntt-ink);
 }
 /* MARGINS */
 #newtab-vertical-margin {
@@ -1552,6 +1588,43 @@ svg {
 		   cue via the inverted system colours + border, not custom rgba shadows. */
 		box-shadow: none;
 	}
+	/* Close button: the SVG background-image is not recoloured by the OS, so a
+	   visible border keeps it recognisable as an interactive control. */
+	.close-button {
+		border: 1px solid ButtonText;
+	}
+	/* Awesomebar: color-mix + rgba vanish under forced-colors; map to system
+	   colours so selected/top rows remain visible and scannable. */
+	#ntt-awesomebar {
+		border: 1px solid CanvasText;
+	}
+	.ntt-awesomebar-row.top,
+	.ntt-awesomebar-row.top.selected {
+		background: Highlight;
+		color: HighlightText;
+	}
+	.ntt-awesomebar-row.top svg {
+		color: HighlightText;
+	}
+	.ntt-awesomebar-row.selected {
+		background: Highlight;
+		color: HighlightText;
+	}
+	/* Undo toast: ensure the accent-coloured Undo button and the border-less
+	   buttons are visible and identifiable as interactive. */
+	#newtab-undo-container {
+		border: 1px solid CanvasText;
+	}
+	#newtab-undo-container button:not(.close-button) {
+		border: 1px solid ButtonText;
+		color: ButtonText;
+	}
+	/* Wallpaper selected-thumb ring: accent colour vanishes — use Highlight
+	   (the OS selection colour) so the active choice remains clear. */
+	.wallpaper-thumb[selected] {
+		border-color: Highlight;
+		box-shadow: 0 0 0 1px Highlight;
+	}
 }
 :root[theme="dark"] .ntt-action-btn:hover {
 	background: rgba(255,255,255,0.10);
@@ -1706,20 +1779,24 @@ a {
 	left: 0;
 	right: 0;
 	margin: 0;
-	padding: 0;
+	padding: 6px;
 	box-sizing: border-box;
 	white-space: nowrap;
 	position: absolute;
 	list-style: none;
-	color: var(--fore-opaque);
-	background-color: var(--back-opaque);
+	color: var(--ntt-ink);
+	background: var(--ntt-surface);
 	z-index: 1;
-	border: 1px #b2aeaa solid;
-	box-shadow: 0px 1px 5px rgba(0, 0, 0, 0.25);
+	border: 1px solid var(--ntt-line);
+	border-radius: 10px;
+	box-shadow: 0 16px 40px rgba(20, 15, 10, 0.16), 0 0 0 1px var(--ntt-line-soft);
 	/* On-system font (the page's `font: message-box` otherwise leaks a system
 	   serif into this dropdown — the rest of the drawer uses the UI sans). */
 	font-family: var(--ntt-font-ui);
 	font-size: 12px;
+}
+:root[theme="dark"] #autocomplete {
+	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--ntt-line-soft);
 }
 /* Buttons don't inherit font-family — keep the Continue/permission button on-system. */
 #autocomplete button {
@@ -1729,10 +1806,14 @@ a {
 	cursor: pointer;
 	padding: 4px 8px;
 	display: flex;
+	border-radius: 7px;
+}
+#autocomplete li:not([hidden]):not(.current):hover {
+	background: var(--ntt-surface-soft);
 }
 #autocomplete li.current {
-	background-color: highlight;
-	color: highlighttext;
+	background-color: Highlight;
+	color: HighlightText;
 }
 #autocomplete li#options-pinURL-blocked {
 	white-space: normal;
@@ -1890,14 +1971,21 @@ li.pinned .autocomplete-icon {
 	right: 0;
 	bottom: 0;
 	width: 360px;
-	background-color: var(--page-background);
-	border-left: 1px solid #b2aeaa;
-	box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+	background: var(--ntt-surface);
+	border-left: 1px solid var(--ntt-line);
+	box-shadow: var(--ntt-float-shadow);
 	z-index: 100;
 	overflow-y: auto;
 	padding: 1em;
 	box-sizing: border-box;
-	color: var(--fore-opaque);
+	color: var(--ntt-ink);
+	font-family: var(--ntt-font-ui);
+}
+:root[theme="dark"] #wallpaper-picker {
+	box-shadow: -16px 0 32px rgba(0, 0, 0, 0.30);
+}
+:root:not([theme="dark"]) #wallpaper-picker {
+	box-shadow: -12px 0 28px rgba(20, 15, 10, 0.06);
 }
 #wallpaper-picker[hidden] {
 	display: none;
@@ -1910,37 +1998,25 @@ li.pinned .autocomplete-icon {
 }
 #wallpaper-header h2 {
 	margin: 0;
-	font-size: 16px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: -0.005em;
 }
 #wallpaper-actions {
 	display: flex;
 	gap: 8px;
 	margin-bottom: 1em;
 }
-#wallpaper-actions button,
-#wallpaper-upload-label {
-	flex: 1;
-	padding: 6px 8px;
-	font-size: 12px;
-	cursor: pointer;
-	text-align: center;
-	border: 1px solid #b2aeaa;
-	background-color: transparent;
-	color: var(--fore-opaque);
-	border-radius: 4px;
-}
-#wallpaper-actions button:hover,
-#wallpaper-upload-label:hover {
-	background-color: var(--fore-trans1);
-}
 #wallpaper-upload {
 	display: none;
 }
 .wallpaper-category {
-	font-size: 13px;
-	font-weight: 600;
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	color: var(--ntt-mute);
 	margin: 12px 0 6px;
-	text-transform: capitalize;
 }
 .wallpaper-row {
 	display: grid;
@@ -1952,16 +2028,16 @@ li.pinned .autocomplete-icon {
 	width: 100%;
 	aspect-ratio: 16 / 10;
 	object-fit: cover;
-	border-radius: 4px;
+	border-radius: var(--ntt-radius);
 	cursor: pointer;
 	border: 2px solid transparent;
 	box-sizing: border-box;
 	transition: border-color 150ms;
 }
 .wallpaper-thumb:hover {
-	border-color: var(--fore-transp);
+	border-color: var(--ntt-line);
 }
 .wallpaper-thumb[selected] {
-	border-color: #0a84ff;
-	box-shadow: 0 0 0 1px #0a84ff;
+	border-color: var(--ntt-accent);
+	box-shadow: 0 0 0 1px var(--ntt-accent);
 }
