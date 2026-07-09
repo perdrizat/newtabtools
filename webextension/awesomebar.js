@@ -218,7 +218,7 @@ var AwesomeBar = {
 				return; // a newer query superseded this one
 			}
 			this._render(this.buildResults(q, { tiles, bookmarks, history }));
-		});
+		}).catch(console.error);
 	},
 
 	_tiles() {

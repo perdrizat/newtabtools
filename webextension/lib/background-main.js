@@ -46,7 +46,7 @@ import '../common.js';
 import '../prefs.js';
 import { registerMessageHandler } from './messages.js';
 import { Tiles } from './tiles-store.js';
-import { SAFE_PROTOCOLS, getTZDateString } from './constants.js';
+import { SAFE_PROTOCOLS, getTZDateString, NEW_TAB_PAGE } from './constants.js';
 import { withStore } from './db.js';
 import {
 	resetNetworkIdleTimer,
@@ -66,7 +66,7 @@ import {
 	createMenuTolerant,
 } from './platform.js';
 
-const NEW_TAB_URL = chrome.runtime.getURL('newTab.html');
+const NEW_TAB_URL = chrome.runtime.getURL(NEW_TAB_PAGE);
 
 // ---------------------------------------------------------------------------
 // Message dispatch

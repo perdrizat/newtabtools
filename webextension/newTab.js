@@ -2411,9 +2411,9 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 			return;
 		}
 		if (newTabTools.pinURLAutocomplete.compareDocumentPosition(event.target) & Node.DOCUMENT_POSITION_CONTAINED_BY) {
-			let target = event.target;
-			while (target.nodeName.toLowerCase() != 'li') {
-				target = target.parentNode;
+			let target = event.target.closest('li');
+			if (!target) {
+				return;
 			}
 			if (target != newTabTools.pinURLBlocked) {
 				newTabTools.setPinURLInputValue(target.dataset.url);

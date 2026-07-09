@@ -14,9 +14,9 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
@@ -27,8 +27,7 @@ const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 
 describe('Never-capture UI — markup', () => {
 	let html: string;
-	// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup structure
-	beforeAll(() => { html = fs.readFileSync(HTML_PATH, 'utf8'); });
+	beforeAll(() => { html = readNewTabHtml(); });
 
 	it('advanced panel contains a form group with id="options-nevercapture"', () => {
 		const advanced = html.slice(

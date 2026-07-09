@@ -20,10 +20,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?(?:get\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -43,8 +43,7 @@ describe('Recently-closed toggle — placement in the Page tab Title Bar group',
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- structural check: drawer markup placement
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 	});
 
 	it('the recent control is a role="switch" toggle (not a segmented radio)', () => {

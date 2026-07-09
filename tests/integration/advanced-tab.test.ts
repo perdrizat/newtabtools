@@ -17,18 +17,17 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
 describe('Advanced tab — no native controls (§5/B1)', () => {
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drawer markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 	});
 
 	it('has no native checkbox anywhere in the drawer body', () => {
@@ -47,8 +46,7 @@ describe('Advanced tab — button hierarchy + confirm steps (§5/§7)', () => {
 	let js: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup/CSS/JS
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour
@@ -178,8 +176,7 @@ describe('Themed Restore file button (Advanced › Restore)', () => {
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: locale copy
@@ -209,8 +206,7 @@ describe('History-tiles filter — toggle, remove, design language', () => {
 	let js: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour
@@ -257,8 +253,7 @@ describe('Tile editor controls — themed + recognizable', () => {
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: locale copy
@@ -288,8 +283,7 @@ describe('Tile dialog redesign — Pin next / Update current, rows, alignment', 
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour

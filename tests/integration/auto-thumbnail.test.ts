@@ -76,6 +76,7 @@ import {
 } from '../../webextension/lib/capture.js';
 import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
 import { handleMessage } from '../../webextension/lib/messages.js';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -155,10 +156,7 @@ describe('Remove-thumbnail button — newTab.html (source scan)', () => {
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		html = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
-		);
+		html = readNewTabHtml();
 	});
 
 	it('site template has action buttons container for thumbnail actions', () => {

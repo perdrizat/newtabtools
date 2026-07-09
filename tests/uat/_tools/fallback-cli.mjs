@@ -24,6 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Builder } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
+import { newTabURL } from './urls.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // XPI_DIR = canonical build output. ART_DIR = UAT evidence (daemon file, etc.).
@@ -32,7 +33,7 @@ const ART_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifac
 const DAEMON_FILE = `${ART_DIR}/uat-cli-daemon.json`;
 const ADDON_ID = 'newtabtools@symlink.ch';
 const UUID = 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.html`;
+const NEWTAB_URL = newTabURL(UUID);
 
 function newestXpi() {
 	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }

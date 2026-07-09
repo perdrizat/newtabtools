@@ -3,20 +3,27 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Regression test for the Stage H1 case-trap fix (MODERNIZATION.md, audit
- * 2026-07-09-mv3-inventory.md §2.1): the pin-URL autocomplete dropdown's
- * window-level click handler in `newTab.js` walks up from `event.target` to
- * the containing `<li>` via `while (target.nodeName != 'li')`. Under XHTML
- * (the pre-Stage-H2 parser) `nodeName` was lowercase so this worked; under
- * the HTML parser (`newTab.html`, landed in Stage H2) `nodeName` is
- * uppercase (`'LI'`), so an unfixed loop would never match, walk past the
- * `<li>` to `document`, and throw on `null.parentNode`.
+ * Regression test for the Stage H1 case-trap fix and its H-review follow-up
+ * (audit 2026-07-09-modernization-h-code-review.md #1): the pin-URL
+ * autocomplete dropdown's window-level click handler in `newTab.js` resolves
+ * `event.target` up to its containing `<li>`.
+ *
+ * It originally did this via `while (target.nodeName != 'li') { target =
+ * target.parentNode; }`. Under XHTML (the pre-Stage-H2 parser) `nodeName`
+ * was lowercase so this worked; under the HTML parser (`newTab.html`, landed
+ * in Stage H2) `nodeName` is uppercase (`'LI'`), so the unfixed loop would
+ * never match, walk past the `<li>` to `document`, and throw on
+ * `null.parentNode`. The loop also had no termination guard for a click on a
+ * non-`<li>` direct child of the dropdown (e.g. a header row) — it would
+ * still walk past `document` and throw on `null.nodeName`.
+ *
+ * The handler now uses `event.target.closest('li')` instead: it's natively
+ * case-insensitive and returns `null` (guarded, see the last test below)
+ * rather than throwing when no `<li>` ancestor exists.
  *
  * jsdom (the fast-tier environment) already parses as HTML by default
  * (audit §3.2), so real DOM elements created here naturally have uppercase
- * `nodeName` — no simulation needed; this is what made the test genuinely
- * red against the unfixed source, and it now also matches the real
- * production parser post-H2.
+ * `nodeName` — no simulation needed.
  *
  * Extracts the actual click-handler function literally from `newTab.js` (not
  * a reimplementation) so the test tracks the real code path.
@@ -52,6 +59,7 @@ describe('pin-URL autocomplete window click handler — nodeName case-safety (St
 	let li: HTMLElement;
 	let span: HTMLElement;
 	let blockedLi: HTMLElement;
+	let header: HTMLElement;
 	let input: HTMLElement;
 	let setPinURLInputValue: ReturnType<typeof vi.fn>;
 	let autocomplete: ReturnType<typeof vi.fn>;
@@ -74,6 +82,8 @@ describe('pin-URL autocomplete window click handler — nodeName case-safety (St
 		li.appendChild(span);
 		blockedLi = document.createElement('li');
 		blockedLi.id = 'options-pinURL-blocked';
+		header = document.createElement('div');
+		ul.appendChild(header);
 		ul.appendChild(li);
 		ul.appendChild(blockedLi);
 		document.body.appendChild(ul);
@@ -114,6 +124,16 @@ describe('pin-URL autocomplete window click handler — nodeName case-safety (St
 
 	it('does not fill the input when the resolved <li> is the blocked placeholder', () => {
 		const event = { button: 0, target: blockedLi, stopPropagation: vi.fn() };
+		expect(() => handler(event)).not.toThrow();
+		expect(setPinURLInputValue).not.toHaveBeenCalled();
+	});
+
+	it('does not throw and does not fill the input on a click on a non-<li> direct child of the dropdown', () => {
+		// Guards against the unbounded ancestor walk this handler used to do:
+		// if the dropdown ever gains a non-<li> direct child (e.g. a header
+		// row), a click on it must not walk past the <ul> to `document` and
+		// throw on `null.nodeName`.
+		const event = { button: 0, target: header, stopPropagation: vi.fn() };
 		expect(() => handler(event)).not.toThrow();
 		expect(setPinURLInputValue).not.toHaveBeenCalled();
 	});

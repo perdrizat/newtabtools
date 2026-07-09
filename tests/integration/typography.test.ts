@@ -19,10 +19,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 // Return the body of the FIRST CSS rule whose selector list ends with `selector`
 // immediately before the opening brace. Anchored on `selector\s*{` so
@@ -41,10 +41,9 @@ describe('typography role discipline (§6)', () => {
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS/markup rule presence
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rule presence
 		css = fs.readFileSync(CSS_PATH, 'utf8');
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup attribute presence
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 	});
 
 	// Textual content that must NOT be monospace.

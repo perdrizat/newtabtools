@@ -17,13 +17,14 @@
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { newTabURL } from './urls.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DAEMON = path.join(__dirname, 'browser-daemon.mjs');
 const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
 const BASE = `http://127.0.0.1:${PORT}`;
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.html`;
+const NEWTAB_URL = newTabURL(UUID);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const size = o => Buffer.byteLength(JSON.stringify(o));

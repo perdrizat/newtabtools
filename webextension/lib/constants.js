@@ -23,8 +23,18 @@
  * by three independent modules (lib/capture.js, lib/messages.js,
  * lib/background-main.js's cleanupThumbnails/idleListener), so a shared leaf
  * module with no imports of its own is the natural home.
+ *
+ * `NEW_TAB_PAGE` (Stage H close-out, audit
+ * 2026-07-09-modernization-h-code-review.md #7) — post-rename, the runtime
+ * had `'newTab.html'` as a literal in exactly two places: manifest.json's
+ * `chrome_url_overrides` and `chrome.runtime.getURL('newTab.html')` in
+ * lib/background-main.js. Only the second is an importable JS site (manifest
+ * JSON can't import), so it moves here.
  */
 export const SAFE_PROTOCOLS = ['http:', 'https:', 'ftp:'];
+
+/** Filename of the new tab page, relative to the extension root. */
+export const NEW_TAB_PAGE = 'newTab.html';
 
 /**
  * @param {Date} [date]

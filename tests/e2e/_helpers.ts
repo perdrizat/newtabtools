@@ -111,11 +111,21 @@ export async function getExtensionUUID(): Promise<string> {
 }
 
 /**
+ * Build the full `moz-extension://` URL to the new tab page for a given
+ * per-profile UUID (audit 2026-07-09-modernization-h-code-review.md #7b —
+ * the sibling of tests/uat/_tools/urls.mjs's `newTabURL`, kept local here
+ * since this file already anchors the E2E harness's own path constants).
+ */
+export function newTabURL(uuid: string): string {
+	return `moz-extension://${uuid}/newTab.html`;
+}
+
+/**
  * Get the full URL to the extension's new tab page.
  */
 export async function getNewTabURL(): Promise<string> {
 	const uuid = await getExtensionUUID();
-	return `moz-extension://${uuid}/newTab.html`;
+	return newTabURL(uuid);
 }
 
 export interface WaitForConditionOpts {

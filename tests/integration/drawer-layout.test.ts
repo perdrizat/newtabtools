@@ -229,7 +229,9 @@ describe('Drawer Layout tab — drawerOnChange (Phase 3-1)', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const drawerOnChange = extractMethod(source, 'drawerOnChange');
 
-		const code = `var _layoutChangeHarness = { ${drawerOnChange} };`;
+		// `optionsOnChange` is stubbed (not extracted) — the harness only
+		// needs to record whether the slider branch fell through to it.
+		const code = `var _layoutChangeHarness = { ${drawerOnChange}, optionsOnChange(event) { this._optionsOnChangeCalled = true; } };`;
 		vm.runInThisContext(code, { filename: 'drawer-layout-change-harness.js' });
 		harness = (globalThis as any)._layoutChangeHarness;
 	});
@@ -241,6 +243,7 @@ describe('Drawer Layout tab — drawerOnChange (Phase 3-1)', () => {
 			spacing: 'small', margin: ['small', 'small', 'small', 'small'],
 			tileRadius: 'medium',
 		};
+		harness._optionsOnChangeCalled = false;
 	});
 
 	it('slider index 0 maps spacing to "small"', () => {
@@ -280,18 +283,36 @@ describe('Drawer Layout tab — drawerOnChange (Phase 3-1)', () => {
 
 	// --- Regressions caught during Phase 3-1 review ---
 
-	it('regression: identifies range inputs by `type`, not `tagName` (case-insensitive)', () => {
-		// `Element.tagName` is uppercase in HTML (`INPUT`); it was lowercase
-		// (`input`) back when newTab.xhtml was parsed as XML (pre-Stage-H),
-		// which is how the original `tagName === "INPUT"` check silently
-		// failed in the real extension while passing all jsdom tests. Kept
-		// as a defense-in-depth regression guard post-HTML5-conversion.
-		const slider = document.querySelector('input[type="range"][data-pref="spacing"]') as HTMLInputElement;
-		// Force tagName to lowercase to simulate the old XHTML semantics.
-		Object.defineProperty(slider, 'tagName', { value: 'input', configurable: true });
-		slider.value = '1';
-		harness.drawerOnChange({ target: slider });
+	it('regression: dispatches on `target.type === "range"`, not `tagName` — a range-type target with a non-INPUT tagName still writes the pref', () => {
+		// `drawerOnChange` (newTab.js:1636) dispatches on `target.type ===
+		// 'range'` — it never reads `tagName` at all (that was true even
+		// before Stage H2; the old `Element.tagName` case-trap this test used
+		// to guard against lived in the pin-URL autocomplete handler, not
+		// here — see pin-url-autocomplete-click.test.ts). A plain object
+		// stands in for the event target: `type: 'range'` but a `tagName`
+		// that is deliberately NOT 'INPUT', so a tagName-based gate — if ever
+		// reintroduced — would fail this test by falling through instead.
+		const fakeTarget = {
+			type: 'range', tagName: 'SPAN', value: '1',
+			dataset: { pref: 'spacing' },
+			closest: () => null,
+		};
+		harness.drawerOnChange({ target: fakeTarget });
 		expect((globalThis as any).Prefs.spacing).toBe('medium');
+		expect(harness._optionsOnChangeCalled).toBe(false);
+	});
+
+	it('regression: a non-range target with the same data-pref does NOT hit the slider branch (falls through to optionsOnChange)', () => {
+		// Confirms the dispatch is genuinely conditional on `type === 'range'`
+		// rather than on `dataset.pref` alone.
+		const fakeTarget = {
+			type: 'text', tagName: 'INPUT', value: '1',
+			dataset: { pref: 'spacing' },
+			closest: () => null,
+		};
+		harness.drawerOnChange({ target: fakeTarget });
+		expect((globalThis as any).Prefs.spacing).toBe('small'); // unchanged from beforeEach default
+		expect(harness._optionsOnChangeCalled).toBe(true);
 	});
 
 	it('regression: updates the slider px label synchronously (no storage round-trip)', () => {

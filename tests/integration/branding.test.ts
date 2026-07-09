@@ -19,11 +19,11 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 
 const AMO_URL = 'https://addons.mozilla.org/firefox/addon/newtab-powertools/';
@@ -84,8 +84,7 @@ describe('About section — brand home', () => {
 	let css: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: About markup
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: About CSS
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});

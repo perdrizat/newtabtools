@@ -25,6 +25,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -138,8 +139,7 @@ describe('Titlebar — Board A chrome (newTab.html)', () => {
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: titlebar structure
-		html = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
+		html = readNewTabHtml();
 	});
 
 	it('drops the wordmark, masthead, and lock/cogwheel button cluster (§1)', () => {

@@ -20,6 +20,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,8 +29,7 @@ describe('About section — newTab.html + version render', () => {
 	let js: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- structural assertions on shipped markup
-		html = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- regex on version-render code path
 		js = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.js'), 'utf8');
 	});

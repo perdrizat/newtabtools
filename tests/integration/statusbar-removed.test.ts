@@ -21,9 +21,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 const LOCALE_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
@@ -47,10 +47,9 @@ describe('Phase 4-0 — status bar retired from the chrome', () => {
 	let css: string;
 
 	beforeAll(() => {
-		/* eslint-disable ntt/no-source-grep -- structural checks: markup/style removal */
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
+		// eslint-disable-next-line ntt/no-source-grep -- structural check: style removal
 		css = fs.readFileSync(CSS_PATH, 'utf8');
-		/* eslint-enable ntt/no-source-grep */
 	});
 
 	it('the #ntt-statusbar markup is removed entirely (Phase 5-1)', () => {

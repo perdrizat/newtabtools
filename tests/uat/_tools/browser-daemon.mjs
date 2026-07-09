@@ -51,6 +51,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
+import { newTabURL } from './urls.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -60,7 +61,7 @@ const XPI_DIR = process.env.XPI_DIR || path.resolve(ROOT, 'dist');
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const ADDON_ID = 'newtabtools@symlink.ch';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.html`;
+const NEWTAB_URL = newTabURL(UUID);
 
 // Window size for the Firefox viewport. Default Full HD; override with
 // $UAT_WINDOW=WxH (e.g. 2560x1600 to supersample marketing screenshots).

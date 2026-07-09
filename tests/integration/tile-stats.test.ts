@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'vm';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATS_PATH = path.resolve(__dirname, '../../webextension/stats.js');
@@ -24,10 +25,7 @@ describe('TileStats module — source presence', () => {
 	});
 
 	it('is linked in newTab.html', () => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: script link in template
-		const html = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
-		);
+		const html = readNewTabHtml();
 		expect(html).toContain('stats.js');
 	});
 });

@@ -20,11 +20,10 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { mountSite } from './_helpers';
+import { mountSite, readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 
 describe('edit mode — CSS affordances (§2)', () => {
@@ -111,8 +110,7 @@ describe('edit mode — markup + defaults (§2)', () => {
 	let prefs: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template + pref defaults
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: pref default
 		prefs = fs.readFileSync(PREFS_PATH, 'utf8');
 	});

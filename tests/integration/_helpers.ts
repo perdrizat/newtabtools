@@ -10,6 +10,36 @@ import { vi } from 'vitest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const NEWTAB_HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+let _newTabHtmlCache: string | undefined;
+
+/**
+ * Reads the shipped `webextension/newTab.html`, cached after the first call.
+ *
+ * Centralizes what used to be ~16 hand-rolled
+ * `fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8')`
+ * copies across the integration suite (audit
+ * 2026-07-09-modernization-h-code-review.md #5) — the H2 rename touched every
+ * one of them, which is the cost this helper removes: the next rename (or
+ * path change) touches this one line instead. This is the one sanctioned
+ * place the integration tier reads `newTab.html` from disk; callers import
+ * this helper instead of calling `readFileSync` themselves, so the
+ * `ntt/no-source-grep` justification lives here once rather than once per
+ * call site.
+ */
+export function readNewTabHtml(): string {
+	if (_newTabHtmlCache === undefined) {
+		// eslint-disable-next-line ntt/no-source-grep -- the one sanctioned read of newTab.html; see docstring above
+		_newTabHtmlCache = fs.readFileSync(NEWTAB_HTML_PATH, 'utf8');
+	}
+	return _newTabHtmlCache;
+}
+
+/** Parses `newTab.html` with the same `DOMParser` the fast tier uses elsewhere. */
+export function parseNewTabDocument(): Document {
+	return new DOMParser().parseFromString(readNewTabHtml(), 'text/html');
+}
+
 export function loadModule(relativePath: string, sandbox?: Record<string, unknown>): Record<string, unknown> {
 	const fullPath = path.resolve(__dirname, relativePath);
 	const source = fs.readFileSync(fullPath, 'utf8');

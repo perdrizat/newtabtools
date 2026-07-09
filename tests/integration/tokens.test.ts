@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TOKENS_PATH = path.resolve(__dirname, '../../webextension/tokens.css');
@@ -117,10 +118,7 @@ describe('Design tokens — tokens.css', () => {
 		let html: string;
 
 		beforeAll(() => {
-			// eslint-disable-next-line ntt/no-source-grep -- wiring check: stylesheet link
-			html = fs.readFileSync(
-				path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
-			);
+			html = readNewTabHtml();
 		});
 
 		it('has a <link> to tokens.css', () => {

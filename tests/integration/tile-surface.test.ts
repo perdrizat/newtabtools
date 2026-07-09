@@ -16,21 +16,19 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { mountSite } from './_helpers';
+import { mountSite, readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 describe('tile surface — kebab-at-rest affordance (§3c)', () => {
 	let css: string;
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template + CSS structure
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS structure
 		css = fs.readFileSync(CSS_PATH, 'utf8');
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		html = fs.readFileSync(HTML_PATH, 'utf8');
+		html = readNewTabHtml();
 	});
 
 	it('tile template carries a .ntt-actions-kebab rest affordance', () => {

@@ -199,6 +199,24 @@ describe('AwesomeBar — DOM wiring', () => {
 		expect(urls).toContain('https://git-scm.com/'); // history
 	});
 
+	it('regression (June review §4.4): a thrown render error inside _query\'s Promise.all chain is caught, not an unhandled rejection', async () => {
+		// _query's Promise.all([...]).then(...) chain had no .catch — if the
+		// render callback itself threw (e.g. a future _render/buildResults
+		// bug), the resulting rejection was unhandled. It must land on
+		// console.error instead.
+		const realRender = AwesomeBar._render;
+		AwesomeBar._render = () => { throw new Error('boom from _render'); };
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			AwesomeBar._query('git');
+			await new Promise(r => setTimeout(r, 0));
+			expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ message: 'boom from _render' }));
+		} finally {
+			AwesomeBar._render = realRender;
+			errorSpy.mockRestore();
+		}
+	});
+
 	it('preventive (review §3): renders attacker-controlled title/URL as text, never as HTML', () => {
 		// Bookmark/history titles + URLs are attacker-influenced (a user can be
 		// tricked into bookmarking a page with a crafted title). The renderer

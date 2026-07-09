@@ -18,6 +18,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
@@ -66,10 +67,7 @@ describe('Tile aspect ratio UI — newTab.html', () => {
 	let html: string;
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		html = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
-		);
+		html = readNewTabHtml();
 	});
 
 	it('has a tileAspect segmented control in the Tile tab (Phase 3-2 reshuffle)', () => {
