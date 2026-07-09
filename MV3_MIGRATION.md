@@ -102,9 +102,11 @@ geckodriver on both firefox-esr 140.12 and release 152.0.5, all headless.
       first event-page respawn, then it vanishes again (gesture-tied, unusable for
       background capture). **On release Firefox 152.0.5 it works** (real ~28KB JPEG
       captured, same probe, same permissions, no prefs). This is a Firefox-version
-      gate, not a permission gate. Exact boundary version: bisect in progress over
-      141–152; result decides the new `strict_min_version`.
-      Consequences: (a) `strict_min_version` must rise from 140 to the boundary;
+      gate, not a permission gate. **Bisect result (official binaries 146/149/150/
+      151/152): the boundary is exactly Firefox 152.0** — `captureVisibleTab` and
+      `captureTab` are both `undefined` through 151.0 and working functions from
+      152.0 (end-to-end capture confirmed on 152.0; 151.0 throws).
+      Consequences: (a) `strict_min_version` becomes **"152.0"**;
       (b) the E2E tier cannot run on ESR 140 post-flip — Mozilla APT currently has
       no newer ESR, so E2E moves to a release-channel binary (runner + CI);
       (c) UAT (release Firefox) already works.
