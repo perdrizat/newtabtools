@@ -22,7 +22,7 @@ were already Stage H.
 | Step | Status | Commit |
 |---|---|---|
 | Sequencing decision (M before H) | ✓ decided 2026-07-09 | — |
-| ESR-140 retest (MV3 capture gate confirmation) | ~ in progress (parallel agent) | — |
+| ESR-140 retest (MV3 capture gate confirmation) | ✓ done — gate CONFIRMED on the real 2.1.0 build (capture APIs absent on 140; min-version enforced even on temp installs; keep 152.0) | — |
 | M1 — globalThis bridge + module entry flip | ~ in progress (agent implementing) | — |
 | M2 — `lib/db.js` + tiles store (ready-gated) | pending | — |
 | M3 — capture pipeline module + image seam | pending | — |

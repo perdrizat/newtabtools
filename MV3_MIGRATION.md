@@ -314,12 +314,13 @@ review of the migration; disposition per maintainer decision 2026-07-09.
 - All other open items in this section were absorbed into the MODERNIZATION arc
   on 2026-07-09 (see [`MODERNIZATION.md`](MODERNIZATION.md) "Folded-in extras");
   this backlog is closed — MODERNIZATION.md is the live tracker.
-- **Retest the finished MV3 build against Firefox 140/ESR.** The Fx-152 capture gate
-  was established with a minimal probe during the spike (2026-07-09). Once the real
-  migrated extension exists, re-run it (probe + E2E capture tests) on ESR 140 to
-  confirm the gate is a genuine upstream version restriction and not a temporary
-  issue or a side effect of our own probe/migration choices. If capture turns out to
-  work on 140, lower `strict_min_version` accordingly.
+- ~~**Retest the finished MV3 build against Firefox 140/ESR.**~~ — **DONE
+  2026-07-09** (MODERNIZATION arc, parallel verification): capture-API absence
+  reproduces on ESR 140.12 with the real 2.1.0 build's own runtime (probe AND a
+  min-version-patched diagnostic copy — `typeof captureVisibleTab` `undefined`,
+  everything else works); `strict_min_version: "152.0"` is enforced even on
+  temporary installs (geckodriver refuses the unmodified artifact). Gate is a
+  genuine upstream restriction; 152.0 stays.
 - XHTML→HTML conversion (dedicated high-risk task; full UAT review). *(review
   2026-07-09 §3b concurs; hazards inventoried in audit/2026-07-09-mv3-inventory.md
   §2. Slots as the natural first step of the ES-module arc / Chrome prep — not
