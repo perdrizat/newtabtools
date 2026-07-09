@@ -4,30 +4,32 @@
 
 /**
  * Backup/restore pipeline (MODERNIZATION.md, Stage M, slice M4), carved out
- * of the former webextension/export.js into a real ES module. Unlike
- * background.js (still bridge-mode until M5), none of this file's three
- * collaborators — the vendored zip library, the Tiles/Background stores,
- * purgeNeverCaptureHost — are dual-scope page/background files (Decision 2),
- * so there's no reason to reach them through the globalThis bridge: real
- * `import`s replace the `zip`/`Tiles`/`Background`/`purgeNeverCaptureHost`
- * globals export.js used to read.
+ * of the former webextension/export.js into a real ES module. None of this
+ * file's collaborators — the vendored zip library, the Tiles/Background
+ * stores, purgeNeverCaptureHost — are dual-scope page/background files
+ * (Decision 2), so there's no reason to reach them through the globalThis
+ * bridge: real `import`s replace the `zip`/`Tiles`/`Background`/
+ * `purgeNeverCaptureHost` globals export.js used to read.
  *
- * `makeZip`/`readZip` themselves are still bridged onto `globalThis` — by
- * lib/background-main.js, the same mechanism as `withStore`/`SAFE_PROTOCOLS`
- * (M2) and the capture-pipeline exports (M3) — for background.js (bridge-mode
- * itself until M5) to reach from its `Export:backup`/`Import:restore` message
- * handlers.
+ * `makeZip`/`readZip` are real exports, imported directly by lib/messages.js
+ * (M5, dissolves the former background.js) from its `Export:backup`/
+ * `Import:restore` message-handler cases — no more `globalThis` bridge for
+ * either.
  *
- * `Filters` (prefs.js, a dual-scope bridge file per Decision 2) is read here
- * as a bare global, same stopgap as lib/tiles-store.js's own `Filters` read —
- * M5's lib/platform.js replaces this with one typed accessor seam.
+ * `Filters` (prefs.js, a dual-scope bridge file per Decision 2) is read via
+ * lib/platform.js's `getFilters()` typed accessor (M5) — the one sanctioned
+ * read site for that global across lib/, replacing the former bare-global
+ * stopgap this file (and lib/tiles-store.js) used before M5.
+ *
+ * `notifyRestoreComplete()` (the one-off `Page.restoreComplete` broadcast)
+ * is gone too — M5's lib/platform.js `broadcastToPages()` absorbs it; every
+ * call site below calls that directly instead.
  */
-
-/* globals Filters */
 
 import * as zip from './zip/zip-core.js';
 import { Tiles, Background } from './tiles-store.js';
 import { purgeNeverCaptureHost } from './capture.js';
+import { getFilters, broadcastToPages } from './platform.js';
 
 zip.configure({ useWebWorkers: false });
 
@@ -102,22 +104,6 @@ export async function makeZip() {
 		}
 		throw ex;
 	}
-}
-
-/**
- * Tell every open new-tab page that a restore has finished rewriting the
- * stored data. Each page refreshes itself — wallpaper, full grid rebuild,
- * thumbnails — on this message (see pageMessageHandler in newTab.js). This
- * replaces the MV2-only extension.getViews() access to page globals
- * (Slice A of the MV3 migration). When no page is open the broadcast rejects
- * with "Receiving end does not exist" — swallowed.
- *
- * M5's lib/platform.js `broadcastToPages()` (MODERNIZATION.md) absorbs this
- * one-off broadcast helper; left as-is here until then.
- * @returns {Promise<void>}
- */
-function notifyRestoreComplete() {
-	return browser.runtime.sendMessage({name: 'Page.restoreComplete'}).catch(() => {});
 }
 
 /**
@@ -218,7 +204,7 @@ export async function readZip(file) {
 					if (typeof entry !== 'string') {
 						continue;
 					}
-					let normalized = Filters.normalizeHost(entry).replace(/:\d+$/, '');
+					let normalized = getFilters().normalizeHost(entry).replace(/:\d+$/, '');
 					if (normalized && safeHostPattern.test(normalized) && !seen.has(normalized)) {
 						seen.add(normalized);
 						cleaned.push(normalized);
@@ -238,7 +224,7 @@ export async function readZip(file) {
 			await purgeNeverCaptureHost(host);
 		}
 		// Everything the backup carried is written — pages refresh themselves.
-		await notifyRestoreComplete();
+		await broadcastToPages('Page.restoreComplete');
 		return;
 	}
 
@@ -288,5 +274,5 @@ export async function readZip(file) {
 
 	// The restore data is fully written — pages refresh themselves (wallpaper,
 	// full grid rebuild, thumbnails) on this broadcast.
-	await notifyRestoreComplete();
+	await broadcastToPages('Page.restoreComplete');
 }

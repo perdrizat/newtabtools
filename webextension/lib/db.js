@@ -6,17 +6,18 @@
  * IndexedDB connection lifecycle for New Tab Tools (MODERNIZATION.md, Stage
  * M, slice M2 — "the readiness redesign").
  *
- * Supersedes background.js's `initDB`/`waitForDB`/`globalThis.db` trio (and
- * the ~10 hand-wrapped `waitForDB()` call sites the pre-release fix queue
- * added — audit §2.1). The raw connection is a MODULE-PRIVATE binding: it is
- * never exported, and nothing outside this file can read or write it. Every
- * caller — Tiles/Background (lib/tiles-store.js, real `import`) and
- * background.js's remaining raw store access (bridged onto
- * `globalThis.withStore` in lib/background-main.js — background.js is still
- * a bridge-mode file per Decision 2 and can't use `import` syntax until its
- * own carve-up in M5) — goes through `withStore()`, which awaits
- * readiness itself. An unguarded db access is therefore unrepresentable:
- * there is no `db` identifier anywhere else in the codebase to unguard.
+ * Supersedes the former webextension/background.js's `initDB`/`waitForDB`/
+ * `globalThis.db` trio (and the ~10 hand-wrapped `waitForDB()` call sites the
+ * pre-release fix queue added — audit §2.1). The raw connection is a
+ * MODULE-PRIVATE binding: it is never exported, and nothing outside this
+ * file can read or write it. Every caller — Tiles/Background
+ * (lib/tiles-store.js), lib/messages.js's `Thumbnails.*` handlers, and
+ * lib/background-main.js's `cleanupThumbnails` — reaches it via a real
+ * `import { withStore } from './db.js'` (background.js dissolved in
+ * MODERNIZATION.md Stage M slice M5; there is no more `globalThis` bridge for
+ * it) — goes through `withStore()`, which awaits readiness itself. An
+ * unguarded db access is therefore unrepresentable: there is no `db`
+ * identifier anywhere else in the codebase to unguard.
  */
 
 /** @type {IDBDatabase|undefined} The live connection. Module-private — never exported. */
@@ -132,12 +133,15 @@ function waitForDB() {
  * Typed as one general union signature rather than `@overload`s: a generic
  * `@overload` pair here didn't survive TypeScript's overload/implementation
  * compatibility check cleanly (the `fn` parameter's contravariant position
- * fights the generic per-overload template). Every call site in the actually
- * type-checked lib/tiles-store.js is single-store only, so it goes through
- * that file's own `withObjectStore()` wrapper (a thin, precisely-typed
- * single-store view onto this function) instead of narrowing here —
- * background.js's multi-store `purgeNeverCaptureHost` call is outside the
- * type-checked program (see tsconfig.json's `exclude` comment) and unaffected.
+ * fights the generic per-overload template). Most single-store call sites
+ * (lib/tiles-store.js, lib/messages.js, lib/capture.js's own single-store
+ * calls) go through a file-local `withObjectStore()` wrapper (a thin,
+ * precisely-typed single-store view onto this function) instead of narrowing
+ * here; lib/background-main.js's one call site (`cleanupThumbnails`) casts
+ * the parameter to `IDBObjectStore` inline instead of adding a wrapper for a
+ * single use. `purgeNeverCaptureHost` (lib/capture.js) is the one multi-store
+ * call site and casts the union to `IDBTransaction` inline at its own call
+ * site (see that function's own doc comment).
  *
  * @param {string|string[]} storeNames
  * @param {'readonly'|'readwrite'} mode

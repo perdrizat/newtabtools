@@ -78,9 +78,9 @@ globalThis.Prefs = {
 		// Registered synchronously here — not after the storage.local.get
 		// await below — so it's live the instant init() runs, rather than
 		// only once that async read resolves. init() itself is called
-		// synchronously at background.js's top level, so this keeps every
-		// respawn's listener registration synchronous top-to-bottom (MV3
-		// event-page respawn hygiene; see MV3_MIGRATION.md).
+		// synchronously at lib/background-main.js's top level, so this keeps
+		// every respawn's listener registration synchronous top-to-bottom
+		// (MV3 event-page respawn hygiene; see MV3_MIGRATION.md).
 		chrome.storage.onChanged.addListener(this.prefsChanged.bind(this));
 
 		let prefs = await browser.storage.local.get();
@@ -372,7 +372,7 @@ globalThis.NeverCapture = {
 
 	/**
 	 * Return true when `host` is covered by `pattern`.
-	 * Helper exposed for background.js cursor passes.
+	 * Helper exposed for lib/capture.js's purgeNeverCaptureHost cursor passes.
 	 * @param {string} host
 	 * @param {string} pattern
 	 * @returns {boolean}

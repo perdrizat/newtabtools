@@ -3,7 +3,7 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Page */
-/* globals Blocked, NeverCapture, newTabTools, NttIcons, Prefs, Tiles, TileStats */
+/* globals Blocked, NeverCapture, newTabTools, NttIcons, pageMessageHandler, Prefs, Tiles, TileStats */
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -2321,3 +2321,15 @@ var UndoDialog = {
 UndoDialog.init();
 
 newTabTools.startup();
+
+// MV3 review §4.3 (MODERNIZATION.md M5): this is the last statement this
+// file's top-level execution runs — `Updater`/`Grid` (defined above) now
+// exist, so this is the ready signal for any 'Page.updateGrid'/
+// 'Page.restoreComplete' broadcast that arrived (and was queued by
+// pageMessageHandler in newTab.js) before this file finished loading.
+// Guarded: fx-newTab.js is also loaded standalone (without newTab.js) by
+// tests/integration/_helpers.ts's mountSite() harness, where
+// pageMessageHandler doesn't exist.
+if (typeof pageMessageHandler !== 'undefined') {
+	pageMessageHandler.flushQueued();
+}

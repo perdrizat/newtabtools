@@ -27,7 +27,7 @@ were already Stage H.
 | M2 — `lib/db.js` + tiles store (ready-gated) | ✓ done (fast 1228, E2E 126; `db` global dead, `withStore` gate; bonus: `Thumbnails.delete`+`cleanupThumbnails` were still unguarded, now gated; `getGridTiles` rename; SAFE_PROTOCOLS unified, export.js independent) | — |
 | M3 — capture pipeline module + image seam | ✓ done (fast 1234, E2E 126; background.js 1063→545 lines; agent-caught eval-time bridge-reference bug fixed via deferred closures; favicon test extraction hack deleted) | — |
 | M4 — backup/export module + zip.js ESM vendoring | ✓ done (fast 1232, E2E 126; export.js dissolved into lib/backup.js, boundary verbatim; zip-global shim retired; zip-core.d.ts shadow types, update-zip preserves it) | — |
-| M5 — `lib/platform.js` + entry consolidation + review leftovers | pending | — |
+| M5 — `lib/platform.js` + entry consolidation + review leftovers | ✓ done (fast 1238, E2E 126; background.js + tiles.js shim DELETED; globalThis surface = 5 dual-scope symbols only; §3.1 + §4.3 closed; zero background vm-loads left) | — |
 | M6 — cosmetic UAT findings (placeholder clip, chip contrast, scenario text) | pending | — |
 | M gate — full E2E + full UAT + audit | pending | — |
 | H1 — case-trap prefix fixes (XHTML-safe) | pending | — |

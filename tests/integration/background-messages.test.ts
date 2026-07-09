@@ -6,31 +6,38 @@
  * Integration test: runtime.onMessage boundary characterization.
  * Phase 1 slot 1 of the migration plan (MIGRATION.md).
  *
- * Loads the real `background.js` (script-mode legacy code) via
- * `vm.runInThisContext` into a mocked environment and exercises every
- * message handler through the `chrome.runtime.onMessage` listener.
- * Pins current behaviour — including known bugs — before any rewrite
- * touches the message protocol.
+ * MODERNIZATION.md slice M5 dissolves the former webextension/background.js:
+ * this test now drives the real `handleMessage` export of lib/messages.js
+ * directly (native import, no vm.runInThisContext — lib/messages.js has real
+ * `import` syntax and can't be script-mode-parsed). Its dependencies
+ * (Tiles/Background, withStore, makeZip/readZip) are real imports in
+ * lib/messages.js itself; this test mutates the SAME singleton
+ * `Tiles`/`Background` objects it imports (module instances are shared by
+ * resolved path, so replacing a method on the imported object is visible
+ * through lib/messages.js's own import of the same module) instead of
+ * replacing a `globalThis` bridge. `makeZip`/`readZip` are mocked via
+ * `vi.mock` — this test only cares about dispatch plumbing, not the real
+ * zip/backup pipeline (covered by backup-restore.test.ts). `withStore`
+ * (lib/db.js) is the REAL implementation, driven by the controllable
+ * `indexedDB.open()` mock below — same pattern the rest of this test suite
+ * has always used.
  *
  * Mocking strategy:
  *   - jest-webextension-mock (via tests/setup.js) provides chrome/browser stubs
- *   - Tiles, Background, Prefs, etc. are vi.fn() stubs on globalThis
- *   - indexedDB.open is mocked to resolve initDB synchronously
- *   - The onMessage listener is captured from the mock after script load
+ *   - Tiles/Background have their methods replaced with vi.fn() stubs
+ *   - indexedDB.open is mocked to resolve synchronously
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-import { withStore } from '../../webextension/lib/db.js';
-import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
-import { getTZDateString, resetNetworkIdleTimer, purgeNeverCaptureHost } from '../../webextension/lib/capture.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
+vi.mock('../../webextension/lib/backup.js', () => ({
+	makeZip: vi.fn().mockResolvedValue(new Blob(['zip-data'])),
+	readZip: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { handleMessage } from '../../webextension/lib/messages.js';
+import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
+import { makeZip, readZip } from '../../webextension/lib/backup.js';
 
 const EXTENSION_ID = 'newtabtools@symlink.ch';
 
@@ -76,17 +83,10 @@ function mockCursorIteration(entries: Array<Record<string, unknown>>) {
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => {
-	type MessageListener = (message: any, sender: any, sendResponse: any) => boolean | undefined | void;
-
-	let listener: MessageListener;
-	let sendResponse: ReturnType<typeof vi.fn>;
+describe('lib/messages.js — runtime.onMessage boundary (Phase 1 slot 1)', () => {
+	let sendResponse: ReturnType<typeof vi.fn<(...args: any[]) => any>>;
 
 	// Shared mock objects (set in beforeAll, referenced in tests)
-	let mockTiles: Record<string, ReturnType<typeof vi.fn> | unknown>;
-	let mockBackground: Record<string, ReturnType<typeof vi.fn>>;
-	let mockMakeZip: ReturnType<typeof vi.fn>;
-	let mockReadZip: ReturnType<typeof vi.fn>;
 	let thumbnailStore: Record<string, ReturnType<typeof vi.fn>>;
 	let tilesStore: Record<string, ReturnType<typeof vi.fn>>;
 	let mockDB: Record<string, unknown>;
@@ -97,8 +97,9 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 	const noIdSender = { url: 'https://evil.example.com' };
 
 	beforeAll(async () => {
-		// --- Tiles ---
-		mockTiles = {
+		// --- Tiles / Background: mutate the REAL singletons lib/messages.js
+		// imports (there is no globalThis bridge to replace anymore). ---
+		Object.assign(Tiles, {
 			ensureReady: vi.fn().mockResolvedValue({ cache: [], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
 			getGridTiles: vi.fn().mockResolvedValue([]),
@@ -110,25 +111,21 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			_list: ['https://pinned.example.com'],
 			_cache: [],
 			_ready: false,
-		};
-		(globalThis as any).Tiles = mockTiles;
-
-		// --- Background ---
-		mockBackground = {
+		});
+		Object.assign(Background, {
 			getBackground: vi.fn().mockResolvedValue({ data: 'bg-data' }),
 			setBackground: vi.fn().mockResolvedValue(undefined),
-		};
-		(globalThis as any).Background = mockBackground;
+		});
 
-		// --- Prefs (plain-object mock; init resolves immediately) ---
+		// --- Prefs / Blocked / Filters / NeverCapture (dual-scope bridge
+		// globals, read via lib/platform.js's accessors inside lib/messages.js
+		// and lib/capture.js) ---
 		(globalThis as any).Prefs = {
 			init: vi.fn().mockResolvedValue(undefined),
 			version: -1,
 			rows: 3,
 			columns: 3,
 		};
-
-		// --- Blocked / Filters / NeverCapture ---
 		(globalThis as any).Blocked = { _list: [] };
 		(globalThis as any).Filters = { _list: Object.create(null) };
 		// NeverCapture default: list is empty (no URLs blocked from capture).
@@ -155,15 +152,6 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			},
 		};
 
-		// --- makeZip / readZip ---
-		mockMakeZip = vi.fn().mockResolvedValue(new Blob(['zip-data']));
-		(globalThis as any).makeZip = mockMakeZip;
-		mockReadZip = vi.fn().mockResolvedValue(undefined);
-		(globalThis as any).readZip = mockReadZip;
-
-		// --- compareVersions ---
-		(globalThis as any).compareVersions = vi.fn().mockReturnValue(0);
-
 		// --- Mock DB (IndexedDB) ---
 		thumbnailStore = {
 			put: vi.fn(),
@@ -187,7 +175,8 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			createObjectStore: vi.fn(),
 		};
 
-		// Mock indexedDB.open → fires onsuccess synchronously so initDB resolves
+		// Mock indexedDB.open → fires onsuccess synchronously so lib/db.js's
+		// initDB resolves.
 		const dbReq: Record<string, unknown> = {};
 		for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
 			Object.defineProperty(dbReq, prop, {
@@ -199,69 +188,11 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		}
 		(globalThis as any).indexedDB = { open: vi.fn(() => dbReq) };
 
-		// M2: background.js reads `withStore` off globalThis (it's still
-		// bridge-mode — see lib/background-main.js) instead of touching a raw
-		// `db` global. Bridge the real lib/db.js implementation here so it
-		// drives the SAME indexedDB.open mock above (this pattern — real
-		// import + globalThis bridge assignment in the test file itself —
-		// repeats for every test that still vm-loads background.js; see
-		// db-wake-race.test.ts / event-page-resilience.test.ts for the same
-		// idiom).
-		(globalThis as any).withStore = withStore;
-		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
-
-		// M3: bridge lib/capture.js's exports the same way — background.js's
-		// top-level `chrome.webRequest.*.addListener(…)` calls need
-		// `resetNetworkIdleTimer` reachable (wrapped in a closure, see
-		// background.js's own comment), and 'Thumbnails.purgeHost' below
-		// dispatches through the real `purgeNeverCaptureHost`.
-		(globalThis as any).getTZDateString = getTZDateString;
-		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
-		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
-
 		// --- Browser / Chrome API gaps ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;
-		(globalThis as any).chrome.runtime.getURL = vi.fn(
-			(p: string) => `moz-extension://test-uuid/${p}`,
-		);
-		(globalThis as any).chrome.management = {
-			getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }),
-		};
-		(globalThis as any).browser.menus = {
-			create: vi.fn(),
-			update: vi.fn(),
-			refresh: vi.fn(),
-			onShown: { addListener: vi.fn() },
-		};
-		if (!(globalThis as any).chrome.idle?.onStateChanged) {
-			(globalThis as any).chrome.idle = {
-				onStateChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-			};
-		}
-		(globalThis as any).chrome.webRequest = {
-			onBeforeRequest: { addListener: vi.fn() },
-			onCompleted: { addListener: vi.fn() },
-			onErrorOccurred: { addListener: vi.fn() },
-		};
-		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
-		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
+		(globalThis as any).chrome.permissions = { contains: vi.fn().mockResolvedValue(true) };
+		(globalThis as any).chrome.tabs.get = vi.fn().mockResolvedValue({ active: true, windowId: 1, incognito: false });
 		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn().mockResolvedValue(undefined);
-		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
-		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
-
-		// --- Load background.js (script-mode, runs in global scope) ---
-		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const code = fs.readFileSync(BACKGROUND_PATH, 'utf8');
-		vm.runInThisContext(code, { filename: 'background.js' });
-
-		// Flush microtasks so the init Promise.all resolves
-		await new Promise(resolve => setTimeout(resolve, 0));
-
-		// --- Capture the listener ---
-		const calls = (globalThis as any).chrome.runtime.onMessage.addListener.mock.calls;
-		expect(calls.length).toBe(1);
-		listener = calls[0][0] as MessageListener;
 	});
 
 	beforeEach(() => {
@@ -272,31 +203,31 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 	describe('sender validation (audit §2.4 wiring)', () => {
 		it('rejects sender with wrong extension id', () => {
-			const result = listener({ name: 'Tiles.isPinned', url: 'https://x.com' }, invalidSender, sendResponse);
+			const result = handleMessage({ name: 'Tiles.isPinned', url: 'https://x.com' }, invalidSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('rejects sender with no id (web page)', () => {
-			const result = listener({ name: 'Tiles.isPinned' }, noIdSender, sendResponse);
+			const result = handleMessage({ name: 'Tiles.isPinned' }, noIdSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('rejects null sender', () => {
-			const result = listener({ name: 'Tiles.isPinned' }, null, sendResponse);
+			const result = handleMessage({ name: 'Tiles.isPinned' }, null, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('rejects undefined sender', () => {
-			const result = listener({ name: 'Tiles.isPinned' }, undefined, sendResponse);
+			const result = handleMessage({ name: 'Tiles.isPinned' }, undefined, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('accepts the extension\'s own pages (sender.id matches)', async () => {
-			const result = listener({ name: 'Tiles.isPinned', url: 'https://example.com' }, validSender, sendResponse);
+			const result = handleMessage({ name: 'Tiles.isPinned', url: 'https://example.com' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
 		});
@@ -306,25 +237,25 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 	describe('Tiles handlers', () => {
 		it('Tiles.isPinned — sends true for a pinned URL', async () => {
-			(mockTiles.isPinned as ReturnType<typeof vi.fn>).mockReturnValueOnce(true);
-			const result = listener({ name: 'Tiles.isPinned', url: 'https://pinned.example.com' }, validSender, sendResponse);
+			(Tiles.isPinned as ReturnType<typeof vi.fn>).mockReturnValueOnce(true);
+			const result = handleMessage({ name: 'Tiles.isPinned', url: 'https://pinned.example.com' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(true));
 		});
 
 		it('Tiles.isPinned — sends false for an unpinned URL', async () => {
-			(mockTiles.isPinned as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
-			const result = listener({ name: 'Tiles.isPinned', url: 'https://nope.com' }, validSender, sendResponse);
+			(Tiles.isPinned as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+			const result = handleMessage({ name: 'Tiles.isPinned', url: 'https://nope.com' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(false));
 		});
 
 		it('Tiles.getAllTiles — sends { tiles, list } on success', async () => {
 			const fakeTiles = [{ id: 1, url: 'https://a.com' }];
-			(mockTiles.getGridTiles as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeTiles);
-			mockTiles._list = ['https://a.com'];
+			(Tiles.getGridTiles as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeTiles);
+			Tiles._list = ['https://a.com'];
 
-			const result = listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
+			const result = handleMessage({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() =>
 				expect(sendResponse).toHaveBeenCalledWith({ tiles: fakeTiles, list: ['https://a.com'] }),
@@ -333,8 +264,8 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('Tiles.getAllTiles — sends null on error', async () => {
 			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-			(mockTiles.getGridTiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('DB error'));
-			const result = listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
+			(Tiles.getGridTiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('DB error'));
+			const result = handleMessage({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
 			spy.mockRestore();
@@ -342,32 +273,32 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('Tiles.getTile — delegates with message.url', async () => {
 			const tile = { url: 'https://b.com', title: 'B' };
-			(mockTiles.getTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(tile);
-			const result = listener({ name: 'Tiles.getTile', url: 'https://b.com' }, validSender, sendResponse);
+			(Tiles.getTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(tile);
+			const result = handleMessage({ name: 'Tiles.getTile', url: 'https://b.com' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(tile));
 		});
 
 		it('Tiles.putTile — delegates with message.tile', async () => {
-			(mockTiles.putTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
-			const result = listener({ name: 'Tiles.putTile', tile: { url: 'https://c.com' } }, validSender, sendResponse);
+			(Tiles.putTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = handleMessage({ name: 'Tiles.putTile', tile: { url: 'https://c.com' } }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
 		});
 
 		it('Tiles.removeTile — delegates with message.tile', async () => {
-			(mockTiles.removeTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
-			const result = listener({ name: 'Tiles.removeTile', tile: { url: 'https://d.com' } }, validSender, sendResponse);
+			(Tiles.removeTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = handleMessage({ name: 'Tiles.removeTile', tile: { url: 'https://d.com' } }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
 		});
 
 		it('Tiles.clear — calls Tiles.clear() and sends response', async () => {
-			(mockTiles.clear as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
-			const result = listener({ name: 'Tiles.clear' }, validSender, sendResponse);
+			(Tiles.clear as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = handleMessage({ name: 'Tiles.clear' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => {
-				expect(mockTiles.clear).toHaveBeenCalled();
+				expect(Tiles.clear).toHaveBeenCalled();
 				expect(sendResponse).toHaveBeenCalled();
 			});
 		});
@@ -375,8 +306,8 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		it('Tiles.pinTile — sends the new tile id and broadcasts Page.updateGrid', async () => {
 			// Slice A (MV3_MIGRATION.md): the getViews() loop is gone; open
 			// new-tab pages are told to re-render via a runtime broadcast.
-			(mockTiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(99);
-			const result = listener(
+			(Tiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(99);
+			const result = handleMessage(
 				{ name: 'Tiles.pinTile', title: 'My Page', url: 'https://e.com' },
 				validSender, sendResponse,
 			);
@@ -394,9 +325,9 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			// and still deliver the pinTile response.
 			((globalThis as any).browser.runtime.sendMessage as ReturnType<typeof vi.fn>)
 				.mockImplementationOnce(() => Promise.reject(new Error('Receiving end does not exist')));
-			(mockTiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(100);
+			(Tiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(100);
 
-			listener({ name: 'Tiles.pinTile', title: 'X', url: 'https://x.com' }, validSender, sendResponse);
+			handleMessage({ name: 'Tiles.pinTile', title: 'X', url: 'https://x.com' }, validSender, sendResponse);
 
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(100));
 		});
@@ -406,24 +337,24 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 	describe('Background handlers', () => {
 		it('Background.getBackground — sends background data', async () => {
-			mockBackground.getBackground.mockResolvedValueOnce({ data: 'image-data' });
-			const result = listener({ name: 'Background.getBackground' }, validSender, sendResponse);
+			(Background.getBackground as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: 'image-data' });
+			const result = handleMessage({ name: 'Background.getBackground' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ data: 'image-data' }));
 		});
 
 		it('Background.getBackground — sends null on error', async () => {
 			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-			mockBackground.getBackground.mockRejectedValueOnce(new Error('nope'));
-			const result = listener({ name: 'Background.getBackground' }, validSender, sendResponse);
+			(Background.getBackground as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('nope'));
+			const result = handleMessage({ name: 'Background.getBackground' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
 			spy.mockRestore();
 		});
 
 		it('Background.setBackground — delegates with message.file', async () => {
-			mockBackground.setBackground.mockResolvedValueOnce(undefined);
-			const result = listener({ name: 'Background.setBackground', file: 'blob:...' }, validSender, sendResponse);
+			(Background.setBackground as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = handleMessage({ name: 'Background.setBackground', file: 'blob:...' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
 		});
@@ -439,11 +370,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('Thumbnails.save — writes to IDB when url and image are present', async () => {
-			// The write is wrapped in waitForDB() (audit §2.1) — the handler
-			// itself still returns synchronously (fire-and-forget, no response
-			// channel), but the actual db.transaction() call is now deferred a
-			// microtask behind waitForDB().
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
@@ -457,7 +384,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('Thumbnails.save — skips write when url is missing', () => {
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.save', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
@@ -466,7 +393,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('Thumbnails.save — skips write when image is missing', () => {
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.save', url: 'https://g.com' },
 				validSender, sendResponse,
 			);
@@ -476,12 +403,11 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('Thumbnails.get — sends empty Map when no thumbnails exist', async () => {
 			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.get', urls: ['https://h.com'] },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			// waitForDB() guard (audit §2.1) defers the cursor open a microtask.
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
 			const sentMap: Map<string, string> = sendResponse.mock.calls[0][0];
 			expect(sentMap).toBeInstanceOf(Map);
@@ -494,7 +420,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 				{ url: 'https://nomatch.com', image: 'data:img2', used: '2026-05-01' },
 			];
 			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.get', urls: ['https://match.com'] },
 				validSender, sendResponse,
 			);
@@ -510,35 +436,35 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 	describe('Export/Import handlers', () => {
 		beforeEach(() => {
-			mockMakeZip.mockClear();
-			mockReadZip.mockClear();
+			(makeZip as ReturnType<typeof vi.fn>).mockClear();
+			(readZip as ReturnType<typeof vi.fn>).mockClear();
 		});
 
 		it('Export:backup — calls sendResponse with makeZip result', async () => {
 			const zipResult = { blob: 'fake-zip-blob' };
-			mockMakeZip.mockResolvedValueOnce(zipResult);
-			const result = listener({ name: 'Export:backup' }, validSender, sendResponse);
+			(makeZip as ReturnType<typeof vi.fn>).mockResolvedValueOnce(zipResult);
+			const result = handleMessage({ name: 'Export:backup' }, validSender, sendResponse);
 			expect(result).toBe(true);
-			expect(mockMakeZip).toHaveBeenCalled();
+			expect(makeZip).toHaveBeenCalled();
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(zipResult));
 		});
 
 		it('Import:restore — responds { ok: true } on success', async () => {
-			mockReadZip.mockResolvedValueOnce(undefined);
-			const result = listener(
+			(readZip as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
+			const result = handleMessage(
 				{ name: 'Import:restore', file: 'fake-zip-data' },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			expect(mockReadZip).toHaveBeenCalledWith('fake-zip-data');
+			expect(readZip).toHaveBeenCalledWith('fake-zip-data');
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ ok: true }));
 		});
 
 		it('Import:restore — surfaces the error instead of swallowing it on failure', async () => {
 			// A malformed backup makes readZip reject. The handler must report the
 			// failure (not leave the message hanging / fail silently).
-			mockReadZip.mockRejectedValueOnce(new Error('bad zip'));
-			const result = listener(
+			(readZip as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('bad zip'));
+			const result = handleMessage(
 				{ name: 'Import:restore', file: 'corrupt-zip' },
 				validSender, sendResponse,
 			);
@@ -553,19 +479,19 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 	describe('unknown and edge-case messages', () => {
 		it('returns false for an unknown message name', () => {
-			const result = listener({ name: 'NoSuchHandler' }, validSender, sendResponse);
+			const result = handleMessage({ name: 'NoSuchHandler' }, validSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('returns false when message has no name property', () => {
-			const result = listener({}, validSender, sendResponse);
+			const result = handleMessage({}, validSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
 
 		it('returns false for undefined message name', () => {
-			const result = listener({ name: undefined }, validSender, sendResponse);
+			const result = handleMessage({ name: undefined }, validSender, sendResponse);
 			expect(result).toBe(false);
 			expect(sendResponse).not.toHaveBeenCalled();
 		});
@@ -583,7 +509,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('skips IDB write when the url host is in the never-capture list', () => {
 			(globalThis as any).NeverCapture._list = ['f.com'];
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
@@ -593,7 +519,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('still writes when the url host is NOT in the never-capture list', async () => {
 			(globalThis as any).NeverCapture._list = ['other.com'];
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
@@ -617,7 +543,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('invalid host (missing) → responds null, opens no cursor', async () => {
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.purgeHost' },
 				validSender, sendResponse,
 			);
@@ -627,7 +553,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('empty host string → responds null, opens no cursor', async () => {
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: '' },
 				validSender, sendResponse,
 			);
@@ -637,7 +563,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		});
 
 		it('non-string host → responds null', async () => {
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: 42 },
 				validSender, sendResponse,
 			);
@@ -655,7 +581,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			// Tiles pass: empty
 			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
 
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
 				validSender, sendResponse,
 			);
@@ -677,7 +603,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			];
 			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration(tileEntries));
 
-			const result = listener(
+			const result = handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
 				validSender, sendResponse,
 			);
@@ -699,7 +625,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			const cursorReq = mockCursorIteration(tileEntries);
 			tilesStore.openCursor.mockReturnValueOnce(cursorReq);
 
-			listener(
+			handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
 				validSender, sendResponse,
 			);
@@ -720,7 +646,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			];
 			tilesStore.openCursor.mockReturnValueOnce(mockCursorIteration(tileEntries));
 
-			listener(
+			handleMessage(
 				{ name: 'Thumbnails.purgeHost', host: '.example.com' },
 				validSender, sendResponse,
 			);

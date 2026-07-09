@@ -154,9 +154,17 @@ export default [
 	},
 	js.configs.recommended,
 	{
-		// Legacy script-tag files in webextension/, loaded via <script> in
-		// newTab.xhtml and the MV3 background module entry (side-effect
-		// imported from lib/background-main.js — MODERNIZATION.md M1).
+		// Script-mode files in webextension/ (MODERNIZATION.md Stage M, slice
+		// M5 — background.js and its tiles.js bridge shim are gone). This is
+		// now exactly: the page files loaded via classic `<script>` in
+		// newTab.xhtml (newTab.js, fx-newTab.js, icons.js, awesomebar.js,
+		// stats.js, action.js, tiles-shim.js) plus common.js/prefs.js, the two
+		// dual-scope bridge files (MODERNIZATION.md Decision 2) that are ALSO
+		// side-effect-imported by lib/background-main.js (a real ES module) —
+		// classic script syntax (`globalThis.X = …`, no `import`/`export`)
+		// works identically either way, which is the whole point of the
+		// bridge; it stays permanently, unlike the M1–M4 bridges this glob
+		// used to also cover.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2018,
@@ -177,22 +185,6 @@ export default [
 		// as ES modules and consumed both by tests (via Vitest) and, in time,
 		// by refactored portions of the legacy script-tag code.
 		files: ['webextension/lib/**/*.js'],
-		languageOptions: {
-			ecmaVersion: 2020,
-			sourceType: 'module',
-			globals: webExtGlobals,
-		},
-		rules: projectRules,
-	},
-	{
-		// Bridge-shim files that live outside webextension/lib/ but have
-		// gained real `import` syntax (MODERNIZATION.md Stage M, slice M2 —
-		// tiles.js shrinks to `import {Tiles, Background} from
-		// './lib/tiles-store.js'; globalThis.Tiles = Tiles; …`). Still
-		// side-effect-imported from lib/background-main.js like the other
-		// bridge-mode files, but parsed as a module so ESLint accepts the
-		// import declaration.
-		files: ['webextension/tiles.js'],
 		languageOptions: {
 			ecmaVersion: 2020,
 			sourceType: 'module',

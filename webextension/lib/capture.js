@@ -21,21 +21,24 @@
  * (unbounded wait for tab activation, must survive a respawn).
  *
  * `NeverCapture` is a dual-scope bridge global (prefs.js, MODERNIZATION.md
- * Decision 2) — read via `globalThis.NeverCapture` below; the typed
- * `lib/platform.js` accessor that formalizes this seam arrives in M5.
+ * Decision 2) — read via lib/platform.js's `getNeverCapture()` typed
+ * accessor (M5), the one sanctioned read site for that global across lib/.
  *
- * background.js (still bridge-mode — no `import` syntax until its own
- * carve-up in M5) keeps every listener registration (webRequest,
- * webNavigation, tabs.* listeners, onMessage) and reaches this module's
- * exports as bare identifiers, bridged onto `globalThis` by
- * lib/background-main.js — same mechanism as `withStore`/`SAFE_PROTOCOLS`
- * (M2).
+ * M5 also moves the browser-capability checks (the `<all_urls>` permission
+ * probe in `startCaptureSession`, the capture-API presence probe in
+ * `captureTab`) onto lib/platform.js's `hasAllUrlsPermission()`/
+ * `isCaptureAvailable()` wrappers — same logic, relocated to the file a
+ * Chrome/stage-3 port forks.
+ *
+ * lib/messages.js (M5, dissolves the former background.js) and
+ * lib/background-main.js reach this module's exports via real `import`s —
+ * no more `globalThis` bridge for any of it.
  */
-
-/* globals NeverCapture */
 
 import { withStore } from './db.js';
 import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
+import { getTZDateString } from './constants.js';
+import { getNeverCapture, hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
 
 /**
  * Thin single-store view onto withStore() — mirrors lib/tiles-store.js's own
@@ -51,17 +54,6 @@ import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
  */
 function withObjectStore(storeName, mode, fn) {
 	return withStore(storeName, mode, /** @type {(storeOrTx: IDBObjectStore|IDBTransaction) => T|Promise<T>} */ (fn));
-}
-
-/**
- * @returns {string} today's date as `YYYY-MM-DD` in the local timezone.
- * Moved alongside the capture pipeline (`pickAndStore` needs it); background.js
- * still needs it too (message handlers, `cleanupThumbnails`, `idleListener`),
- * so it's bridged back the same way `withStore` is.
- * @param {Date} [date]
- */
-export function getTZDateString(date = new Date()) {
-	return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map(p => p.toString().padStart(2, '0')).join('-');
 }
 
 // ---------------------------------------------------------------------------
@@ -142,13 +134,14 @@ export function resetNetworkIdleTimer(details) {
  * @returns {Promise<{dataURL: string|null, favIconUrl: string|null}>}
  */
 export async function captureTab(tabId, windowId) {
-	// Firefox hides tabs.captureVisibleTab entirely when the extension lacks
-	// (or has lost) the <all_urls> host permission it requires — the API
-	// isn't merely denied, `typeof` is `undefined` (spike finding, 2026-07-09).
-	// startCaptureSession() already guards on browser.permissions.contains()
-	// before creating a session, but this is a second, independent guard for
-	// any other caller (e.g. the action popup's Thumbnails.capture message).
-	if (typeof browser.tabs.captureVisibleTab !== 'function') {
+	// lib/platform.js's isCaptureAvailable() wraps the same `typeof` probe
+	// (spike finding, 2026-07-09: Firefox hides tabs.captureVisibleTab
+	// entirely, not merely denies it, when the <all_urls> host permission is
+	// lacking/revoked). startCaptureSession() already guards on
+	// hasAllUrlsPermission() before creating a session, but this is a second,
+	// independent guard for any other caller (e.g. the action popup's
+	// Thumbnails.capture message).
+	if (!isCaptureAvailable()) {
 		return {dataURL: null, favIconUrl: null};
 	}
 	let tab;
@@ -260,12 +253,7 @@ export function removeCaptureSession(tabId) {
  * @returns {Promise<void>}
  */
 export async function startCaptureSession(tabId, windowId, url) {
-	let granted;
-	try {
-		granted = await browser.permissions.contains({origins: ['<all_urls>']});
-	} catch (ex) {
-		granted = false;
-	}
+	let granted = await hasAllUrlsPermission();
 	if (!granted) {
 		return;
 	}
@@ -285,7 +273,7 @@ function _startCaptureSession(tabId, windowId, url) {
 	// Accepted millisecond startup race (same class as Blocked/Filters): if the
 	// list is updated concurrently with a navigation the guard may miss one
 	// capture — acceptable given the infrequency of list mutations.
-	if (NeverCapture.matches(url)) {
+	if (getNeverCapture().matches(url)) {
 		return;
 	}
 
@@ -402,7 +390,7 @@ function pickAndStore(tabId) {
 	// Re-check never-capture list. Closes the in-flight-session race: if the
 	// user added the host to the list after the session started, we must not
 	// store the capture that was taken before the list update landed.
-	if (NeverCapture.matches(url)) {
+	if (getNeverCapture().matches(url)) {
 		captureSessions.delete(tabId);
 		return;
 	}
@@ -581,7 +569,7 @@ export function purgeNeverCaptureHost(pattern) {
 					let row = cursor.value;
 					let host = null;
 					try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-					if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
+					if (host && getNeverCapture().hostMatchesPattern(host, pattern)) {
 						cursor.delete();
 						thumbCount++;
 					}
@@ -594,7 +582,7 @@ export function purgeNeverCaptureHost(pattern) {
 							let row = tileCursor.value;
 							let host = null;
 							try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-							if (host && NeverCapture.hostMatchesPattern(host, pattern)
+							if (host && getNeverCapture().hostMatchesPattern(host, pattern)
 								&& row.image && row.imageIsThumbnail) {
 								delete row.image;
 								delete row.imageIsThumbnail;

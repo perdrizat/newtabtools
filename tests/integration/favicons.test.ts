@@ -28,10 +28,10 @@ const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
 // M3 (MODERNIZATION.md): captureTab/startCaptureSession/fetchFaviconBlob/
 // pickAndStore moved from background.js to lib/capture.js — this wiring
 // check now source-scans the new home. The 'Thumbnails.getFavicons' message
-// handler itself did NOT move (background.js keeps all message dispatch), so
-// that one test still scans background.js.
+// handler moved again in M5 (background.js dissolved) to lib/messages.js —
+// that one test now scans there instead.
 const CAPTURE_PATH = path.resolve(__dirname, '../../webextension/lib/capture.js');
-const BG_PATH = path.resolve(__dirname, '../../webextension/background.js');
+const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/lib/messages.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -88,12 +88,12 @@ describe('lib/capture.js — favicon capture + storage wiring', () => {
 	});
 });
 
-describe('background.js — Thumbnails.getFavicons message handler wiring', () => {
+describe('lib/messages.js — Thumbnails.getFavicons message handler wiring', () => {
 	let bgSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: message dispatch
-		bgSource = fs.readFileSync(BG_PATH, 'utf8');
+		bgSource = fs.readFileSync(MESSAGES_PATH, 'utf8');
 	});
 
 	it('Thumbnails.getFavicons message handler walks the store and returns a Map', () => {

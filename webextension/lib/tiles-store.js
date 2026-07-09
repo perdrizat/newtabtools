@@ -8,20 +8,18 @@
  * through `withStore()` (lib/db.js) — no raw `db`/transaction identifier
  * exists in this file at all.
  *
- * Interim global reads: `Prefs`/`Blocked`/`Filters`/`compareVersions` come
- * from the dual-scope bridge files (prefs.js/common.js, MODERNIZATION.md
- * Decision 2), which convert their top-level definitions to
- * `globalThis.X = …` rather than a real `export` (real `export` would break
- * their classic-`<script>` page load). Reading them here as bare identifiers
- * — same as tiles.js always did — is a documented stopgap: M5's
- * `lib/platform.js` replaces this with one typed accessor seam. Until then,
- * the ESLint globals directive below is the seam.
+ * `Prefs`/`Blocked`/`Filters`/`compareVersions` come from the dual-scope
+ * bridge files (prefs.js/common.js, MODERNIZATION.md Decision 2), which
+ * convert their top-level definitions to `globalThis.X = …` rather than a
+ * real `export` (real `export` would break their classic-`<script>` page
+ * load). M5's lib/platform.js typed accessors are the one sanctioned read
+ * site for each — read here through `getPrefs()`/`getBlocked()`/
+ * `getFilters()`/`getCompareVersions()` rather than a bare identifier.
  */
-
-/* globals Blocked, compareVersions, Filters, Prefs */
 
 import { withStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
+import { getBlocked, getCompareVersions, getFilters, getPrefs } from './platform.js';
 
 /**
  * @typedef {Object} Tile
@@ -37,9 +35,8 @@ import { SAFE_PROTOCOLS } from './constants.js';
 /**
  * Thin single-store view onto withStore() — every call site in this file is
  * single-store (the one multi-store call, purgeNeverCaptureHost, lives in
- * background.js, outside the type-checked program; see withStore's own doc
- * comment). Narrows `fn`'s parameter to `IDBObjectStore` once, here, instead
- * of a cast at every call site below.
+ * lib/capture.js; see withStore's own doc comment). Narrows `fn`'s parameter
+ * to `IDBObjectStore` once, here, instead of a cast at every call site below.
  * @template T
  * @param {string} storeName
  * @param {'readonly'|'readwrite'} mode
@@ -101,12 +98,12 @@ export const Tiles = {
 		}));
 	},
 	// Internal rename from `getAllTiles` (M2, MODERNIZATION.md Decision 3):
-	// the WIRE message name 'Tiles.getAllTiles' stays frozen — background.js's
+	// the WIRE message name 'Tiles.getAllTiles' stays frozen — lib/messages.js's
 	// dispatch case keeps that name and calls this method under its new name.
 	// tiles-shim.js (page-side proxy) also keeps `getAllTiles` — it mirrors
 	// the wire name, not this internal one.
 	getGridTiles() {
-		let count = Prefs.rows * Prefs.columns;
+		let count = getPrefs().rows * getPrefs().columns;
 		return withObjectStore('tiles', 'readonly', store => new Promise(resolve => {
 			let op = store.getAll();
 			op.onsuccess = async () => {
@@ -130,7 +127,7 @@ export const Tiles = {
 					urlMap.set(t.url, t);
 				}
 
-				if (!Prefs.history) {
+				if (!getPrefs().history) {
 					this._cache = links.map(l => l.url);
 					resolve(links.slice(0, count));
 					return;
@@ -138,17 +135,17 @@ export const Tiles = {
 
 				let {version} = await browser.runtime.getBrowserInfo();
 				let options;
-				if (compareVersions(version, '63.0a1') >= 0) {
+				if (getCompareVersions()(version, '63.0a1') >= 0) {
 					options = { limit: 100, onePerDomain: false, includeBlocked: true };
 				} else {
 					options = { providers: ['places'] };
 				}
 				let r = await browser.topSites.get(options);
 				let urls = this._list.slice();
-				let filters = Filters.getList();
+				let filters = getFilters().getList();
 				let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
 				let remaining = r.filter(s => {
-					if (Blocked.isBlocked(s.url)) {
+					if (getBlocked().isBlocked(s.url)) {
 						return false;
 					}
 					let url = new URL(s.url);
@@ -254,7 +251,7 @@ export const Tiles = {
 	/**
 	 * Resolves with `undefined` if the URL was already pinned (no-op); a
 	 * pinned tile's IDBValidKey (from the underlying putTile()) otherwise —
-	 * background.js's 'Tiles.pinTile' handler sends this value straight back
+	 * lib/messages.js's 'Tiles.pinTile' handler sends this value straight back
 	 * to the caller as the new tile's id.
 	 * @param {string} title
 	 * @param {string} url

@@ -2144,7 +2144,18 @@ var newTabTools = {
  * also receives page→background messages (Tiles.*, Thumbnails.*, …). It must
  * act only on the broadcast Page.* names below and return a falsy value for
  * everything else — returning true or calling sendResponse here would hijack
- * response routing that belongs to the background dispatcher (background.js).
+ * response routing that belongs to the background dispatcher
+ * (lib/messages.js).
+ *
+ * MV3 review §4.3 (folded into MODERNIZATION.md M5): `Updater`/`Grid` are
+ * defined by fx-newTab.js, which loads AFTER this file — an early broadcast
+ * (the background can wake and message a page before fx-newTab.js's own
+ * top-level execution finishes) used to be silently dropped by the
+ * `typeof … !== 'undefined'` guards below. Instead, an early message is now
+ * QUEUED (deduped by name — two queued 'Page.updateGrid's collapse to one
+ * flush-time refresh) and replayed by `pageMessageHandler.flushQueued()`,
+ * which fx-newTab.js calls at the very end of its own top-level execution
+ * (the file that defines the globals, so its end IS the ready signal).
  *
  * @param {{name?: string}} message
  * @returns {boolean} always false — never claims the sendResponse channel
@@ -2152,10 +2163,10 @@ var newTabTools = {
 function pageMessageHandler(message) {
 	switch (message && message.name) {
 	case 'Page.updateGrid':
-		// `Updater` is defined by fx-newTab.js, which loads after this file —
-		// guard so an early message can't throw.
 		if (typeof Updater !== 'undefined') {
 			Updater.updateGrid();
+		} else {
+			pageMessageHandler._enqueue('Page.updateGrid');
 		}
 		break;
 	case 'Page.restoreComplete':
@@ -2169,11 +2180,44 @@ function pageMessageHandler(message) {
 		if (typeof Grid !== 'undefined') {
 			newTabTools.refreshBackgroundImage();
 			Grid.refresh().then(() => newTabTools.getThumbnails());
+		} else {
+			pageMessageHandler._enqueue('Page.restoreComplete');
 		}
 		break;
 	}
 	return false;
 }
+
+/** @type {string[]} Broadcast names that arrived before fx-newTab.js's globals existed. */
+pageMessageHandler._queue = [];
+
+/**
+ * Queue a Page.* broadcast name for replay once fx-newTab.js's globals exist.
+ * Deduped: queuing the same name twice only replays it once at flush time.
+ * @param {string} name
+ * @returns {void}
+ */
+pageMessageHandler._enqueue = function(name) {
+	if (!pageMessageHandler._queue.includes(name)) {
+		pageMessageHandler._queue.push(name);
+	}
+};
+
+/**
+ * Replay every queued broadcast, in the order it was first queued, then
+ * clear the queue. Called once by fx-newTab.js at the end of its own
+ * top-level execution — by that point `Updater`/`Grid` exist, so each replay
+ * takes the direct (non-queuing) branch above.
+ * @returns {void}
+ */
+pageMessageHandler.flushQueued = function() {
+	let queued = pageMessageHandler._queue;
+	pageMessageHandler._queue = [];
+	for (let name of queued) {
+		pageMessageHandler({ name });
+	}
+};
+
 browser.runtime.onMessage.addListener(pageMessageHandler);
 
 (function() {

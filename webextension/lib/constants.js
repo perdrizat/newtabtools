@@ -17,5 +17,19 @@
  * MODERNIZATION.md/CONTRIBUTING.md's "Security-boundary changes" section:
  * the restore allow-list is a separate trust boundary (untrusted backup
  * file data) that must not silently widen if this list ever does.
+ *
+ * `getTZDateString` (MODERNIZATION.md, Stage M, slice M5) moved here from
+ * lib/capture.js — it has no capture-pipeline-specific state and is needed
+ * by three independent modules (lib/capture.js, lib/messages.js,
+ * lib/background-main.js's cleanupThumbnails/idleListener), so a shared leaf
+ * module with no imports of its own is the natural home.
  */
 export const SAFE_PROTOCOLS = ['http:', 'https:', 'ftp:'];
+
+/**
+ * @param {Date} [date]
+ * @returns {string} today's date as `YYYY-MM-DD` in the local timezone.
+ */
+export function getTZDateString(date = new Date()) {
+	return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map(p => p.toString().padStart(2, '0')).join('-');
+}

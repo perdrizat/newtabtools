@@ -84,7 +84,7 @@ web-ext build --source-dir webextension/
 
 - **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred (see [`ROADMAP.md`](ROADMAP.md)).
 - **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab` (XHTML→HTML conversion is a separate, explicitly deferred task — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)).
-- **Background Scripts:** A non-persistent **event page** (classic `background.scripts` array, no service worker — full DOM/`window`/canvas/IndexedDB access) split across multiple files (`common.js`, `tiles.js`, `prefs.js`, `background.js`), using promise-based `browser.*` throughout. The event page suspends after ~30s idle and respawns on events; respawn-hygiene directives (menus, IDB reconnect, session-backed pending state) live in [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
+- **Background Scripts:** A non-persistent **event page** (`background: {"scripts": ["lib/background-main.js"], "type": "module"}`, no service worker — full DOM/`window`/canvas/IndexedDB access), using promise-based `browser.*` throughout. `lib/background-main.js` is the single ES-module entry: it side-effect-imports the dual-scope bridge files (`common.js`, `prefs.js` — loaded as classic `<script>`s by the page too, MODERNIZATION.md Decision 2) and registers every listener directly (message dispatch via `lib/messages.js`, webRequest/webNavigation/tabs/menus/idle). The rest of the background is real ES modules under `webextension/lib/`: `lib/messages.js` (the `runtime.onMessage` dispatch table), `lib/platform.js` (the browser-capability seam a future Chrome port forks — permissions/action/menus/i18n wrappers, plus the Decision-2 accessor for the dual-scope globals), `lib/db.js` (IndexedDB), `lib/tiles-store.js` (the Tiles/Background models), `lib/capture.js` + `lib/thumbnail-image.js` (the auto-thumbnail pipeline), and `lib/backup.js` (export/import). The event page suspends after ~30s idle and respawns on events; respawn-hygiene directives (menus, IDB reconnect, session-backed pending state, the action-button sweep) live in [`MODERNIZATION.md`](MODERNIZATION.md) (current) and [`MV3_MIGRATION.md`](MV3_MIGRATION.md) (historical record).
 
 ### Patterns & Conventions
 
@@ -134,8 +134,8 @@ The following classes of change loosen a security boundary and **must** be calle
 
 - **CSP changes** in `webextension/manifest.json` — any directive widening, including adding wildcards like `https:` or `*` to `connect-src`, `img-src`, `style-src`, etc.
 - **New required permissions** in `webextension/manifest.json` (`permissions` array) or a widened **`host_permissions`** array (MV3 splits host-match patterns like `<all_urls>` out of `permissions`). Optional permissions are fine; promoting optional → required is a boundary change. Note `host_permissions` is user-revocable at runtime (Firefox shows it in the install prompt) — code that depends on it must degrade gracefully, not throw, when revoked.
-- **Allow-list additions** in `webextension/export.js` (the restore allow-list grows).
-- **Removing URL/protocol validation** anywhere (`isValidURL`, the `safeProtocols` allow-list in `export.js`, the `safeHexColor` / `safeBackgroundUrl` regexes, etc.).
+- **Allow-list additions** in `webextension/lib/backup.js` (the restore allow-list grows).
+- **Removing URL/protocol validation** anywhere (`isValidURL`, the `safeProtocols` allow-list in `lib/backup.js`, the `safeHexColor` / `safeBackgroundUrl` regexes, etc.).
 - **Adding `style.X = template + userInput + template`** patterns where the template includes CSS that consumes URLs (`url(...)`, `background`, `background-image`, etc.). Always prefer `style.setProperty('--var', validatedValue)` over interpolating into a shorthand.
 
 For each, the commit message or PR description must state: (a) what boundary moved, (b) why the previous boundary was inadequate, (c) the new threat model, (d) what compensating control (if any) replaces the removed defence-in-depth. The test suite cannot detect a *widened* CSP (it permits more, not less), so this is a human-review gate.
@@ -155,6 +155,9 @@ Contributions generated with the help of AI are welcome but must follow the stan
 - [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV3).
 - [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
 - [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
+- [`webextension/lib/background-main.js`](webextension/lib/background-main.js): The background's single ES-module entry point — every listener registration lives here (message dispatch registration, webRequest/webNavigation/tabs/menus/idle).
+- [`webextension/lib/messages.js`](webextension/lib/messages.js): The `runtime.onMessage` dispatch table (the 19 frozen wire names — MODERNIZATION.md Decision 3).
+- [`webextension/lib/platform.js`](webextension/lib/platform.js): The browser-capability seam (permissions/action/menus/i18n wrappers, the Decision-2 dual-scope-global accessor) — the file a future Chrome port forks.
 - [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
 - [`ROADMAP.md`](ROADMAP.md): Direction, scope/non-goals, backlog, and the load-bearing decisions of record.
 - [`MV3_MIGRATION.md`](MV3_MIGRATION.md): The completed Manifest V3 migration's record (status board, slice checklists, spike findings) + the post-MV3 backlog directives for new code.

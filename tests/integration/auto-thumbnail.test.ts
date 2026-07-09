@@ -28,29 +28,37 @@
  *   9. Display (`newTab.js` `getThumbnails`): applies thumbnails to grid sites.
  *  10. Cleanup (`cleanupThumbnails`): removes entries older than 2 weeks.
  *
- * Test approach: the capture flow tests load background.js via
- * `vm.runInThisContext` with mocked chrome.* APIs and exercise the captured
- * listeners behaviorally (using fake timers), rather than source-scanning.
+ * Test approach: the capture flow tests exercise the captured listeners
+ * behaviorally (using fake timers), rather than source-scanning.
  * Source-scanning is reserved for pure wiring checks (e.g. "no executeScript").
  *
  * MODERNIZATION.md slice M3: the capture pipeline itself (session/network-
  * idle state, captureTab, pickAndStore, fetchFaviconBlob, pendingCaptures,
  * purgeNeverCaptureHost) now lives in lib/capture.js, and resizeThumbnail/
  * isBlank/dataURLtoBlob in lib/thumbnail-image.js — both real ES modules,
- * natively imported below. The webNavigation.onCompleted/tabs.onActivated/
- * tabs.onRemoved/runtime.onMessage LISTENERS are still registered by
- * background.js itself (still bridge-mode), so this file keeps vm-loading
- * background.js for those — with lib/capture.js's exports bridged onto
- * globalThis beforehand, the same pattern established in M2's
- * db-wake-race.test.ts/background-messages.test.ts. Direct-unit-style access
- * to armNetworkIdle/disarmNetworkIdle/captureTab (previously read off
- * `globalThis` because background.js defined them itself) now goes through
- * the native import bindings instead — same underlying function, reached
- * without the vm/global indirection. `captureSessions`/`networkIdleWatchers`
- * are module-private in lib/capture.js now; `_captureSessionsForTests`/
- * `_networkIdleWatchersForTests` are the documented test-only escape hatches
- * (same convention as lib/db.js's `_resetForTests`) replacing the old
- * `globalThis.captureSessions`/`globalThis.networkIdleWatchers` reads.
+ * natively imported below. Direct-unit-style access to
+ * armNetworkIdle/disarmNetworkIdle/captureTab goes through the native import
+ * bindings. `captureSessions`/`networkIdleWatchers` are module-private in
+ * lib/capture.js; `_captureSessionsForTests`/`_networkIdleWatchersForTests`
+ * are the documented test-only escape hatches (same convention as
+ * lib/db.js's `_resetForTests`).
+ *
+ * MODERNIZATION.md slice M5 dissolves the former webextension/background.js:
+ * the webNavigation.onCompleted/tabs.onActivated/tabs.onRemoved LISTENERS now
+ * live in lib/background-main.js's own top level, and the message dispatcher
+ * is `handleMessage`, a real export of lib/messages.js. This file natively
+ * `import()`s lib/background-main.js (capturing the three listeners from
+ * their mocked `addListener` call args, same technique as before, just
+ * pointed at the real entry point instead of a vm-loaded background.js) and
+ * imports `handleMessage` directly for `onMessageListener` — no vm/global
+ * indirection needed for either. `Tiles`/`Background` are the REAL
+ * lib/tiles-store.js singletons (mutated via `Object.assign`, the same
+ * pattern established in background-messages.test.ts) rather than a
+ * `globalThis` bridge — there isn't one anymore. `Prefs`/`Blocked`/`Filters`/
+ * `NeverCapture` are the REAL prefs.js objects too (created by
+ * lib/background-main.js's own `import '../prefs.js'`): `NeverCapture._list`
+ * is mutated directly in tests exactly as before, since the real object has
+ * the identical shape the old hand-rolled mock had.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -58,28 +66,26 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
-import { withStore, _resetForTests } from '../../webextension/lib/db.js';
-import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import { _resetForTests } from '../../webextension/lib/db.js';
 import {
-	getTZDateString,
 	armNetworkIdle,
 	disarmNetworkIdle,
-	resetNetworkIdleTimer,
-	startCaptureSession,
-	removeCaptureSession,
 	captureTab,
-	addPendingCapture,
-	takePendingCapture,
-	removePendingCapture,
-	purgeNeverCaptureHost,
 	_captureSessionsForTests,
 	_networkIdleWatchersForTests,
 } from '../../webextension/lib/capture.js';
+import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
+import { handleMessage } from '../../webextension/lib/messages.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
+const WEBEXT = path.resolve(__dirname, '../../webextension');
+const CAPTURE_PATH = path.resolve(__dirname, '../../webextension/lib/capture.js');
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const EXTENSION_ID = 'newtabtools@symlink.ch';
+
+function webext(relPath: string): string {
+	return path.join(WEBEXT, relPath);
+}
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -99,12 +105,12 @@ function extractMethod(source: string, methodName: string): string {
 // Source-scanning: wiring checks (things that only need string presence)
 // ===========================================================================
 
-describe('Wiring checks — background.js (source scan)', () => {
+describe('Wiring checks — lib/capture.js (source scan)', () => {
 	let bgSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: deprecated API absence
-		bgSource = fs.readFileSync(BACKGROUND_PATH, 'utf8');
+		bgSource = fs.readFileSync(CAPTURE_PATH, 'utf8');
 	});
 
 	it('does NOT use executeScript (§2.6 resolved)', () => {
@@ -158,7 +164,7 @@ describe('Remove-thumbnail button — newTab.xhtml (source scan)', () => {
 // Behavioral tests: load background.js and exercise capture flow
 // ===========================================================================
 
-describe('background.js — multi-stage capture (behavioral)', () => {
+describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 	// Captured listeners
 	type Listener = (...args: any[]) => any;
 	let onCompletedListener: Listener;
@@ -172,7 +178,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	let captureCallCount: () => number;
 	let captureDataURL: string;
 
-	// Globals that background.js defines — we'll access them for assertions
+	// Globals that background.js used to define — we'll access them for assertions
 	let getCaptureSessions: () => Map<number, any>;
 	let getPendingCapturesObj: () => Record<string, any>;
 	let getNetworkIdleWatchers: () => Map<number, any>;
@@ -188,8 +194,10 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	beforeAll(async () => {
 		vi.useFakeTimers();
 
-		// --- Tiles ---
-		(globalThis as any).Tiles = {
+		// --- Tiles / Background: mutate the REAL singletons lib/messages.js /
+		// lib/background-main.js import (there is no globalThis bridge to
+		// replace anymore — see this file's header comment). ---
+		Object.assign(Tiles, {
 			ensureReady: vi.fn().mockResolvedValue({ cache: ['https://example.com'], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
 			getGridTiles: vi.fn().mockResolvedValue([]),
@@ -200,46 +208,11 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			pinTile: vi.fn().mockResolvedValue(42),
 			_list: ['https://example.com'],
 			_cache: ['https://example.com'],
-		};
-
-		// --- Background / Prefs / Blocked / Filters / NeverCapture ---
-		(globalThis as any).Background = {
+		});
+		Object.assign(Background, {
 			getBackground: vi.fn().mockResolvedValue({ data: 'bg-data' }),
 			setBackground: vi.fn().mockResolvedValue(undefined),
-		};
-		(globalThis as any).Prefs = {
-			init: vi.fn().mockResolvedValue(undefined),
-			version: -1,
-			rows: 3,
-			columns: 3,
-		};
-		(globalThis as any).Blocked = { _list: [] };
-		(globalThis as any).Filters = { _list: Object.create(null) };
-		// NeverCapture default: empty list (no URLs opted-out). Tests that need
-		// a listed host mutate _list directly or stub .matches in beforeEach.
-		(globalThis as any).NeverCapture = {
-			_list: [] as string[],
-			matches(url: string) {
-				try {
-					const host = new URL(url).host;
-					return this.matchingEntry(host) !== undefined;
-				} catch { return false; }
-			},
-			matchingEntry(host: string) {
-				const dots = this._list.filter((e: string) => e.startsWith('.'));
-				return this._list.includes(host) ? host : dots.find(
-					(e: string) => host === e.substring(1) || host.endsWith(e)
-				);
-			},
-			hostMatchesPattern(host: string, pattern: string) {
-				if (pattern.startsWith('.')) {
-					return host === pattern.substring(1) || host.endsWith(pattern);
-				}
-				return host === pattern;
-			},
-		};
-		(globalThis as any).makeZip = vi.fn().mockResolvedValue(new Blob(['zip-data']));
-		(globalThis as any).readZip = vi.fn().mockResolvedValue(undefined);
+		});
 
 		// --- Mock DB ---
 		thumbnailStore = {
@@ -274,27 +247,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			});
 		}
 		(globalThis as any).indexedDB = { open: vi.fn(() => dbReq) };
-
-		// M2: bridge the real lib/db.js withStore() onto globalThis, same as
-		// production's lib/background-main.js does — background.js still
-		// reads it as a bare identifier (bridge-mode file; see
-		// db-wake-race.test.ts for the canonical explanation of this pattern).
-		(globalThis as any).withStore = withStore;
-		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
-
-		// M3: bridge the real lib/capture.js exports onto globalThis, same as
-		// production's lib/background-main.js does — background.js is still
-		// bridge-mode and reaches the whole capture pipeline as bare
-		// identifiers (see this file's own header comment for the pattern).
-		(globalThis as any).getTZDateString = getTZDateString;
-		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
-		(globalThis as any).disarmNetworkIdle = disarmNetworkIdle;
-		(globalThis as any).startCaptureSession = startCaptureSession;
-		(globalThis as any).removeCaptureSession = removeCaptureSession;
-		(globalThis as any).addPendingCapture = addPendingCapture;
-		(globalThis as any).takePendingCapture = takePendingCapture;
-		(globalThis as any).removePendingCapture = removePendingCapture;
-		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
 
 		// --- captureVisibleTab mock — returns a data URL ---
 		captureDataURL = 'data:image/png;base64,AAAA';
@@ -340,12 +292,16 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			}
 		};
 
-		// --- chrome.storage.local.get mock (for thumbnailSize) + browser.storage.session mock ---
+		// --- chrome.storage.local.get mock (for thumbnailSize, AND for the real
+		// prefs.js's `Prefs.init()` no-argument `get()` call — background-main.js
+		// side-effect-imports the real prefs.js now, M5) + browser.storage.session
+		// mock ---
 		sessionStore = {};
 		(globalThis as any).chrome.storage = {
 			local: {
-				get: vi.fn((keys: Record<string, unknown>) => Promise.resolve(keys)),
+				get: vi.fn((keys?: Record<string, unknown>) => Promise.resolve(keys || {})),
 				set: vi.fn(() => Promise.resolve()),
+				remove: vi.fn(() => Promise.resolve()),
 			},
 			session: {
 				get: vi.fn((key: string) => {
@@ -363,6 +319,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 					return Promise.resolve();
 				}),
 			},
+			onChanged: { addListener: vi.fn() },
 		};
 
 		// --- Browser / Chrome API gaps ---
@@ -411,26 +368,25 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			enable: vi.fn().mockResolvedValue(undefined),
 			disable: vi.fn().mockResolvedValue(undefined),
 		};
+		(globalThis as any).browser.runtime.onStartup = { addListener: vi.fn() };
 
-		// --- Load background.js ---
-		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
+		// --- Native import() of the real background entry point ---
 		(globalThis as any).chrome.webNavigation.onCompleted.addListener.mockClear();
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const code = fs.readFileSync(BACKGROUND_PATH, 'utf8');
-		vm.runInThisContext(code, { filename: 'background.js' });
+		await import(/* @vite-ignore */ webext('lib/background-main.js'));
 
-		// Flush microtasks so init Promise.all resolves
+		// Flush microtasks so the top-level Prefs.init() chain resolves.
 		await vi.advanceTimersByTimeAsync(0);
 
-		// --- Capture all registered listeners ---
+		// --- Capture the listeners lib/background-main.js registers ---
 		onCompletedListener = (globalThis as any).chrome.webNavigation.onCompleted
 			.addListener.mock.calls[0][0];
 		onActivatedListener = (globalThis as any).chrome.tabs.onActivated
 			.addListener.mock.calls[0][0];
 		onRemovedListener = (globalThis as any).chrome.tabs.onRemoved
 			.addListener.mock.calls[0][0];
-		onMessageListener = (globalThis as any).chrome.runtime.onMessage
-			.addListener.mock.calls[0][0];
+		// lib/messages.js's handleMessage is a real export — no vm/mock-call
+		// indirection needed to reach it.
+		onMessageListener = handleMessage;
 
 		// M3: captureSessions/networkIdleWatchers are module-private to
 		// lib/capture.js now (no globalThis global to read) — these test-only
@@ -620,7 +576,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	// whether the URL changed — there is no separate URL check anywhere in
 	// the pipeline, so this must hold before AND after the captureTab rewrite.
 	it('a real navigation to a different URL replaces the session and invalidates its in-flight captures', async () => {
-		(globalThis as any).Tiles.ensureReady
+		(Tiles.ensureReady as ReturnType<typeof vi.fn>)
 			.mockResolvedValueOnce({ cache: ['https://example.com'], list: [] })
 			.mockResolvedValueOnce({ cache: ['https://second.example.com'], list: [] });
 
@@ -882,7 +838,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			// Both tabs inactive so both onCompleted calls defer into pendingCaptures.
 			(globalThis as any).chrome.tabs.get = vi.fn()
 				.mockResolvedValue({ active: false, windowId: 1, incognito: false });
-			(globalThis as any).Tiles.ensureReady.mockResolvedValue(
+			(Tiles.ensureReady as ReturnType<typeof vi.fn>).mockResolvedValue(
 				{ cache: ['https://example.com', 'https://second.example.com'], list: [] },
 			);
 

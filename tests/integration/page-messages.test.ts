@@ -62,8 +62,12 @@ function loadHandler(sandbox: Record<string, unknown>) {
 	});
 	vm.runInContext(code, ctx, { filename: 'page-message-harness.js' });
 
-	const listener = addListener.mock.calls[0]?.[0] as MessageListener;
-	return { listener, addListener };
+	const listener = addListener.mock.calls[0]?.[0] as MessageListener & { flushQueued: () => void };
+	// `ctx` is returned too — MV3 review §4.3 tests mutate it after the
+	// initial load (e.g. defining `Updater`/`Grid` only once fx-newTab.js
+	// has "finished loading", to prove the queued-then-flushed replay takes
+	// the direct branch once the globals exist).
+	return { listener, addListener, ctx };
 }
 
 const sender = { id: 'newtabtools@symlink.ch' };
@@ -150,5 +154,81 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 		expect(listener({ name: 'NoSuchThing' }, sender, vi.fn())).toBeFalsy();
 		expect(listener({}, sender, vi.fn())).toBeFalsy();
 		expect(listener(null, sender, vi.fn())).toBeFalsy();
+	});
+
+	// -----------------------------------------------------------------------
+	// MV3 review §4.3 (folded into MODERNIZATION.md M5): early broadcasts are
+	// queued (not silently dropped) and replayed once fx-newTab.js's globals
+	// exist, via `pageMessageHandler.flushQueued()` — the one line
+	// fx-newTab.js adds at the very end of its own top-level execution.
+	// -----------------------------------------------------------------------
+
+	describe('early-broadcast queue + flushQueued (§4.3)', () => {
+		it('an early \'Page.updateGrid\' (no Updater yet) is queued, not dropped, and does not throw', () => {
+			const { listener } = loadHandler({});
+			expect(() => listener({ name: 'Page.updateGrid' }, sender, vi.fn())).not.toThrow();
+			expect(listener.flushQueued).toBeDefined();
+		});
+
+		it('flushQueued() replays a queued \'Page.updateGrid\' exactly once, after Updater exists', () => {
+			const updateGrid = vi.fn();
+			const { listener, ctx } = loadHandler({});
+
+			// Arrives before fx-newTab.js's globals exist — queued.
+			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
+			expect(updateGrid).not.toHaveBeenCalled();
+
+			// fx-newTab.js finishes loading — Updater now exists in this
+			// context — then calls flushQueued() (the one added line).
+			(ctx as Record<string, unknown>).Updater = { updateGrid };
+			listener.flushQueued();
+
+			expect(updateGrid).toHaveBeenCalledTimes(1);
+		});
+
+		it('two queued \'Page.updateGrid\' broadcasts dedupe to a single flush-time refresh', () => {
+			const updateGrid = vi.fn();
+			const { listener, ctx } = loadHandler({});
+
+			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
+			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
+
+			(ctx as Record<string, unknown>).Updater = { updateGrid };
+			listener.flushQueued();
+
+			expect(updateGrid).toHaveBeenCalledTimes(1);
+		});
+
+		it('flushQueued() replays a queued \'Page.restoreComplete\' exactly once, after Grid/newTabTools exist', async () => {
+			let resolveRefresh!: () => void;
+			const refresh = vi.fn(() => new Promise<void>(res => { resolveRefresh = res; }));
+			const newTabTools = { refreshBackgroundImage: vi.fn(), getThumbnails: vi.fn() };
+			const { listener, ctx } = loadHandler({});
+
+			listener({ name: 'Page.restoreComplete' }, sender, vi.fn());
+			expect(newTabTools.refreshBackgroundImage).not.toHaveBeenCalled();
+
+			(ctx as Record<string, unknown>).Grid = { refresh };
+			(ctx as Record<string, unknown>).newTabTools = newTabTools;
+			listener.flushQueued();
+
+			expect(newTabTools.refreshBackgroundImage).toHaveBeenCalledTimes(1);
+			resolveRefresh();
+			await vi.waitFor(() => expect(newTabTools.getThumbnails).toHaveBeenCalledTimes(1));
+		});
+
+		it('flushQueued() with nothing queued does not throw and calls nothing', () => {
+			const updateGrid = vi.fn();
+			const { listener } = loadHandler({ Updater: { updateGrid } });
+			expect(() => listener.flushQueued()).not.toThrow();
+			expect(updateGrid).not.toHaveBeenCalled();
+		});
+
+		it('a LATE message (globals already present, nothing queued) still works directly, without going through the queue', () => {
+			const updateGrid = vi.fn();
+			const { listener } = loadHandler({ Updater: { updateGrid } });
+			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
+			expect(updateGrid).toHaveBeenCalledTimes(1);
+		});
 	});
 });

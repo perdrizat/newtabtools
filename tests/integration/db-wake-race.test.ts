@@ -9,55 +9,51 @@
  *
  * MODERNIZATION.md slice M2 rewrite: this is the §2.1-regression guard the
  * M2 test-harness strategy explicitly calls out to survive the readiness
- * redesign, now proving `withStore()`'s readiness gate instead of the old
- * `waitForDB()`/`globalThis.db` pair. There is no `db` global left to poke —
- * `db` is module-private to lib/db.js — so the mechanism changes but the
- * property under test does not: **a message dispatched before the
+ * redesign, proving `withStore()`'s readiness gate. There is no `db` global
+ * to poke — `db` is module-private to lib/db.js — so the mechanism changes
+ * but the property under test does not: **a message dispatched before the
  * connection finishes opening must still be answered correctly once it
  * does**, for every db-touching handler, and the capture path's
  * `Tiles.ensureReady()`/`_ready` sticky-state behavior.
  *
- * `tiles.js` is now a bridge shim (`import {Tiles, Background} from
- * './lib/tiles-store.js'; …`) with real `import` syntax, so it can no
- * longer be `vm.runInThisContext`-loaded (script-mode parsing rejects
- * `import`). Instead: a native `import` of the real lib/tiles-store.js +
- * lib/db.js + lib/constants.js, with the SAME bridge assignments tiles.js /
- * lib/background-main.js make in production — `globalThis.Tiles = Tiles`,
- * `globalThis.withStore = withStore`, `globalThis.SAFE_PROTOCOLS =
- * SAFE_PROTOCOLS` — before vm-loading `background.js` (still bridge-mode,
- * unchanged). Because lib/tiles-store.js reaches the connection via the SAME
- * imported `withStore` function background.js's own handlers use (one
- * cached ES module instance), dispatching ANY db-touching message — through
- * either path — drives the identical controllable `indexedDB.open()` mock.
+ * MODERNIZATION.md slice M5 dissolves the former webextension/background.js.
+ * The message dispatcher is now `handleMessage`, a real export of
+ * lib/messages.js, imported directly (no vm-load). The webNavigation.
+ * onCompleted listener now lives in lib/background-main.js's own top level
+ * — reaching it means importing the real entry point, which side-effect-
+ * imports the REAL common.js/prefs.js (Decision 2's dual-scope bridge files
+ * stay bridge-mode permanently). Rather than stubbing `Prefs` as a plain
+ * object, this test seeds `chrome.storage.local` (jest-webextension-mock's
+ * built-in store already implements the real get(id|array|defaults-object)
+ * contract) BEFORE importing, and lets the real prefs.js compute `Prefs`/
+ * `Blocked`/`Filters`/`NeverCapture` from that seed — `history: false` avoids
+ * exercising `browser.topSites.get()`, keeping this file's focus on the DB
+ * race itself, same as the property the old plain-object mock captured.
+ *
+ * `Tiles`/`Background` are the REAL lib/tiles-store.js singletons — the same
+ * module instance lib/messages.js and lib/background-main.js import — so
+ * dispatching ANY db-touching message drives the identical controllable
+ * `indexedDB.open()` mock below.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-import { Tiles as RealTiles, Background as RealBackground } from '../../webextension/lib/tiles-store.js';
-import { withStore, _resetForTests } from '../../webextension/lib/db.js';
-import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
-import {
-	getTZDateString,
-	resetNetworkIdleTimer,
-	disarmNetworkIdle,
-	startCaptureSession,
-	removeCaptureSession,
-	addPendingCapture,
-	takePendingCapture,
-	removePendingCapture,
-	purgeNeverCaptureHost,
-	_captureSessionsForTests,
-} from '../../webextension/lib/capture.js';
+import { Tiles } from '../../webextension/lib/tiles-store.js';
+import { _resetForTests } from '../../webextension/lib/db.js';
+import { _captureSessionsForTests } from '../../webextension/lib/capture.js';
+import { handleMessage } from '../../webextension/lib/messages.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
+const WEBEXT = path.resolve(__dirname, '../../webextension');
 const EXTENSION_ID = 'newtabtools@symlink.ch';
 
+function webext(relPath: string): string {
+	return path.join(WEBEXT, relPath);
+}
+
 // ---------------------------------------------------------------------------
-// In-memory IndexedDB mock (tiles / background / thumbnails stores)
+// Controllable indexedDB.open — resolves ONLY when the test calls .resolve()
 // ---------------------------------------------------------------------------
 
 function createMockDB() {
@@ -70,7 +66,6 @@ function createMockDB() {
 
 	function makeOp<T>(resultFn: () => T) {
 		const op: Record<string, unknown> = { result: undefined, onsuccess: null, onerror: null };
-		// Real IDB ops resolve asynchronously — fire onsuccess on a microtask.
 		Promise.resolve().then(() => {
 			op.result = resultFn();
 			const cb = op.onsuccess as (() => void) | null;
@@ -158,19 +153,13 @@ function createMockDB() {
 	};
 }
 
-// ---------------------------------------------------------------------------
-// Controllable indexedDB.open — resolves ONLY when the test calls .resolve()
-// ---------------------------------------------------------------------------
-
 type ControllableOpen = { resolve: () => void; reject: () => void };
 
 describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)', () => {
 	let mockDBInstance: ReturnType<typeof createMockDB>;
 	let pendingOpens: ControllableOpen[];
 	let openMock: ReturnType<typeof vi.fn>;
-	let listener: (message: unknown, sender: unknown, sendResponse: any) => boolean;
 	let onCompletedListener: (details: { frameId: number; tabId: number; url: string }) => void;
-	let Tiles: any;
 
 	const validSender = { id: EXTENSION_ID };
 
@@ -207,32 +196,15 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	beforeAll(async () => {
 		mockDBInstance = createMockDB();
 		installControllableIndexedDB();
+		(globalThis as any).IDBKeyRange = { upperBound: vi.fn((v: unknown) => ({ upperBound: v })) };
 
-		// --- Dependencies tiles.js expects (plain-object mocks, real tiles.js loaded below) ---
-		(globalThis as any).Prefs = {
-			init: vi.fn().mockResolvedValue(undefined),
-			version: -1,
-			rows: 3,
-			columns: 3,
-			history: false,
-		};
-		(globalThis as any).Blocked = { isBlocked: vi.fn(() => false) };
-		(globalThis as any).Filters = { getList: vi.fn(() => ({})) };
-		(globalThis as any).NeverCapture = {
-			_list: [] as string[],
-			matches: vi.fn().mockReturnValue(false),
-			matchingEntry: vi.fn().mockReturnValue(undefined),
-			hostMatchesPattern(host: string, pattern: string) {
-				if (pattern.startsWith('.')) {
-					return host === pattern.substring(1) || host.endsWith(pattern);
-				}
-				return host === pattern;
-			},
-		};
-		(globalThis as any).makeZip = vi.fn().mockResolvedValue(new Blob(['zip-data']));
-		(globalThis as any).readZip = vi.fn().mockResolvedValue(undefined);
+		// Seed storage so the REAL prefs.js computes `Prefs.history === false`
+		// (skips browser.topSites.get() — keeps this file's focus on the DB
+		// race, same property the old plain-object Prefs mock captured).
+		(globalThis as any).chrome.storage.local.set({ history: false });
 
-		// --- Browser / Chrome API gaps (mirrors event-page-resilience.test.ts) ---
+		// --- Browser / Chrome API gaps (background-main.js's top-level
+		// registrations need these to exist or import() throws synchronously) ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;
 		(globalThis as any).chrome.runtime.getURL = vi.fn((p: string) => `moz-extension://test-uuid/${p}`);
 		(globalThis as any).chrome.management = { getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }) };
@@ -249,73 +221,37 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 			onErrorOccurred: { addListener: vi.fn() },
 		};
 		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
-		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
 		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn().mockResolvedValue(undefined);
 		(globalThis as any).chrome.tabs.get = vi.fn().mockResolvedValue({ active: true, windowId: 1, incognito: false });
 		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
-		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
-		(globalThis as any).chrome.permissions = { contains: vi.fn().mockResolvedValue(true) };
+		(globalThis as any).chrome.i18n.getMessage = vi.fn((k: string) => k);
+		(globalThis as any).chrome.permissions.contains = vi.fn().mockResolvedValue(true);
 		(globalThis as any).chrome.action = {
 			enable: vi.fn().mockResolvedValue(undefined),
 			disable: vi.fn().mockResolvedValue(undefined),
 		};
-		(globalThis as any).chrome.storage.session = {
-			get: vi.fn().mockResolvedValue({}),
-			set: vi.fn().mockResolvedValue(undefined),
-		};
-		(globalThis as any).chrome.storage.local = {
-			get: vi.fn().mockResolvedValue({ thumbnailSize: 600 }),
-			set: vi.fn().mockResolvedValue(undefined),
-		};
+		(globalThis as any).browser.runtime.onStartup = { addListener: vi.fn() };
 
-		// --- Bridge the real lib modules onto globalThis (production does this
-		// via tiles.js + lib/background-main.js), THEN vm-load background.js
-		// (still bridge-mode — reads Tiles/Background/withStore/SAFE_PROTOCOLS
-		// as bare identifiers) ---
-		(globalThis as any).Tiles = RealTiles;
-		(globalThis as any).Background = RealBackground;
-		(globalThis as any).withStore = withStore;
-		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
-		(globalThis as any).compareVersions = vi.fn(); // Prefs.history is false below — never actually called.
-
-		// M3: bridge the real lib/capture.js exports onto globalThis, same as
-		// production's lib/background-main.js does — background.js is still
-		// bridge-mode and reaches the whole capture pipeline as bare
-		// identifiers (see this file's own header comment for the pattern).
-		(globalThis as any).getTZDateString = getTZDateString;
-		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
-		(globalThis as any).disarmNetworkIdle = disarmNetworkIdle;
-		(globalThis as any).startCaptureSession = startCaptureSession;
-		(globalThis as any).removeCaptureSession = removeCaptureSession;
-		(globalThis as any).addPendingCapture = addPendingCapture;
-		(globalThis as any).takePendingCapture = takePendingCapture;
-		(globalThis as any).removePendingCapture = removePendingCapture;
-		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
-
+		// --- Native import() of the real background entry point ---
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
 		(globalThis as any).chrome.webNavigation.onCompleted.addListener.mockClear();
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		vm.runInThisContext(fs.readFileSync(BACKGROUND_PATH, 'utf8'), { filename: 'background.js' });
+		await import(/* @vite-ignore */ webext('lib/background-main.js'));
 
-		Tiles = (globalThis as any).Tiles;
-
-		const messageCalls = (globalThis as any).chrome.runtime.onMessage.addListener.mock.calls;
-		expect(messageCalls.length).toBe(1);
-		listener = messageCalls[0][0];
+		// Flush the top-level Prefs.init() chain so `Prefs.history === false`
+		// before any test runs.
+		await vi.waitFor(() => expect((globalThis as any).Prefs?.history).toBe(false));
 
 		const navCalls = (globalThis as any).chrome.webNavigation.onCompleted.addListener.mock.calls;
 		expect(navCalls.length).toBe(1);
 		onCompletedListener = navCalls[0][0];
 
-		// No eager top-level connection warm-up anymore (M2 drops it — see
-		// background.js's own comment): background.js's top level now only
-		// calls Prefs.init(), nothing touches the DB until the first message
-		// or navigation event. Each test below is therefore responsible for
-		// triggering the open itself by dispatching its message — see
-		// beforeEach's `_resetForTests()`.
+		// No eager top-level connection warm-up (M2 drops it) — nothing
+		// touches the DB until the first message or navigation event. Each
+		// test below is responsible for triggering the open itself by
+		// dispatching its message — see beforeEach's `_resetForTests()`.
 	});
 
-	let sendResponse: ReturnType<typeof vi.fn>;
+	let sendResponse: ReturnType<typeof vi.fn<(...args: any[]) => any>>;
 
 	beforeEach(async () => {
 		sendResponse = vi.fn();
@@ -329,12 +265,11 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 
 		// Force a fresh "db is still opening" state for this test: no cached
 		// connection, no in-flight open promise — lib/db.js's public escape
-		// hatch for exactly this (see its own doc comment), replacing the old
-		// `if (db) { db.onclose(); }` dance now that there's no raw `db`
-		// global to poke. The test's own listener()/onCompletedListener() call
-		// below triggers the FIRST `indexedDB.open()` for this test, pushing a
-		// new controllable entry onto `pendingOpens` — exactly the "event
-		// page just woke, connection still opening" race under test.
+		// hatch for exactly this. The test's own handleMessage()/
+		// onCompletedListener() call below triggers the FIRST
+		// `indexedDB.open()` for this test, pushing a new controllable entry
+		// onto `pendingOpens` — exactly the "event page just woke, connection
+		// still opening" race under test.
 		_resetForTests();
 	});
 
@@ -345,7 +280,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Tiles.isPinned — waits for the DB, then responds correctly (was: unhandled rejection, no response)', async () => {
 		mockDBInstance._stores.tiles.push({ id: 1, url: 'https://pinned.example.com', position: 0 });
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Tiles.isPinned', url: 'https://pinned.example.com' }, validSender, sendResponse,
 		)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
@@ -361,7 +296,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Tiles.getAllTiles — already guarded, still waits for the DB and responds correctly', async () => {
 		mockDBInstance._stores.tiles.push({ id: 1, url: 'https://a.com', position: 0 });
 
-		expect(() => listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse)).not.toThrow();
+		expect(() => handleMessage({ name: 'Tiles.getAllTiles' }, validSender, sendResponse)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
 
 		latestOpen().resolve();
@@ -377,7 +312,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Tiles.getTile — waits for the DB, then responds with the tile (was: never responds)', async () => {
 		mockDBInstance._stores.tiles.push({ id: 1, url: 'https://b.com', title: 'B', position: 0 });
 
-		expect(() => listener({ name: 'Tiles.getTile', url: 'https://b.com' }, validSender, sendResponse)).not.toThrow();
+		expect(() => handleMessage({ name: 'Tiles.getTile', url: 'https://b.com' }, validSender, sendResponse)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
 
 		latestOpen().resolve();
@@ -387,7 +322,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	});
 
 	it('Tiles.putTile — waits for the DB, then writes and responds (was: never responds)', async () => {
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Tiles.putTile', tile: { url: 'https://c.com', title: 'C', position: 0 } },
 			validSender, sendResponse,
 		)).not.toThrow();
@@ -402,7 +337,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		mockDBInstance._stores.tiles.push({ id: 5, url: 'https://d.com', position: 0 });
 		Tiles._list.push('https://d.com');
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Tiles.removeTile', tile: { id: 5, url: 'https://d.com' } },
 			validSender, sendResponse,
 		)).not.toThrow();
@@ -420,7 +355,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Tiles.clear — already guarded, waits for the DB and responds', async () => {
 		mockDBInstance._stores.tiles.push({ id: 1, url: 'https://e.com', position: 0 });
 
-		expect(() => listener({ name: 'Tiles.clear' }, validSender, sendResponse)).not.toThrow();
+		expect(() => handleMessage({ name: 'Tiles.clear' }, validSender, sendResponse)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
 
 		latestOpen().resolve();
@@ -435,7 +370,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Background.getBackground — already guarded, waits for the DB and responds', async () => {
 		mockDBInstance._stores.background.push({ id: 1, color: '#fff' });
 
-		expect(() => listener({ name: 'Background.getBackground' }, validSender, sendResponse)).not.toThrow();
+		expect(() => handleMessage({ name: 'Background.getBackground' }, validSender, sendResponse)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
 
 		latestOpen().resolve();
@@ -449,7 +384,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	// =========================================================================
 
 	it('Thumbnails.save — dispatching before the DB opens does not throw, and the write lands once it does (was: synchronous throw)', async () => {
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 			validSender, sendResponse,
 		)).not.toThrow();
@@ -468,7 +403,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Thumbnails.get — dispatching before the DB opens does not throw, and responds with the correct Map once it does (was: synchronous throw)', async () => {
 		mockDBInstance._stores.thumbnails.push({ url: 'https://g.com', image: 'data:img', used: '2000-01-01' });
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Thumbnails.get', urls: ['https://g.com'] }, validSender, sendResponse,
 		)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
@@ -486,7 +421,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Thumbnails.getFavicons — dispatching before the DB opens does not throw, and responds correctly once it does (was: synchronous throw)', async () => {
 		mockDBInstance._stores.thumbnails.push({ url: 'https://h.com', favicon: new Blob(['f']) });
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Thumbnails.getFavicons', urls: ['https://h.com'] }, validSender, sendResponse,
 		)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
@@ -504,7 +439,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Thumbnails.getFaviconsByHost — dispatching before the DB opens does not throw, and responds correctly once it does (was: synchronous throw)', async () => {
 		mockDBInstance._stores.thumbnails.push({ url: 'https://sub.example.com/x', favicon: new Blob(['f']) });
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Thumbnails.getFaviconsByHost', hosts: ['sub.example.com'] }, validSender, sendResponse,
 		)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
@@ -522,7 +457,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Thumbnails.purgeHost — already guarded, waits for the DB and responds', async () => {
 		mockDBInstance._stores.thumbnails.push({ url: 'https://example.com/a', image: new Blob(['a']) });
 
-		expect(() => listener(
+		expect(() => handleMessage(
 			{ name: 'Thumbnails.purgeHost', host: '.example.com' }, validSender, sendResponse,
 		)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
@@ -540,7 +475,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	it('Thumbnails.clear — already guarded, waits for the DB and responds', async () => {
 		mockDBInstance._stores.thumbnails.push({ url: 'https://example.com/a', image: new Blob(['a']) });
 
-		expect(() => listener({ name: 'Thumbnails.clear' }, validSender, sendResponse)).not.toThrow();
+		expect(() => handleMessage({ name: 'Thumbnails.clear' }, validSender, sendResponse)).not.toThrow();
 		expect(sendResponse).not.toHaveBeenCalled();
 
 		latestOpen().resolve();
@@ -595,8 +530,8 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	});
 
 	// =========================================================================
-	// tiles.js §2.2 amplifier (now lib/tiles-store.js), exercised directly: a
-	// failing read must not leave _ready stuck true with an empty _list.
+	// lib/tiles-store.js §2.2 amplifier, exercised directly: a failing read
+	// must not leave _ready stuck true with an empty _list.
 	//
 	// M2 note: the original version of this test forced a synchronous throw
 	// by nulling `globalThis.db` directly — that whole bug class is what M2
