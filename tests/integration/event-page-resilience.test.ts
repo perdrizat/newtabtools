@@ -30,8 +30,11 @@
  * test file provides them the same way production's lib/background-main.js
  * does: a real `import` of the lib module, then a `globalThis.X = X`
  * assignment before vm-loading background.js. This pattern repeats in every
- * remaining test that still vm-loads background.js/export.js and will
- * repeat again in M3/M4 as more of the bridge surface grows.
+ * remaining test that still vm-loads background.js and repeated again in
+ * M3/M4 as more of the bridge surface grew (the former webextension/export.js
+ * dissolved into lib/backup.js in M4 — this file doesn't load it directly,
+ * it just pre-assigns `makeZip`/`readZip` mocks onto `globalThis` the same
+ * way, below).
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';

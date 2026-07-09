@@ -2159,7 +2159,7 @@ function pageMessageHandler(message) {
 		}
 		break;
 	case 'Page.restoreComplete':
-		// A restore just rewrote prefs/tiles/background (export.js readZip).
+		// A restore just rewrote prefs/tiles/background (lib/backup.js's readZip).
 		// Refresh the wallpaper, then rebuild the grid from scratch —
 		// `Updater.updateGrid` reuses existing Site instances whose in-memory
 		// `_link` still points at pre-restore data, so only `Grid.refresh()`

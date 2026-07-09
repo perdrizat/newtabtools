@@ -50,6 +50,17 @@
  * of lib/capture.js that background.js only calls, so this file's assertion
  * for it moves from "background.js defines…" to "the bridge exposes…", same
  * framing as `withStore`/`SAFE_PROTOCOLS` below.
+ *
+ * MODERNIZATION.md slice M4 carves the former webextension/export.js into
+ * lib/backup.js: `makeZip`/`readZip` are now real exports of that module,
+ * bridged onto `globalThis` the same way as everything else in this list —
+ * this file's assertions for them move from "export.js defines..." to "the
+ * bridge exposes...". The former `lib/zip-global.js` bridge (which gave
+ * export.js a `globalThis.zip` to read) is deleted outright: lib/backup.js
+ * reaches the vendored zip build via a real `import * as zip from
+ * './zip/zip-core.js'` instead, so there is no more globalThis-bridged `zip`
+ * to assert on anywhere, and this file's native `import()` chain no longer
+ * loads either former file.
  */
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
@@ -68,6 +79,7 @@ import {
 	removePendingCapture,
 	purgeNeverCaptureHost,
 } from '../../webextension/lib/capture.js';
+import { makeZip, readZip } from '../../webextension/lib/backup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -190,15 +202,22 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 		(globalThis as any).removePendingCapture = removePendingCapture;
 		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
 
+		// M4: bridge lib/backup.js's makeZip/readZip onto globalThis BEFORE
+		// background.js loads — the same mechanism as the M2/M3 bridges above
+		// (see lib/background-main.js's own header comment). There is no more
+		// `lib/zip-global.js` bridge to load: lib/backup.js reaches the
+		// vendored zip build via a real import of its own.
+		(globalThis as any).makeZip = makeZip;
+		(globalThis as any).readZip = readZip;
+
 		// --- Native import(), in the manifest's declared background.scripts
-		// order (audit §1: common.js, tiles.js, prefs.js, background.js,
-		// lib/zip.js [now lib/zip-global.js], export.js) ---
+		// order (audit §1: common.js, tiles.js, prefs.js, background.js —
+		// export.js dissolved into lib/backup.js in M4, so it's no longer a
+		// separate load here) ---
 		await import(/* @vite-ignore */ webext('common.js'));
 		await import(/* @vite-ignore */ webext('tiles.js'));
 		await import(/* @vite-ignore */ webext('prefs.js'));
 		await import(/* @vite-ignore */ webext('background.js'));
-		await import(/* @vite-ignore */ webext('lib/zip-global.js'));
-		await import(/* @vite-ignore */ webext('export.js'));
 
 		// Flush the top-level Prefs.init() chain, and prove the connection
 		// lifecycle works end-to-end through the bridged withStore() (M2
@@ -306,21 +325,14 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 	});
 
 	// ------------------------------------------------------------------
-	// export.js → makeZip, readZip
+	// lib/backup.js (M4) → makeZip, readZip. There is no more globalThis `zip`
+	// to assert on — lib/backup.js imports the vendored build directly.
 	// ------------------------------------------------------------------
-	it('export.js defines globalThis.makeZip', () => {
+	it('lib/background-main.js\'s bridge exposes globalThis.makeZip (now from lib/backup.js)', () => {
 		expect(typeof (globalThis as any).makeZip).toBe('function');
 	});
 
-	it('export.js defines globalThis.readZip', () => {
+	it('lib/background-main.js\'s bridge exposes globalThis.readZip (now from lib/backup.js)', () => {
 		expect(typeof (globalThis as any).readZip).toBe('function');
-	});
-
-	// ------------------------------------------------------------------
-	// lib/zip.js → zip (used export.js)
-	// ------------------------------------------------------------------
-	it('lib/zip-global.js defines globalThis.zip', () => {
-		expect(typeof (globalThis as any).zip).toBe('object');
-		expect(typeof (globalThis as any).zip.ZipWriter).toBe('function');
 	});
 });

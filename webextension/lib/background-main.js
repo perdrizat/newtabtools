@@ -25,13 +25,9 @@
  * `prefs.js`/`common.js` can't gain `export` syntax without breaking their
  * classic-script page load.
  *
- * `lib/zip-global.js` (not `../lib/zip.js` — see scripts/update-zip.mjs and
- * that file's own header comment for why) must load before `../export.js`:
- * export.js calls `zip.configure(...)` at its own top level on import.
- *
  * M2 (MODERNIZATION.md, "the readiness redesign") adds two more real-module
- * -> globalThis bridges of the same shape as `zip-global.js`'s: `withStore`
- * (lib/db.js) and `SAFE_PROTOCOLS` (lib/constants.js). Both are needed by
+ * -> globalThis bridges: `withStore` (lib/db.js) and `SAFE_PROTOCOLS`
+ * (lib/constants.js). Both are needed by
  * background.js, which stays bridge-mode (no `import` syntax) until its own
  * carve-up in M3/M5 — same reason tiles.js keeps the `Tiles`/`Background`
  * bridge itself instead of doing it here. These two are small enough, and
@@ -64,6 +60,18 @@
  * closure at each call site (see that file's own comment) so the identifier
  * lookup itself is deferred to first use, same as everything else here.
  *
+ * M4 (MODERNIZATION.md, "backup/export module") adds `lib/backup.js`'s
+ * `makeZip`/`readZip` the same way. The former `lib/zip-global.js` bridge
+ * (which gave the old export.js a `globalThis.zip` to read) is gone — M1's
+ * pulled-forward zip ESM vendoring is now consumed directly by lib/backup.js
+ * via a real `import * as zip from './zip/zip-core.js'`, so there is no more
+ * globalThis-bridged `zip` anywhere; `zip.configure(...)` moved to
+ * lib/backup.js's own top level. `makeZip`/`readZip` are read LAZILY by
+ * background.js (from inside the `Export:backup`/`Import:restore`
+ * message-handler cases, never at top level), so the same "bridge in this
+ * file's trailing body, order doesn't matter" reasoning as the M3 paragraph
+ * above applies.
+ *
  * No other logic lives in this file — M5 consolidates listener registration
  * here for real; this slice only flips the loading mechanism plus these
  * bridge assignments, otherwise behavior-identical.
@@ -85,9 +93,8 @@ import {
 	removePendingCapture,
 	purgeNeverCaptureHost,
 } from './capture.js';
+import { makeZip, readZip } from './backup.js';
 import '../background.js';
-import './zip-global.js';
-import '../export.js';
 
 globalThis.withStore = withStore;
 globalThis.SAFE_PROTOCOLS = SAFE_PROTOCOLS;
@@ -100,3 +107,5 @@ globalThis.addPendingCapture = addPendingCapture;
 globalThis.takePendingCapture = takePendingCapture;
 globalThis.removePendingCapture = removePendingCapture;
 globalThis.purgeNeverCaptureHost = purgeNeverCaptureHost;
+globalThis.makeZip = makeZip;
+globalThis.readZip = readZip;

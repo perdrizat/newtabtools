@@ -26,26 +26,31 @@
 	// `exclude` only prunes candidates matched by `include`'s globs — it does
 	// NOT stop tsc from following a real `import` out of an included file and
 	// pulling the imported file into the program anyway (a well-known tsconfig
-	// gotcha). That matters here: webextension/lib/background-main.js and
-	// webextension/lib/zip-global.js (MODERNIZATION.md M1) are real ES-module
-	// entries that `import` the six background files at webextension/'s
-	// top level (common.js, tiles.js, prefs.js, background.js, export.js) and
-	// the vendored webextension/lib/zip/** tree (scripts/update-zip.mjs).
-	// Those six background files were NEVER part of this program before M1
+	// gotcha). That matters here: webextension/lib/background-main.js
+	// (MODERNIZATION.md M1) is a real ES-module entry that `import`s the six
+	// background files at webextension/'s top level (common.js, tiles.js,
+	// prefs.js, background.js — export.js dissolved into lib/backup.js in
+	// M4). Those background files were NEVER part of this program before M1
 	// (only loaded via classic <script>, invisible to tsc's module graph) —
 	// fully typing ~2000 lines of pre-existing legacy JS is out of scope for
-	// M1's behavior-preserving globalThis-bridge conversion. The vendored zip
-	// tree is third-party code we don't touch or type by our own rules.
-	// Excluding the two *entry* files here (not the files they import) keeps
-	// tsc from ever making them program roots, so it never follows their
-	// imports in the first place — this is the whole fix, not a per-file
-	// `@ts-nocheck` scattered across 30 files.
+	// M1's behavior-preserving globalThis-bridge conversion. Excluding the
+	// *entry* file here (not the files it imports) keeps tsc from ever making
+	// it a program root, so it never follows those imports in the first
+	// place — this is the whole fix, not a per-file `@ts-nocheck` scattered
+	// across 30 files.
+	//
+	// webextension/lib/zip/** (the vendored zip.js ESM tree,
+	// scripts/update-zip.mjs) is third-party code we don't touch or type by
+	// our own rules — excluded even though lib/backup.js (M4) now `import`s
+	// it directly (a real, checked lib/ module), for the same
+	// exclude-doesn't-stop-import-following reason above: without this entry
+	// tsc would still pull the vendored tree into the program via that
+	// import and start reporting on code we don't own.
 	"exclude": [
 		"node_modules",
 		"tests/e2e/test-profile",
 		"tests/e2e/_artifacts",
 		"webextension/lib/background-main.js",
-		"webextension/lib/zip-global.js",
 		"webextension/lib/zip/**"
 	]
 }

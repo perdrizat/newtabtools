@@ -151,7 +151,7 @@ globalThis.Prefs = {
 		].includes(prefs.backgroundPosition)) {
 			this._backgroundPosition = prefs.backgroundPosition;
 		}
-		// Same shape as the per-tile `backgroundColor` validator in export.js.
+		// Same shape as the per-tile `backgroundColor` validator in lib/backup.js.
 		if (typeof prefs.backgroundColor === 'string'
 			&& (prefs.backgroundColor === '' || /^#[0-9a-f]{3,8}$/i.test(prefs.backgroundColor))) {
 			this._backgroundColor = prefs.backgroundColor;

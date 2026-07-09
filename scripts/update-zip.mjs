@@ -21,16 +21,18 @@
  * `zip-core.js` is the "core" entry — no filesystem API (`zip-fs*`), no
  * WASM decompression fallback (`*-wasm.js`), no Node-native codecs
  * (`*-native.js`) — matching the browser-only, `useWebWorkers: false`
- * usage in webextension/export.js. FILES below is that entry's full
+ * usage in webextension/lib/backup.js. FILES below is that entry's full
  * transitive `import`/`export … from` closure (computed by walking the
  * graph from zip-core.js; verified to exclude any `zip-fs*`/`*-wasm`/
  * `*-native`/eval/`new Function`/WebAssembly reference — see the M1 report
  * for the walk). Every file is copied byte-for-byte (own upstream license
  * header intact); nothing here is hand-edited.
  *
- * webextension/lib/zip-global.js re-exports this tree onto `globalThis.zip`
- * (the dual-scope bridge — MODERNIZATION.md Decision 2) for export.js
- * (a classic-script-shaped file) to read.
+ * webextension/lib/backup.js (MODERNIZATION.md M4) imports this tree
+ * directly (`import * as zip from './zip/zip-core.js'`) — no more
+ * globalThis bridge. zip-core.d.ts (hand-written, see its own header
+ * comment) is preserved across this script's rm+recopy below since it isn't
+ * part of the vendored FILES list.
  *
  * No new dependency, no lockfile change — same `@zip.js/zip.js` devDependency
  * and exact pinned version as before; this only changes which of its
@@ -127,12 +129,25 @@ if (JSON.stringify(actual) !== JSON.stringify(expected)) {
 	process.exit(1);
 }
 
+// zip-core.d.ts (MODERNIZATION.md M4) is hand-written, not vendored — see its
+// own header comment. It normally lives at destDir/zip-core.d.ts, which the
+// rmSync below would otherwise delete; read it out first and write it back
+// once the vendored FILES are back in place.
+const typesFile = path.join(destDir, 'zip-core.d.ts');
+const savedTypes = fs.existsSync(typesFile) ? fs.readFileSync(typesFile, 'utf8') : null;
+
 fs.rmSync(destDir, { recursive: true, force: true });
 for (const rel of FILES) {
 	const src = path.join(srcLib, rel);
 	const dest = path.join(destDir, rel);
 	fs.mkdirSync(path.dirname(dest), { recursive: true });
 	fs.copyFileSync(src, dest);
+}
+if (savedTypes !== null) {
+	fs.writeFileSync(typesFile, savedTypes);
+} else {
+	console.warn('update-zip: webextension/lib/zip/zip-core.d.ts was missing before this run — not restored. ' +
+		'If this is not the file\'s first vendoring, check git history.');
 }
 
 fs.rmSync(legacySingleFile, { force: true });

@@ -11,10 +11,10 @@
  * added — audit §2.1). The raw connection is a MODULE-PRIVATE binding: it is
  * never exported, and nothing outside this file can read or write it. Every
  * caller — Tiles/Background (lib/tiles-store.js, real `import`) and
- * background.js/export.js's remaining raw store access (bridged onto
+ * background.js's remaining raw store access (bridged onto
  * `globalThis.withStore` in lib/background-main.js — background.js is still
  * a bridge-mode file per Decision 2 and can't use `import` syntax until its
- * own carve-up in M3/M5) — goes through `withStore()`, which awaits
+ * own carve-up in M5) — goes through `withStore()`, which awaits
  * readiness itself. An unguarded db access is therefore unrepresentable:
  * there is no `db` identifier anywhere else in the codebase to unguard.
  */

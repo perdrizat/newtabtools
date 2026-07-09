@@ -6,8 +6,29 @@
  * Integration test: backup/restore (zip pipeline) characterization.
  * Phase 1 slot 3 of the migration plan (MIGRATION.md).
  *
- * Loads the real `export.js` via `vm.runInThisContext` with mocked browser
- * APIs and a fake zip transport layer. Characterizes:
+ * MODERNIZATION.md slice M4: migrated from `vm.runInThisContext`-loading the
+ * former webextension/export.js (script-mode, with a fake zip transport and
+ * Tiles/Background/purgeNeverCaptureHost poked directly onto `globalThis`) to
+ * a native `import` of the real webextension/lib/backup.js module —
+ * export.js dissolved into that module and has no behavior of its own left
+ * to vm-load. lib/backup.js reaches its three collaborators via real
+ * `import`s (MODERNIZATION.md Decision 2 doesn't apply to any of them — none
+ * are dual-scope page/background files), so this suite substitutes fakes for
+ * those imports with `vi.mock` instead of assigning `globalThis` properties:
+ *   - `./zip/zip-core.js` (the vendored zip build) — same fake
+ *     Promise-based transport layer as before, just expressed as a mocked
+ *     module rather than a `globalThis.zip` object.
+ *   - `./tiles-store.js` (`Tiles`/`Background`) and `./capture.js`
+ *     (`purgeNeverCaptureHost`) — same shape of hand-rolled fakes as before;
+ *     these have their own dedicated suites (tiles-pin.test.ts, the capture
+ *     integration tests) so re-deriving them from a mocked IndexedDB here
+ *     would blur what this suite characterizes (the backup/restore
+ *     validation logic itself, not IndexedDB behavior).
+ * `Filters` (prefs.js, a dual-scope bridge file) is still read by
+ * lib/backup.js as a bare global, so it's still stubbed via `globalThis`
+ * exactly as before.
+ *
+ * Characterizes:
  *   - makeZip: what gets included, pref-key filtering, tile-image extraction
  *   - readZip: benign round-trip, restore-complete broadcast, tile rehydration
  *   - readZip with malicious inputs: javascript: URLs in tiles (§2.1),
@@ -22,24 +43,73 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const EXPORT_PATH = path.resolve(__dirname, '../../webextension/export.js');
 
 // ---------------------------------------------------------------------------
-// Mock zip transport layer
+// Mock zip transport layer + collaborator fakes.
+//
+// vi.mock factories are hoisted above this file's other imports by Vitest, so
+// any outer variable they close over must come from vi.hoisted() — plain
+// module-scope `let`s declared below would not exist yet at hoist time.
 // ---------------------------------------------------------------------------
 
 /** Entries captured during a makeZip call. */
 type WrittenEntry = { filename: string; content: string | Blob };
 
+/** Shape of a mock zip entry, as produced by mockZipEntry() further below. */
+type MockZipEntry = { filename: string; getData: ReturnType<typeof vi.fn> };
+
+const zipState = vi.hoisted(() => ({
+	writtenEntries: [] as WrittenEntry[],
+	readerEntries: [] as MockZipEntry[],
+}));
+
+const mockBackground = vi.hoisted(() => ({
+	getBackground: vi.fn(),
+	setBackground: vi.fn(),
+}));
+
+const mockTiles = vi.hoisted(() => ({
+	getAll: vi.fn(),
+	clear: vi.fn(),
+	putTile: vi.fn(),
+}));
+
+const mockPurgeNeverCaptureHost = vi.hoisted(() => vi.fn());
+
+vi.mock('../../webextension/lib/zip/zip-core.js', () => ({
+	configure: vi.fn(),
+	BlobReader: class { blob: unknown; constructor(b: unknown) { this.blob = b; } },
+	BlobWriter: class {},
+	TextReader: class { text: string; constructor(t: string) { this.text = t; } },
+	TextWriter: class {},
+
+	ZipWriter: class {
+		add = vi.fn(async (filename: string, reader: any) => {
+			const content = 'text' in reader ? reader.text : reader.blob;
+			zipState.writtenEntries.push({ filename, content });
+		});
+		close = vi.fn(async () => new Blob(['mock-zip']));
+		constructor() { zipState.writtenEntries.length = 0; }
+	},
+
+	ZipReader: class {
+		getEntries = vi.fn(async () => zipState.readerEntries);
+	},
+}));
+
+vi.mock('../../webextension/lib/tiles-store.js', () => ({
+	Tiles: mockTiles,
+	Background: mockBackground,
+}));
+
+vi.mock('../../webextension/lib/capture.js', () => ({
+	purgeNeverCaptureHost: mockPurgeNeverCaptureHost,
+}));
+
+import { makeZip, readZip } from '../../webextension/lib/backup.js';
+
 /** Creates a mock zip entry for readZip tests. */
-function mockZipEntry(filename: string, textContent?: string, blobContent?: Blob) {
+function mockZipEntry(filename: string, textContent?: string, blobContent?: Blob): MockZipEntry {
 	return {
 		filename,
 		getData: vi.fn(async () => {
@@ -52,62 +122,15 @@ function mockZipEntry(filename: string, textContent?: string, blobContent?: Blob
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe('backup/restore — export.js (Phase 1 slot 3)', () => {
-	let makeZip: () => Promise<unknown>;
-	let readZip: (file: Blob) => Promise<void>;
-
-	// Captured entries from makeZip
-	let writtenEntries: WrittenEntry[];
-
+describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 	// Mocks
-	let mockBackground: Record<string, ReturnType<typeof vi.fn>>;
-	let mockTiles: Record<string, ReturnType<typeof vi.fn> | unknown>;
 	let mockStorageLocal: Record<string, ReturnType<typeof vi.fn>>;
 	let mockDownloads: {
 		download: ReturnType<typeof vi.fn>;
 		onChanged: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> } | undefined;
 	};
-	let mockPurgeNeverCaptureHost: ReturnType<typeof vi.fn>;
 
 	beforeAll(() => {
-		// --- Mock zip library (modern v2.x Promise-based API) ---
-		writtenEntries = [];
-		(globalThis as any).zip = {
-			configure: vi.fn(),
-			BlobReader: class { blob: unknown; constructor(b: unknown) { this.blob = b; } },
-			BlobWriter: class {},
-			TextReader: class { text: string; constructor(t: string) { this.text = t; } },
-			TextWriter: class {},
-
-			ZipWriter: class {
-				add = vi.fn(async (filename: string, reader: any) => {
-					const content = 'text' in reader ? reader.text : reader.blob;
-					writtenEntries.push({ filename, content });
-				});
-				close = vi.fn(async () => new Blob(['mock-zip']));
-				constructor() { writtenEntries.length = 0; }
-			},
-
-			ZipReader: class {
-				getEntries = vi.fn(async () => [] as ReturnType<typeof mockZipEntry>[]);
-			},
-		};
-
-		// --- Mock Background ---
-		mockBackground = {
-			getBackground: vi.fn().mockResolvedValue(null),
-			setBackground: vi.fn().mockResolvedValue(undefined),
-		};
-		(globalThis as any).Background = mockBackground;
-
-		// --- Mock Tiles ---
-		mockTiles = {
-			getAll: vi.fn().mockResolvedValue([]),
-			clear: vi.fn().mockResolvedValue(undefined),
-			putTile: vi.fn().mockResolvedValue(undefined),
-		};
-		(globalThis as any).Tiles = mockTiles;
-
 		// --- Mock chrome.storage.local ---
 		mockStorageLocal = {
 			get: vi.fn().mockResolvedValue({}),
@@ -141,33 +164,25 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			},
 		};
 
-		// --- Stub purgeNeverCaptureHost (background.js is the real owner) ---
-		mockPurgeNeverCaptureHost = vi.fn().mockResolvedValue({ thumbnails: 0, tiles: 0 });
-		(globalThis as any).purgeNeverCaptureHost = mockPurgeNeverCaptureHost;
-
-		// Save the default ZipReader for restoration in beforeEach.
-		DefaultZipReader = (globalThis as any).zip.ZipReader;
-
-		// --- Load export.js ---
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const code = fs.readFileSync(EXPORT_PATH, 'utf8');
-		vm.runInThisContext(code, { filename: 'export.js' });
-
-		makeZip = (globalThis as any).makeZip;
-		readZip = (globalThis as any).readZip;
+		mockBackground.getBackground.mockResolvedValue(null);
+		mockBackground.setBackground.mockResolvedValue(undefined);
+		mockTiles.getAll.mockResolvedValue([]);
+		mockTiles.clear.mockResolvedValue(undefined);
+		mockTiles.putTile.mockResolvedValue(undefined);
+		mockPurgeNeverCaptureHost.mockResolvedValue({ thumbnails: 0, tiles: 0 });
 
 		expect(makeZip).toBeTypeOf('function');
 		expect(readZip).toBeTypeOf('function');
 	});
 
 	beforeEach(() => {
-		writtenEntries.length = 0;
-		(globalThis as any).zip.ZipReader = DefaultZipReader;
+		zipState.writtenEntries.length = 0;
+		zipState.readerEntries = [];
 		mockBackground.getBackground.mockClear();
 		mockBackground.setBackground.mockClear();
-		(mockTiles.getAll as ReturnType<typeof vi.fn>).mockClear();
-		(mockTiles.clear as ReturnType<typeof vi.fn>).mockClear();
-		(mockTiles.putTile as ReturnType<typeof vi.fn>).mockClear();
+		mockTiles.getAll.mockClear();
+		mockTiles.clear.mockClear();
+		mockTiles.putTile.mockClear();
 		mockStorageLocal.get.mockClear();
 		mockStorageLocal.set.mockClear();
 		mockDownloads.download.mockClear();
@@ -191,7 +206,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await makeZip();
 
-			const prefsEntry = writtenEntries.find(e => e.filename === 'prefs.json');
+			const prefsEntry = zipState.writtenEntries.find(e => e.filename === 'prefs.json');
 			expect(prefsEntry).toBeDefined();
 			const prefs = JSON.parse(prefsEntry!.content as string);
 			expect(prefs.theme).toBe('dark');
@@ -209,7 +224,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await makeZip();
 
-			const tilesEntry = writtenEntries.find(e => e.filename === 'tiles.json');
+			const tilesEntry = zipState.writtenEntries.find(e => e.filename === 'tiles.json');
 			expect(tilesEntry).toBeDefined();
 			const tiles = JSON.parse(tilesEntry!.content as string);
 			expect(tiles).toHaveLength(1);
@@ -224,12 +239,12 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await makeZip();
 
-			const imgEntry = writtenEntries.find(e => e.filename === 'tileImages/7.png');
+			const imgEntry = zipState.writtenEntries.find(e => e.filename === 'tileImages/7.png');
 			expect(imgEntry).toBeDefined();
 			expect(imgEntry!.content).toBe(imageBlob);
 
 			// Image should be removed from tiles.json (stored separately)
-			const tilesEntry = writtenEntries.find(e => e.filename === 'tiles.json');
+			const tilesEntry = zipState.writtenEntries.find(e => e.filename === 'tiles.json');
 			const tiles = JSON.parse(tilesEntry!.content as string);
 			expect(tiles[0]).not.toHaveProperty('image');
 		});
@@ -240,7 +255,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await makeZip();
 
-			const bgEntry = writtenEntries.find(e => e.filename === 'background');
+			const bgEntry = zipState.writtenEntries.find(e => e.filename === 'background');
 			expect(bgEntry).toBeDefined();
 			expect(bgEntry!.content).toBe(bgBlob);
 		});
@@ -250,7 +265,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 			await makeZip();
 
-			expect(writtenEntries.find(e => e.filename === 'background')).toBeUndefined();
+			expect(zipState.writtenEntries.find(e => e.filename === 'background')).toBeUndefined();
 		});
 
 		it('triggers browser.downloads.download', async () => {
@@ -794,13 +809,8 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		});
 	});
 
-	// Store the default ZipReader class for restoration.
-	let DefaultZipReader: any;
-
-	/** Configure the mock zip reader to return the given entries. */
-	function setupReader(entries: ReturnType<typeof mockZipEntry>[]) {
-		(globalThis as any).zip.ZipReader = class {
-			getEntries = vi.fn(async () => entries);
-		};
+	/** Configure the mocked zip.ZipReader to return the given entries. */
+	function setupReader(entries: MockZipEntry[]) {
+		zipState.readerEntries = entries;
 	}
 });

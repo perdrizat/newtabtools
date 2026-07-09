@@ -2,12 +2,36 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported makeZip, readZip */
-/* globals Background, Filters, Tiles, purgeNeverCaptureHost, zip */
+/**
+ * Backup/restore pipeline (MODERNIZATION.md, Stage M, slice M4), carved out
+ * of the former webextension/export.js into a real ES module. Unlike
+ * background.js (still bridge-mode until M5), none of this file's three
+ * collaborators — the vendored zip library, the Tiles/Background stores,
+ * purgeNeverCaptureHost — are dual-scope page/background files (Decision 2),
+ * so there's no reason to reach them through the globalThis bridge: real
+ * `import`s replace the `zip`/`Tiles`/`Background`/`purgeNeverCaptureHost`
+ * globals export.js used to read.
+ *
+ * `makeZip`/`readZip` themselves are still bridged onto `globalThis` — by
+ * lib/background-main.js, the same mechanism as `withStore`/`SAFE_PROTOCOLS`
+ * (M2) and the capture-pipeline exports (M3) — for background.js (bridge-mode
+ * itself until M5) to reach from its `Export:backup`/`Import:restore` message
+ * handlers.
+ *
+ * `Filters` (prefs.js, a dual-scope bridge file per Decision 2) is read here
+ * as a bare global, same stopgap as lib/tiles-store.js's own `Filters` read —
+ * M5's lib/platform.js replaces this with one typed accessor seam.
+ */
+
+/* globals Filters */
+
+import * as zip from './zip/zip-core.js';
+import { Tiles, Background } from './tiles-store.js';
+import { purgeNeverCaptureHost } from './capture.js';
 
 zip.configure({ useWebWorkers: false });
 
-globalThis.makeZip = async function() {
+export async function makeZip() {
 	let writer = new zip.ZipWriter(new zip.BlobWriter());
 
 	let background = await Background.getBackground();
@@ -48,12 +72,14 @@ globalThis.makeZip = async function() {
 	// listener — and its closure over `url` — die with the document, but so
 	// does the document's own object-URL registry (blob URLs are
 	// document-scoped), so there is nothing left to revoke either way.
+	/** @type {number|undefined} */
 	let downloadId;
+	/** @param {browser.downloads._OnChangedDownloadDelta} delta */
 	function onDownloadChanged(delta) {
 		if (delta.id !== downloadId || !delta.state) {
 			return;
 		}
-		if (['complete', 'interrupted'].includes(delta.state.current)) {
+		if (['complete', 'interrupted'].includes(/** @type {string} */ (delta.state.current))) {
 			URL.revokeObjectURL(url);
 			browser.downloads.onChanged.removeListener(onDownloadChanged);
 		}
@@ -76,7 +102,7 @@ globalThis.makeZip = async function() {
 		}
 		throw ex;
 	}
-};
+}
 
 /**
  * Tell every open new-tab page that a restore has finished rewriting the
@@ -85,28 +111,43 @@ globalThis.makeZip = async function() {
  * replaces the MV2-only extension.getViews() access to page globals
  * (Slice A of the MV3 migration). When no page is open the broadcast rejects
  * with "Receiving end does not exist" — swallowed.
+ *
+ * M5's lib/platform.js `broadcastToPages()` (MODERNIZATION.md) absorbs this
+ * one-off broadcast helper; left as-is here until then.
  * @returns {Promise<void>}
  */
 function notifyRestoreComplete() {
 	return browser.runtime.sendMessage({name: 'Page.restoreComplete'}).catch(() => {});
 }
 
-globalThis.readZip = async function(file) {
+/**
+ * @param {Blob} file
+ * @returns {Promise<void>}
+ */
+export async function readZip(file) {
 	let reader = new zip.ZipReader(new zip.BlobReader(file));
 	let entries = await reader.getEntries();
 
+	/**
+	 * @param {string} filename
+	 * @returns {Promise<any>}
+	 */
 	async function getAsJSON(filename) {
 		let entry = entries.find(e => e.filename == filename);
 		if (!entry) {
 			return null;
 		}
 
-		let data = await entry.getData(new zip.TextWriter());
+		let data = /** @type {string} */ (await entry.getData(new zip.TextWriter()));
 		return JSON.parse(data);
 	}
 
+	/**
+	 * @param {import('./zip/zip-core.js').ZipEntry} entry
+	 * @returns {Promise<Blob>}
+	 */
 	async function getAsBlob(entry) {
-		return entry.getData(new zip.BlobWriter());
+		return /** @type {Promise<Blob>} */ (entry.getData(new zip.BlobWriter()));
 	}
 
 	// Parse every JSON entry BEFORE writing any state. A malformed backup (e.g.
@@ -138,6 +179,7 @@ globalThis.readZip = async function(file) {
 			'locked', 'history', 'recent', 'blocked', 'filters',
 			'backgroundUrl', 'backgroundPosition', 'backgroundColor',
 			'neverCaptureHosts'];
+		/** @type {Record<string, any>} */
 		let filtered = {};
 		for (let k of allowedKeys) {
 			if (k in prefs) {
@@ -247,4 +289,4 @@ globalThis.readZip = async function(file) {
 	// The restore data is fully written — pages refresh themselves (wallpaper,
 	// full grid rebuild, thumbnails) on this broadcast.
 	await notifyRestoreComplete();
-};
+}

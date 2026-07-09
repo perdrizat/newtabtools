@@ -12,8 +12,8 @@
  * "which URL schemes does the extension treat as a normal page" rule lives
  * in exactly one place.
  *
- * `export.js`'s own `safeProtocols` is a DELIBERATE exception and does NOT
- * import this — see the comment at its declaration and
+ * `lib/backup.js`'s own `safeProtocols` is a DELIBERATE exception and does
+ * NOT import this — see the comment at its declaration and
  * MODERNIZATION.md/CONTRIBUTING.md's "Security-boundary changes" section:
  * the restore allow-list is a separate trust boundary (untrusted backup
  * file data) that must not silently widen if this list ever does.

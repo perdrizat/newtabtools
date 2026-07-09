@@ -24,7 +24,7 @@ import vm from 'node:vm';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
-const EXPORT_PATH = path.resolve(__dirname, '../../webextension/export.js');
+const BACKUP_PATH = path.resolve(__dirname, '../../webextension/lib/backup.js');
 const CDN = 'https://firefox-settings-attachments.cdn.mozilla.net/';
 
 function extractMethod(source: string, methodName: string): string {
@@ -183,13 +183,13 @@ describe('selectWallpaper — writes backgroundPosition and applies to body', ()
 
 describe('backgroundPosition + backgroundColor prefs', () => {
 	let prefsSource: string;
-	let exportSource: string;
+	let backupSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check
 		prefsSource = fs.readFileSync(PREFS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check
-		exportSource = fs.readFileSync(EXPORT_PATH, 'utf8');
+		backupSource = fs.readFileSync(BACKUP_PATH, 'utf8');
 	});
 
 	it('declares _backgroundPosition with the "center center" default', () => {
@@ -221,7 +221,7 @@ describe('backgroundPosition + backgroundColor prefs', () => {
 	});
 
 	it('includes backgroundPosition + backgroundColor in the export allow-list', () => {
-		expect(exportSource).toContain('\'backgroundPosition\'');
-		expect(exportSource).toContain('\'backgroundColor\'');
+		expect(backupSource).toContain('\'backgroundPosition\'');
+		expect(backupSource).toContain('\'backgroundColor\'');
 	});
 });
