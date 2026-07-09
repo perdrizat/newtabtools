@@ -84,17 +84,47 @@ rejecting forever.
   substitute — capture fires on navigation, not user gesture).
 - webRequest stays observational-only (no `webRequestBlocking`); fine in Firefox MV3.
 
-## Spike findings (Phase 0)
+## Spike findings (Phase 0) — answered 2026-07-09
 
-_To be filled from the spike run before Slice D lands. Questions:_
-- [ ] Q1: Are host permissions granted on **temporary install** (web-ext / geckodriver)
-      for MV3? Which prefs are needed for the E2E/UAT harnesses?
-- [ ] Q2: Does `captureVisibleTab` work end-to-end in an MV3 event page (headless)?
-- [ ] Q3: Do webRequest events keep arriving in the event page; do they wake it?
-- [ ] Q4: Respawn behavior: `menus.create` duplicate errors observed? Listeners re-fire
-      after suspension (`extensions.background.idle.timeout`)?
-- [ ] Q5: Manifest translation accepted by Firefox (scripts array, no `persistent`,
-      CSP object) without warnings?
+Probe: minimal MV3 extension (`host_permissions: ["<all_urls>"]`, `permissions:
+["tabs","webRequest","webNavigation","menus","storage"]`, classic scripts array,
+CSP object) + HTTP beacon server. Runs: web-ext on firefox-esr 140.12, selenium/
+geckodriver on both firefox-esr 140.12 and release 152.0.5, all headless.
+
+- [x] **Q1 — temporary installs auto-grant host permissions.** On both harness paths
+      (web-ext and geckodriver `installAddon(…, true)`), `permissions.getAll()`
+      reported `origins: ["<all_urls>"]` with **zero extra prefs**.
+      `extensions.originControls.grantByDefault` and `granted_host_permissions` are
+      no-ops for temporary installs. E2E/UAT need no permission plumbing.
+- [x] **Q2 — CRITICAL: `tabs.captureVisibleTab` does not exist under MV3 on
+      Firefox ESR 140, even with `<all_urls>` granted.** `typeof` is `undefined`;
+      the call throws synchronously. Adding `activeTab` exposes it only until the
+      first event-page respawn, then it vanishes again (gesture-tied, unusable for
+      background capture). **On release Firefox 152.0.5 it works** (real ~28KB JPEG
+      captured, same probe, same permissions, no prefs). This is a Firefox-version
+      gate, not a permission gate. Exact boundary version: bisect in progress over
+      141–152; result decides the new `strict_min_version`.
+      Consequences: (a) `strict_min_version` must rise from 140 to the boundary;
+      (b) the E2E tier cannot run on ESR 140 post-flip — Mozilla APT currently has
+      no newer ESR, so E2E moves to a release-channel binary (runner + CI);
+      (c) UAT (release Firefox) already works.
+- [x] **Q3 — webRequest events keep arriving and wake the event page.** Observed
+      continuously across suspension cycles. Network-idle detection survives MV3.
+- [x] **Q4 — respawn behavior confirmed.** With `extensions.background.idle.timeout=5000`
+      the event page tore down and respawned on essentially every 10s-spaced event
+      (~23 `bg-loaded` in 4 min). Every respawn: `menus.create` fails with
+      "The menu id X already exists" (Slice B fix confirmed necessary). Top-level
+      listeners re-fired reliably after every respawn.
+- [x] **Q5 — manifest translation accepted cleanly.** `background.scripts` array with
+      no `persistent` key + CSP object: zero manifest warnings from Firefox
+      (`web-ext run --verbose`: "Validating manifest… Installed … as a temporary
+      add-on"). Permission split confirmed: only `<all_urls>` moves to
+      `host_permissions`; API permissions and `optional_permissions` stay put.
+
+Harness invocations that worked (bake into Slice D):
+- E2E: `web-ext run --source-dir … --firefox <binary> --start-url <url> --arg=-headless --no-reload [--pref=extensions.background.idle.timeout=5000]`
+- UAT: geckodriver 0.37 (non-snap) + selenium `installAddon(zip, true)`, headless — unchanged.
+- Suspension testing pref: `extensions.background.idle.timeout` (ms).
 
 ## Execution checklist (one sitting, commit per green slice)
 
