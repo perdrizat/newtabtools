@@ -15,7 +15,7 @@ this file; the corrected directives below are decisions of record.
 | Slice B — event-page resilience | ✓ done (fast 1152, E2E 124) | `6bb6017` |
 | Slice C — async normalization | ✓ done (fast 1153, E2E 124) | `03ffabc` |
 | Slice D — the MV3 flip | ✓ done (fast 1162, E2E 126 on FF152/MV3) | `a0eb4fa` |
-| Final gate — full test/UAT/audit/build | ~ in progress (UAT running, docs sweep) | — |
+| Final gate — full test/UAT/audit/build | ~ in progress: audit ✓, docs ✓ (`7012019`), UAT 10/11 → found respawn-reload bug, fix in progress | — |
 | Post-flip retest on ESR 140 | backlog | — |
 
 ## Strategic decisions (updated 2026-07-09)
@@ -223,6 +223,24 @@ UAT: full suite after Slice D.
 - [ ] Full `pnpm test` (fast + E2E), full UAT suite (all scenarios), `pnpm lint`,
       `pnpm typecheck`, `pnpm lint:webext` (web-ext lint against MV3),
       `pnpm audit --audit-level=high`.
+
+**UAT run 20260709-110359 (full suite, 10/11):**
+- [ ] **REAL BUG (fix in progress): respawn-triggered page reloads.** The top-level
+      `tabs.query` sweep's `tabs.reload(NEW_TAB_URL)` branch re-runs on every
+      event-page respawn → open new-tab pages reload every ~30-60s, killing the
+      drawer (scenario 22 observed 4×) and edit mode (scenario 23 FAILED on
+      "edit mode persists"). MV2 ran this once per session for post-update refresh.
+      Fix: reload moves to `runtime.onInstalled`; enable/disable sweep stays
+      top-level. Slice B's audit had mis-judged this sweep "idempotent" — the
+      deterministic tiers all missed it (E2E navigates per test and never holds
+      transient UI state across a suspension); UAT's visual judgment caught it.
+- Cosmetic, → backlog (not this migration): never-capture host input placeholder
+      clips at the input edge ("…or .example.c"); action-row chips can blend
+      white-on-white against mostly-white thumbnails (scenario 23 observation);
+      scenario-11 text still describes the old "dark scrim" action row.
+- Environmental, no action: Cloudflare-interstitial thumbnails from seeding
+      (phoronix), harness focus-stealing / stale screenshot frames, about:newtab
+      prologue omission (known harness behavior).
 - [ ] Version bump (`pnpm version patch` per daily rule — or minor, maintainer's call),
       CHANGELOG promotion, `pnpm build` artifact in `dist/`.
 - [ ] Docs sweep: CONTRIBUTING.md architecture section (MV2→MV3), TESTING.md,

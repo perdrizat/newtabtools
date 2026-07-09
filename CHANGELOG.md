@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - MV3 Slice C: background/popup callback-style `chrome.*` calls normalized to promise-based `browser.*` (async `captureTab` rewrite preserving session-identity semantics); `chrome.browserAction` kept for the Slice D rename.
 - MV3 Slice D: manifest flipped to MV3 (`action`, CSP object, `host_permissions: ["<all_urls>"]`, `strict_min_version` 152.0); capture path degrades gracefully when host permissions are revoked; E2E tier moved to release-channel Firefox with a 10s event-page idle timeout + new suspension-recovery E2E test; `build-uat.mjs`/UAT preflight updated for MV3/Firefox ≥152.
 
+### Fixed
+
+- MV3 respawn-reload bug (caught by UAT): new-tab-page reload sweep moved from top-level (re-ran every event-page respawn, reloading open pages every ~30s and killing drawer/edit-mode state) into `runtime.onInstalled`.
+
 ## [2.0.7] — 2026-07-06
 
 ### Added

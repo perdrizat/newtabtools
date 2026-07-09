@@ -804,10 +804,40 @@ chrome.tabs.onRemoved.addListener(function(tabId) {
 	disarmNetworkIdle(tabId);
 });
 
+/**
+ * Reload open new-tab pages after an extension install/update, so a stale
+ * page (running the previous version's script) gets the fresh one.
+ *
+ * This lives in `runtime.onInstalled` — NOT in top-level script code — on
+ * purpose. Under MV3 the background is an event page that is torn down and
+ * respawned on essentially every idle cycle (~30s), and top-level code
+ * re-runs on every respawn. A top-level reload sweep therefore reloaded the
+ * user's open new-tab pages continuously rather than once per install/
+ * update, killing any open drawer/edit-mode state (UAT finding 2026-07-09:
+ * observed 4 reloads in a single scenario). `runtime.onInstalled` fires
+ * exactly once per install/update/browser-update, matching the original
+ * (MV2, persistent-background) intent.
+ */
+browser.runtime.onInstalled.addListener(function() {
+	browser.tabs.query({}).then(function(tabs) {
+		for (let tab of tabs) {
+			if (tab.url == NEW_TAB_URL) {
+				chrome.tabs.reload(tab.id);
+			}
+		}
+	}).catch(console.error);
+});
+
+// Per-respawn action-button sweep: harmless (and useful) to re-run every
+// time the event page wakes, unlike the reload above. New-tab-page tabs are
+// skipped (`continue`) rather than falling into the disable branch below —
+// the action button is pointless on the new-tab page itself, and this
+// preserves the pre-MV3 behavior where the (now-removed) reload branch
+// exited the loop iteration before reaching the enable/disable check.
 browser.tabs.query({}).then(function(tabs) {
 	for (let tab of tabs) {
 		if (tab.url == NEW_TAB_URL) {
-			chrome.tabs.reload(tab.id);
+			continue;
 		} else if (!['http:', 'https:', 'ftp:'].includes(new URL(tab.url).protocol)) {
 			browser.action.disable(tab.id).catch(console.error);
 		} else {
