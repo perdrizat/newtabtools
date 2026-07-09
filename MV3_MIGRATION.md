@@ -19,7 +19,8 @@ this file; the corrected directives below are decisions of record.
 | Final gate — full test/UAT/audit/build | ✓ done — all gates green, v2.1.0 | see tag `v2.1.0` |
 | Post-flip retest on ESR 140 | backlog (once next ESR ships / on demand) | — |
 
-| Pre-release fixes (mv3-code-review §2.1/§2.2 + queue) | ~ adjudicated, code deferred until review round closes | — |
+| Pre-release fixes (mv3-code-review §2.1/§2.2 + queue) | ~ in progress (agent executing items 1-3 + object-URL fix; §4/§5 cleanups stay post-release) | — |
+| Next-arc plan (Modules vs HTML5 sequencing) | ✓ done — **modules first**; plan in [`MODERNIZATION.md`](MODERNIZATION.md) | — |
 
 **Migration complete 2026-07-09.** Tagged v2.1.0 (Firefox ≥152, MV3). **Do not
 push/submit until the "Pre-release fixes" section above is executed** — §2.1/§2.2
