@@ -29,7 +29,15 @@ were already Stage H.
 | M4 — backup/export module + zip.js ESM vendoring | ✓ done (fast 1232, E2E 126; export.js dissolved into lib/backup.js, boundary verbatim; zip-global shim retired; zip-core.d.ts shadow types, update-zip preserves it) | — |
 | M5 — `lib/platform.js` + entry consolidation + review leftovers | ✓ done (fast 1238, E2E 126; background.js + tiles.js shim DELETED; globalThis surface = 5 dual-scope symbols only; §3.1 + §4.3 closed; zero background vm-loads left) | — |
 | M6 — cosmetic UAT findings (placeholder clip, chip contrast, scenario text) | ✓ done (fast 1240, E2E 126; input widened via existing flex pattern, chip hairline via `--ntt-line`, scenario prose updated) | — |
-| M gate — full E2E + full UAT + audit | ~ in progress (build → audit → full UAT) | — |
+| M7 — review fixes (audit 2026-07-09-modernization-m) + lazy backup/zip import | ✓ done (fast 1250, E2E 126; restore truly atomic now; zip tree out of the per-respawn static graph) | — |
+| M gate — full E2E + full UAT + audit | ✓ CLOSED — full UAT 11/11 post-M6 (all 3 cosmetic fixes visually verified, zero defects); M7 gated fast+E2E, UAT re-run deferred by maintainer; audit clean | — |
+
+**Stage M complete 2026-07-09.** Background is fully modular: `lib/{db,tiles-store,
+constants,capture,thumbnail-image,backup,platform,messages,background-main}.js`;
+`background.js`, `tiles.js` (shim), `export.js` all deleted; `globalThis` surface
+= the 5 dual-scope symbols; backup/zip lazy-loads on demand. Version stays 2.1.0
+(same-day rule) — release/bump decision at arc end. Branch `modernization-m` is
+merge-ready; Stage H continues on `modernization-h`.
 | H1 — case-trap prefix fixes (XHTML-safe) | pending | — |
 | H2 — markup conversion + rename + touchpoints | pending | — |
 | H3 — `createElementNS` collapse | pending | — |

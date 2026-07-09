@@ -58,6 +58,12 @@ function loadHandler(sandbox: Record<string, unknown>) {
 	const addListener = vi.fn();
 	const ctx = vm.createContext({
 		browser: { runtime: { onMessage: { addListener } } },
+		// A fresh vm context gets its OWN inert `console` binding, distinct
+		// from (and unobservable through) this file's real `console` object —
+		// forwarding the real one so a `console.error` call inside the loaded
+		// code (flushQueued()'s hardening, audit finding #4) can actually be
+		// asserted on via `vi.spyOn(console, 'error')` from the test itself.
+		console,
 		...sandbox,
 	});
 	vm.runInContext(code, ctx, { filename: 'page-message-harness.js' });
@@ -229,6 +235,37 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 			const { listener } = loadHandler({ Updater: { updateGrid } });
 			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
 			expect(updateGrid).toHaveBeenCalledTimes(1);
+		});
+
+		// -------------------------------------------------------------------
+		// Flush hardening (audit finding #4, 2026-07-09 review): each replayed
+		// broadcast runs against a grid that newTabTools.startup() may still be
+		// building asynchronously — a mis-behaving replay throwing must not
+		// abort the rest of the queue, nor escape flushQueued() itself.
+		// -------------------------------------------------------------------
+		it('a replay whose Grid.refresh throws does not prevent the remaining queued replay, and does not throw out of flushQueued()', () => {
+			const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const updateGrid = vi.fn();
+			const refresh = vi.fn(() => { throw new Error('boom'); });
+			const newTabTools = { refreshBackgroundImage: vi.fn(), getThumbnails: vi.fn() };
+			const { listener, ctx } = loadHandler({});
+
+			// Both arrive before fx-newTab.js's globals exist — both queued.
+			listener({ name: 'Page.restoreComplete' }, sender, vi.fn());
+			listener({ name: 'Page.updateGrid' }, sender, vi.fn());
+
+			(ctx as Record<string, unknown>).Grid = { refresh };
+			(ctx as Record<string, unknown>).Updater = { updateGrid };
+			(ctx as Record<string, unknown>).newTabTools = newTabTools;
+
+			expect(() => listener.flushQueued()).not.toThrow();
+
+			// The throwing Page.restoreComplete replay is logged...
+			expect(consoleErrorSpy).toHaveBeenCalled();
+			// ...but does not stop Page.updateGrid from also replaying.
+			expect(updateGrid).toHaveBeenCalledTimes(1);
+
+			consoleErrorSpy.mockRestore();
 		});
 	});
 });

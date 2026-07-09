@@ -136,13 +136,27 @@ export async function readZip(file) {
 		return /** @type {Promise<Blob>} */ (entry.getData(new zip.BlobWriter()));
 	}
 
-	// Parse every JSON entry BEFORE writing any state. A malformed backup (e.g.
-	// a corrupt tiles.json) then aborts the whole restore atomically — rather
+	// Parse every JSON entry, AND validate its shape, BEFORE writing any state.
+	// A malformed backup then aborts the whole restore atomically — rather
 	// than the old behaviour, where prefs were applied first and only then was
 	// tiles.json parsed, so a bad file left a half-applied state (new grid
-	// dimensions, zero tiles) with no error surfaced to the user.
+	// dimensions, zero tiles) with no error surfaced to the user. Note this
+	// covers both a `JSON.parse` failure (a syntactically corrupt file) AND a
+	// wrong-shape-but-parseable file (audit finding #2, 2026-07-09 review):
+	// `JSON.parse` succeeding is not enough — a `tiles.json` of `{"x":1}` or a
+	// `prefs.json` of `5` both parse fine but would previously only fail later,
+	// inside the `for (let t of tiles)` loop / the `'theme' in prefs` check
+	// below, by which point Background.setBackground() and
+	// chrome.storage.local.set() may already have written wallpaper/prefs.
 	let prefs = await getAsJSON('prefs.json');
 	let tiles = await getAsJSON('tiles.json');
+
+	if (tiles !== null && !Array.isArray(tiles)) {
+		throw new Error('Malformed backup: tiles.json must be an array.');
+	}
+	if (prefs !== null && (typeof prefs !== 'object' || Array.isArray(prefs))) {
+		throw new Error('Malformed backup: prefs.json must be an object.');
+	}
 
 	// Hosts restored into the never-capture list, captured here so the purge can
 	// run AFTER tiles are restored (below) — a backup's own tiles may carry
@@ -236,7 +250,15 @@ export async function readZip(file) {
 		if (e.filename.startsWith('tileImages/')) {
 			let id = parseInt(e.filename.substring(11), 10);
 			let image = await getAsBlob(e);
-			tilesMap.get(id).image = image;
+			// An orphan image entry (no tile with this id in tiles.json — a
+			// hand-edited/version-mismatched backup, or a garbage filename like
+			// 'tileImages/abc.png' where parseInt → NaN) is silently ignored
+			// rather than crashing the whole restore (audit finding #3, 2026-07-09
+			// review).
+			let t = tilesMap.get(id);
+			if (t) {
+				t.image = image;
+			}
 		}
 	}
 

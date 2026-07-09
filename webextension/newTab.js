@@ -2208,13 +2208,25 @@ pageMessageHandler._enqueue = function(name) {
  * clear the queue. Called once by fx-newTab.js at the end of its own
  * top-level execution — by that point `Updater`/`Grid` exist, so each replay
  * takes the direct (non-queuing) branch above.
+ *
+ * Each replay is wrapped in its own try/catch (audit finding #4, 2026-07-09
+ * review): the direct branch's `Grid.refresh()`/`Updater.updateGrid()` runs
+ * against a grid that `newTabTools.startup()` is still building
+ * asynchronously at this point, so a mis-behaving replay throwing must not
+ * abort the rest of the queue (or escape flushQueued() itself) — a later
+ * queued name, or a caller relying on flushQueued() itself not throwing,
+ * must not be collateral damage from one bad replay.
  * @returns {void}
  */
 pageMessageHandler.flushQueued = function() {
 	let queued = pageMessageHandler._queue;
 	pageMessageHandler._queue = [];
 	for (let name of queued) {
-		pageMessageHandler({ name });
+		try {
+			pageMessageHandler({ name });
+		} catch (ex) {
+			console.error(ex);
+		}
 	}
 };
 

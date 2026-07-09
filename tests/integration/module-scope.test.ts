@@ -49,6 +49,27 @@ function webext(relPath: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded lib/backup.js (code-review audit, 2026-07-09, adjudicated):
+// lib/messages.js no longer has a static `import ... from './backup.js'` —
+// its 'Export:backup'/'Import:restore' cases each do a dynamic
+// `import('./backup.js')` instead, so backup.js's own import graph (the
+// vendored ~25-file `lib/zip/**` ESM tree) is no longer parsed on every
+// event-page respawn, only when a backup/restore actually happens. Mocking
+// the module (mirroring backup-restore.test.ts's convention) lets this file
+// observe WHEN the module factory actually runs — not just whether
+// makeZip/readZip get called — which is what distinguishes "not in the
+// static graph" from "in the graph but its exports happen not to be called".
+// ---------------------------------------------------------------------------
+const backupModuleState = vi.hoisted(() => ({ loadCount: 0 }));
+const mockMakeZip = vi.hoisted(() => vi.fn().mockResolvedValue(42));
+const mockReadZip = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
+vi.mock('../../webextension/lib/backup.js', () => {
+	backupModuleState.loadCount++;
+	return { makeZip: mockMakeZip, readZip: mockReadZip };
+});
+
+// ---------------------------------------------------------------------------
 // Minimal in-memory IndexedDB mock — auto-resolves indexedDB.open() on a
 // microtask (crib: tests/integration/event-page-resilience.test.ts). Nothing
 // in this file dispatches a message or navigation event that would actually
@@ -201,5 +222,33 @@ describe('module-scope bridge — lib/background-main.js\'s globalThis surface a
 	it('does NOT bridge globalThis.makeZip / readZip', () => {
 		expect((globalThis as any).makeZip).toBeUndefined();
 		expect((globalThis as any).readZip).toBeUndefined();
+	});
+
+	// ------------------------------------------------------------------
+	// Lazy-loaded lib/backup.js (adjudicated review item, 2026-07-09) — out of
+	// the static import graph; dynamically imported on first actual use.
+	// ------------------------------------------------------------------
+	describe('lib/backup.js is lazy-loaded, not statically imported', () => {
+		it('is NOT loaded merely by importing background-main.js (its whole static graph already settled in beforeAll)', () => {
+			expect(backupModuleState.loadCount).toBe(0);
+			expect(mockMakeZip).not.toHaveBeenCalled();
+			expect(mockReadZip).not.toHaveBeenCalled();
+		});
+
+		it('IS loaded lazily, and round-trips, when Export:backup is actually dispatched', async () => {
+			const { handleMessage } = await import('../../webextension/lib/messages.js');
+			const sendResponse = vi.fn();
+
+			const result = handleMessage(
+				{ name: 'Export:backup' },
+				{ id: EXTENSION_ID },
+				sendResponse,
+			);
+
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(42));
+			expect(backupModuleState.loadCount).toBe(1);
+			expect(mockMakeZip).toHaveBeenCalledTimes(1);
+		});
 	});
 });

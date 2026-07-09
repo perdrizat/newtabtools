@@ -17,7 +17,7 @@
  * `getFilters()`/`getCompareVersions()` rather than a bare identifier.
  */
 
-import { withStore } from './db.js';
+import { withObjectStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
 import { getBlocked, getCompareVersions, getFilters, getPrefs } from './platform.js';
 
@@ -31,21 +31,6 @@ import { getBlocked, getCompareVersions, getFilters, getPrefs } from './platform
  * @property {boolean} [imageIsThumbnail]
  * @property {string} [backgroundColor]
  */
-
-/**
- * Thin single-store view onto withStore() — every call site in this file is
- * single-store (the one multi-store call, purgeNeverCaptureHost, lives in
- * lib/capture.js; see withStore's own doc comment). Narrows `fn`'s parameter
- * to `IDBObjectStore` once, here, instead of a cast at every call site below.
- * @template T
- * @param {string} storeName
- * @param {'readonly'|'readwrite'} mode
- * @param {(store: IDBObjectStore) => T|Promise<T>} fn
- * @returns {Promise<T>}
- */
-function withObjectStore(storeName, mode, fn) {
-	return withStore(storeName, mode, /** @type {(storeOrTx: IDBObjectStore|IDBTransaction) => T|Promise<T>} */ (fn));
-}
 
 export const Tiles = {
 	_ready: false,

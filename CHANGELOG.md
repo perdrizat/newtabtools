@@ -15,10 +15,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Modernization M4: `export.js` dissolved into `lib/backup.js` (real imports; restore validation chain moved verbatim — security boundary unchanged); `zip-global.js` shim retired; hand-written `zip-core.d.ts` shadow types preserved by `update-zip`.
 - Modernization M5: `background.js` dissolved — dispatch in `lib/messages.js`, all listeners in `lib/background-main.js`, capability layer in `lib/platform.js` (Chrome fork point, incl. `broadcastToPages`); `globalThis` bridge shrunk to the 5 dual-scope symbols; action sweep seeds on `onInstalled`/`onStartup` instead of every respawn; page-side `Page.*` broadcasts queue until fx-newTab globals exist (was silent drop); last background vm-load tests migrated to native imports.
 
+### Added
+
+- `audit/2026-07-09-modernization-m-code-review.md`: medium-effort review of the Stage M module carve-up (wire contract/response shapes/dual-scope bridge verified intact; flagged the action-sweep disable→re-enable gap, two pre-existing `readZip` robustness bugs, and the flush-queue-before-grid-build race).
+
 ### Fixed
 
 - `Thumbnails.delete` and `cleanupThumbnails` reached the raw IDB connection unguarded on event-page wake (missed by the pre-2.1.0 sweep); now readiness-gated via `withStore`.
 - Never-capture host input widened to the row (placeholder no longer clips); tile action chips gained a `--ntt-line` hairline + soft shadow so they separate from light thumbnails; UAT scenario 11 prose updated to the light-chip design.
+- Restore is truly atomic (M7): wrong-shape `tiles.json`/`prefs.json` rejects before any write; orphan `tileImages/` entries ignored instead of crashing the import.
+- `Export:backup` responds with an error instead of hanging the UI when `makeZip` rejects (e.g. downloads permission missing).
+- Action-button seed sweep re-runs after extension disable→re-enable (session-flag guard at wake) — restores the self-heal lost with the per-respawn sweep.
+- Early `Page.*` broadcast replays are fault-isolated (per-replay try/catch).
+- M7 cleanups: single `withObjectStore` in `lib/db.js`; dead webRequest listener closures removed; backup/zip module lazy-loads on first use (25-file zip tree no longer parses on every event-page respawn).
 
 ## [2.1.0] — 2026-07-09
 

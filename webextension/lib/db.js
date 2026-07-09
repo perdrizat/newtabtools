@@ -135,7 +135,7 @@ function waitForDB() {
  * compatibility check cleanly (the `fn` parameter's contravariant position
  * fights the generic per-overload template). Most single-store call sites
  * (lib/tiles-store.js, lib/messages.js, lib/capture.js's own single-store
- * calls) go through a file-local `withObjectStore()` wrapper (a thin,
+ * calls) go through this file's own `withObjectStore()` export (a thin,
  * precisely-typed single-store view onto this function) instead of narrowing
  * here; lib/background-main.js's one call site (`cleanupThumbnails`) casts
  * the parameter to `IDBObjectStore` inline instead of adding a wrapper for a
@@ -158,6 +158,27 @@ export async function withStore(storeNames, mode, fn) {
 		return fn(tx);
 	}
 	return fn(tx.objectStore(storeNames));
+}
+
+/**
+ * Thin single-store view onto `withStore()` — narrows `fn`'s parameter to
+ * `IDBObjectStore` once, here, instead of a cast at every single-store call
+ * site. Every lib/ module whose IndexedDB access is entirely single-store
+ * (lib/tiles-store.js, lib/messages.js, lib/capture.js's own single-store
+ * calls) imports this shared wrapper rather than each keeping its own
+ * byte-identical copy (code-review audit finding #5, 2026-07-09: three copies
+ * were kept in sync only by a cross-referencing comment in each file — a pure
+ * type cast carries no per-file behavior, so one exported implementation
+ * serves all three). `purgeNeverCaptureHost` (lib/capture.js) is the one
+ * multi-store call site and keeps calling `withStore()` directly.
+ * @template T
+ * @param {string} storeName
+ * @param {'readonly'|'readwrite'} mode
+ * @param {(store: IDBObjectStore) => T|Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export function withObjectStore(storeName, mode, fn) {
+	return withStore(storeName, mode, /** @type {(storeOrTx: IDBObjectStore|IDBTransaction) => T|Promise<T>} */ (fn));
 }
 
 /**

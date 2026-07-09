@@ -10,14 +10,19 @@
  * this test now drives the real `handleMessage` export of lib/messages.js
  * directly (native import, no vm.runInThisContext — lib/messages.js has real
  * `import` syntax and can't be script-mode-parsed). Its dependencies
- * (Tiles/Background, withStore, makeZip/readZip) are real imports in
- * lib/messages.js itself; this test mutates the SAME singleton
- * `Tiles`/`Background` objects it imports (module instances are shared by
- * resolved path, so replacing a method on the imported object is visible
- * through lib/messages.js's own import of the same module) instead of
- * replacing a `globalThis` bridge. `makeZip`/`readZip` are mocked via
- * `vi.mock` — this test only cares about dispatch plumbing, not the real
- * zip/backup pipeline (covered by backup-restore.test.ts). `withStore`
+ * (Tiles/Background, withStore) are real imports in lib/messages.js itself;
+ * this test mutates the SAME singleton `Tiles`/`Background` objects it
+ * imports (module instances are shared by resolved path, so replacing a
+ * method on the imported object is visible through lib/messages.js's own
+ * import of the same module) instead of replacing a `globalThis` bridge.
+ * `makeZip`/`readZip` (lib/backup.js) are mocked via `vi.mock` — this test
+ * only cares about dispatch plumbing, not the real zip/backup pipeline
+ * (covered by backup-restore.test.ts); the mock also transparently covers
+ * lib/messages.js's `Export:backup`/`Import:restore` cases now reaching them
+ * via a dynamic `import('./backup.js')` instead of a static one (2026-07-09
+ * review, adjudicated: keeps the vendored zip ESM tree out of the static
+ * import graph), since `vi.mock` intercepts a specifier regardless of
+ * whether the importing code uses static or dynamic `import`. `withStore`
  * (lib/db.js) is the REAL implementation, driven by the controllable
  * `indexedDB.open()` mock below — same pattern the rest of this test suite
  * has always used.
@@ -445,8 +450,27 @@ describe('lib/messages.js — runtime.onMessage boundary (Phase 1 slot 1)', () =
 			(makeZip as ReturnType<typeof vi.fn>).mockResolvedValueOnce(zipResult);
 			const result = handleMessage({ name: 'Export:backup' }, validSender, sendResponse);
 			expect(result).toBe(true);
-			expect(makeZip).toHaveBeenCalled();
+			await vi.waitFor(() => expect(makeZip).toHaveBeenCalled());
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(zipResult));
+		});
+
+		it('Export:backup — calls sendResponse(null) instead of hanging when makeZip rejects (audit "also noted" fix)', async () => {
+			// Previously `makeZip().then(sendResponse)` had no `.catch` — if
+			// the optional `downloads` permission wasn't granted, makeZip()
+			// rejected and sendResponse was never called, hanging the export
+			// UI. Mirrors the same console.error + sendResponse(null) shape
+			// every other rejection-handled case in this dispatcher uses (e.g.
+			// 'Background.getBackground').
+			const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			(makeZip as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('downloads permission not granted'));
+
+			const result = handleMessage({ name: 'Export:backup' }, validSender, sendResponse);
+
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+			expect(consoleErrorSpy).toHaveBeenCalled();
+
+			consoleErrorSpy.mockRestore();
 		});
 
 		it('Import:restore — responds { ok: true } on success', async () => {
@@ -456,7 +480,10 @@ describe('lib/messages.js — runtime.onMessage boundary (Phase 1 slot 1)', () =
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			expect(readZip).toHaveBeenCalledWith('fake-zip-data');
+			// readZip is reached via a dynamic import('./backup.js') now (lazy-
+			// load, 2026-07-09 review) — one extra microtask hop before it's
+			// actually called, so this can no longer be a synchronous assertion.
+			await vi.waitFor(() => expect(readZip).toHaveBeenCalledWith('fake-zip-data'));
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ ok: true }));
 		});
 

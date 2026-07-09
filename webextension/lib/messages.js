@@ -10,10 +10,20 @@
  * response shapes, and the never-capture guard are byte-equivalent — only
  * the dependencies changed, from background.js's bare-identifier globalThis
  * bridge reads to real `import`s of the lib modules that now own each piece
- * (Tiles/Background, withStore, the capture pipeline, makeZip/readZip). The
- * dual-scope `NeverCapture` global (prefs.js, Decision 2) is read through
+ * (Tiles/Background, withStore, the capture pipeline). The dual-scope
+ * `NeverCapture` global (prefs.js, Decision 2) is read through
  * lib/platform.js's typed accessor, the one sanctioned read site for it
  * across lib/.
+ *
+ * `makeZip`/`readZip` (lib/backup.js) are deliberately NOT a static import
+ * here (audit finding, 2026-07-09 review, adjudicated): lib/backup.js's own
+ * import graph pulls in the vendored `lib/zip/**` ESM tree (~25 files). A
+ * static import would parse that whole tree on every event-page respawn even
+ * though 'Export:backup'/'Import:restore' are rare, user-initiated actions.
+ * Each case below does `const {makeZip} = await import('./backup.js')` (resp.
+ * `readZip`) instead — a dynamic import is cached after its first resolution
+ * (same module instance on every later call), so the cost is paid at most
+ * once per event-page lifetime, only when a backup/restore actually happens.
  *
  * `registerMessageHandler()` is called once, at lib/background-main.js's own
  * top level (still synchronous-on-import — same respawn-hygiene requirement
@@ -22,27 +32,11 @@
  * `browser.runtime.onMessage.addListener` round-trip.
  */
 
-import { withStore } from './db.js';
+import { withObjectStore } from './db.js';
 import { Tiles, Background } from './tiles-store.js';
 import { getTZDateString } from './constants.js';
 import { startCaptureSession, purgeNeverCaptureHost } from './capture.js';
-import { makeZip, readZip } from './backup.js';
 import { getNeverCapture, broadcastToPages } from './platform.js';
-
-/**
- * Thin single-store view onto withStore() — mirrors lib/capture.js's own
- * `withObjectStore()`. Every call site in this file is single-store;
- * 'Thumbnails.purgeHost' dispatches to lib/capture.js's own multi-store
- * `purgeNeverCaptureHost` instead of calling withStore directly.
- * @template T
- * @param {string} storeName
- * @param {'readonly'|'readwrite'} mode
- * @param {(store: IDBObjectStore) => T|Promise<T>} fn
- * @returns {Promise<T>}
- */
-function withObjectStore(storeName, mode, fn) {
-	return withStore(storeName, mode, /** @type {(storeOrTx: IDBObjectStore|IDBTransaction) => T|Promise<T>} */ (fn));
-}
 
 /**
  * The runtime.onMessage listener — dispatch table for the 19 frozen wire
@@ -284,12 +278,17 @@ export function handleMessage(message, sender, sendResponse) {
 		return true;
 
 	case 'Export:backup':
-		makeZip().then(sendResponse);
+		// Lazy-loaded (see file header) — cached after the first call.
+		import('./backup.js').then(({makeZip}) => makeZip()).then(sendResponse).catch(function(event) {
+			console.error(event);
+			sendResponse(null);
+		});
 		return true;
 	case 'Import:restore':
 		// Surface restore failures instead of swallowing the rejection — a
-		// malformed backup must report an error, not fail silently.
-		readZip(message.file).then(
+		// malformed backup must report an error, not fail silently. Lazy-loaded
+		// (see file header) — cached after the first call.
+		import('./backup.js').then(({readZip}) => readZip(message.file)).then(
 			() => sendResponse({ ok: true }),
 			err => {
 				console.error('Import:restore failed:', err);

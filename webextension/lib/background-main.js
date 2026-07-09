@@ -89,17 +89,12 @@ getPrefs().init().then(async function() {
 });
 
 // ---------------------------------------------------------------------------
-// Network idle monitor. `resetNetworkIdleTimer` is wrapped in a closure at
-// each call site (rather than passed directly) purely as a defensive habit
-// carried over from background.js's own bridge-era version of this file —
-// it's a real, already-resolved import binding now, so the wrapping is no
-// longer load-bearing, but keeping the three listeners visually uniform with
-// the rest of this file's registrations costs nothing.
+// Network idle monitor.
 // ---------------------------------------------------------------------------
 
-chrome.webRequest.onBeforeRequest.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
-chrome.webRequest.onCompleted.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
-chrome.webRequest.onErrorOccurred.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
+chrome.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+chrome.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 
 // ---------------------------------------------------------------------------
 // Navigation triggers
@@ -225,6 +220,29 @@ browser.runtime.onInstalled.addListener(function() {
 // respawn) — the other half of §3.1's seed, covering the case where the
 // browser restarts without an install/update (so onInstalled never fires).
 browser.runtime.onStartup.addListener(seedActionSweep);
+
+// ---------------------------------------------------------------------------
+// Session-seed (audit finding #1, 2026-07-09 code review): `onInstalled`/
+// `onStartup` alone miss one case — disabling then re-enabling the extension
+// from about:addons fires NEITHER event, yet it resets every already-open
+// tab's per-tab action-button state back to Firefox's default (enabled).
+// `browser.storage.session` is cleared by exactly the two events that reset
+// that per-tab state (a full browser restart, AND an extension disable→
+// re-enable) — so a once-per-session flag here restores the self-heal the
+// old per-respawn top-level sweep used to provide, at once-per-session cost
+// rather than once-per-respawn: the first wake of a session (flag unset)
+// reseeds the sweep and sets the flag; every later respawn in the same
+// session (flag already set) costs a single storage.session.get() and
+// nothing else.
+// ---------------------------------------------------------------------------
+browser.storage.session.get('actionSeeded').then(function(result) {
+	if (result.actionSeeded) {
+		return;
+	}
+	return seedActionSweep().then(function() {
+		return browser.storage.session.set({actionSeeded: true});
+	});
+}).catch(console.error);
 
 // ---------------------------------------------------------------------------
 // Context menus

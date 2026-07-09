@@ -22,12 +22,20 @@
  * suspending/respawning — so even the "harmless" per-respawn sweep is
  * unnecessary work every ~30s. lib/background-main.js now has NO top-level
  * `tabs.query` sweep of any kind. Instead, a seed sweep
- * (`seedActionSweep()`) runs from TWO listeners: `runtime.onInstalled`
- * (alongside the pre-existing reload-stale-pages behavior) and
- * `runtime.onStartup` (covering a full browser restart with no install/
- * update, so `onInstalled` never fires). Between those, per-navigation
- * maintenance in the (unchanged) `webNavigation.onCompleted` listener keeps
- * each tab's action state current as the user navigates.
+ * (`seedActionSweep()`) runs from THREE places: `runtime.onInstalled`
+ * (alongside the pre-existing reload-stale-pages behavior), `runtime.onStartup`
+ * (covering a full browser restart with no install/update, so `onInstalled`
+ * never fires), and — per the 2026-07-09 code-review audit's finding #1 — a
+ * `browser.storage.session`-backed once-per-session seed that also self-heals
+ * after an extension disable→re-enable from about:addons, which fires NEITHER
+ * `onInstalled` NOR `onStartup` but still resets every open tab's per-tab
+ * action state to Firefox's default (enabled). `storage.session` is cleared by
+ * exactly the two events that reset that per-tab state (a full browser
+ * restart, and a disable→re-enable), so a flag there lets the first wake of a
+ * session reseed the sweep once, and every later respawn in that same session
+ * skip it (cheap `storage.session.get()` only). Between all of these,
+ * per-navigation maintenance in the (unchanged) `webNavigation.onCompleted`
+ * listener keeps each tab's action state current as the user navigates.
  *
  * MODERNIZATION.md slice M5 dissolves the former webextension/background.js;
  * this natively imports the real lib/background-main.js entry point instead
@@ -185,11 +193,29 @@ describe('lib/background-main.js — startup tab sweep (§3.1: onInstalled + onS
 		onStartupListener = startupCalls[0][0] as Function;
 	});
 
-	it('does NOT call tabs.query at plain import time — §3.1 removes the per-respawn top-level sweep entirely', () => {
-		expect(tabsQueryMock).not.toHaveBeenCalled();
+	it('does NOT reload any tab at plain import time — §3.1 removes the per-respawn top-level RELOAD sweep entirely', () => {
+		// The session-seed (finding #1, below) DOES run the action-button sweep
+		// at import time when the storage.session flag is unset (the common
+		// first-wake-of-a-session case, which this fresh test file's freshly-
+		// empty mock store always is) — but it must never reload any tab; only
+		// `runtime.onInstalled` does that.
 		expect(reloadMock).not.toHaveBeenCalled();
-		expect(enableMock).not.toHaveBeenCalled();
-		expect(disableMock).not.toHaveBeenCalled();
+	});
+
+	describe('session-seed at wake (audit finding #1, 2026-07-09 code review)', () => {
+		it('runs the action sweep exactly once at the first wake of a session (storage.session flag unset), and marks the flag', () => {
+			// Observed straight out of beforeAll's import + microtask flush,
+			// before any other test has cleared these mocks — this is the
+			// first-wake-with-flag-unset case (a freshly-empty
+			// browser.storage.session, per this test file's own mock instance).
+			expect(tabsQueryMock).toHaveBeenCalledTimes(1);
+			expect(enableMock).toHaveBeenCalledWith(httpTab.id);
+			expect(disableMock).toHaveBeenCalledWith(aboutTab.id);
+			expect(enableMock).not.toHaveBeenCalledWith(newTabPageTab.id);
+			expect(disableMock).not.toHaveBeenCalledWith(newTabPageTab.id);
+			expect((globalThis as any).browser.storage.session.set)
+				.toHaveBeenCalledWith({ actionSeeded: true });
+		});
 	});
 
 	describe('runtime.onInstalled dispatch', () => {
@@ -248,6 +274,37 @@ describe('lib/background-main.js — startup tab sweep (§3.1: onInstalled + onS
 			expect(enableMock).toHaveBeenCalledWith(httpTab.id);
 			expect(disableMock).toHaveBeenCalledWith(aboutTab.id);
 			expect(reloadMock).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('session-seed at a LATER wake in the same session (audit finding #1)', () => {
+		it('does NOT run the sweep again once the storage.session flag is already set', async () => {
+			// Pre-seed the flag, as if an earlier wake in this same browser
+			// session already ran the seed and set it.
+			await (globalThis as any).browser.storage.session.set({ actionSeeded: true });
+
+			tabsQueryMock.mockClear();
+			enableMock.mockClear();
+			disableMock.mockClear();
+			reloadMock.mockClear();
+			((globalThis as any).browser.storage.session.set as ReturnType<typeof vi.fn>).mockClear();
+			tabsQueryMock.mockResolvedValue([httpTab, newTabPageTab, aboutTab]);
+
+			// Simulate a fresh event-page respawn: force the whole module graph
+			// to re-evaluate from scratch (a real respawn re-runs every
+			// top-level statement in it), then re-import the real background
+			// entry point — this is the "later wake" the flag is meant to skip.
+			vi.resetModules();
+			await import(/* @vite-ignore */ webext('lib/background-main.js'));
+			await new Promise(resolve => setTimeout(resolve, 0));
+			await new Promise(resolve => setTimeout(resolve, 0));
+			await new Promise(resolve => setTimeout(resolve, 0));
+
+			expect(tabsQueryMock).not.toHaveBeenCalled();
+			expect(enableMock).not.toHaveBeenCalled();
+			expect(disableMock).not.toHaveBeenCalled();
+			expect(reloadMock).not.toHaveBeenCalled();
+			expect((globalThis as any).browser.storage.session.set).not.toHaveBeenCalled();
 		});
 	});
 });

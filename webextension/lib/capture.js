@@ -35,26 +35,10 @@
  * no more `globalThis` bridge for any of it.
  */
 
-import { withStore } from './db.js';
+import { withStore, withObjectStore } from './db.js';
 import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
 import { getTZDateString } from './constants.js';
 import { getNeverCapture, hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
-
-/**
- * Thin single-store view onto withStore() — mirrors lib/tiles-store.js's own
- * `withObjectStore()`. Every call site in this file except
- * `purgeNeverCaptureHost`'s multi-store transaction is single-store; narrowing
- * `fn`'s parameter to `IDBObjectStore` once, here, avoids a cast at each of
- * those call sites.
- * @template T
- * @param {string} storeName
- * @param {'readonly'|'readwrite'} mode
- * @param {(store: IDBObjectStore) => T|Promise<T>} fn
- * @returns {Promise<T>}
- */
-function withObjectStore(storeName, mode, fn) {
-	return withStore(storeName, mode, /** @type {(storeOrTx: IDBObjectStore|IDBTransaction) => T|Promise<T>} */ (fn));
-}
 
 // ---------------------------------------------------------------------------
 // Network idle monitor

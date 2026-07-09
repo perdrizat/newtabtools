@@ -656,6 +656,74 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(mockTiles.clear).not.toHaveBeenCalled();
 			expect(mockTiles.putTile).not.toHaveBeenCalled();
 		});
+
+		it('rejects (writing nothing) when tiles.json parses but is not an array (audit finding #2)', async () => {
+			// '{"x":1}' is syntactically valid JSON but the wrong SHAPE — it
+			// must be rejected just as atomically as a JSON.parse failure,
+			// before Background.setBackground/storage.local.set ever run.
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'dark' })),
+				mockZipEntry('tiles.json', '{"x":1}'),
+				mockZipEntry('background', undefined, new Blob(['bg-data'])),
+			]);
+
+			await expect(readZip(new Blob())).rejects.toThrow();
+
+			expect(mockBackground.setBackground).not.toHaveBeenCalled();
+			expect(mockStorageLocal.set).not.toHaveBeenCalled();
+			expect(mockTiles.clear).not.toHaveBeenCalled();
+			expect(mockTiles.putTile).not.toHaveBeenCalled();
+		});
+
+		it('rejects (writing nothing) when prefs.json parses but is not an object (audit finding #2)', async () => {
+			// '5' is syntactically valid JSON but the wrong SHAPE.
+			setupReader([
+				mockZipEntry('prefs.json', '5'),
+				mockZipEntry('tiles.json', JSON.stringify([{ id: 1, url: 'https://a.com', position: 0 }])),
+				mockZipEntry('background', undefined, new Blob(['bg-data'])),
+			]);
+
+			await expect(readZip(new Blob())).rejects.toThrow();
+
+			expect(mockBackground.setBackground).not.toHaveBeenCalled();
+			expect(mockStorageLocal.set).not.toHaveBeenCalled();
+			expect(mockTiles.clear).not.toHaveBeenCalled();
+			expect(mockTiles.putTile).not.toHaveBeenCalled();
+		});
+	});
+
+	// ======================== readZip — orphan tileImages/ entries (audit finding #3) ========================
+
+	describe('readZip — orphan tileImages/ entries (audit finding #3)', () => {
+		it('ignores an orphan image whose id has no matching tile, and completes the restore', async () => {
+			const tiles = [{ id: 1, url: 'https://a.com', title: 'A', position: 0 }];
+			setupReader([
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+				mockZipEntry('tileImages/999.png', undefined, new Blob(['orphan'])),
+			]);
+
+			await expect(readZip(new Blob())).resolves.toBeUndefined();
+
+			expect(mockTiles.putTile).toHaveBeenCalledTimes(1);
+			expect(mockTiles.putTile).toHaveBeenCalledWith(
+				expect.objectContaining({ url: 'https://a.com' }),
+			);
+		});
+
+		it('ignores a garbage tileImages/ filename (parseInt → NaN) without throwing', async () => {
+			const tiles = [{ id: 1, url: 'https://a.com', title: 'A', position: 0 }];
+			setupReader([
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+				mockZipEntry('tileImages/abc.png', undefined, new Blob(['garbage'])),
+			]);
+
+			await expect(readZip(new Blob())).resolves.toBeUndefined();
+
+			expect(mockTiles.putTile).toHaveBeenCalledTimes(1);
+			expect(mockTiles.putTile).toHaveBeenCalledWith(
+				expect.objectContaining({ url: 'https://a.com' }),
+			);
+		});
 	});
 
 	// ======================== Helper ========================
