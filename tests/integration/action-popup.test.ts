@@ -35,14 +35,15 @@ function loadPopup(opts: { isPinned: boolean }) {
 	const body = actionHtml.slice(actionHtml.indexOf('<body>') + 6, actionHtml.indexOf('<script'));
 	document.body.innerHTML = body;
 
-	const sendMessage = vi.fn((msg: any, cb?: (r?: unknown) => void) => {
-		if (typeof cb !== 'function') { return; }
-		if (msg.name === 'Tiles.isPinned') { cb(opts.isPinned); }
-		else { cb(); }
+	const sendMessage = vi.fn((msg: any) => {
+		if (msg.name === 'Tiles.isPinned') { return Promise.resolve(opts.isPinned); }
+		return Promise.resolve();
 	});
 	(globalThis as any).chrome = {
 		i18n: { getMessage: vi.fn((k: string) => `i18n:${k}`) },
-		tabs: { query: vi.fn((_q: unknown, cb: (tabs: unknown[]) => void) => cb([TAB])) },
+	};
+	(globalThis as any).browser = {
+		tabs: { query: vi.fn().mockResolvedValue([TAB]) },
 		runtime: { sendMessage },
 	};
 	const close = vi.fn();
@@ -74,7 +75,6 @@ describe('action.js — toolbar popup glue (real markup + real script)', () => {
 		await tick();
 		expect(sendMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ name: 'Tiles.isPinned', url: TAB.url }),
-			expect.any(Function),
 		);
 		expect((document.getElementById('pin') as HTMLElement).hidden).toBe(false);
 		expect((document.getElementById('pinned') as HTMLElement).hidden).toBe(true);
@@ -102,9 +102,12 @@ describe('action.js — toolbar popup glue (real markup + real script)', () => {
 		const { sendMessage, close } = loadPopup({ isPinned: false });
 		await tick();
 		(document.getElementById('capture') as HTMLElement).click();
+		// The click handler is now `async function() { await sendMessage(...); close(); }`
+		// (Slice C of the MV3 migration: promise-based browser.* instead of a
+		// callback) — flush the microtask so `close()` has run.
+		await tick();
 		expect(sendMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ name: 'Thumbnails.capture' }),
-			expect.any(Function),
 		);
 		expect(close).toHaveBeenCalled();
 	});

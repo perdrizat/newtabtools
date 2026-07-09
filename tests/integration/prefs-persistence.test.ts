@@ -53,15 +53,25 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		storageData = {};
 		onChangedListeners = [];
 
-		// Mock chrome.storage.local
-		chrome.storage.local.get = vi.fn((cb: (data: Record<string, unknown>) => void) => {
-			cb({ ...storageData });
+		// Mock chrome.storage.local — prefs.js now calls the promise-based
+		// `browser.storage.local.*` (Slice C of the MV3 migration); `chrome`
+		// and `browser` are the same shared object under jest-webextension-mock,
+		// so overriding `chrome.storage.local` here also covers `browser.*`.
+		// Both calling conventions are supported for robustness.
+		chrome.storage.local.get = vi.fn((keys?: unknown, cb?: (data: Record<string, unknown>) => void) => {
+			const result = { ...storageData };
+			if (typeof cb === 'function') {return cb(result);}
+			return Promise.resolve(result);
 		}) as any;
 		chrome.storage.local.set = vi.fn((obj: Record<string, unknown>, cb?: () => void) => {
 			Object.assign(storageData, obj);
-			if (cb) {cb();}
+			if (typeof cb === 'function') {return cb();}
+			return Promise.resolve();
 		}) as any;
-		chrome.storage.local.remove = vi.fn() as any;
+		chrome.storage.local.remove = vi.fn((_keys?: unknown, cb?: () => void) => {
+			if (typeof cb === 'function') {return cb();}
+			return Promise.resolve();
+		}) as any;
 
 		// Mock chrome.storage.onChanged
 		chrome.storage.onChanged.addListener = vi.fn((listener: any) => {
@@ -338,7 +348,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Blocked._list).toContain('https://evil.com');
 		expect(chrome.storage.local.set).toHaveBeenCalledWith(
 			{ blocked: ['https://evil.com'] },
-			expect.any(Function),
 		);
 	});
 
@@ -366,7 +375,6 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Blocked._list).toHaveLength(0);
 		expect(chrome.storage.local.set).toHaveBeenCalledWith(
 			{ blocked: [] },
-			expect.any(Function),
 		);
 	});
 

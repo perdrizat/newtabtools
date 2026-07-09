@@ -7,13 +7,12 @@
 Promise.all([
 	Prefs.init(),
 	waitForDB()
-]).then(function() {
+]).then(async function() {
 	let previousVersion = Prefs.version;
-	chrome.management.getSelf(function({version: currentVersion}) {
-		if (previousVersion != currentVersion) {
-			Prefs.version = currentVersion;
-		}
-	});
+	let {version: currentVersion} = await browser.management.getSelf();
+	if (previousVersion != currentVersion) {
+		Prefs.version = currentVersion;
+	}
 }).catch(function(event) {
 	console.error(event);
 });
@@ -373,28 +372,35 @@ function resizeThumbnail(dataURL, targetWidth) {
 }
 
 /**
- * Capture the visible tab and return the data URL via callback.
+ * Capture the visible tab and return the data URL and favicon URL.
  * Verifies the target tab is still active before capturing — if the user
  * switched tabs, captureVisibleTab would screenshot the wrong page.
- * Returns null if the tab is no longer active or captureVisibleTab fails.
+ * dataURL is null if the tab is gone/inactive or captureVisibleTab fails.
+ * @param {number} tabId
+ * @param {number} windowId
+ * @returns {Promise<{dataURL: string|null, favIconUrl: string|null}>}
  */
-function captureTab(tabId, windowId, label, callback) {
-	chrome.tabs.get(tabId, function(tab) {
-		if (chrome.runtime.lastError || !tab || !tab.active) {
-			callback(null, null);
-			return;
-		}
-		// `favIconUrl` can become available before or after the screenshot
-		// is ready — grab whichever value is current at this moment.
-		let favIconUrl = tab.favIconUrl || null;
-		chrome.tabs.captureVisibleTab(windowId, {format: 'png'}, function(dataURL) {
-			if (!dataURL) {
-				callback(null, favIconUrl);
-				return;
-			}
-			callback(dataURL, favIconUrl);
-		});
-	});
+async function captureTab(tabId, windowId) {
+	let tab;
+	try {
+		tab = await browser.tabs.get(tabId);
+	} catch (ex) {
+		// Tab is gone — same as the old callback's `runtime.lastError` check.
+		return {dataURL: null, favIconUrl: null};
+	}
+	if (!tab.active) {
+		return {dataURL: null, favIconUrl: null};
+	}
+	// `favIconUrl` can become available before or after the screenshot
+	// is ready — grab whichever value is current at this moment.
+	let favIconUrl = tab.favIconUrl || null;
+	let dataURL;
+	try {
+		dataURL = await browser.tabs.captureVisibleTab(windowId, {format: 'png'});
+	} catch (ex) {
+		return {dataURL: null, favIconUrl};
+	}
+	return {dataURL: dataURL || null, favIconUrl};
 }
 
 /**
@@ -539,7 +545,7 @@ function startCaptureSession(tabId, windowId, url) {
 	captureSessions.set(tabId, session);
 
 	// Capture A: immediate.
-	captureTab(tabId, windowId, 'A', function(dataURL, favIconUrl) {
+	captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
 		if (dataURL && captureSessions.get(tabId) === session) {
 			session.captures.push({label: 'A', dataURL: dataURL});
 		}
@@ -553,7 +559,7 @@ function startCaptureSession(tabId, windowId, url) {
 		if (captureSessions.get(tabId) !== session) {
 			return;
 		}
-		captureTab(tabId, windowId, 'B', function(dataURL, favIconUrl) {
+		captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
 			if (dataURL && captureSessions.get(tabId) === session) {
 				session.captures.push({label: 'B', dataURL: dataURL});
 			}
@@ -573,7 +579,7 @@ function startCaptureSession(tabId, windowId, url) {
 		if (!finalized && captureSessions.get(tabId) === session) {
 			finalized = true;
 			disarmNetworkIdle(tabId);
-			captureTab(tabId, windowId, 'C', function(dataURL, favIconUrl) {
+			captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
 				}
@@ -592,7 +598,7 @@ function startCaptureSession(tabId, windowId, url) {
 		}
 		if (elapsed <= 2000) {
 			// Network idle within 2s — take Capture C, then finalize.
-			captureTab(tabId, windowId, 'C', function(dataURL, favIconUrl) {
+			captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
 				if (dataURL && captureSessions.get(tabId) === session) {
 					session.captures.push({label: 'C', dataURL: dataURL});
 				}
@@ -649,7 +655,7 @@ function pickAndStore(tabId) {
 	Promise.all([
 		Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })),
 		fetchFaviconBlob(favIconUrl),
-	]).then(function(results) {
+	]).then(async function(results) {
 		let blankResults = results[0];
 		let faviconBlob = results[1];
 
@@ -664,26 +670,24 @@ function pickAndStore(tabId) {
 
 		let best = captures[bestIndex];
 
-		chrome.storage.local.get({'thumbnailSize': 600}, function(prefs) {
-			resizeThumbnail(best.dataURL, prefs.thumbnailSize).then(function(blob) {
-				let today = getTZDateString();
-				let record = {
-					url: url,
-					image: blob,
-					stored: today,
-					used: today,
-				};
-				if (faviconBlob) {
-					// data: favicon, decoded + cached as a Blob (offline-capable).
-					record.favicon = faviconBlob;
-				} else if (favIconUrl && /^https?:\/\//.test(favIconUrl)) {
-					// Remote favicon: store the URL so the page can render it
-					// live via <img> (no fetch / no connect-src wildcard).
-					record.faviconUrl = favIconUrl;
-				}
-				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
-			});
-		});
+		let prefs = await browser.storage.local.get({'thumbnailSize': 600});
+		let blob = await resizeThumbnail(best.dataURL, prefs.thumbnailSize);
+		let today = getTZDateString();
+		let record = {
+			url: url,
+			image: blob,
+			stored: today,
+			used: today,
+		};
+		if (faviconBlob) {
+			// data: favicon, decoded + cached as a Blob (offline-capable).
+			record.favicon = faviconBlob;
+		} else if (favIconUrl && /^https?:\/\//.test(favIconUrl)) {
+			// Remote favicon: store the URL so the page can render it
+			// live via <img> (no fetch / no connect-src wildcard).
+			record.faviconUrl = favIconUrl;
+		}
+		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
 	});
 }
 
@@ -703,31 +707,30 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	chrome.browserAction.enable(details.tabId);
 
-	Tiles.ensureReady().then(function({cache}) {
+	Tiles.ensureReady().then(async function({cache}) {
 		if (cache.includes(details.url)) {
 			// Never-capture privacy guard: skip both paths for listed hosts.
 			if (NeverCapture.matches(details.url)) {
 				return;
 			}
-			chrome.tabs.get(details.tabId, function(tab) {
-				if (tab.incognito) {
-					return;
-				}
-				if (tab.active) {
-					startCaptureSession(details.tabId, tab.windowId, details.url);
-				} else {
-					// Unbounded wait for tab activation — doesn't survive event-page
-					// suspension in-memory, so it lives in storage.session instead.
-					browser.storage.session.get('pendingCaptures').then(function(result) {
-						let pendingCaptures = result.pendingCaptures || {};
-						pendingCaptures[details.tabId] = {
-							url: details.url,
-							windowId: tab.windowId,
-						};
-						return browser.storage.session.set({pendingCaptures});
-					}).catch(console.error);
-				}
-			});
+			let tab = await browser.tabs.get(details.tabId);
+			if (tab.incognito) {
+				return;
+			}
+			if (tab.active) {
+				startCaptureSession(details.tabId, tab.windowId, details.url);
+			} else {
+				// Unbounded wait for tab activation — doesn't survive event-page
+				// suspension in-memory, so it lives in storage.session instead.
+				await browser.storage.session.get('pendingCaptures').then(function(result) {
+					let pendingCaptures = result.pendingCaptures || {};
+					pendingCaptures[details.tabId] = {
+						url: details.url,
+						windowId: tab.windowId,
+					};
+					return browser.storage.session.set({pendingCaptures});
+				});
+			}
 		}
 	}).catch(console.error);
 });
@@ -758,7 +761,7 @@ chrome.tabs.onRemoved.addListener(function(tabId) {
 	disarmNetworkIdle(tabId);
 });
 
-chrome.tabs.query({}, function(tabs) {
+browser.tabs.query({}).then(function(tabs) {
 	for (let tab of tabs) {
 		if (tab.url == NEW_TAB_URL) {
 			chrome.tabs.reload(tab.id);
@@ -768,7 +771,7 @@ chrome.tabs.query({}, function(tabs) {
 			chrome.browserAction.enable(tab.id);
 		}
 	}
-});
+}).catch(console.error);
 
 /**
  * Register a context menu item, tolerating the "already exists" duplicate
@@ -910,12 +913,12 @@ function idleListener(state) {
 	if (state == 'idle') {
 		chrome.idle.onStateChanged.removeListener(idleListener);
 		let today = getTZDateString();
-		chrome.storage.local.get({thumbnailCleanupLastRun: null}, function(result) {
+		browser.storage.local.get({thumbnailCleanupLastRun: null}).then(function(result) {
 			if (result.thumbnailCleanupLastRun !== today) {
 				cleanupThumbnails();
-				chrome.storage.local.set({thumbnailCleanupLastRun: today});
+				browser.storage.local.set({thumbnailCleanupLastRun: today}).catch(console.error);
 			}
-		});
+		}).catch(console.error);
 	}
 }
 

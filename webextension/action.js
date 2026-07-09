@@ -6,34 +6,32 @@ function getString(name) {
 	return chrome.i18n.getMessage(name);
 }
 
-function getTab() {
-	return new Promise(function(resolve) {
-		chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-			resolve(tabs[0]);
-		});
-	});
+/**
+ * @returns {Promise<browser.tabs.Tab>} The active tab in the current window.
+ */
+async function getTab() {
+	let tabs = await browser.tabs.query({active: true, currentWindow: true});
+	return tabs[0];
 }
 
 document.querySelectorAll('[data-message]').forEach(n => {
 	n.textContent = getString(n.dataset.message);
 });
 
-getTab().then(tab => {
-	chrome.runtime.sendMessage({name: 'Tiles.isPinned', url: tab.url}, isPinned => {
-		document.getElementById('pinned').hidden = !isPinned;
-		document.getElementById('pin').hidden = isPinned;
-	});
+getTab().then(async tab => {
+	let isPinned = await browser.runtime.sendMessage({name: 'Tiles.isPinned', url: tab.url});
+	document.getElementById('pinned').hidden = !isPinned;
+	document.getElementById('pin').hidden = isPinned;
 });
 
 document.getElementById('pin').onclick = function() {
 	getTab().then(function(tab) {
-		chrome.runtime.sendMessage({name: 'Tiles.pinTile', title: tab.title, url: tab.url});
+		browser.runtime.sendMessage({name: 'Tiles.pinTile', title: tab.title, url: tab.url});
 		window.close();
 	});
 };
 
-document.getElementById('capture').onclick = function() {
-	chrome.runtime.sendMessage({name: 'Thumbnails.capture'}, () => {
-		window.close();
-	});
+document.getElementById('capture').onclick = async function() {
+	await browser.runtime.sendMessage({name: 'Thumbnails.capture'});
+	window.close();
 };

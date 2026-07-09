@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Added `audit/2026-07-09-mv3-inventory.md`: full file:line codebase inventory (background, front end, test infra) backing the migration plan.
 - MV3 Slice A: removed both `extension.getViews()` sites — background/export now broadcast `Page.updateGrid`/`Page.restoreComplete`; new page-side `runtime.onMessage` listener; restore refresh (incl. prefs-only path) is message-driven.
 - MV3 Slice B: respawn-safe background — duplicate-tolerant menu creation, IDB auto-reconnect (`onclose`/`onversionchange` + retryable `waitForDB`), `pendingCaptures` moved to `storage.session`, thumbnail cleanup capped at once daily, `storage.onChanged` listener registration made synchronous.
+- MV3 Slice C: background/popup callback-style `chrome.*` calls normalized to promise-based `browser.*` (async `captureTab` rewrite preserving session-identity semantics); `chrome.browserAction` kept for the Slice D rename.
 
 ## [2.0.7] — 2026-07-06
 

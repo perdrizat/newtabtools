@@ -12,8 +12,8 @@ this file; the corrected directives below are decisions of record.
 | Phase 0 — spike + bisect | ✓ done | `653042a`, `dd02699` |
 | Decisions: min_version 152.0, E2E on release FF | ✓ approved by maintainer | — |
 | Slice A — getViews → messaging | ✓ done (fast 1139, E2E 124) | `12b410c` |
-| Slice B — event-page resilience | ~ in progress (agent implementing) | — |
-| Slice C — async normalization | pending | — |
+| Slice B — event-page resilience | ✓ done (fast 1152, E2E 124) | `6bb6017` |
+| Slice C — async normalization | ~ in progress (agent implementing) | — |
 | Slice D — the MV3 flip | pending | — |
 | Final gate — full test/UAT/audit/build | pending | — |
 | Post-flip retest on ESR 140 | backlog | — |
@@ -184,13 +184,17 @@ UAT: full suite after Slice D.
 - [x] Gates: fast 1152 ✓ (+13, new `event-page-resilience.test.ts`), lint ✓,
       typecheck ✓, E2E 124 ✓.
 
-### Slice C — async normalization (MV2-safe)
-- [ ] ~15 callback-style call sites → `browser.*` promises: `storage.local.get/set`
-      (prefs.js, background.js, export.js), `tabs.get` ×2, `captureVisibleTab`,
-      `tabs.query` ×2, `topSites.get`, `management.getSelf`, `downloads.download`,
-      `sendMessage` ×3 (action.js). `captureTab`'s nested callbacks are the one with
-      real refactor weight (threaded through the capture state machine).
-- [ ] `chrome.browserAction.*` ×4 → `browser.browserAction` now, renamed in Slice D.
+### Slice C — async normalization (MV2-safe) — ✓ DONE
+- [x] All callback-style `chrome.*` sites in prefs/tiles/export/action/background
+      converted to promise `browser.*` + async/await; fire-and-forget writes carry
+      `.catch(console.error)`.
+- [x] `captureTab()` rewritten async, branch-for-branch (tab-gone, inactive,
+      capture-throw); 4 callers keep session-identity checks; unused `label`
+      param dropped. Characterization test added for cross-URL session invalidation.
+- [x] `chrome.browserAction.*` deliberately left for Slice D's rename.
+- [x] 11 integration test files: callback mocks → promise mocks; no assertions
+      weakened.
+- [x] Gates: fast 1153 ✓, lint ✓, typecheck ✓, E2E 124 ✓.
 
 ### Slice D — the flip (atomic)
 - [ ] `manifest.json`: `manifest_version: 3`; `browser_action` → `action`

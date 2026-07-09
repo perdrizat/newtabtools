@@ -40,6 +40,23 @@ function makeChrome() {
 	};
 }
 
+// prefs.js now calls the promise-based `browser.storage.local.*` (Slice C of
+// the MV3 migration). Under `loadModule`'s `vm.createContext` harness `chrome`
+// and `browser` are separate mock objects (unlike the shared-object alias
+// used by jest-webextension-mock elsewhere), so NeverCapture's persistence
+// path needs its own `browser` sandbox entry.
+function makeBrowser() {
+	return {
+		storage: {
+			local: {
+				get: vi.fn().mockResolvedValue({}),
+				set: vi.fn().mockResolvedValue(undefined),
+				remove: vi.fn().mockResolvedValue(undefined),
+			},
+		},
+	};
+}
+
 // ---------------------------------------------------------------------------
 // NeverCapture.matches
 // ---------------------------------------------------------------------------
@@ -135,11 +152,12 @@ describe('NeverCapture.add', () => {
 	let mockSet: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
-		mockSet = vi.fn();
+		mockSet = vi.fn().mockResolvedValue(undefined);
 		const chrome = makeChrome();
+		const browser = makeBrowser();
 		// Override set so we can spy on calls; cast to bypass the strict Mock subtype.
-		(chrome.storage.local as any).set = mockSet;
-		const ctx = loadPrefs({ chrome });
+		(browser.storage.local as any).set = mockSet;
+		const ctx = loadPrefs({ chrome, browser });
 		NC = ctx.NeverCapture;
 		NC._list = [];
 	});
@@ -166,11 +184,10 @@ describe('NeverCapture.add', () => {
 		expect(NC._list.length).toBe(0);
 	});
 
-	it('persists via chrome.storage.local.set with key neverCaptureHosts', () => {
+	it('persists via browser.storage.local.set with key neverCaptureHosts', () => {
 		NC.add('example.com');
 		expect(mockSet).toHaveBeenCalledWith(
 			expect.objectContaining({ neverCaptureHosts: expect.arrayContaining(['example.com']) }),
-			expect.anything(),
 		);
 	});
 
@@ -198,10 +215,11 @@ describe('NeverCapture.remove', () => {
 	let mockSet: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
-		mockSet = vi.fn();
+		mockSet = vi.fn().mockResolvedValue(undefined);
 		const chrome = makeChrome();
-		(chrome.storage.local as any).set = mockSet;
-		const ctx = loadPrefs({ chrome });
+		const browser = makeBrowser();
+		(browser.storage.local as any).set = mockSet;
+		const ctx = loadPrefs({ chrome, browser });
 		NC = ctx.NeverCapture;
 		NC._list = [];
 	});
@@ -219,12 +237,11 @@ describe('NeverCapture.remove', () => {
 		expect(NC._list).not.toContain('.example.com');
 	});
 
-	it('persists after removal via chrome.storage.local.set', () => {
+	it('persists after removal via browser.storage.local.set', () => {
 		NC._list = ['remove.me'];
 		NC.remove('remove.me');
 		expect(mockSet).toHaveBeenCalledWith(
 			expect.objectContaining({ neverCaptureHosts: expect.not.arrayContaining(['remove.me']) }),
-			expect.anything(),
 		);
 	});
 

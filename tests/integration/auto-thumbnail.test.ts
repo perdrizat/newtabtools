@@ -242,7 +242,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		// --- captureVisibleTab mock — returns a data URL ---
 		captureDataURL = 'data:image/png;base64,AAAA';
 		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(
-			(_windowId: number, _opts: unknown, cb: Function) => cb(captureDataURL)
+			() => Promise.resolve(captureDataURL)
 		);
 		captureCallCount = () =>
 			(globalThis as any).chrome.tabs.captureVisibleTab.mock.calls.length;
@@ -287,8 +287,8 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		sessionStore = {};
 		(globalThis as any).chrome.storage = {
 			local: {
-				get: vi.fn((keys: Record<string, unknown>, cb: Function) => cb(keys)),
-				set: vi.fn(),
+				get: vi.fn((keys: Record<string, unknown>) => Promise.resolve(keys)),
+				set: vi.fn(() => Promise.resolve()),
 			},
 			session: {
 				get: vi.fn((key: string) => {
@@ -314,7 +314,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			(p: string) => `moz-extension://test-uuid/${p}`,
 		);
 		(globalThis as any).chrome.management = {
-			getSelf: vi.fn((cb: Function) => cb({ version: '1.0.0' })),
+			getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }),
 		};
 		(globalThis as any).browser.menus = {
 			create: vi.fn(),
@@ -335,9 +335,9 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
 		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
 		(globalThis as any).chrome.tabs.get = vi.fn(
-			(_tabId: number, cb: Function) => cb({ active: true, windowId: 1, incognito: false })
+			() => Promise.resolve({ active: true, windowId: 1, incognito: false })
 		);
-		(globalThis as any).chrome.tabs.query = vi.fn((_q: unknown, cb: Function) => cb([]));
+		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
 		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
 
 		// --- Load background.js ---
@@ -411,7 +411,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 	it('onCompleted skips incognito tabs', async () => {
 		(globalThis as any).chrome.tabs.get.mockImplementationOnce(
-			(_tabId: number, cb: Function) => cb({ active: true, windowId: 1, incognito: true })
+			() => Promise.resolve({ active: true, windowId: 1, incognito: true })
 		);
 		onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 		await vi.advanceTimersByTimeAsync(0);
@@ -420,7 +420,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 	it('onCompleted defers inactive tabs to pendingCaptures', async () => {
 		(globalThis as any).chrome.tabs.get.mockImplementationOnce(
-			(_tabId: number, cb: Function) => cb({ active: false, windowId: 1, incognito: false })
+			() => Promise.resolve({ active: false, windowId: 1, incognito: false })
 		);
 		onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 		// pendingCaptures now round-trips through the mocked browser.storage.session
@@ -537,6 +537,44 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		expect(captureCallCount()).toBe(4); // old A + new A + new B + new C
 	});
 
+	// Characterization test (MV3_MIGRATION.md Slice C: captureTab rewritten
+	// from nested callbacks to an async function). The test above exercises
+	// session invalidation via a duplicate onCompleted for the SAME URL; this
+	// one drives it with a genuine navigation to a DIFFERENT URL, confirming
+	// the session-identity guard (`captureSessions.get(tabId) === session`)
+	// invalidates in-flight captures from the replaced session regardless of
+	// whether the URL changed — there is no separate URL check anywhere in
+	// the pipeline, so this must hold before AND after the captureTab rewrite.
+	it('a real navigation to a different URL replaces the session and invalidates its in-flight captures', async () => {
+		(globalThis as any).Tiles.ensureReady
+			.mockResolvedValueOnce({ cache: ['https://example.com'], list: [] })
+			.mockResolvedValueOnce({ cache: ['https://second.example.com'], list: [] });
+
+		onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+		await vi.advanceTimersByTimeAsync(0); // first session's A
+		expect(captureCallCount()).toBe(1);
+		const firstSession = getCaptureSessions().get(42);
+		expect(firstSession.url).toBe('https://example.com');
+
+		// Real navigation to a DIFFERENT URL on the same tab, before the first
+		// session's B/hard-deadline stages fire.
+		onCompletedListener({ frameId: 0, tabId: 42, url: 'https://second.example.com' });
+		await vi.advanceTimersByTimeAsync(0); // second session's A
+		expect(captureCallCount()).toBe(2);
+		const secondSession = getCaptureSessions().get(42);
+		expect(secondSession).not.toBe(firstSession);
+		expect(secondSession.url).toBe('https://second.example.com');
+
+		// The first session's B (500ms) and hard-deadline C (2000ms) timers
+		// were cancelled when the second session replaced it (startCaptureSession
+		// clears `oldSession.timers`) — only the SECOND session's B/C stages
+		// contribute further captures.
+		await vi.advanceTimersByTimeAsync(500); // second session's B
+		expect(captureCallCount()).toBe(3);
+		await vi.advanceTimersByTimeAsync(1500); // second session's hard-deadline C
+		expect(captureCallCount()).toBe(4);
+	});
+
 	it('onRemoved cleans up captureSessions, pendingCaptures, and network idle', async () => {
 		getCaptureSessions().set(42, { url: 'x', captures: [], timers: [] });
 		sessionStore.pendingCaptures = { 42: { url: 'x', windowId: 1 } };
@@ -609,7 +647,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 		// Simulate user switching away — tabs.get now returns inactive
 		(globalThis as any).chrome.tabs.get.mockImplementation(
-			(_tabId: number, cb: Function) => cb({ active: false, windowId: 1, incognito: false })
+			() => Promise.resolve({ active: false, windowId: 1, incognito: false })
 		);
 
 		// B at 500ms — should be skipped because tab is no longer active
@@ -618,7 +656,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 		// Restore mock for other tests
 		(globalThis as any).chrome.tabs.get.mockImplementation(
-			(_tabId: number, cb: Function) => cb({ active: true, windowId: 1, incognito: false })
+			() => Promise.resolve({ active: true, windowId: 1, incognito: false })
 		);
 	});
 
@@ -720,7 +758,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		it('webNavigation.onCompleted for a listed cached URL — no pendingCaptures entry (inactive tab)', async () => {
 			(globalThis as any).NeverCapture._list = ['example.com'];
 			(globalThis as any).chrome.tabs.get.mockImplementationOnce(
-				(_tabId: number, cb: Function) => cb({ active: false, windowId: 1, incognito: false })
+				() => Promise.resolve({ active: false, windowId: 1, incognito: false })
 			);
 			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 			await vi.advanceTimersByTimeAsync(0);

@@ -132,8 +132,8 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 
 		(globalThis as any).browser = {
 			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
+			topSites: { get: vi.fn() },
 		};
-		chrome.topSites = { get: vi.fn() } as any;
 
 		// Mock IDB
 		const stores: Record<string, any[]> = { tiles: [], background: [], thumbnails: [] };
@@ -186,7 +186,7 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
 		const result = await Tiles.getAllTiles();
-		expect(chrome.topSites.get).not.toHaveBeenCalled();
+		expect((globalThis as any).browser.topSites.get).not.toHaveBeenCalled();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).toContain('https://pinned.com');
 	});
@@ -209,15 +209,13 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
-		(chrome.topSites.get as any).mockImplementation((_opts: any, cb: any) => {
-			cb([
-				{ url: 'https://history1.com', title: 'H1' },
-				{ url: 'https://history2.com', title: 'H2' },
-			]);
-		});
+		((globalThis as any).browser.topSites.get as any).mockResolvedValue([
+			{ url: 'https://history1.com', title: 'H1' },
+			{ url: 'https://history2.com', title: 'H2' },
+		]);
 
 		const result = await Tiles.getAllTiles();
-		expect(chrome.topSites.get).toHaveBeenCalled();
+		expect((globalThis as any).browser.topSites.get).toHaveBeenCalled();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).toContain('https://pinned.com');
 		expect(urls).toContain('https://history1.com');
@@ -239,12 +237,10 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
-		(chrome.topSites.get as any).mockImplementation((_opts: any, cb: any) => {
-			cb([
-				{ url: 'https://pinned.com', title: 'Same URL' }, // already pinned
-				{ url: 'https://new.com', title: 'New' },
-			]);
-		});
+		((globalThis as any).browser.topSites.get as any).mockResolvedValue([
+			{ url: 'https://pinned.com', title: 'Same URL' }, // already pinned
+			{ url: 'https://new.com', title: 'New' },
+		]);
 
 		const result = await Tiles.getAllTiles();
 		const pinnedCount = result.filter((s: any) => s && s.url === 'https://pinned.com').length;

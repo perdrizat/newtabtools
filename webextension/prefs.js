@@ -30,11 +30,16 @@ var Prefs = {
 	_backgroundColor: '',
 	_version: -1,
 
-	init() {
+	/**
+	 * @returns {Promise<void>} Resolves once the initial storage read has
+	 *   been applied via parsePrefs.
+	 */
+	async init() {
 		// Prune keys for features removed during the v2 redesign so they don't
 		// linger in storage or ride along in backups. `parsePrefs` already
 		// ignores unknown keys, so this is housekeeping, not correctness.
-		chrome.storage.local.remove(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']);
+		// Fire-and-forget: failure is logged, never surfaced to callers.
+		browser.storage.local.remove(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']).catch(console.error);
 
 		let names = [
 			'theme',
@@ -65,24 +70,21 @@ var Prefs = {
 			this.__defineSetter__(n, function(value) {
 				let obj = {};
 				obj[n] = value;
-				chrome.storage.local.set(obj);
+				// Fire-and-forget: failure is logged, never surfaced to callers.
+				browser.storage.local.set(obj).catch(console.error);
 			});
 		}
 
-		// Registered synchronously here — not inside the storage.local.get
-		// callback below — so it's live the instant init() runs, rather than
+		// Registered synchronously here — not after the storage.local.get
+		// await below — so it's live the instant init() runs, rather than
 		// only once that async read resolves. init() itself is called
 		// synchronously at background.js's top level, so this keeps every
 		// respawn's listener registration synchronous top-to-bottom (MV3
 		// event-page respawn hygiene; see MV3_MIGRATION.md).
 		chrome.storage.onChanged.addListener(this.prefsChanged.bind(this));
 
-		return new Promise(resolve => {
-			chrome.storage.local.get(prefs => {
-				this.parsePrefs(prefs);
-				resolve();
-			});
-		});
+		let prefs = await browser.storage.local.get();
+		this.parsePrefs(prefs);
 	},
 	parsePrefs(prefs) {
 		if (['system', 'light', 'dark', 'contrast'].includes(prefs.theme)) {
@@ -217,10 +219,14 @@ var Prefs = {
 
 var Blocked = {
 	_list: [],
+	/**
+	 * Persist the current list. Never rejects — a write failure is logged
+	 * and swallowed, matching the old callback-style behaviour (which never
+	 * surfaced `runtime.lastError` either).
+	 * @returns {Promise<void>}
+	 */
 	_saveList() {
-		return new Promise(resolve => {
-			chrome.storage.local.set({ 'blocked': this._list }, resolve);
-		});
+		return browser.storage.local.set({ 'blocked': this._list }).catch(console.error);
 	},
 	block(url) {
 		this._list.push(url);
@@ -244,8 +250,9 @@ var Blocked = {
 
 var Filters = {
 	_list: Object.create(null),
+	// Fire-and-forget: failure is logged, never surfaced to callers.
 	_saveList() {
-		chrome.storage.local.set({ 'filters': this._list });
+		browser.storage.local.set({ 'filters': this._list }).catch(console.error);
 	},
 	getList() {
 		let copy = Object.create(null);
@@ -304,13 +311,13 @@ var NeverCapture = {
 	_list: [],
 
 	/**
-	 * Persist the current list to chrome.storage.local.
+	 * Persist the current list to storage.local. Never rejects — a write
+	 * failure is logged and swallowed, matching the old callback-style
+	 * behaviour (which never surfaced `runtime.lastError` either).
 	 * @returns {Promise<void>}
 	 */
 	_saveList() {
-		return new Promise(resolve => {
-			chrome.storage.local.set({ 'neverCaptureHosts': this._list }, resolve);
-		});
+		return browser.storage.local.set({ 'neverCaptureHosts': this._list }).catch(console.error);
 	},
 
 	/**

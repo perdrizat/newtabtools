@@ -15,9 +15,7 @@ async function makeZip() {
 		await writer.add('background', new zip.BlobReader(background));
 	}
 
-	let prefs = await new Promise(function(resolve) {
-		chrome.storage.local.get(resolve);
-	});
+	let prefs = await browser.storage.local.get();
 	for (let k of ['thumbnailSize', 'version']) {
 		delete prefs[k];
 	}
@@ -33,12 +31,14 @@ async function makeZip() {
 	await writer.add('tiles.json', new zip.TextReader(JSON.stringify(tiles, null, '\t')));
 
 	let blob = await writer.close();
-	return new Promise(function(resolve) {
-		chrome.downloads.download({
-			url: URL.createObjectURL(blob),
-			filename: 'newtabtools.zip',
-			saveAs: true
-		}, resolve);
+	// `downloads` is an optional permission (see manifest.json); if it hasn't
+	// been granted, `browser.downloads` is undefined and this throws — same
+	// as the old callback-style `chrome.downloads.download(...)` call did
+	// with no guard of its own.
+	return browser.downloads.download({
+		url: URL.createObjectURL(blob),
+		filename: 'newtabtools.zip',
+		saveAs: true
 	});
 }
 

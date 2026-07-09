@@ -107,14 +107,14 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 		// --- Mock chrome.storage.local ---
 		mockStorageLocal = {
-			get: vi.fn((cb: Function) => cb({})),
+			get: vi.fn().mockResolvedValue({}),
 			set: vi.fn().mockResolvedValue(undefined),
 		};
 		(globalThis as any).chrome.storage = { local: mockStorageLocal };
 
 		// --- Mock chrome.downloads ---
 		mockDownloads = {
-			download: vi.fn((_opts: unknown, cb: Function) => cb(42)),
+			download: vi.fn().mockResolvedValue(42),
 		};
 		(globalThis as any).chrome.downloads = mockDownloads;
 
@@ -175,13 +175,13 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 
 	describe('makeZip — export pipeline', () => {
 		it('exports prefs.json with internal keys stripped', async () => {
-			mockStorageLocal.get.mockImplementationOnce((cb: Function) => cb({
+			mockStorageLocal.get.mockResolvedValueOnce({
 				theme: 'dark',
 				rows: 4,
 				columns: 5,
 				thumbnailSize: 600,
 				version: '2.0',
-			}));
+			});
 
 			await makeZip();
 
@@ -247,12 +247,11 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			expect(writtenEntries.find(e => e.filename === 'background')).toBeUndefined();
 		});
 
-		it('triggers chrome.downloads.download', async () => {
+		it('triggers browser.downloads.download', async () => {
 			await makeZip();
 
 			expect(mockDownloads.download).toHaveBeenCalledWith(
 				expect.objectContaining({ filename: 'newtabtools.zip', saveAs: true }),
-				expect.any(Function),
 			);
 		});
 	});

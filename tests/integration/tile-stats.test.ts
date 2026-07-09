@@ -258,7 +258,18 @@ describe('statType pref — behavioral validation (§4.6)', () => {
 				},
 				i18n: { getMessage: vi.fn(() => '') },
 			},
-			browser: { theme: { onUpdated: { addListener: vi.fn(), removeListener: vi.fn() } } },
+			browser: {
+				theme: { onUpdated: { addListener: vi.fn(), removeListener: vi.fn() } },
+				// prefs.js's init() now calls the promise-based browser.storage.local.*
+				// (Slice C of the MV3 migration).
+				storage: {
+					local: {
+						get: vi.fn().mockResolvedValue({}),
+						set: vi.fn().mockResolvedValue(undefined),
+						remove: vi.fn().mockResolvedValue(undefined),
+					},
+				},
+			},
 			window: {},
 			Blocked: { _list: [] },
 			Filters: { _list: {} },

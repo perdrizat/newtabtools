@@ -319,8 +319,8 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 
 		(globalThis as any).browser = {
 			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
+			topSites: { get: vi.fn() },
 		};
-		chrome.topSites = { get: vi.fn() } as any;
 
 		// Mock IDB
 		const stores: Record<string, any[]> = { tiles: [], background: [], thumbnails: [] };
@@ -359,10 +359,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 	});
 
 	function setupTopSites(sites: Array<{ url: string; title: string }>) {
-		(chrome.topSites.get as any).mockImplementation((_opts: any, cb: any) => {
-			// topSitesCallback captured but not directly tested here.
-			cb(sites);
-		});
+		((globalThis as any).browser.topSites.get as any).mockResolvedValue(sites);
 	}
 
 	it('exact host filter at 0 blocks all tiles from that domain', async () => {

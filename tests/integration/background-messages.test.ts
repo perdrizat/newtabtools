@@ -202,7 +202,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			(p: string) => `moz-extension://test-uuid/${p}`,
 		);
 		(globalThis as any).chrome.management = {
-			getSelf: vi.fn((cb: Function) => cb({ version: '1.0.0' })),
+			getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }),
 		};
 		(globalThis as any).browser.menus = {
 			create: vi.fn(),
@@ -222,8 +222,8 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		};
 		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
 		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
-		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn();
-		(globalThis as any).chrome.tabs.query = vi.fn((_q: unknown, cb: Function) => cb([]));
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn().mockResolvedValue(undefined);
+		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
 		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
 
 		// --- Load background.js (script-mode, runs in global scope) ---

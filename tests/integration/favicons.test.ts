@@ -49,12 +49,13 @@ describe('background.js — favicon capture + storage wiring', () => {
 		source = fs.readFileSync(BG_PATH, 'utf8');
 	});
 
-	it('captureTab returns (dataURL, favIconUrl) — second arg threads `tab.favIconUrl` through', () => {
-		// The new contract: `callback(dataURL, favIconUrl)`. Older tests
-		// passing a single-arg callback would still work, but the wiring
-		// itself must reach for `tab.favIconUrl`.
+	it('captureTab resolves {dataURL, favIconUrl} — favIconUrl threads `tab.favIconUrl` through', () => {
+		// The contract (Slice C of the MV3 migration — captureTab is now an
+		// async function returning a Promise instead of taking a callback):
+		// `return {dataURL, favIconUrl}`. The wiring itself must reach for
+		// `tab.favIconUrl`.
 		expect(source).toMatch(/let\s+favIconUrl\s*=\s*tab\.favIconUrl\s*\|\|\s*null/);
-		expect(source).toMatch(/callback\(\s*dataURL\s*,\s*favIconUrl\s*\)/);
+		expect(source).toMatch(/return\s*\{dataURL:\s*dataURL\s*\|\|\s*null,\s*favIconUrl\}/);
 	});
 
 	it('startCaptureSession threads favIconUrl from each capture into `session.favIconUrl`', () => {

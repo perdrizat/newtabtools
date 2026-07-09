@@ -84,57 +84,56 @@ var Tiles = {
 				} else {
 					options = { providers: ['places'] };
 				}
-				chrome.topSites.get(options, r => {
-					let urls = this._list.slice();
-					let filters = Filters.getList();
-					let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
-					let remaining = r.filter(s => {
-						if (Blocked.isBlocked(s.url)) {
-							return false;
-						}
-						let url = new URL(s.url);
-						if (!['http:', 'https:', 'ftp:'].includes(url.protocol)) {
-							return false;
-						}
-
-						let isNew = !urls.includes(s.url);
-						if (isNew) {
-							if (Tiles._hostFilteredOut(url.host, filters, dotFilters)) {
-								return false;
-							}
-							urls.push(s.url);
-						} else {
-							// If we pin a tile we've never visited, it has no title.
-							let t = urlMap.get(s.url);
-							if (t && !('title' in t)) {
-								t.title = s.title;
-							}
-						}
-						return isNew;
-					});
-
-					// Add some extras for thumbnail generation of tiles that might get promoted.
-					let extraCount = count + 25;
-					for (let i = 0; i < extraCount && remaining.length > 0; i++) {
-						if (!links[i]) {
-							let next = remaining.shift();
-							if (next) {
-								let mapData = urlMap.get(next.url);
-								if (mapData) {
-									for (let key of Object.keys(mapData)) {
-										next[key] = mapData[key];
-									}
-								}
-								links[i] = next;
-							} else {
-								break;
-							}
-						}
+				let r = await browser.topSites.get(options);
+				let urls = this._list.slice();
+				let filters = Filters.getList();
+				let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
+				let remaining = r.filter(s => {
+					if (Blocked.isBlocked(s.url)) {
+						return false;
+					}
+					let url = new URL(s.url);
+					if (!['http:', 'https:', 'ftp:'].includes(url.protocol)) {
+						return false;
 					}
 
-					this._cache = links.map(l => l.url);
-					resolve(links.slice(0, count));
+					let isNew = !urls.includes(s.url);
+					if (isNew) {
+						if (Tiles._hostFilteredOut(url.host, filters, dotFilters)) {
+							return false;
+						}
+						urls.push(s.url);
+					} else {
+						// If we pin a tile we've never visited, it has no title.
+						let t = urlMap.get(s.url);
+						if (t && !('title' in t)) {
+							t.title = s.title;
+						}
+					}
+					return isNew;
 				});
+
+				// Add some extras for thumbnail generation of tiles that might get promoted.
+				let extraCount = count + 25;
+				for (let i = 0; i < extraCount && remaining.length > 0; i++) {
+					if (!links[i]) {
+						let next = remaining.shift();
+						if (next) {
+							let mapData = urlMap.get(next.url);
+							if (mapData) {
+								for (let key of Object.keys(mapData)) {
+									next[key] = mapData[key];
+								}
+							}
+							links[i] = next;
+						} else {
+							break;
+						}
+					}
+				}
+
+				this._cache = links.map(l => l.url);
+				resolve(links.slice(0, count));
 			};
 		});
 	},

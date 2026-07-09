@@ -181,7 +181,7 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 			(p: string) => `moz-extension://test-uuid/${p}`,
 		);
 		(globalThis as any).chrome.management = {
-			getSelf: vi.fn((cb: Function) => cb({ version: '1.0.0' })),
+			getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }),
 		};
 		(globalThis as any).browser.menus = {
 			create: vi.fn((_props: unknown, cb?: Function) => {
@@ -201,12 +201,12 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 		};
 		(globalThis as any).chrome.tabs.onActivated = { addListener: vi.fn() };
 		(globalThis as any).chrome.tabs.onRemoved = { addListener: vi.fn() };
-		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn();
-		(globalThis as any).chrome.tabs.get = vi.fn((_tabId: number, cb: Function) => cb({}));
-		// Default mock (jest-webextension-mock) calls back with `[{}]`, whose
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn().mockResolvedValue(undefined);
+		(globalThis as any).chrome.tabs.get = vi.fn().mockResolvedValue({});
+		// Default mock (jest-webextension-mock) resolves with `[{}]`, whose
 		// missing `.url` throws inside the top-level `new URL(tab.url)` check —
 		// override to the empty-tabs case used by the other background.js tests.
-		(globalThis as any).chrome.tabs.query = vi.fn((_q: unknown, cb: Function) => cb([]));
+		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
 		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
 
 		// --- Load background.js (script-mode, runs in global scope) ---
@@ -350,6 +350,10 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 
 		it('runs cleanupThumbnails and records today on the first idle transition with no prior run', async () => {
 			idleListener('idle');
+			// idleListener now reads storage.local via the promise-based
+			// `browser.storage.local.get` (Slice C of the MV3 migration) — the
+			// cleanup decision lands a microtask later than the old callback form.
+			await Promise.resolve();
 			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
 
 			const stored = await (globalThis as any).chrome.storage.local.get('thumbnailCleanupLastRun');
@@ -358,18 +362,21 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 
 		it('skips cleanupThumbnails on a second idle transition claiming the same day (next respawn)', async () => {
 			idleListener('idle');
+			await Promise.resolve();
 			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
 			thumbnailStore.index.mockClear();
 
 			// Simulate the next MV3 respawn: the listener re-arms and fires again
 			// the same day — cleanupThumbnails must not run a second time.
 			idleListener('idle');
+			await Promise.resolve();
 			expect(thumbnailStore.index).not.toHaveBeenCalled();
 		});
 
 		it('runs again once the stored last-run date is an earlier day', async () => {
 			await (globalThis as any).chrome.storage.local.set({ thumbnailCleanupLastRun: '2000-01-01' });
 			idleListener('idle');
+			await Promise.resolve();
 			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
 		});
 
