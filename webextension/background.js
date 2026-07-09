@@ -2,12 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, makeZip, NeverCapture, Prefs, purgeNeverCaptureHost, readZip, Tiles */
+/* globals Background, makeZip, NeverCapture, Prefs, purgeNeverCaptureHost, readZip, SAFE_PROTOCOLS, Tiles, withStore */
 
-Promise.all([
-	Prefs.init(),
-	waitForDB()
-]).then(async function() {
+Prefs.init().then(async function() {
 	let previousVersion = Prefs.version;
 	let {version: currentVersion} = await browser.management.getSelf();
 	if (previousVersion != currentVersion) {
@@ -17,95 +14,20 @@ Promise.all([
 	console.error(event);
 });
 
-// `db` lives on globalThis (not a local `var`), not just for tiles.js's
-// benefit (audit §1.9) but because background.js's own module scope would
-// otherwise shadow it: with a plain `var db;` in this module, a later
-// `globalThis.db = …` write would leave that local `db` binding permanently
-// `undefined` while every unqualified `db` read in *this* file kept
-// resolving to the stale local, not the freshly-set global. Every read and
-// write in this file goes through `globalThis.db` explicitly so there is
-// only ever one binding.
+// M2 (MODERNIZATION.md, "the readiness redesign"): the IndexedDB connection
+// lifecycle (`initDB`/`waitForDB`/the raw `db` handle) moved to lib/db.js,
+// which exposes only `withStore(storeNames, mode, fn)` — it awaits
+// readiness itself, so no caller anywhere (including this file) ever holds
+// or races a raw connection. `withStore` reaches this file via
+// `globalThis.withStore`, bridged in lib/background-main.js (this file is
+// still bridge-mode — no `import` syntax — until its own carve-up in
+// M3/M5). The top-level eager `waitForDB()` call the old code ran in
+// parallel with `Prefs.init()` is gone too: every handler below already
+// awaits readiness via `withStore` before touching a store, so the eager
+// warm-up was redundant — the first caller (whichever event wakes the page)
+// now triggers the lazy open, same as before minus the one redundant kick.
 
-// Memoizes the in-flight initDB() call so concurrent waitForDB() callers
-// share one open request; cleared on settle (success or failure) so a LATER
-// call retries from scratch. See waitForDB() below.
-var dbInitPromise;
 const NEW_TAB_URL = chrome.runtime.getURL('newTab.xhtml');
-
-/**
- * Open (or reopen) the IndexedDB connection, resolving once `db` is set.
- * Attaches `onclose`/`onversionchange` handlers that clear `db` when the
- * connection drops — independent of event-page respawn (e.g. another
- * context bumping the DB version) — so `waitForDB()` knows to reopen it.
- * @returns {Promise<void>} Rejects with the triggering event on a genuine
- *   open failure (`onblocked`/`onerror`).
- */
-function initDB() {
-	return new Promise(function(resolve, reject) {
-		let request = indexedDB.open('newTabTools', 9);
-
-		request.onsuccess = function(/* event */) {
-			// console.log(event.type, event);
-			globalThis.db = this.result;
-			globalThis.db.onclose = function() {
-				globalThis.db = undefined;
-			};
-			globalThis.db.onversionchange = function() {
-				globalThis.db.close();
-				globalThis.db = undefined;
-			};
-			resolve();
-		};
-
-		request.onblocked = request.onerror = function(event) {
-			reject(event);
-		};
-
-		request.onupgradeneeded = function(/* event */) {
-			// console.log(event.type, event);
-			globalThis.db = this.result;
-
-			if (!globalThis.db.objectStoreNames.contains('tiles')) {
-				globalThis.db.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
-			}
-			if (!this.transaction.objectStore('tiles').indexNames.contains('url')) {
-				this.transaction.objectStore('tiles').createIndex('url', 'url');
-			}
-
-			if (!globalThis.db.objectStoreNames.contains('background')) {
-				globalThis.db.createObjectStore('background', { autoIncrement: true });
-			}
-
-			if (!globalThis.db.objectStoreNames.contains('thumbnails')) {
-				globalThis.db.createObjectStore('thumbnails', { keyPath: 'url' });
-			}
-			if (!this.transaction.objectStore('thumbnails').indexNames.contains('used')) {
-				this.transaction.objectStore('thumbnails').createIndex('used', 'used');
-			}
-		};
-	});
-}
-
-/**
- * Resolve once the IndexedDB connection is ready, (re)opening it if needed.
- * Concurrent callers dedupe onto the same in-flight `initDB()` call via
- * `dbInitPromise`; once that call settles the dedup is cleared, so a LATER
- * call — after a dropped connection (`onclose`/`onversionchange`) or a
- * failed open — retries `initDB()` from scratch instead of being doomed for
- * the lifetime of the context.
- * @returns {Promise<void>}
- */
-function waitForDB() {
-	if (globalThis.db) {
-		return Promise.resolve();
-	}
-	if (!dbInitPromise) {
-		dbInitPromise = initDB().finally(function() {
-			dbInitPromise = undefined;
-		});
-	}
-	return dbInitPromise;
-}
 
 function getTZDateString(date = new Date()) {
 	return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map(p => p.toString().padStart(2, '0')).join('-');
@@ -126,10 +48,11 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
 	switch (message.name) {
 	case 'Tiles.isPinned':
-		// Wrapped in waitForDB() (audit §2.1): this is the toolbar popup's sole
-		// wake message — on an event-page wake, db can still be opening when it
-		// fires, and Tiles.ensureReady()/getAllTiles() reach db directly.
-		waitForDB().then(() => Tiles.ensureReady()).then(() => {
+		// M2: Tiles.ensureReady() -> getGridTiles() reaches withStore directly
+		// now, which awaits DB readiness itself — the explicit waitForDB()
+		// wrap the pre-release fix added (audit §2.1: this is the toolbar
+		// popup's sole wake message) collapses into that.
+		Tiles.ensureReady().then(() => {
 			sendResponse(Tiles.isPinned(message.url));
 		}).catch(function(event) {
 			console.error(event);
@@ -137,9 +60,9 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		});
 		return true;
 	case 'Tiles.getAllTiles':
-		waitForDB().then(function() {
-			return Tiles.getAllTiles();
-		}).then(function(tiles) {
+		// Wire name frozen (MODERNIZATION.md Decision 3); internal method
+		// renamed getAllTiles -> getGridTiles (M2, lib/tiles-store.js).
+		Tiles.getGridTiles().then(function(tiles) {
 			sendResponse({ tiles, list: Tiles._list });
 		}).catch(function(event) {
 			console.error(event);
@@ -147,22 +70,19 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		});
 		return true;
 	case 'Tiles.getTile':
-		// waitForDB() guard (audit §2.1) — these three were the "missed by the
-		// report" unguarded handlers; response shape unchanged (no sendResponse
-		// on error, matching the pre-existing sibling pattern).
-		waitForDB().then(() => Tiles.getTile(message.url)).then(sendResponse, console.error);
+		Tiles.getTile(message.url).then(sendResponse, console.error);
 		return true;
 	case 'Tiles.putTile':
-		waitForDB().then(() => Tiles.putTile(message.tile)).then(sendResponse, console.error);
+		Tiles.putTile(message.tile).then(sendResponse, console.error);
 		return true;
 	case 'Tiles.removeTile':
-		waitForDB().then(() => Tiles.removeTile(message.tile)).then(sendResponse, console.error);
+		Tiles.removeTile(message.tile).then(sendResponse, console.error);
 		return true;
 	// Exposes the existing Tiles.clear() (single IDB objectStore.clear) over
 	// the message protocol. Added to support hermetic E2E test cleanup, but
 	// also useful for any future "reset all tiles" UI action.
 	case 'Tiles.clear':
-		waitForDB().then(() => Tiles.clear()).then(sendResponse);
+		Tiles.clear().then(sendResponse);
 		return true;
 	case 'Tiles.pinTile':
 		Tiles.pinTile(message.title, message.url).then(function(id) {
@@ -176,9 +96,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return true;
 
 	case 'Background.getBackground':
-		waitForDB().then(function() {
-			return Background.getBackground();
-		}).then(sendResponse).catch(function(event) {
+		Background.getBackground().then(sendResponse).catch(function(event) {
 			console.error(event);
 			sendResponse(null);
 		});
@@ -191,10 +109,11 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		let {url, image} = message;
 		// Never-capture guard: refuse to store a thumbnail for a listed host.
 		if (url && image && !NeverCapture.matches(url)) {
-			// waitForDB() guard (audit §2.1): fire-and-forget write, so no
-			// sendResponse either way — just don't reach db before it's open.
-			waitForDB().then(function() {
-				globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
+			// withStore() guard (supersedes audit §2.1's waitForDB() wrap):
+			// fire-and-forget write, so no sendResponse either way — just
+			// don't reach the store before the connection is open.
+			withStore('thumbnails', 'readwrite', function(store) {
+				store.put({
 					url,
 					image,
 					stored: today,
@@ -204,26 +123,30 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		}
 		return false;
 	case 'Thumbnails.get':
-		// waitForDB() guard (audit §2.1): this fires on every new-tab-page
-		// load, so an event-page wake races it against the still-opening db.
+		// withStore() guard: this fires on every new-tab-page load, so an
+		// event-page wake races it against the still-opening connection.
 		let map = new Map();
-		waitForDB().then(function() {
-			globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
-				let cursor = this.result;
-				if (cursor) {
-					let thumb = cursor.value;
-					if (message.urls.includes(thumb.url)) {
-						map.set(thumb.url, thumb.image);
-						if (thumb.used != today) {
-							thumb.used = today;
-							cursor.update(thumb);
+		withStore('thumbnails', 'readwrite', function(store) {
+			return new Promise(function(resolve) {
+				store.openCursor().onsuccess = function() {
+					let cursor = this.result;
+					if (cursor) {
+						let thumb = cursor.value;
+						if (message.urls.includes(thumb.url)) {
+							map.set(thumb.url, thumb.image);
+							if (thumb.used != today) {
+								thumb.used = today;
+								cursor.update(thumb);
+							}
 						}
+						cursor.continue();
+					} else {
+						resolve();
 					}
-					cursor.continue();
-				} else {
-					sendResponse(map);
-				}
-			};
+				};
+			});
+		}).then(function() {
+			sendResponse(map);
 		}).catch(function(event) {
 			console.error(event);
 			sendResponse(map);
@@ -241,25 +164,28 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// A cached `data:` favicon comes back as a `favicon` Blob; a remote
 		// favicon comes back as its `faviconUrl` string for the page to render
 		// live via <img>. The page-side handler distinguishes the two.
-		// waitForDB() guard (audit §2.1).
 		let faviconMap = new Map();
-		waitForDB().then(function() {
-			globalThis.db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
-				let cursor = this.result;
-				if (cursor) {
-					let row = cursor.value;
-					if (message.urls.includes(row.url)) {
-						if (row.favicon) {
-							faviconMap.set(row.url, row.favicon);
-						} else if (row.faviconUrl) {
-							faviconMap.set(row.url, row.faviconUrl);
+		withStore('thumbnails', 'readonly', function(store) {
+			return new Promise(function(resolve) {
+				store.openCursor().onsuccess = function() {
+					let cursor = this.result;
+					if (cursor) {
+						let row = cursor.value;
+						if (message.urls.includes(row.url)) {
+							if (row.favicon) {
+								faviconMap.set(row.url, row.favicon);
+							} else if (row.faviconUrl) {
+								faviconMap.set(row.url, row.faviconUrl);
+							}
 						}
+						cursor.continue();
+					} else {
+						resolve();
 					}
-					cursor.continue();
-				} else {
-					sendResponse(faviconMap);
-				}
-			};
+				};
+			});
+		}).then(function() {
+			sendResponse(faviconMap);
 		}).catch(function(event) {
 			console.error(event);
 			sendResponse(faviconMap);
@@ -271,28 +197,31 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// `www.` dropped) instead of exact URL. Favicons are per-site, so a
 		// recently-closed deep article URL can reuse the favicon stored for any
 		// page on the same site. Returns a `host -> (Blob | string)` map.
-		// waitForDB() guard (audit §2.1).
 		let faviconsByHost = new Map();
 		let wantedHosts = new Set(message.hosts || []);
-		waitForDB().then(function() {
-			globalThis.db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
-				let cursor = this.result;
-				if (cursor) {
-					let row = cursor.value;
-					let host = null;
-					try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
-					if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
-						if (row.favicon) {
-							faviconsByHost.set(host, row.favicon);
-						} else if (row.faviconUrl) {
-							faviconsByHost.set(host, row.faviconUrl);
+		withStore('thumbnails', 'readonly', function(store) {
+			return new Promise(function(resolve) {
+				store.openCursor().onsuccess = function() {
+					let cursor = this.result;
+					if (cursor) {
+						let row = cursor.value;
+						let host = null;
+						try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
+						if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
+							if (row.favicon) {
+								faviconsByHost.set(host, row.favicon);
+							} else if (row.faviconUrl) {
+								faviconsByHost.set(host, row.faviconUrl);
+							}
 						}
+						cursor.continue();
+					} else {
+						resolve();
 					}
-					cursor.continue();
-				} else {
-					sendResponse(faviconsByHost);
-				}
-			};
+				};
+			});
+		}).then(function() {
+			sendResponse(faviconsByHost);
 		}).catch(function(event) {
 			console.error(event);
 			sendResponse(faviconsByHost);
@@ -300,7 +229,12 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return true;
 
 	case 'Thumbnails.delete':
-		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
+		// M2: previously an unguarded `globalThis.db.transaction(...)` call
+		// (no waitForDB() wrap existed here) — withStore now closes that gap
+		// too, as a side effect of every raw transaction site moving onto it.
+		withStore('thumbnails', 'readwrite', function(store) {
+			store.delete(message.url);
+		}).catch(console.error);
 		return false;
 
 	case 'Thumbnails.purgeHost':
@@ -309,7 +243,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 			sendResponse(null);
 			return true;
 		}
-		// purgeNeverCaptureHost awaits DB readiness internally.
+		// purgeNeverCaptureHost awaits DB readiness internally (via withStore).
 		purgeNeverCaptureHost(message.host).then(sendResponse).catch(function(event) {
 			console.error('Thumbnails.purgeHost failed:', event);
 			sendResponse(null);
@@ -320,10 +254,14 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// Wipe every stored screenshot + cached favicon. Used by the drawer's
 		// "Reset all settings" so a factory reset doesn't leave captured images
 		// of visited sites on disk.
-		waitForDB().then(function() {
-			globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').clear().onsuccess = function() {
-				sendResponse();
-			};
+		withStore('thumbnails', 'readwrite', function(store) {
+			return new Promise(function(resolve) {
+				store.clear().onsuccess = function() {
+					resolve();
+				};
+			});
+		}).then(function() {
+			sendResponse();
 		});
 		return true;
 
@@ -768,12 +706,13 @@ function pickAndStore(tabId) {
 			// live via <img> (no fetch / no connect-src wildcard).
 			record.faviconUrl = favIconUrl;
 		}
-		// Re-guard db (audit §2.4): the isBlank/favicon/resize awaits above
-		// give the connection time to drop via onclose/onversionchange —
-		// waitForDB() re-opens it if so, instead of throwing on a stale
-		// `db` reference and losing the freshly-captured thumbnail silently.
-		await waitForDB();
-		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
+		// Re-guard the store (audit §2.4): the isBlank/favicon/resize awaits
+		// above give the connection time to drop via onclose/onversionchange —
+		// withStore() re-opens it if so, instead of throwing on a stale
+		// connection and losing the freshly-captured thumbnail silently.
+		await withStore('thumbnails', 'readwrite', function(store) {
+			store.put(record);
+		});
 	}).catch(console.error);
 }
 
@@ -786,7 +725,7 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 		return;
 	}
 
-	if (!['http:', 'https:', 'ftp:'].includes(new URL(details.url).protocol)) {
+	if (!SAFE_PROTOCOLS.includes(new URL(details.url).protocol)) {
 		// browser.action is promise-based in MV3; enable/disable on a since-
 		// closed tab can reject, so this fire-and-forget call needs a catch.
 		browser.action.disable(details.tabId).catch(console.error);
@@ -795,12 +734,12 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	browser.action.enable(details.tabId).catch(console.error);
 
-	// waitForDB() guard (audit §2.1): Tiles.ensureReady() reaches db directly
-	// via getAllTiles() — on an event-page wake this can otherwise fire
-	// before db finishes opening, which (pre-fix) permanently loses this
-	// capture AND sticky-disables the cache for the rest of the respawn
-	// (tiles.js §2.2). Inserted ahead of the existing chain, not restructured.
-	waitForDB().then(() => Tiles.ensureReady()).then(async function({cache}) {
+	// Tiles.ensureReady() -> getGridTiles() awaits DB readiness via withStore
+	// itself now (M2) — on an event-page wake this can otherwise have fired
+	// before the connection finished opening, which (pre-fix) permanently
+	// lost this capture AND sticky-disabled the cache for the rest of the
+	// respawn (tiles.js §2.2, now lib/tiles-store.js).
+	Tiles.ensureReady().then(async function({cache}) {
 		if (cache.includes(details.url)) {
 			// Never-capture privacy guard: skip both paths for listed hosts.
 			if (NeverCapture.matches(details.url)) {
@@ -945,7 +884,7 @@ browser.tabs.query({}).then(function(tabs) {
 	for (let tab of tabs) {
 		if (tab.url == NEW_TAB_URL) {
 			continue;
-		} else if (!['http:', 'https:', 'ftp:'].includes(new URL(tab.url).protocol)) {
+		} else if (!SAFE_PROTOCOLS.includes(new URL(tab.url).protocol)) {
 			browser.action.disable(tab.id).catch(console.error);
 		} else {
 			browser.action.enable(tab.id).catch(console.error);
@@ -1003,18 +942,31 @@ browser.menus.onShown.addListener(info => {
 	browser.menus.refresh();
 });
 
+/**
+ * Delete every thumbnail whose `used` date is older than two weeks. Runs via
+ * withStore(), so a caller (idleListener, below) that fires before the
+ * connection is ready no longer needs its own guard (M2 closes this gap:
+ * this call site was previously unguarded raw `globalThis.db` access).
+ * @returns {Promise<void>} Resolves once the sweep finishes.
+ */
 function cleanupThumbnails() {
 	let expiry = getTZDateString(new Date(Date.now() - 1209600000)); // ms in two weeks.
-	let index = globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').index('used');
-	let keyRange = IDBKeyRange.upperBound(expiry);
+	return withStore('thumbnails', 'readwrite', function(store) {
+		return new Promise(function(resolve) {
+			let index = store.index('used');
+			let keyRange = IDBKeyRange.upperBound(expiry);
 
-	index.openCursor(keyRange).onsuccess = function() {
-		let cursor = this.result;
-		if (cursor) {
-			cursor.delete();
-			cursor.continue();
-		}
-	};
+			index.openCursor(keyRange).onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					cursor.delete();
+					cursor.continue();
+				} else {
+					resolve();
+				}
+			};
+		});
+	});
 }
 
 /**
@@ -1033,52 +985,58 @@ function cleanupThumbnails() {
  * URL.hostname (no port) — the canonical never-capture entry is a port-less
  * host, so a listed `example.com` also covers `example.com:8443`.
  *
- * Awaits DB readiness internally so callers on the restore path (readZip, which
- * runs without a preceding waitForDB) can't crash on an uninitialised db.
+ * Awaits DB readiness internally (via withStore) so callers on the restore
+ * path (readZip, which runs without a preceding message-handler wrap) can't
+ * crash on an unopened connection. M2: both passes now run inside ONE
+ * withStore(['thumbnails', 'tiles'], …) transaction (the multi-store shape)
+ * instead of the pre-M2 code's two sequential `db.transaction()` calls — an
+ * incidental atomicity improvement, not a behavior change either pass relies on.
  *
  * @param {string} pattern  A NeverCapture host pattern, e.g. '.example.com' or 'example.com'.
  * @returns {Promise<{thumbnails: number, tiles: number}>}
  */
 globalThis.purgeNeverCaptureHost = function(pattern) {
-	return waitForDB().then(() => new Promise(function(resolve) {
-		let thumbCount = 0;
-		let tileCount = 0;
+	return withStore(['thumbnails', 'tiles'], 'readwrite', function(tx) {
+		return new Promise(function(resolve) {
+			let thumbCount = 0;
+			let tileCount = 0;
 
-		// Pass 1: thumbnails store — delete matching records.
-		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
-			let cursor = this.result;
-			if (cursor) {
-				let row = cursor.value;
-				let host = null;
-				try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-				if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
-					cursor.delete();
-					thumbCount++;
-				}
-				cursor.continue();
-			} else {
-				// Pass 2: tiles store — strip auto-thumbnail image from matching tiles.
-				globalThis.db.transaction('tiles', 'readwrite').objectStore('tiles').openCursor().onsuccess = function() {
-					let tileCursor = this.result;
-					if (tileCursor) {
-						let row = tileCursor.value;
-						let host = null;
-						try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-						if (host && NeverCapture.hostMatchesPattern(host, pattern)
-							&& row.image && row.imageIsThumbnail) {
-							delete row.image;
-							delete row.imageIsThumbnail;
-							tileCursor.update(row);
-							tileCount++;
-						}
-						tileCursor.continue();
-					} else {
-						resolve({ thumbnails: thumbCount, tiles: tileCount });
+			// Pass 1: thumbnails store — delete matching records.
+			tx.objectStore('thumbnails').openCursor().onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					let row = cursor.value;
+					let host = null;
+					try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
+					if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
+						cursor.delete();
+						thumbCount++;
 					}
-				};
-			}
-		};
-	}));
+					cursor.continue();
+				} else {
+					// Pass 2: tiles store — strip auto-thumbnail image from matching tiles.
+					tx.objectStore('tiles').openCursor().onsuccess = function() {
+						let tileCursor = this.result;
+						if (tileCursor) {
+							let row = tileCursor.value;
+							let host = null;
+							try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
+							if (host && NeverCapture.hostMatchesPattern(host, pattern)
+								&& row.image && row.imageIsThumbnail) {
+								delete row.image;
+								delete row.imageIsThumbnail;
+								tileCursor.update(row);
+								tileCount++;
+							}
+							tileCursor.continue();
+						} else {
+							resolve({ thumbnails: thumbCount, tiles: tileCount });
+						}
+					};
+				}
+			};
+		});
+	});
 };
 
 /**
@@ -1095,7 +1053,7 @@ function idleListener(state) {
 		let today = getTZDateString();
 		browser.storage.local.get({thumbnailCleanupLastRun: null}).then(function(result) {
 			if (result.thumbnailCleanupLastRun !== today) {
-				cleanupThumbnails();
+				cleanupThumbnails().catch(console.error);
 				browser.storage.local.set({thumbnailCleanupLastRun: today}).catch(console.error);
 			}
 		}).catch(console.error);

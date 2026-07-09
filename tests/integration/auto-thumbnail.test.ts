@@ -39,6 +39,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { withStore, _resetForTests } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -156,7 +158,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		(globalThis as any).Tiles = {
 			ensureReady: vi.fn().mockResolvedValue({ cache: ['https://example.com'], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
-			getAllTiles: vi.fn().mockResolvedValue([]),
+			getGridTiles: vi.fn().mockResolvedValue([]),
 			getTile: vi.fn().mockResolvedValue({ url: 'https://example.com', title: 'Example' }),
 			putTile: vi.fn().mockResolvedValue(undefined),
 			removeTile: vi.fn().mockResolvedValue(undefined),
@@ -238,6 +240,13 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			});
 		}
 		(globalThis as any).indexedDB = { open: vi.fn(() => dbReq) };
+
+		// M2: bridge the real lib/db.js withStore() onto globalThis, same as
+		// production's lib/background-main.js does — background.js still
+		// reads it as a bare identifier (bridge-mode file; see
+		// db-wake-race.test.ts for the canonical explanation of this pattern).
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
 		// --- captureVisibleTab mock — returns a data URL ---
 		captureDataURL = 'data:image/png;base64,AAAA';
@@ -720,13 +729,19 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 	// --- Thumbnails.delete message handler ---
 
-	it('Thumbnails.delete removes entry from IDB', () => {
+	it('Thumbnails.delete removes entry from IDB', async () => {
 		const sender = { id: EXTENSION_ID };
 		onMessageListener(
 			{ name: 'Thumbnails.delete', url: 'https://example.com' },
 			sender,
 			vi.fn()
 		);
+		// M2: this handler now goes through withStore(), which awaits DB
+		// readiness before opening the transaction — no longer synchronous
+		// (this was background.js's one previously-UNGUARDED raw db.transaction
+		// call site; withStore closes that gap as a side effect, at the cost of
+		// one microtask of latency here).
+		await vi.advanceTimersByTimeAsync(0);
 		expect(mockDB.transaction).toHaveBeenCalledWith('thumbnails', 'readwrite');
 		expect(thumbnailStore.delete).toHaveBeenCalledWith('https://example.com');
 	});
@@ -776,24 +791,27 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			await vi.advanceTimersByTimeAsync(0); // A
 
 			// Simulate the connection dropping (the real onclose/onversionchange
-			// handlers set `db = undefined`) exactly while pickAndStore's chain is
-			// mid-flight — at the `browser.storage.local.get` await that follows
-			// the isBlank/favicon awaits.
+			// handlers in lib/db.js clear the module-private connection) exactly
+			// while pickAndStore's chain is mid-flight — at the
+			// `browser.storage.local.get` await that follows the isBlank/favicon
+			// awaits. There's no raw `db` global to poke anymore (M2) — lib/db.js's
+			// `_resetForTests()` is the documented public escape hatch for
+			// simulating this (see its own doc comment).
 			(globalThis as any).chrome.storage.local.get = vi.fn((keys: Record<string, unknown>) => {
-				(globalThis as any).db = undefined;
+				_resetForTests();
 				return Promise.resolve(keys);
 			});
 
 			// Let network idle fire (2s) to trigger pickAndStore.
 			await vi.advanceTimersByTimeAsync(2000);
-			// Flush isBlank + storage.local.get (drops db) + resizeThumbnail +
-			// the re-guarding waitForDB() + the final db.transaction().put().
+			// Flush isBlank + storage.local.get (drops the connection) +
+			// resizeThumbnail + the re-guarding withStore() + the final put().
 			for (let i = 0; i < 6; i++) {
 				await vi.advanceTimersByTimeAsync(0);
 			}
 
 			expect(unhandledSpy).not.toHaveBeenCalled();
-			// waitForDB() reopens the connection (indexedDB.open mock always
+			// withStore() reopens the connection (indexedDB.open mock always
 			// succeeds here) — the write retries and lands rather than being
 			// silently lost.
 			expect(thumbnailStore.put).toHaveBeenCalled();

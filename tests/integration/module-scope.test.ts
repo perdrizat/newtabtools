@@ -29,11 +29,22 @@
  * because `prefs.js`'s `var Prefs = {…}` never left prefs.js's own module
  * scope. After the conversion (`globalThis.Prefs = {…}`, etc.), the same
  * imports succeed and every symbol below is defined.
+ *
+ * MODERNIZATION.md slice M2 updates the §1.9 map this file asserts against:
+ * the `db` global is GONE (by design — it's module-private to lib/db.js
+ * now), replaced by `withStore` (lib/db.js) and `SAFE_PROTOCOLS`
+ * (lib/constants.js), both bridged onto `globalThis` the same way
+ * lib/background-main.js does in production. `tiles.js` itself is now a real
+ * ES module (a bridge shim importing lib/tiles-store.js), so its dynamic
+ * `import()` below picks up its own `Tiles`/`Background` real-import chain
+ * transparently — no change needed to how it's loaded here.
  */
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { withStore } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -127,6 +138,16 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 			remove: vi.fn().mockResolvedValue(undefined),
 		};
 
+		// M2: bridge lib/db.js's withStore() and lib/constants.js's
+		// SAFE_PROTOCOLS onto globalThis BEFORE background.js loads — the same
+		// two bridge assignments lib/background-main.js makes in production
+		// (see that file's header comment). Both are real `import`s at the top
+		// of this file; tiles.js needs no such treatment here since it's now
+		// itself a real ES module that does its own Tiles/Background bridging
+		// via a real relative import when dynamically imported below.
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+
 		// --- Native import(), in the manifest's declared background.scripts
 		// order (audit §1: common.js, tiles.js, prefs.js, background.js,
 		// lib/zip.js [now lib/zip-global.js], export.js) ---
@@ -137,10 +158,10 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 		await import(/* @vite-ignore */ webext('lib/zip-global.js'));
 		await import(/* @vite-ignore */ webext('export.js'));
 
-		// Flush the top-level Promise.all([Prefs.init(), waitForDB()]) chain so
-		// initDB()'s indexedDB.open() success handler has a chance to run and
-		// set (globalThis.)db.
-		await vi.waitFor(() => expect((globalThis as any).db).toBeDefined());
+		// Flush the top-level Prefs.init() chain, and prove the connection
+		// lifecycle works end-to-end through the bridged withStore() (M2
+		// replaces the old "wait for globalThis.db" assertion — see below).
+		await vi.waitFor(() => expect((globalThis as any).withStore).toBeDefined());
 	});
 
 	// ------------------------------------------------------------------
@@ -174,25 +195,41 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 	});
 
 	// ------------------------------------------------------------------
-	// tiles.js → Tiles, Background
+	// tiles.js (bridge shim, M2) → Tiles, Background (from lib/tiles-store.js)
 	// ------------------------------------------------------------------
-	it('tiles.js defines globalThis.Tiles', () => {
+	it('tiles.js bridges globalThis.Tiles from lib/tiles-store.js', () => {
 		expect(typeof (globalThis as any).Tiles).toBe('object');
-		expect(typeof (globalThis as any).Tiles.getAllTiles).toBe('function');
+		// getAllTiles was renamed to getGridTiles internally in M2 (the WIRE
+		// message name 'Tiles.getAllTiles' stays frozen — Decision 3 — but
+		// this is the internal store method, which is not the wire name).
+		expect(typeof (globalThis as any).Tiles.getGridTiles).toBe('function');
 	});
 
-	it('tiles.js defines globalThis.Background', () => {
+	it('tiles.js bridges globalThis.Background from lib/tiles-store.js', () => {
 		expect(typeof (globalThis as any).Background).toBe('object');
 		expect(typeof (globalThis as any).Background.getBackground).toBe('function');
 	});
 
 	// ------------------------------------------------------------------
-	// background.js → db, purgeNeverCaptureHost
+	// lib/db.js → withStore (M2: replaces the `db` global, which no longer
+	// exists anywhere — it's module-private to lib/db.js)
 	// ------------------------------------------------------------------
-	it('background.js sets globalThis.db once initDB() resolves', () => {
-		expect((globalThis as any).db).toBeDefined();
+	it('lib/background-main.js\'s bridge exposes globalThis.withStore, and it resolves once the connection is open', async () => {
+		expect(typeof (globalThis as any).withStore).toBe('function');
+		const store = await (globalThis as any).withStore('tiles', 'readonly', (s: unknown) => s);
+		expect(store).toBeDefined();
 	});
 
+	// ------------------------------------------------------------------
+	// lib/constants.js → SAFE_PROTOCOLS (M2)
+	// ------------------------------------------------------------------
+	it('lib/background-main.js\'s bridge exposes globalThis.SAFE_PROTOCOLS', () => {
+		expect((globalThis as any).SAFE_PROTOCOLS).toEqual(['http:', 'https:', 'ftp:']);
+	});
+
+	// ------------------------------------------------------------------
+	// background.js → purgeNeverCaptureHost
+	// ------------------------------------------------------------------
 	it('background.js defines globalThis.purgeNeverCaptureHost', () => {
 		expect(typeof (globalThis as any).purgeNeverCaptureHost).toBe('function');
 	});

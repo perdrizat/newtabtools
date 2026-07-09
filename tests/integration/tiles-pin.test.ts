@@ -3,34 +3,39 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Integration test: pin/unpin tile logic in tiles.js.
+ * Integration test: pin/unpin tile logic in lib/tiles-store.js.
  * Phase 1 slot 6 of the migration plan (MIGRATION.md).
  *
- * Loads the real `tiles.js` via `vm.runInThisContext` with an in-memory
- * mock of the IndexedDB `db` global. Characterizes:
+ * MODERNIZATION.md slice M2: migrated from `vm.runInThisContext`-loading
+ * tiles.js (script-mode, with a directly-poked `globalThis.db` mock) to a
+ * native `import` of the real lib/tiles-store.js + lib/db.js modules —
+ * tiles.js is now just a bridge shim (`import {Tiles, Background} from
+ * './lib/tiles-store.js'; globalThis.Tiles = Tiles; …`) with no behavior of
+ * its own left to vm-load. There is no `db` global to poke anymore: a mocked
+ * `indexedDB.open()` (same shape lib/db.js's tests use elsewhere) drives the
+ * connection, and `_resetForTests()` gives each test a clean slate.
+ *
+ * Characterizes:
  *   - pinTile: position assignment (first gap), duplicate rejection, IDB write
  *   - putTile: list tracking, IDB write
  *   - removeTile: list cleanup (including duplicates), IDB delete
  *   - isPinned: list membership check
  *   - getTile: IDB index lookup
- *   - ensureReady / getAllTiles: cache population, history-disabled path
+ *   - ensureReady / getGridTiles: cache population, history-disabled path
  *   - clear: IDB clear + state
  *
  * E2E note: pin persistence is already covered by tests/e2e/pin-persists.test.js.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TILES_PATH = path.resolve(__dirname, '../../webextension/tiles.js');
-const COMMON_PATH = path.resolve(__dirname, '../../webextension/common.js');
+import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
+import { _resetForTests } from '../../webextension/lib/db.js';
 
 // ---------------------------------------------------------------------------
-// In-memory IndexedDB mock
+// In-memory IndexedDB mock (tiles / background / thumbnails stores), driven
+// through a mocked `indexedDB.open()` — same shape as db-connection.test.ts /
+// module-scope.test.ts, since lib/tiles-store.js reaches the connection only
+// via lib/db.js's withStore(), never directly.
 // ---------------------------------------------------------------------------
 
 interface TileRecord {
@@ -63,7 +68,7 @@ function createMockDB() {
 		return op;
 	}
 
-	function makeObjectStore(name: string, readwrite = false) {
+	function makeObjectStore(name: string) {
 		return {
 			getAll() {
 				return makeOp(() => [...stores[name]]);
@@ -72,13 +77,11 @@ function createMockDB() {
 				return makeOp(() => stores[name].find((r: TileRecord) => r.id === id) || null);
 			},
 			add(record: TileRecord) {
-				if (!readwrite) {throw new Error('readonly');}
 				record.id = autoId++;
 				stores[name].push({ ...record });
 				return makeOp(() => record.id!);
 			},
 			put(record: TileRecord) {
-				if (!readwrite) {throw new Error('readonly');}
 				if (record.id == null) {
 					record.id = autoId++;
 				} else {
@@ -89,12 +92,10 @@ function createMockDB() {
 				return makeOp(() => record.id!);
 			},
 			delete(id: number) {
-				if (!readwrite) {throw new Error('readonly');}
 				stores[name] = stores[name].filter((r: TileRecord) => r.id !== id);
 				return makeOp(() => undefined);
 			},
 			clear() {
-				if (!readwrite) {throw new Error('readonly');}
 				stores[name] = [];
 				return makeOp(() => undefined);
 			},
@@ -114,53 +115,62 @@ function createMockDB() {
 	}
 
 	return {
-		transaction(storeName: string, mode?: string) {
-			const rw = mode === 'readwrite';
+		objectStoreNames: { contains: () => true },
+		createObjectStore: () => {},
+		close: () => {},
+		transaction(storeName: string) {
 			return {
 				objectStore(name: string) {
 					if (name !== storeName) {throw new Error(`wrong store: ${name}`);}
-					return makeObjectStore(name, rw);
+					return makeObjectStore(name);
 				},
 			};
 		},
 		// Expose internals for test assertions
 		_stores: stores,
-		_resetAutoId() { autoId = 1; },
 	};
+}
+
+function installAutoResolvingIndexedDB(mockDb: ReturnType<typeof createMockDB>) {
+	const openMock = vi.fn(() => {
+		const handlers: Record<string, Function> = {};
+		const req: Record<string, unknown> = {};
+		for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
+			Object.defineProperty(req, prop, {
+				set(cb: Function) { handlers[prop] = cb; },
+				configurable: true,
+			});
+		}
+		Promise.resolve().then(() => {
+			handlers.onsuccess && handlers.onsuccess.call({ result: mockDb });
+		});
+		return req;
+	});
+	(globalThis as any).indexedDB = { open: openMock };
 }
 
 // ---------------------------------------------------------------------------
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
-	let Tiles: any;
-	let Background: any;
+describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 	let mockDb: ReturnType<typeof createMockDB>;
 
 	beforeAll(() => {
-		// Load compareVersions from common.js
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
-		vm.runInThisContext(commonSrc, { filename: 'common.js' });
-
-		// Provide globals tiles.js expects
-		globalThis.Prefs = { rows: 3, columns: 3, history: false };
-		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
-		globalThis.Filters = { getList: vi.fn(() => ({})) };
-
-		// Load tiles.js — this defines global `Tiles` and `Background`
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
-		vm.runInThisContext(tilesSrc, { filename: 'tiles.js' });
-
-		Tiles = (globalThis as any).Tiles;
-		Background = (globalThis as any).Background;
+		// Globals lib/tiles-store.js expects (Prefs/Blocked/Filters —
+		// MODERNIZATION.md Decision 2 interim bridge; compareVersions is
+		// pulled from common.js in production, mocked here since getGridTiles
+		// only calls it on the Prefs.history=true path).
+		globalThis.Prefs = { rows: 3, columns: 3, history: false } as any;
+		globalThis.Blocked = { isBlocked: vi.fn(() => false) } as any;
+		globalThis.Filters = { getList: vi.fn(() => ({})) } as any;
+		globalThis.compareVersions = vi.fn(() => 1) as any;
 	});
 
 	beforeEach(() => {
+		_resetForTests();
 		mockDb = createMockDB();
-		(globalThis as any).db = mockDb;
+		installAutoResolvingIndexedDB(mockDb);
 		// Reset Tiles internal state
 		Tiles._ready = false;
 		Tiles._cache = [];
@@ -251,7 +261,7 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		mockDb._stores.tiles.push({ id: 1, url: 'https://example.com', title: 'Ex', position: 0 });
 		const tile = await Tiles.getTile('https://example.com');
 		expect(tile).not.toBeNull();
-		expect(tile.url).toBe('https://example.com');
+		expect(tile!.url).toBe('https://example.com');
 	});
 
 	it('getTile returns null for unknown URL', async () => {
@@ -259,9 +269,9 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		expect(tile).toBeNull();
 	});
 
-	// ==================== ensureReady / getAllTiles ====================
+	// ==================== ensureReady / getGridTiles ====================
 
-	it('getAllTiles populates _cache and returns tiles up to rows*columns', async () => {
+	it('getGridTiles populates _cache and returns tiles up to rows*columns', async () => {
 		mockDb._stores.tiles.push(
 			{ id: 1, url: 'https://a.com', title: 'A', position: 0 },
 			{ id: 2, url: 'https://b.com', title: 'B', position: 1 },
@@ -270,13 +280,13 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		(globalThis as any).Prefs.columns = 2;
 		(globalThis as any).Prefs.history = false;
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		expect(result).toHaveLength(2);
 		expect(Tiles._cache).toEqual(['https://a.com', 'https://b.com']);
 		expect(Tiles._list).toEqual(['https://a.com', 'https://b.com']);
 	});
 
-	it('getAllTiles skips duplicate URLs and logs error', async () => {
+	it('getGridTiles skips duplicate URLs and logs error', async () => {
 		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		mockDb._stores.tiles.push(
 			{ id: 1, url: 'https://a.com', title: 'A', position: 0 },
@@ -284,13 +294,13 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		);
 		(globalThis as any).Prefs.history = false;
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('appears twice'));
 		expect(result).toHaveLength(1);
 		consoleSpy.mockRestore();
 	});
 
-	it('getAllTiles truncates to rows*columns', async () => {
+	it('getGridTiles truncates to rows*columns', async () => {
 		for (let i = 0; i < 20; i++) {
 			mockDb._stores.tiles.push({ id: i + 1, url: `https://${i}.com`, title: `${i}`, position: i });
 		}
@@ -298,7 +308,7 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 		(globalThis as any).Prefs.columns = 2;
 		(globalThis as any).Prefs.history = false;
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		expect(result).toHaveLength(4);
 	});
 
@@ -338,7 +348,7 @@ describe('Tiles pin/unpin — tiles.js (Phase 1 slot 6)', () => {
 	});
 
 	it('Background.setBackground stores and then getBackground retrieves it', async () => {
-		await Background.setBackground({ color: '#fff', file: 'blob' });
+		await Background.setBackground({ color: '#fff', file: 'blob' } as any);
 		const result = await Background.getBackground();
 		expect(result).not.toBeNull();
 	});

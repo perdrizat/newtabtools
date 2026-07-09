@@ -24,11 +24,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { Tiles } from '../../webextension/lib/tiles-store.js';
+import { _resetForTests } from '../../webextension/lib/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const TILES_PATH = path.resolve(__dirname, '../../webextension/tiles.js');
-const COMMON_PATH = path.resolve(__dirname, '../../webextension/common.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -114,29 +114,18 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 
 // ==================== hide history-derived tiles ====================
 
-describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => {
-	let Tiles: any;
+/**
+ * MODERNIZATION.md slice M2: migrated from `vm.runInThisContext`-loading
+ * tiles.js (with a directly-poked `globalThis.db` mock) to a native `import`
+ * of the real lib/tiles-store.js (getGridTiles, the M2 rename of
+ * getAllTiles) + lib/db.js. A mocked `indexedDB.open()` drives the
+ * connection now; `_resetForTests()` gives each test a clean slate.
+ */
+describe('Hide history tiles — lib/tiles-store.js getGridTiles (Phase 1 slot 15)', () => {
+	let stores: Record<string, any[]>;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
-
-		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
-		globalThis.Filters = {
-			_list: Object.create(null),
-			getList() { return Object.assign(Object.create(null), this._list); },
-		};
-		globalThis.Prefs = { rows: 2, columns: 2, history: true };
-
-		(globalThis as any).browser = {
-			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
-			topSites: { get: vi.fn() },
-		};
-
-		// Mock IDB
-		const stores: Record<string, any[]> = { tiles: [], background: [], thumbnails: [] };
+	function installAutoResolvingIndexedDB() {
+		stores = { tiles: [], background: [], thumbnails: [] };
 		function makeOp<T>(resultFn: () => T) {
 			const op = { result: undefined as T | undefined, onsuccess: null as ((this: any) => void) | null, onerror: null as ((e: unknown) => void) | null };
 			Promise.resolve().then(() => { op.result = resultFn(); if (op.onsuccess) {op.onsuccess.call(op);} });
@@ -153,39 +142,63 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 				index: vi.fn(() => ({ getAll: vi.fn(() => makeOp(() => [...stores[name]])) })),
 			};
 		}
-		(globalThis as any).db = {
-			transaction: vi.fn((_stores: string[], _mode?: string) => ({
+		const mockDb = {
+			objectStoreNames: { contains: () => true },
+			createObjectStore: () => {},
+			close: () => {},
+			transaction: vi.fn((_storeNames: string | string[], _mode?: string) => ({
 				objectStore: vi.fn((name: string) => makeObjectStore(name)),
 			})),
 		};
-		// We need stores accessible from beforeEach
-		(globalThis as any)._testStores = stores;
+		const openMock = vi.fn(() => {
+			const handlers: Record<string, Function> = {};
+			const req: Record<string, unknown> = {};
+			for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
+				Object.defineProperty(req, prop, {
+					set(cb: Function) { handlers[prop] = cb; },
+					configurable: true,
+				});
+			}
+			Promise.resolve().then(() => {
+				handlers.onsuccess && handlers.onsuccess.call({ result: mockDb });
+			});
+			return req;
+		});
+		(globalThis as any).indexedDB = { open: openMock };
+	}
 
-		vm.runInThisContext(commonSrc, { filename: 'common.js' });
-		vm.runInThisContext(tilesSrc, { filename: 'tiles.js' });
-		Tiles = (globalThis as any).Tiles;
+	beforeAll(() => {
+		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
+		globalThis.Filters = {
+			_list: Object.create(null),
+			getList() { return Object.assign(Object.create(null), this._list); },
+		};
+		globalThis.Prefs = { rows: 2, columns: 2, history: true };
+		globalThis.compareVersions = vi.fn(() => 1);
+
+		(globalThis as any).browser = {
+			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
+			topSites: { get: vi.fn() },
+		};
 	});
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		Tiles._cache = null;
+		_resetForTests();
+		installAutoResolvingIndexedDB();
+		Tiles._cache = [];
 		Tiles._ready = false;
 		Tiles._list = [];
 		Prefs.history = true;
 		Prefs.rows = 2;
 		Prefs.columns = 2;
-		const stores = (globalThis as any)._testStores;
-		stores.tiles.length = 0;
-		stores.background.length = 0;
-		stores.thumbnails.length = 0;
 	});
 
 	it('Prefs.history=false skips topSites and returns only pinned tiles', async () => {
 		Prefs.history = false;
-		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		expect((globalThis as any).browser.topSites.get).not.toHaveBeenCalled();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).toContain('https://pinned.com');
@@ -195,10 +208,9 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 		Prefs.history = false;
 		Prefs.rows = 2;
 		Prefs.columns = 2;
-		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		// links is sparse: only index 0 is set, so slice(0, 4) returns length 1
 		expect(result[0].url).toBe('https://pinned.com');
 		expect(result.filter((s: any) => s)).toHaveLength(1);
@@ -206,7 +218,6 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 
 	it('Prefs.history=true calls topSites.get and fills unpinned slots', async () => {
 		Prefs.history = true;
-		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
 		((globalThis as any).browser.topSites.get as any).mockResolvedValue([
@@ -214,7 +225,7 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 			{ url: 'https://history2.com', title: 'H2' },
 		]);
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		expect((globalThis as any).browser.topSites.get).toHaveBeenCalled();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).toContain('https://pinned.com');
@@ -226,7 +237,7 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 		Prefs.rows = 1;
 		Prefs.columns = 2;
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		// No pinned tiles → links is empty sparse array → slice returns []
 		expect(result).toHaveLength(0);
 		expect(result.filter((s: any) => s)).toHaveLength(0);
@@ -234,7 +245,6 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 
 	it('Prefs.history=true does not duplicate already-pinned URLs from topSites', async () => {
 		Prefs.history = true;
-		const stores = (globalThis as any)._testStores;
 		stores.tiles.push({ id: 1, url: 'https://pinned.com', title: 'Pinned', position: 0 });
 
 		((globalThis as any).browser.topSites.get as any).mockResolvedValue([
@@ -242,7 +252,7 @@ describe('Hide history tiles — tiles.js getAllTiles (Phase 1 slot 15)', () => 
 			{ url: 'https://new.com', title: 'New' },
 		]);
 
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const pinnedCount = result.filter((s: any) => s && s.url === 'https://pinned.com').length;
 		expect(pinnedCount).toBe(1);
 	});

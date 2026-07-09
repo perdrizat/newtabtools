@@ -24,6 +24,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { withStore } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,7 +100,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		mockTiles = {
 			ensureReady: vi.fn().mockResolvedValue({ cache: [], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
-			getAllTiles: vi.fn().mockResolvedValue([]),
+			getGridTiles: vi.fn().mockResolvedValue([]),
 			getTile: vi.fn().mockResolvedValue({ url: 'https://example.com', title: 'Example' }),
 			putTile: vi.fn().mockResolvedValue(undefined),
 			removeTile: vi.fn().mockResolvedValue(undefined),
@@ -195,6 +197,17 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			});
 		}
 		(globalThis as any).indexedDB = { open: vi.fn(() => dbReq) };
+
+		// M2: background.js reads `withStore` off globalThis (it's still
+		// bridge-mode — see lib/background-main.js) instead of touching a raw
+		// `db` global. Bridge the real lib/db.js implementation here so it
+		// drives the SAME indexedDB.open mock above (this pattern — real
+		// import + globalThis bridge assignment in the test file itself —
+		// repeats for every test that still vm-loads background.js; see
+		// db-wake-race.test.ts / event-page-resilience.test.ts for the same
+		// idiom).
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
 		// --- Browser / Chrome API gaps ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;
@@ -298,7 +311,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('Tiles.getAllTiles — sends { tiles, list } on success', async () => {
 			const fakeTiles = [{ id: 1, url: 'https://a.com' }];
-			(mockTiles.getAllTiles as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeTiles);
+			(mockTiles.getGridTiles as ReturnType<typeof vi.fn>).mockResolvedValueOnce(fakeTiles);
 			mockTiles._list = ['https://a.com'];
 
 			const result = listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
@@ -310,7 +323,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 
 		it('Tiles.getAllTiles — sends null on error', async () => {
 			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-			(mockTiles.getAllTiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('DB error'));
+			(mockTiles.getGridTiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('DB error'));
 			const result = listener({ name: 'Tiles.getAllTiles' }, validSender, sendResponse);
 			expect(result).toBe(true);
 			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));

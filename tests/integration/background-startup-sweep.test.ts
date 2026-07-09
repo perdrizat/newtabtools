@@ -29,6 +29,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { withStore } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -92,7 +94,7 @@ describe('background.js — startup tab sweep (reload vs. onInstalled)', () => {
 		(globalThis as any).Tiles = {
 			ensureReady: vi.fn().mockResolvedValue({ cache: [], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
-			getAllTiles: vi.fn().mockResolvedValue([]),
+			getGridTiles: vi.fn().mockResolvedValue([]),
 			getTile: vi.fn().mockResolvedValue(null),
 			putTile: vi.fn().mockResolvedValue(undefined),
 			removeTile: vi.fn().mockResolvedValue(undefined),
@@ -158,6 +160,13 @@ describe('background.js — startup tab sweep (reload vs. onInstalled)', () => {
 		}
 		(globalThis as any).indexedDB = { open: vi.fn(() => dbReq) };
 		(globalThis as any).IDBKeyRange = { upperBound: vi.fn((v: unknown) => ({ upperBound: v })) };
+
+		// M2: bridge the real lib/db.js withStore() onto globalThis, same as
+		// production's lib/background-main.js does — background.js still
+		// reads it as a bare identifier (bridge-mode file, see db-wake-race
+		// test for the canonical explanation of this pattern).
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
 		// --- Browser / Chrome API gaps ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;

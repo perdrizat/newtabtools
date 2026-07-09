@@ -29,13 +29,36 @@
  * that file's own header comment for why) must load before `../export.js`:
  * export.js calls `zip.configure(...)` at its own top level on import.
  *
- * No logic lives in this file — M5 consolidates listener registration here
- * for real; this slice only flips the loading mechanism, behavior-identical.
+ * M2 (MODERNIZATION.md, "the readiness redesign") adds two more real-module
+ * -> globalThis bridges of the same shape as `zip-global.js`'s: `withStore`
+ * (lib/db.js) and `SAFE_PROTOCOLS` (lib/constants.js). Both are needed by
+ * background.js, which stays bridge-mode (no `import` syntax) until its own
+ * carve-up in M3/M5 — same reason tiles.js keeps the `Tiles`/`Background`
+ * bridge itself instead of doing it here. These two are small enough, and
+ * have no natural existing shim file of their own (unlike Tiles/Background's
+ * tiles.js), that bridging them directly in this file — rather than adding
+ * two more single-purpose "-global.js" files — is the more readable choice;
+ * revisit if a third such bridge shows up. Textual position relative to
+ * `../background.js` below doesn't matter for correctness: ES module
+ * evaluation runs every one of this file's OWN imports (including
+ * background.js) to completion before any of this file's own body
+ * statements — including these `globalThis.X = …` lines — execute, so they
+ * are guaranteed to land before any asynchronous listener callback in
+ * background.js can possibly run, regardless of where they're written here.
+ *
+ * No other logic lives in this file — M5 consolidates listener registration
+ * here for real; this slice only flips the loading mechanism plus these
+ * bridge assignments, otherwise behavior-identical.
  */
 
 import '../common.js';
 import '../tiles.js';
 import '../prefs.js';
+import { withStore } from './db.js';
+import { SAFE_PROTOCOLS } from './constants.js';
 import '../background.js';
 import './zip-global.js';
 import '../export.js';
+
+globalThis.withStore = withStore;
+globalThis.SAFE_PROTOCOLS = SAFE_PROTOCOLS;

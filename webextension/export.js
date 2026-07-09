@@ -213,6 +213,13 @@ globalThis.readZip = async function(file) {
 	}
 
 	await Tiles.clear();
+	// Deliberately NOT the shared lib/constants.js SAFE_PROTOCOLS (M2,
+	// MODERNIZATION.md/CONTRIBUTING.md "Security-boundary changes"): this is
+	// the restore allow-list validating untrusted backup-file data, a
+	// separate trust boundary from the same-shaped list elsewhere. Keeping
+	// its own copy means a future widening of SAFE_PROTOCOLS for the
+	// tiles/background paths can't silently widen what a malicious backup
+	// file is allowed to restore.
 	let safeProtocols = ['http:', 'https:', 'ftp:'];
 	let safeHexColor = /^#[0-9a-f]{3,8}$/i;
 	for (let t of tilesMap.values()) {

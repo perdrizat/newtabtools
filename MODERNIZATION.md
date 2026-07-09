@@ -24,7 +24,7 @@ were already Stage H.
 | Sequencing decision (M before H) | ✓ decided 2026-07-09 | — |
 | ESR-140 retest (MV3 capture gate confirmation) | ✓ done — gate CONFIRMED on the real 2.1.0 build (capture APIs absent on 140; min-version enforced even on temp installs; keep 152.0) | — |
 | M1 — globalThis bridge + module entry flip | ✓ done (fast 1225, E2E 126, no wake-latency regression; zip spike FAILED → M4's ESM vendoring pulled forward: `lib/zip/` 25-file tree + `zip-global.js` bridge; AMO zip-reproducibility note now stale → M-gate docs) | — |
-| M2 — `lib/db.js` + tiles store (ready-gated) | ~ in progress (agent implementing) | — |
+| M2 — `lib/db.js` + tiles store (ready-gated) | ✓ done (fast 1228, E2E 126; `db` global dead, `withStore` gate; bonus: `Thumbnails.delete`+`cleanupThumbnails` were still unguarded, now gated; `getGridTiles` rename; SAFE_PROTOCOLS unified, export.js independent) | — |
 | M3 — capture pipeline module + image seam | pending | — |
 | M4 — backup/export module + zip.js ESM vendoring | pending | — |
 | M5 — `lib/platform.js` + entry consolidation + review leftovers | pending | — |
@@ -91,12 +91,15 @@ rename internals (`getAllTiles` → grid-fit name, per the 2026-06-10 §4.5
 deferral) but never a message string. A contract test (integration) asserting the
 dispatch table's names is part of M1 and survives the whole arc.
 
-### 4. idb library: re-evaluated at M2, default remains "no"
+### 4. idb library: re-evaluated at M2 — outcome: stay hand-rolled (2026-07-09)
 
-Deferred decision from the 2026-07-09 review round. M2 is the reconsideration
-point the rejection named. Default stance stands (zero-runtime-deps policy;
-reconnect logic is ours either way); adopt only if M2's hand-rolled module turns
-out materially worse. Record the outcome here either way.
+M2's `withStore` is ~50 lines of logic and behaviorally fine; the friction was
+TypeScript, not IndexedDB (a `string|string[]`-polymorphic callback signature
+fought JSDoc `@overload`, resolved with a precisely-typed `withObjectStore`
+wrapper in tiles-store.js). Honest note from the implementation: `idb`'s typed
+wrapper would have sidestepped that, so a reasonable adopt case exists if the
+pattern repeats in M3/M4 — but zero-runtime-deps holds and the default-no
+stance stands. Revisit only if M3/M4 hit the same typing wall.
 
 ## Stage M — background ES-module rewrite
 

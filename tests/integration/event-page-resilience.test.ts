@@ -8,18 +8,30 @@
  *
  * Under MV3 the background becomes an event page torn down after ~30s idle
  * and respawned by events — top-level code re-runs on every respawn. This
- * file characterizes the three respawn-safety mechanisms added in Slice B,
- * loading the real `background.js` (script-mode) the same way
+ * file characterizes two of the three respawn-safety mechanisms added in
+ * Slice B, loading the real `background.js` (script-mode) the same way
  * `background-messages.test.ts` does:
  *
  *   1. `browser.menus.create` is duplicate-tolerant (a respawn re-creating
  *      an existing menu id must not throw or log).
- *   2. IndexedDB reconnect: `onclose`/`onversionchange` clear `db`, and
- *      `waitForDB()` re-runs `initDB()` from an unset/broken connection
- *      instead of being doomed for the context's lifetime, while still
- *      deduping concurrent callers onto one in-flight open.
- *   3. The one-shot idle-cleanup listener re-arms per respawn, but
+ *   2. The one-shot idle-cleanup listener re-arms per respawn, but
  *      `cleanupThumbnails()` itself is now guarded to run at most once a day.
+ *
+ * The THIRD mechanism — IndexedDB reconnect (onclose/onversionchange +
+ * dedup + retry) — moved to tests/integration/db-connection.test.ts in M2
+ * (MODERNIZATION.md): that logic now lives in lib/db.js as a real ES module
+ * (`withStore`), not a `globalThis.db`/`globalThis.waitForDB()` pair this
+ * file could poke directly, so it's tested via native `import` against
+ * lib/db.js instead of through background.js's vm-loaded script scope.
+ *
+ * background.js is still a bridge-mode file (MODERNIZATION.md Decision 2 —
+ * no `import` syntax until its own carve-up in M3/M5), so it reads
+ * `withStore`/`SAFE_PROTOCOLS` as bare identifiers off `globalThis`. This
+ * test file provides them the same way production's lib/background-main.js
+ * does: a real `import` of the lib module, then a `globalThis.X = X`
+ * assignment before vm-loading background.js. This pattern repeats in every
+ * remaining test that still vm-loads background.js/export.js and will
+ * repeat again in M3/M4 as more of the bridge surface grows.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -27,6 +39,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { withStore } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -74,20 +88,25 @@ function mockCursorIteration(entries: Array<Record<string, unknown>>) {
 // ---------------------------------------------------------------------------
 
 describe('background.js — event-page respawn resilience (Slice B)', () => {
-	let mockDB: Record<string, unknown>;
 	let thumbnailStore: Record<string, ReturnType<typeof vi.fn>>;
 
-	// Controllable indexedDB.open mock: each call fires asynchronously
-	// (microtask) with either the shared mockDB (default: 'success') or an
-	// error event, driven by a per-call queue so tests can script a specific
-	// open outcome without touching the earlier calls already made at load.
-	let openQueue: Array<'success' | 'error'>;
-	let openMock: ReturnType<typeof vi.fn>;
-
-	function installControllableIndexedDB() {
-		openQueue = [];
-		openMock = vi.fn(() => {
-			const behavior = openQueue.length ? openQueue.shift() : 'success';
+	function installAutoResolvingIndexedDB() {
+		const stores: Record<string, unknown> = {
+			tiles: {
+				put: vi.fn(), get: vi.fn(), getAll: vi.fn(),
+				openCursor: vi.fn(() => mockCursorIteration([])), createIndex: vi.fn(),
+				indexNames: { contains: () => true },
+			},
+			thumbnails: thumbnailStore,
+			background: { put: vi.fn(), get: vi.fn() },
+		};
+		const mockDB = {
+			objectStoreNames: { contains: (n: string) => n in stores },
+			transaction: vi.fn(() => ({ objectStore: vi.fn((n: string) => stores[n]) })),
+			createObjectStore: vi.fn(),
+			close: vi.fn(),
+		};
+		const openMock = vi.fn(() => {
 			const handlers: Record<string, Function> = {};
 			const req: Record<string, unknown> = {};
 			for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
@@ -96,14 +115,8 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 					configurable: true,
 				});
 			}
-			// Fire after the synchronous handler-assignment block in initDB()
-			// completes, mirroring IndexedDB's real async open.
 			Promise.resolve().then(() => {
-				if (behavior === 'error' && handlers.onerror) {
-					handlers.onerror(new Event('error'));
-				} else if (handlers.onsuccess) {
-					handlers.onsuccess.call({ result: mockDB });
-				}
+				handlers.onsuccess && handlers.onsuccess.call({ result: mockDB });
 			});
 			return req;
 		});
@@ -115,7 +128,7 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 		(globalThis as any).Tiles = {
 			ensureReady: vi.fn().mockResolvedValue({ cache: [], list: [] }),
 			isPinned: vi.fn().mockReturnValue(false),
-			getAllTiles: vi.fn().mockResolvedValue([]),
+			getGridTiles: vi.fn().mockResolvedValue([]),
 			getTile: vi.fn().mockResolvedValue(null),
 			putTile: vi.fn().mockResolvedValue(undefined),
 			removeTile: vi.fn().mockResolvedValue(undefined),
@@ -155,25 +168,13 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 			openCursor: vi.fn(() => mockCursorIteration([])),
 			index: vi.fn(() => ({ openCursor: vi.fn(() => mockCursorIteration([])) })),
 		};
-		const stores: Record<string, unknown> = {
-			tiles: {
-				put: vi.fn(), get: vi.fn(), getAll: vi.fn(),
-				openCursor: vi.fn(() => mockCursorIteration([])), createIndex: vi.fn(),
-				indexNames: { contains: () => true },
-			},
-			thumbnails: thumbnailStore,
-			background: { put: vi.fn(), get: vi.fn() },
-		};
-		mockDB = {
-			objectStoreNames: { contains: (n: string) => n in stores },
-			transaction: vi.fn(() => ({ objectStore: vi.fn((n: string) => stores[n]) })),
-			createObjectStore: vi.fn(),
-			// Real onversionchange handlers call db.close() before clearing db.
-			close: vi.fn(),
-		};
-
-		installControllableIndexedDB();
+		installAutoResolvingIndexedDB();
 		(globalThis as any).IDBKeyRange = { upperBound: vi.fn((v: unknown) => ({ upperBound: v })) };
+
+		// M2: bridge the real lib/db.js withStore() and lib/constants.js
+		// SAFE_PROTOCOLS onto globalThis (see the file header comment).
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
 		// --- Browser / Chrome API gaps (mirrors background-messages.test.ts) ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;
@@ -214,7 +215,7 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 		const code = fs.readFileSync(BACKGROUND_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'background.js' });
 
-		// Flush microtasks so the init Promise.all (Prefs.init + waitForDB) resolves.
+		// Flush microtasks so the init Prefs.init() chain resolves.
 		await new Promise(resolve => setTimeout(resolve, 0));
 		await new Promise(resolve => setTimeout(resolve, 0));
 	});
@@ -254,95 +255,12 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 		});
 	});
 
-	// ======================== 2. IndexedDB reconnect ========================
-
-	describe('IndexedDB reconnect', () => {
-		beforeEach(async () => {
-			openQueue = [];
-			// Normalize starting state: db must be connected before each test's
-			// disconnect scenario (a prior test may have left it disconnected).
-			if (!(globalThis as any).db) {
-				await (globalThis as any).waitForDB();
-			}
-		});
-
-		it('attaches onclose/onversionchange handlers after a successful open', () => {
-			const db = (globalThis as any).db;
-			expect(db).toBe(mockDB);
-			expect(typeof db.onclose).toBe('function');
-			expect(typeof db.onversionchange).toBe('function');
-		});
-
-		it('reopens the connection after onclose fires, resolving waitForDB() again', async () => {
-			const callsBefore = openMock.mock.calls.length;
-			(globalThis as any).db.onclose();
-			expect((globalThis as any).db).toBeUndefined();
-
-			const waitForDB = (globalThis as any).waitForDB as Function;
-			await waitForDB();
-
-			expect(openMock.mock.calls.length).toBe(callsBefore + 1);
-			expect((globalThis as any).db).toBe(mockDB);
-		});
-
-		it('reopens the connection after onversionchange fires (closes then clears db)', async () => {
-			const callsBefore = openMock.mock.calls.length;
-			(globalThis as any).db.onversionchange();
-			expect((globalThis as any).db).toBeUndefined();
-
-			const waitForDB = (globalThis as any).waitForDB as Function;
-			await waitForDB();
-
-			expect(openMock.mock.calls.length).toBe(callsBefore + 1);
-			expect((globalThis as any).db).toBe(mockDB);
-		});
-
-		it('dedupes concurrent callers onto a single in-flight initDB() call', async () => {
-			(globalThis as any).db.onclose();
-			const callsBefore = openMock.mock.calls.length;
-
-			const waitForDB = (globalThis as any).waitForDB as Function;
-			const p1 = waitForDB();
-			const p2 = waitForDB();
-
-			// Both calls happened before the mocked open() resolved (still
-			// microtask-pending) — only one new indexedDB.open() call should
-			// have been made for the pair.
-			expect(openMock.mock.calls.length).toBe(callsBefore + 1);
-
-			await Promise.all([p1, p2]);
-			expect((globalThis as any).db).toBe(mockDB);
-		});
-
-		it('rejects current callers on open failure, then a later call retries and resolves', async () => {
-			(globalThis as any).db.onclose();
-			openQueue.push('error');
-
-			const waitForDB = (globalThis as any).waitForDB as Function;
-			await expect(waitForDB()).rejects.toBeDefined();
-			expect((globalThis as any).db).toBeUndefined();
-
-			// A LATER call (after the failed one settled) retries from scratch —
-			// queue is empty now, so the mock defaults to success.
-			const callsBefore = openMock.mock.calls.length;
-			await waitForDB();
-
-			expect(openMock.mock.calls.length).toBe(callsBefore + 1);
-			expect((globalThis as any).db).toBe(mockDB);
-		});
-	});
-
-	// ======================== 3. Idle-cleanup guard ========================
+	// ======================== 2. Idle-cleanup guard ========================
 
 	describe('idle-cleanup: cleanupThumbnails runs at most once per day', () => {
 		let idleListener: Function;
 
 		beforeEach(async () => {
-			// Ensure db is connected (the IndexedDB describe block above may
-			// have left it disconnected on a shared background.js load).
-			if (!(globalThis as any).db) {
-				await (globalThis as any).waitForDB();
-			}
 			await (globalThis as any).chrome.storage.local.clear();
 			thumbnailStore.index.mockClear();
 			idleListener = (globalThis as any).idleListener;
@@ -350,11 +268,13 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 
 		it('runs cleanupThumbnails and records today on the first idle transition with no prior run', async () => {
 			idleListener('idle');
-			// idleListener now reads storage.local via the promise-based
-			// `browser.storage.local.get` (Slice C of the MV3 migration) — the
-			// cleanup decision lands a microtask later than the old callback form.
-			await Promise.resolve();
-			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
+			// idleListener reads storage.local via the promise-based
+			// `browser.storage.local.get` (Slice C of the MV3 migration), and
+			// cleanupThumbnails() itself now goes through withStore() (M2) —
+			// each adds a variable number of microtask hops (withStore's
+			// includes the lazy indexedDB.open() on this file's first call),
+			// so poll for the eventual call instead of counting ticks.
+			await vi.waitFor(() => expect(thumbnailStore.index).toHaveBeenCalledTimes(1));
 
 			const stored = await (globalThis as any).chrome.storage.local.get('thumbnailCleanupLastRun');
 			expect(typeof stored.thumbnailCleanupLastRun).toBe('string');
@@ -362,22 +282,24 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 
 		it('skips cleanupThumbnails on a second idle transition claiming the same day (next respawn)', async () => {
 			idleListener('idle');
-			await Promise.resolve();
-			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
+			await vi.waitFor(() => expect(thumbnailStore.index).toHaveBeenCalledTimes(1));
 			thumbnailStore.index.mockClear();
 
 			// Simulate the next MV3 respawn: the listener re-arms and fires again
 			// the same day — cleanupThumbnails must not run a second time.
 			idleListener('idle');
-			await Promise.resolve();
+			// Flush generously — there's nothing to poll FOR (we're asserting an
+			// absence), so give any wrongly-scheduled call every chance to land.
+			for (let i = 0; i < 10; i++) {
+				await Promise.resolve();
+			}
 			expect(thumbnailStore.index).not.toHaveBeenCalled();
 		});
 
 		it('runs again once the stored last-run date is an earlier day', async () => {
 			await (globalThis as any).chrome.storage.local.set({ thumbnailCleanupLastRun: '2000-01-01' });
 			idleListener('idle');
-			await Promise.resolve();
-			expect(thumbnailStore.index).toHaveBeenCalledTimes(1);
+			await vi.waitFor(() => expect(thumbnailStore.index).toHaveBeenCalledTimes(1));
 		});
 
 		it('calls chrome.idle.onStateChanged.removeListener on every idle transition (one-shot per respawn, unchanged)', () => {

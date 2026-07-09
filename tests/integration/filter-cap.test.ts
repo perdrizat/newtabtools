@@ -29,11 +29,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { Tiles } from '../../webextension/lib/tiles-store.js';
+import { _resetForTests } from '../../webextension/lib/db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const TILES_PATH = path.resolve(__dirname, '../../webextension/tiles.js');
-const COMMON_PATH = path.resolve(__dirname, '../../webextension/common.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -299,15 +299,18 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 
 // ==================== Filter matching logic tests ====================
 
-describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
-	let Tiles: any;
-
+/**
+ * MODERNIZATION.md slice M2: migrated from `vm.runInThisContext`-loading
+ * tiles.js (with a directly-poked `globalThis.db` mock) to a native `import`
+ * of the real lib/tiles-store.js (getGridTiles, the M2 rename of
+ * getAllTiles) + lib/db.js. The `stores.tiles` IDB backing was always empty
+ * across every test in this describe (nothing here ever populates it — the
+ * dataset comes entirely from the topSites mock), so the same empty-store
+ * mock instance is reused across tests via a mocked `indexedDB.open()`;
+ * `_resetForTests()` forces each test's first `withStore()` call to reopen.
+ */
+describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)', () => {
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const commonSrc = fs.readFileSync(COMMON_PATH, 'utf8');
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const tilesSrc = fs.readFileSync(TILES_PATH, 'utf8');
-
 		// Provide globals
 		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
 		globalThis.Filters = {
@@ -316,13 +319,14 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			setFilter: vi.fn(),
 		};
 		globalThis.Prefs = { rows: 3, columns: 3, history: true };
+		globalThis.compareVersions = vi.fn(() => 1);
 
 		(globalThis as any).browser = {
 			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
 			topSites: { get: vi.fn() },
 		};
 
-		// Mock IDB
+		// Mock IDB (stores stay empty for the reason in the doc comment above)
 		const stores: Record<string, any[]> = { tiles: [], background: [], thumbnails: [] };
 		function makeOp<T>(resultFn: () => T) {
 			const op = { result: undefined as T | undefined, onsuccess: null as ((this: any) => void) | null, onerror: null as ((e: unknown) => void) | null };
@@ -340,20 +344,35 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 				index: vi.fn(() => ({ getAll: vi.fn(() => makeOp(() => [...stores[name]])) })),
 			};
 		}
-		(globalThis as any).db = {
-			transaction: vi.fn((_stores: string[], _mode?: string) => ({
+		const mockDb = {
+			objectStoreNames: { contains: () => true },
+			createObjectStore: () => {},
+			close: () => {},
+			transaction: vi.fn((_storeNames: string | string[], _mode?: string) => ({
 				objectStore: vi.fn((name: string) => makeObjectStore(name)),
 			})),
 		};
-
-		vm.runInThisContext(commonSrc, { filename: 'common.js' });
-		vm.runInThisContext(tilesSrc, { filename: 'tiles.js' });
-		Tiles = (globalThis as any).Tiles;
+		const openMock = vi.fn(() => {
+			const handlers: Record<string, Function> = {};
+			const req: Record<string, unknown> = {};
+			for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
+				Object.defineProperty(req, prop, {
+					set(cb: Function) { handlers[prop] = cb; },
+					configurable: true,
+				});
+			}
+			Promise.resolve().then(() => {
+				handlers.onsuccess && handlers.onsuccess.call({ result: mockDb });
+			});
+			return req;
+		});
+		(globalThis as any).indexedDB = { open: openMock };
 	});
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		Tiles._cache = null;
+		_resetForTests();
+		Tiles._cache = [];
 		(globalThis as any).Filters._list = Object.create(null);
 		(globalThis as any).Blocked.isBlocked.mockReturnValue(false);
 	});
@@ -369,7 +388,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://example.com/page2', title: 'Page 2' },
 			{ url: 'https://other.com/', title: 'Other' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('https://example.com/page1');
 		expect(urls).not.toContain('https://example.com/page2');
@@ -383,7 +402,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://example.com/page2', title: 'Page 2' },
 			{ url: 'https://other.com/', title: 'Other' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const exampleUrls = result.filter((s: any) => s).map((s: any) => s.url).filter((u: string) => u.includes('example.com'));
 		expect(exampleUrls).toHaveLength(1);
 	});
@@ -395,7 +414,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://deep.sub.example.com/', title: 'Deep' },
 			{ url: 'https://other.com/', title: 'Other' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('https://sub.example.com/');
 		expect(urls).not.toContain('https://deep.sub.example.com/');
@@ -408,7 +427,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://example.com/', title: 'Bare' },
 			{ url: 'https://other.com/', title: 'Other' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('https://example.com/');
 	});
@@ -418,7 +437,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://a.com/', title: 'A' },
 			{ url: 'https://b.com/', title: 'B' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).toContain('https://a.com/');
 		expect(urls).toContain('https://b.com/');
@@ -430,7 +449,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://evil.com/', title: 'Evil' },
 			{ url: 'https://good.com/', title: 'Good' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('https://evil.com/');
 		expect(urls).toContain('https://good.com/');
@@ -442,7 +461,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'about:blank', title: 'Blank' },
 			{ url: 'https://ok.com/', title: 'OK' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('chrome://settings');
 		expect(urls).not.toContain('about:blank');
@@ -460,7 +479,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://www.linkedin.com/in/me', title: 'Me' },
 			{ url: 'https://m.linkedin.com/', title: 'Mobile' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		const www = urls.filter((u: string) => u.includes('www.linkedin.com'));
 		expect(www).toHaveLength(2);
@@ -474,7 +493,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://linkedin.com/', title: 'Apex' },
 			{ url: 'https://www.linkedin.com/feed/', title: 'WWW' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls).not.toContain('https://linkedin.com/');
 		expect(urls).toContain('https://www.linkedin.com/feed/');
@@ -489,7 +508,7 @@ describe('Filter matching — tiles.js getAllTiles (Phase 1 slot 13)', () => {
 			{ url: 'https://b.com/1', title: 'B1' },
 			{ url: 'https://b.com/2', title: 'B2' },
 		]);
-		const result = await Tiles.getAllTiles();
+		const result = await Tiles.getGridTiles();
 		const urls = result.filter((s: any) => s).map((s: any) => s.url);
 		expect(urls.filter((u: string) => u.includes('a.com'))).toHaveLength(1);
 		expect(urls.filter((u: string) => u.includes('b.com'))).toHaveLength(1);

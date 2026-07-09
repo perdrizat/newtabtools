@@ -9,7 +9,7 @@ var Tiles = {
 	isPinned(url) {
 		return this._list.includes(url);
 	},
-	getAllTiles() { // NOTE: misleading name — see tiles.js getAllTiles; rename deferred to MV3 tiles.js module-extraction (audit/2026-06-10 §4.5).
+	getAllTiles() { // NOTE: misleading name — mirrors the FROZEN wire message name 'Tiles.getAllTiles' (MODERNIZATION.md Decision 3); the background-side store method was renamed to getGridTiles in M2 (lib/tiles-store.js), but this page-side proxy keeps its own name since it's the wire name, not an internal one.
 		return new Promise((resolve, reject) => {
 			chrome.runtime.sendMessage({ name: 'Tiles.getAllTiles' }, response => {
 				if (response === null) {

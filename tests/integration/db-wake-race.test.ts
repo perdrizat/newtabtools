@@ -3,24 +3,32 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Regression test: unguarded `db` access on event-page wake (audit
+ * Regression test: unguarded db access on event-page wake (audit
  * 2026-07-09-mv3-code-review.md §2.1/§2.2, adjudicated in MV3_MIGRATION.md
  * "Pre-release fixes" item 1 — WIDENED beyond the original report).
  *
- * The `runtime.onMessage` listener is registered synchronously and fires the
- * instant the MV3 event page wakes, but `indexedDB.open()` (kicked off by the
- * top-level `Promise.all([Prefs.init(), waitForDB()])`) can still be in
- * flight. Several handlers reached `db` directly instead of going through
- * `waitForDB()` first — this file dispatches every db-touching message
- * BEFORE resolving the fake `indexedDB.open()` on command, and asserts each
- * handler waits for the DB instead of throwing / responding with a wrong or
- * undefined value.
+ * MODERNIZATION.md slice M2 rewrite: this is the §2.1-regression guard the
+ * M2 test-harness strategy explicitly calls out to survive the readiness
+ * redesign, now proving `withStore()`'s readiness gate instead of the old
+ * `waitForDB()`/`globalThis.db` pair. There is no `db` global left to poke —
+ * `db` is module-private to lib/db.js — so the mechanism changes but the
+ * property under test does not: **a message dispatched before the
+ * connection finishes opening must still be answered correctly once it
+ * does**, for every db-touching handler, and the capture path's
+ * `Tiles.ensureReady()`/`_ready` sticky-state behavior.
  *
- * Loads the REAL `tiles.js` (not a stub) alongside `background.js`, via the
- * same vm.runInThisContext idiom as event-page-resilience.test.ts /
- * tiles-pin.test.ts, so the tiles.js `_ready` sticky-state fix (§2.2) is
- * exercised for real through the message boundary and the `webNavigation.
- * onCompleted` capture path — not through a mocked `Tiles.ensureReady()`.
+ * `tiles.js` is now a bridge shim (`import {Tiles, Background} from
+ * './lib/tiles-store.js'; …`) with real `import` syntax, so it can no
+ * longer be `vm.runInThisContext`-loaded (script-mode parsing rejects
+ * `import`). Instead: a native `import` of the real lib/tiles-store.js +
+ * lib/db.js + lib/constants.js, with the SAME bridge assignments tiles.js /
+ * lib/background-main.js make in production — `globalThis.Tiles = Tiles`,
+ * `globalThis.withStore = withStore`, `globalThis.SAFE_PROTOCOLS =
+ * SAFE_PROTOCOLS` — before vm-loading `background.js` (still bridge-mode,
+ * unchanged). Because lib/tiles-store.js reaches the connection via the SAME
+ * imported `withStore` function background.js's own handlers use (one
+ * cached ES module instance), dispatching ANY db-touching message — through
+ * either path — drives the identical controllable `indexedDB.open()` mock.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -28,10 +36,11 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { Tiles as RealTiles, Background as RealBackground } from '../../webextension/lib/tiles-store.js';
+import { withStore, _resetForTests } from '../../webextension/lib/db.js';
+import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const COMMON_PATH = path.resolve(__dirname, '../../webextension/common.js');
-const TILES_PATH = path.resolve(__dirname, '../../webextension/tiles.js');
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
 const EXTENSION_ID = 'newtabtools@symlink.ch';
 
@@ -247,11 +256,16 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 			set: vi.fn().mockResolvedValue(undefined),
 		};
 
-		// --- Load common.js, then the REAL tiles.js (defines Tiles/Background), then background.js ---
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		vm.runInThisContext(fs.readFileSync(COMMON_PATH, 'utf8'), { filename: 'common.js' });
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		vm.runInThisContext(fs.readFileSync(TILES_PATH, 'utf8'), { filename: 'tiles.js' });
+		// --- Bridge the real lib modules onto globalThis (production does this
+		// via tiles.js + lib/background-main.js), THEN vm-load background.js
+		// (still bridge-mode — reads Tiles/Background/withStore/SAFE_PROTOCOLS
+		// as bare identifiers) ---
+		(globalThis as any).Tiles = RealTiles;
+		(globalThis as any).Background = RealBackground;
+		(globalThis as any).withStore = withStore;
+		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+		(globalThis as any).compareVersions = vi.fn(); // Prefs.history is false below — never actually called.
+
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
 		(globalThis as any).chrome.webNavigation.onCompleted.addListener.mockClear();
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
@@ -267,10 +281,12 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		expect(navCalls.length).toBe(1);
 		onCompletedListener = navCalls[0][0];
 
-		// Leave the very first initDB() open (from the top-level
-		// Promise.all([Prefs.init(), waitForDB()])) UNRESOLVED — this is
-		// exactly the "event page just woke, db still opening" state every
-		// test below starts from.
+		// No eager top-level connection warm-up anymore (M2 drops it — see
+		// background.js's own comment): background.js's top level now only
+		// calls Prefs.init(), nothing touches the DB until the first message
+		// or navigation event. Each test below is therefore responsible for
+		// triggering the open itself by dispatching its message — see
+		// beforeEach's `_resetForTests()`.
 	});
 
 	let sendResponse: ReturnType<typeof vi.fn>;
@@ -285,14 +301,15 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		mockDBInstance._stores.background.length = 0;
 		(globalThis as any).NeverCapture._list = [];
 
-		// Force a fresh "db is still opening" state for this test: if a prior
-		// test resolved the connection, disconnect it (mirrors onclose firing
-		// on event-page respawn) so the next waitForDB() call reopens — and
-		// pushes a NEW controllable entry onto pendingOpens for this test to
-		// drive on command.
-		if ((globalThis as any).db) {
-			(globalThis as any).db.onclose();
-		}
+		// Force a fresh "db is still opening" state for this test: no cached
+		// connection, no in-flight open promise — lib/db.js's public escape
+		// hatch for exactly this (see its own doc comment), replacing the old
+		// `if (db) { db.onclose(); }` dance now that there's no raw `db`
+		// global to poke. The test's own listener()/onCompletedListener() call
+		// below triggers the FIRST `indexedDB.open()` for this test, pushing a
+		// new controllable entry onto `pendingOpens` — exactly the "event
+		// page just woke, connection still opening" race under test.
+		_resetForTests();
 	});
 
 	// =========================================================================
@@ -547,18 +564,24 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 	});
 
 	// =========================================================================
-	// tiles.js §2.2 amplifier, exercised directly: a throwing transaction must
-	// not leave _ready stuck true with an empty _list.
+	// tiles.js §2.2 amplifier (now lib/tiles-store.js), exercised directly: a
+	// failing read must not leave _ready stuck true with an empty _list.
+	//
+	// M2 note: the original version of this test forced a synchronous throw
+	// by nulling `globalThis.db` directly — that whole bug class is what M2
+	// eliminates by construction (there's no raw `db` to null anymore; every
+	// access is readiness-gated through withStore()). The equivalent failure
+	// mode that's STILL representable is the connection failing to open at
+	// all — so this drives that path instead via the controllable
+	// indexedDB.open() mock, and asserts the same postcondition: `_ready`
+	// isn't left stuck true by a call that never reached a successful read.
 	// =========================================================================
 
-	it('Tiles.getAllTiles — a throwing transaction (db undefined) does not leave _ready stuck true (tiles.js §2.2)', async () => {
-		const savedDb = (globalThis as any).db;
-		(globalThis as any).db = undefined;
-		try {
-			await expect(Tiles.getAllTiles()).rejects.toBeDefined();
-			expect(Tiles._ready).toBe(false);
-		} finally {
-			(globalThis as any).db = savedDb;
-		}
+	it('Tiles.getGridTiles — a failed connection open does not leave _ready stuck true (lib/tiles-store.js §2.2)', async () => {
+		const promise = Tiles.getGridTiles();
+		expect(Tiles._ready).toBe(false);
+		latestOpen().reject();
+		await expect(promise).rejects.toBeDefined();
+		expect(Tiles._ready).toBe(false);
 	});
 });

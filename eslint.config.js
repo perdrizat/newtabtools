@@ -185,6 +185,22 @@ export default [
 		rules: projectRules,
 	},
 	{
+		// Bridge-shim files that live outside webextension/lib/ but have
+		// gained real `import` syntax (MODERNIZATION.md Stage M, slice M2 —
+		// tiles.js shrinks to `import {Tiles, Background} from
+		// './lib/tiles-store.js'; globalThis.Tiles = Tiles; …`). Still
+		// side-effect-imported from lib/background-main.js like the other
+		// bridge-mode files, but parsed as a module so ESLint accepts the
+		// import declaration.
+		files: ['webextension/tiles.js'],
+		languageOptions: {
+			ecmaVersion: 2020,
+			sourceType: 'module',
+			globals: webExtGlobals,
+		},
+		rules: projectRules,
+	},
+	{
 		// E2E tests and helpers. These run in Node but often contain
 		// evaluate() blocks that run in the browser, plus Puppeteer's
 		// own browser-like API. nttGlobals covers extension-specific
