@@ -62,13 +62,13 @@ describe('Tile aspect ratio CSS — newTab.css', () => {
 	});
 });
 
-describe('Tile aspect ratio UI — newTab.xhtml', () => {
+describe('Tile aspect ratio UI — newTab.html', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
 

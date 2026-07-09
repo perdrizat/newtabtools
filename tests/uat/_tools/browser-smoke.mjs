@@ -22,7 +22,7 @@ const XPI_DIR = process.env.XPI_DIR || path.resolve(__dirname, '../../../dist');
 const ART_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const ADDON_ID = 'newtabtools@symlink.ch';
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
+const NEWTAB_URL = `moz-extension://${UUID}/newTab.html`;
 const SHOT = `${ART_DIR}/browser-smoke.png`;
 
 function resolveXpi() {

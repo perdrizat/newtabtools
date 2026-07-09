@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Modernization H2: the new-tab page is now HTML5 — `newTab.xhtml` → `newTab.html` (`<!DOCTYPE html>`, charset meta, xmlns dropped, 10 self-closing non-void tags expanded to prevent parser mis-nesting); all path touchpoints renamed (manifest, E2E/UAT tooling, ~16 structural tests); `loads-cleanly` E2E now asserts DOCTYPE + no-quirks-mode.
+
 - Modernization M1: background flipped to a single ES-module entry (`lib/background-main.js`, `type: module`) over a `globalThis` bridge in the six background files; behavior-identical, page scripts unchanged.
 - zip.js re-vendored as the unbundled ESM core tree (`lib/zip/`, 25 files from the same pinned `@zip.js/zip.js`) + `lib/zip-global.js` bridge — the old single-file UMD build doesn't survive module loading; `update-zip` script rewritten accordingly.
 - Modernization M2: IndexedDB behind `lib/db.js` `withStore()` (raw `db` global removed — unguarded access now unrepresentable; `waitForDB` handler wraps collapsed); `Tiles`/`Background` as real ES modules in `lib/tiles-store.js` (`getAllTiles`→`getGridTiles` internal rename, wire name frozen); shared `SAFE_PROTOCOLS` in `lib/constants.js` (restore boundary's copy stays independent); first test batch migrated vm-load→native import.

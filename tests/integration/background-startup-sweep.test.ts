@@ -49,7 +49,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
 const EXTENSION_ID = 'newtabtools@symlink.ch';
-const NEW_TAB_URL = 'moz-extension://test-uuid/newTab.xhtml';
+const NEW_TAB_URL = 'moz-extension://test-uuid/newTab.html';
 
 function webext(relPath: string): string {
 	return path.join(WEBEXT, relPath);

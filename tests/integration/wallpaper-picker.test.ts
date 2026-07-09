@@ -181,16 +181,16 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 });
 
 // ===========================================================================
-// Wallpaper picker UI — newTab.xhtml (wiring)
+// Wallpaper picker UI — newTab.html (wiring)
 // ===========================================================================
 
-describe('Wallpaper picker UI — newTab.xhtml', () => {
+describe('Wallpaper picker UI — newTab.html', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
 

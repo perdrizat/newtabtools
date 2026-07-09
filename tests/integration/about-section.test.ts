@@ -23,13 +23,13 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-describe('About section — newTab.xhtml + version render', () => {
+describe('About section — newTab.html + version render', () => {
 	let xhtml: string;
 	let js: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural assertions on shipped markup
-		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8');
+		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- regex on version-render code path
 		js = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.js'), 'utf8');
 	});

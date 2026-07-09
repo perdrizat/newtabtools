@@ -35,11 +35,17 @@ were already Stage H.
 **Stage M complete 2026-07-09.** Background is fully modular: `lib/{db,tiles-store,
 constants,capture,thumbnail-image,backup,platform,messages,background-main}.js`;
 `background.js`, `tiles.js` (shim), `export.js` all deleted; `globalThis` surface
-= the 5 dual-scope symbols; backup/zip lazy-loads on demand. Version stays 2.1.0
-(same-day rule) — release/bump decision at arc end. Branch `modernization-m` is
-merge-ready; Stage H continues on `modernization-h`.
+= the 5 dual-scope symbols; backup/zip lazy-loads on demand.
+
+**Release shape (maintainer, 2026-07-09):** `modernization-m` was MERGED to main
+and released as **2.2.0**. Stage H (this branch) ships as the next release =
+**major bump to 3.0.0** with all remaining updates. H-gate consequences:
+`pnpm version major` at close-out; CHANGELOG must be reconciled with main's
+2.2.0 promotion when merging (our `[Unreleased]` still holds the M entries —
+they belong under main's `## [2.2.0]` heading; H entries go under
+`## [3.0.0]`).
 | H1 — case-trap prefix fixes (XHTML-safe) | ✓ done (fast 1253, E2E 126; 1 real bug fixed — autocomplete `nodeName != 'li'` walk; bonus: inert uppercase tag filter in i18n-render E2E fixed) | — |
-| H2 — markup conversion + rename + touchpoints | pending | — |
+| H2 — markup conversion + rename + touchpoints | ✓ done (fast 1257, E2E 126 on the HTML5 page; 10 tags expanded, mis-nesting regression test proven non-tautological; full UAT gate next) | — |
 | H3 — `createElementNS` collapse | pending | — |
 | H4 — tooling/i18n/UAT constants sweep | pending | — |
 | H gate — full E2E + full UAT + audit | pending | — |

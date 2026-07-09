@@ -141,13 +141,14 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 	}, 30_000);
 
 	// --- Regressions caught manually during Phase 3-1 review.
-	//     These exercise the real XHTML / CSS / Firefox runtime, which is
+	//     These exercise the real page / CSS / Firefox runtime, which is
 	//     where the earlier integration suite (jsdom + HTML semantics)
 	//     gave false-green results. ---
 
 	it('regression: dispatching an `input` event on the spacing slider updates --ntt-gap in realtime', async () => {
-		// jsdom returned tagName === "INPUT" but XHTML returns "input", so
-		// the original handler silently no-op'd in the real extension.
+		// jsdom returned tagName === "INPUT" but the (then-XHTML) production
+		// page returned "input", so the original handler silently no-op'd
+		// in the real extension.
 		// Also: `<input type="range">` fires `change` only on release; the
 		// drawer must listen for `input` for realtime drag feedback.
 		await page.evaluate(() => {

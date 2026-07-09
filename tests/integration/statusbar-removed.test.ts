@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 const LOCALE_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');

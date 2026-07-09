@@ -23,7 +23,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?(?:get\\s+)?${methodName}[\\(\\s]`, 'm');

@@ -258,7 +258,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 
 	it('skips tabs with moz-extension:// URLs (filters out own new-tab page)', () => {
 		const items = [
-			{ tab: { url: 'moz-extension://abc-123/newTab.xhtml', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'moz-extension://abc-123/newTab.html', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));

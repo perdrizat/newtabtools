@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 // Return the body of the FIRST CSS rule whose selector list ends with `selector`
 // immediately before the opening brace. Anchored on `selector\s*{` so

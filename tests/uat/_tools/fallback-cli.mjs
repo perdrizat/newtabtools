@@ -32,7 +32,7 @@ const ART_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifac
 const DAEMON_FILE = `${ART_DIR}/uat-cli-daemon.json`;
 const ADDON_ID = 'newtabtools@symlink.ch';
 const UUID = 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = `moz-extension://${UUID}/newTab.xhtml`;
+const NEWTAB_URL = `moz-extension://${UUID}/newTab.html`;
 
 function newestXpi() {
 	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }

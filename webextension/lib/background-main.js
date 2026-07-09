@@ -21,7 +21,7 @@
  *
  * `common.js` and `prefs.js` stay dual-scope bridge files PERMANENTLY
  * (MODERNIZATION.md Decision 2: real `export` syntax would break their
- * classic-`<script>` page load in newTab.xhtml). They are still
+ * classic-`<script>` page load in newTab.html). They are still
  * side-effect-imported here so their top-level `globalThis.X = …`
  * assignments run before anything below needs `Prefs`/`Blocked`/`Filters`/
  * `NeverCapture`/`compareVersions` — reached, from this file and every other
@@ -66,7 +66,7 @@ import {
 	createMenuTolerant,
 } from './platform.js';
 
-const NEW_TAB_URL = chrome.runtime.getURL('newTab.xhtml');
+const NEW_TAB_URL = chrome.runtime.getURL('newTab.html');
 
 // ---------------------------------------------------------------------------
 // Message dispatch

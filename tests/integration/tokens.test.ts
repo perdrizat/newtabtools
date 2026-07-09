@@ -113,13 +113,13 @@ describe('Design tokens — tokens.css', () => {
 		});
 	});
 
-	describe('newTab.xhtml links tokens.css', () => {
+	describe('newTab.html links tokens.css', () => {
 		let xhtml: string;
 
 		beforeAll(() => {
 			// eslint-disable-next-line ntt/no-source-grep -- wiring check: stylesheet link
 			xhtml = fs.readFileSync(
-				path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+				path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 			);
 		});
 

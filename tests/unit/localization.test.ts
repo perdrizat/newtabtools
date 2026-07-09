@@ -58,11 +58,11 @@ function collectJSKeys(): Set<string> {
 	return keys;
 }
 
-/** Extract all message keys referenced in XHTML/HTML via data-message, data-placeholder, data-title, data-label. */
+/** Extract all message keys referenced in HTML via data-message, data-placeholder, data-title, data-label. */
 function collectMarkupKeys(): Set<string> {
 	const keys = new Set<string>();
 	const markupFiles = fs.readdirSync(WEBEXT_DIR)
-		.filter(f => f.endsWith('.xhtml') || f.endsWith('.html'))
+		.filter(f => f.endsWith('.html'))
 		.map(f => path.join(WEBEXT_DIR, f));
 
 	for (const file of markupFiles) {

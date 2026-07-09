@@ -58,7 +58,7 @@ describe('Reset confirm gate — optionsOnClick (§7 inline Confirm/Cancel)', ()
 	});
 
 	beforeEach(() => {
-		// The Advanced-tab reset group, as in newTab.xhtml: trigger button +
+		// The Advanced-tab reset group, as in newTab.html: trigger button +
 		// the initially-hidden inline confirm row.
 		document.body.innerHTML = `
 			<div id="options-reset-group">

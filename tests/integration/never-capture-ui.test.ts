@@ -16,7 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');

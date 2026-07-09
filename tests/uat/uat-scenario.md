@@ -27,7 +27,7 @@ The browser daemon has already launched Firefox, seeded its history (so the defa
 
 Most scenarios start from this default state. Unless the scenario directs otherwise:
 
-1. `mcp__ntt-uat__browser_navigate` to the extension's `newTab.xhtml` (a stable starting frame).
+1. `mcp__ntt-uat__browser_navigate` to the extension's `newTab.html` (a stable starting frame).
 2. **Capture the starting state:** `browser_take_screenshot` named `00-initial`, before you touch anything.
 
 Then walk the scenario's own Verify / Visual sections.
@@ -36,7 +36,7 @@ Then walk the scenario's own Verify / Visual sections.
 
 Some scenarios restore the known-good fixture via the UI. When directed:
 
-1. `browser_navigate` to `newTab.xhtml`; `browser_take_screenshot` named `00-initial`.
+1. `browser_navigate` to `newTab.html`; `browser_take_screenshot` named `00-initial`.
 2. Click `#options-toggle` (open drawer), then `[data-drawer-tab="advanced"]`.
 3. `mcp__ntt-uat__browser_file_upload` the fixture into `#options-restore-file`. The fixture's absolute path is in the runner prologue ("Fixture zip (absolute path)") — use it verbatim.
 4. Click `#options-restore`, then click `#options-restore-confirm` in the inline confirmation row that appears. (Restore overwrites the whole setup, so §7 gates it behind an inline Confirm/Cancel row — clicking Restore only *reveals* the prompt; the restore runs on Confirm.)
@@ -55,7 +55,7 @@ If any restore step fails (selector missing, file input rejects the zip, count n
 These are intended designs (DESIGNv2_REVIEW), not bugs:
 
 - **Opening the drawer IS Edit mode (§2).** Whenever the drawer is open, the board behind it is in edit mode: pinned tiles show a dashed copper outline + a centred drag handle + a persistent top-right action row; auto (non-pinned) tiles fade and show a centred "+ Add tile"; the titlebar button reads `Done`. This is correct — don't report it as unexpected clutter or occlusion.
-- **Reach the page by its `moz-extension://<uuid>/newTab.xhtml` URL** (the runner prologue / preamble give it). `about:newtab` returns an empty non-extension document in this harness — that is not a defect.
+- **Reach the page by its `moz-extension://<uuid>/newTab.html` URL** (the runner prologue / preamble give it). `about:newtab` returns an empty non-extension document in this harness — that is not a defect.
 - **Key selectors:** the drawer is `#ntt-drawer`; the single titlebar action button is `#options-toggle` (reads `Edit`, or `Done` while open); there is no wordmark, padlock, or cogwheel (Board A §1).
 - **Recently-closed chips render the letter-block fallback favicon** in the seeded environment (closed-tab session data carries no favicon). §4 permits the fallback at the same size/radius — don't flag the absence of real favicons.
 - **Disabled-looking Restore button** when no backup file is selected is the expected resting state.

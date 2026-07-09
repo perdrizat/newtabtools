@@ -134,12 +134,12 @@ describe('_layoutTitlebar — measures the card container and sets the slot widt
 	});
 });
 
-describe('Titlebar — Board A chrome (newTab.xhtml)', () => {
+describe('Titlebar — Board A chrome (newTab.html)', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: titlebar structure
-		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8');
+		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
 	});
 
 	it('drops the wordmark, masthead, and lock/cogwheel button cluster (§1)', () => {

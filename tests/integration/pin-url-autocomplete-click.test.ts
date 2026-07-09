@@ -7,15 +7,16 @@
  * 2026-07-09-mv3-inventory.md §2.1): the pin-URL autocomplete dropdown's
  * window-level click handler in `newTab.js` walks up from `event.target` to
  * the containing `<li>` via `while (target.nodeName != 'li')`. Under XHTML
- * (today's parser) `nodeName` is lowercase so this works; under an HTML
- * parser (Stage H2) `nodeName` is uppercase (`'LI'`), the loop never matches,
- * and it walks past the `<li>` to `document` and then throws on
- * `null.parentNode`.
+ * (the pre-Stage-H2 parser) `nodeName` was lowercase so this worked; under
+ * the HTML parser (`newTab.html`, landed in Stage H2) `nodeName` is
+ * uppercase (`'LI'`), so an unfixed loop would never match, walk past the
+ * `<li>` to `document`, and throw on `null.parentNode`.
  *
  * jsdom (the fast-tier environment) already parses as HTML by default
  * (audit §3.2), so real DOM elements created here naturally have uppercase
- * `nodeName` — no simulation needed; this is what makes the test genuinely
- * red against the unfixed source.
+ * `nodeName` — no simulation needed; this is what made the test genuinely
+ * red against the unfixed source, and it now also matches the real
+ * production parser post-H2.
  *
  * Extracts the actual click-handler function literally from `newTab.js` (not
  * a reimplementation) so the test tracks the real code path.
@@ -93,8 +94,9 @@ describe('pin-URL autocomplete window click handler — nodeName case-safety (St
 		};
 
 		// Confirm the jsdom fixture actually reproduces the HTML-parser case
-		// (uppercase nodeName) that the XHTML production page does not hit
-		// today — otherwise this test would pass for the wrong reason.
+		// (uppercase nodeName), which is also what the real production page
+		// (`newTab.html`, post-H2) hits — otherwise this test would pass for
+		// the wrong reason.
 		expect(li.nodeName).toBe('LI');
 	});
 

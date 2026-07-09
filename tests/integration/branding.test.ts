@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 
 const AMO_URL = 'https://addons.mozilla.org/firefox/addon/newtab-powertools/';

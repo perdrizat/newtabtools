@@ -17,7 +17,7 @@
 		}
 	},
 	"chrome_url_overrides": {
-		"newtab": "newTab.xhtml"
+		"newtab": "newTab.html"
 	},
 	"background": {
 		"scripts": [

@@ -39,7 +39,7 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 		expect(consoleErrors).toEqual([]);
 	});
 
-	it('renders the XHTML page (not a blank page or XML parse error)', async () => {
+	it('renders the HTML5 page (not a blank page or parse error)', async () => {
 		const bodyLength = await page.evaluate(
 			() => document.body?.innerHTML?.length ?? 0
 		);
@@ -49,6 +49,18 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 			() => document.getElementById('newtab-scrollbox') !== null
 		);
 		expect(hasScrollbox).toBe(true);
+
+		// HTML5-parse regression guard (MODERNIZATION.md Stage H, slice H2):
+		// newTab.html has a `<!DOCTYPE html>` and is served/parsed as HTML,
+		// not XML. A parse failure serving a broken/blank document, or a
+		// silent fallback to quirks mode, would fail these.
+		const doctypeName = await page.evaluate(
+			() => document.doctype?.name ?? null
+		);
+		expect(doctypeName).toBe('html');
+
+		const compatMode = await page.evaluate(() => document.compatMode);
+		expect(compatMode).toBe('CSS1Compat');
 	});
 
 	it('renders the tile grid with cells', async () => {

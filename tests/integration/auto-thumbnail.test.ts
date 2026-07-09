@@ -145,13 +145,13 @@ describe('Wiring checks — action.js (source scan)', () => {
 	});
 });
 
-describe('Remove-thumbnail button — newTab.xhtml (source scan)', () => {
+describe('Remove-thumbnail button — newTab.html (source scan)', () => {
 	let xhtml: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
 		xhtml = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
 

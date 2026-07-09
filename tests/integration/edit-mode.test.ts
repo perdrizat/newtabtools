@@ -24,7 +24,7 @@ import { mountSite } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 
 describe('edit mode — CSS affordances (§2)', () => {

@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
 describe('Advanced tab — no native controls (§5/B1)', () => {
