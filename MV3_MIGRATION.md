@@ -19,7 +19,11 @@ this file; the corrected directives below are decisions of record.
 | Final gate — full test/UAT/audit/build | ✓ done — all gates green, v2.1.0 | see tag `v2.1.0` |
 | Post-flip retest on ESR 140 | backlog (once next ESR ships / on demand) | — |
 
-**Migration complete 2026-07-09.** Released as v2.1.0 (Firefox ≥152, MV3).
+| Pre-release fixes (mv3-code-review §2.1/§2.2 + queue) | ~ adjudicated, code deferred until review round closes | — |
+
+**Migration complete 2026-07-09.** Tagged v2.1.0 (Firefox ≥152, MV3). **Do not
+push/submit until the "Pre-release fixes" section above is executed** — §2.1/§2.2
+(unguarded `db` on event-page wake) is confirmed user-visible.
 
 ## Strategic decisions (updated 2026-07-09)
 
@@ -253,6 +257,50 @@ UAT: full suite after Slice D.
       tests/e2e/README.md, README.md, ROADMAP.md (3 new decisions of record),
       docs/amo-submission-notes.md (MV3 + host-permission revocability for
       reviewers). PRIVACY.md needed no change.
+
+## Pre-release fixes (from audit/2026-07-09-mv3-code-review.md — REQUIRED before push/AMO)
+
+Adjudicated 2026-07-09 (verified against source; orchestrator review widened §2.1).
+Code changes deferred until the maintainer's review round closes; then fix in this
+order, TDD, E2E-gated:
+
+1. **§2.1+§2.2 CONFIRMED (widened): unguarded `db` access on event-page wake.**
+   Unguarded message handlers: `Tiles.isPinned` (:120), `Tiles.getTile`/`putTile`/
+   `removeTile` (:135-141 — missed by the report), `Thumbnails.save` (:173),
+   `Thumbnails.get` (:185), `getFavicons` (:211), `getFaviconsByHost` (:235); plus
+   the `webNavigation.onCompleted` capture path's `Tiles.ensureReady()` (also
+   missed — worst case: sticky-disables auto-capture for a whole respawn).
+   Amplifier: `tiles.js:53` sets `_ready = true` before the throwing transaction →
+   sticky empty state. Fix: `waitForDB()` wrap on every handler that reaches `db`
+   (match the guarded siblings) + move `_ready = true` into `op.onsuccess`.
+   Regression test: integration-tier with an on-command-resolving `indexedDB.open`
+   mock, dispatching each message BEFORE the open resolves (E2E can't reach the
+   popup and passes this race by timing luck).
+2. **§2.4 PLAUSIBLE-accepted:** `pickAndStore` re-guards `db` via `waitForDB()`
+   after its awaits + `.catch` (connection can drop mid-chain via `onclose`).
+3. **§2.3 accepted (was documented-benign at Slice B):** serialize
+   `pendingCaptures` mutations behind a single helper (`addPending`/`takePending`/
+   `removePending`, one in-flight write promise) — same change lands the §4.1
+   dedup of the three open-coded RMW blocks.
+4. **§4.1 partial:** extract `broadcastToPages(name)` into `common.js` (dedups
+   `background.js` pinTile + `export.js` notifyRestoreComplete). Unify the
+   `['http:','https:','ftp:']` constant across background/tiles/action-sweep —
+   but **keep `export.js`'s `safeProtocols` copy independent**: the restore
+   allow-list is a declared security boundary (CONTRIBUTING) and must not be
+   silently widened by a capture-eligibility change. §4.3 accepted low: queue
+   early `Page.*` broadcasts in `pageMessageHandler` and flush once fx-newTab.js
+   globals exist.
+5. **§3.1 accepted-opportunistic:** action sweep → `onInstalled`/`onStartup` seed
+   + `onCompleted` maintenance (per-tab action state persists outside the event
+   page). Batch with item 3 if touching that area.
+6. **§3.2 DECLINED (decision of record):** in-memory mirror of `pendingCaptures`
+   for `onActivated` — self-defeating (`onActivated` is the wake event, so the
+   mirror is never hydrated when it matters; awaiting hydration IS the storage
+   read; not awaiting reintroduces the exact lost-state bug the storage move
+   fixed). The avoided read is a sub-ms in-memory parent-process lookup.
+
+Also fold in here when executing: the object-URL revocation fix from the first
+review round (queued below).
 
 ## Post-MV3 backlog (explicitly deferred)
 
