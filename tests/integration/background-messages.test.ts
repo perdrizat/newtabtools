@@ -204,10 +204,6 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		(globalThis as any).chrome.management = {
 			getSelf: vi.fn((cb: Function) => cb({ version: '1.0.0' })),
 		};
-		if (!(globalThis as any).chrome.extension) {
-			(globalThis as any).chrome.extension = {};
-		}
-		(globalThis as any).chrome.extension.getViews = vi.fn(() => []);
 		(globalThis as any).browser.menus = {
 			create: vi.fn(),
 			update: vi.fn(),
@@ -353,7 +349,9 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			});
 		});
 
-		it('Tiles.pinTile — sends the new tile id and queries views', async () => {
+		it('Tiles.pinTile — sends the new tile id and broadcasts Page.updateGrid', async () => {
+			// Slice A (MV3_MIGRATION.md): the getViews() loop is gone; open
+			// new-tab pages are told to re-render via a runtime broadcast.
 			(mockTiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(99);
 			const result = listener(
 				{ name: 'Tiles.pinTile', title: 'My Page', url: 'https://e.com' },
@@ -362,22 +360,22 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			expect(result).toBe(true);
 			await vi.waitFor(() => {
 				expect(sendResponse).toHaveBeenCalledWith(99);
-				expect((globalThis as any).chrome.extension.getViews).toHaveBeenCalled();
+				expect((globalThis as any).browser.runtime.sendMessage)
+					.toHaveBeenCalledWith({ name: 'Page.updateGrid' });
 			});
 		});
 
-		it('Tiles.pinTile — calls Updater.updateGrid on open new-tab views', async () => {
-			const mockUpdater = { updateGrid: vi.fn() };
-			const mockView = { location: { pathname: '/newTab.xhtml' }, Updater: mockUpdater };
-			(globalThis as any).chrome.extension.getViews.mockReturnValueOnce([mockView]);
+		it('Tiles.pinTile — still responds when no page is open (broadcast rejects)', async () => {
+			// With no new-tab page open, runtime.sendMessage rejects with
+			// "Receiving end does not exist" — the handler must swallow that
+			// and still deliver the pinTile response.
+			((globalThis as any).browser.runtime.sendMessage as ReturnType<typeof vi.fn>)
+				.mockImplementationOnce(() => Promise.reject(new Error('Receiving end does not exist')));
 			(mockTiles.pinTile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(100);
 
 			listener({ name: 'Tiles.pinTile', title: 'X', url: 'https://x.com' }, validSender, sendResponse);
 
-			await vi.waitFor(() => {
-				expect(mockUpdater.updateGrid).toHaveBeenCalled();
-				expect(sendResponse).toHaveBeenCalledWith(100);
-			});
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(100));
 		});
 	});
 

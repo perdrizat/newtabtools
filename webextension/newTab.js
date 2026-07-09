@@ -2135,6 +2135,47 @@ var newTabTools = {
 	}
 };
 
+/**
+ * Page-side broadcast listener — the page's first and only runtime.onMessage
+ * listener (Slice A of the MV3 migration: replaces the background's
+ * extension.getViews() access to page globals, see MV3_MIGRATION.md).
+ *
+ * runtime.sendMessage fans out to every extension context, so this listener
+ * also receives page→background messages (Tiles.*, Thumbnails.*, …). It must
+ * act only on the broadcast Page.* names below and return a falsy value for
+ * everything else — returning true or calling sendResponse here would hijack
+ * response routing that belongs to the background dispatcher (background.js).
+ *
+ * @param {{name?: string}} message
+ * @returns {boolean} always false — never claims the sendResponse channel
+ */
+function pageMessageHandler(message) {
+	switch (message && message.name) {
+	case 'Page.updateGrid':
+		// `Updater` is defined by fx-newTab.js, which loads after this file —
+		// guard so an early message can't throw.
+		if (typeof Updater !== 'undefined') {
+			Updater.updateGrid();
+		}
+		break;
+	case 'Page.restoreComplete':
+		// A restore just rewrote prefs/tiles/background (export.js readZip).
+		// Refresh the wallpaper, then rebuild the grid from scratch —
+		// `Updater.updateGrid` reuses existing Site instances whose in-memory
+		// `_link` still points at pre-restore data, so only `Grid.refresh()`
+		// picks up the newly-restored links — and finally pull thumbnails for
+		// the rebuilt tiles (`Grid.refresh()` doesn't read the Thumbnails IDB
+		// store on its own). `Grid` is defined by fx-newTab.js (loads later).
+		if (typeof Grid !== 'undefined') {
+			newTabTools.refreshBackgroundImage();
+			Grid.refresh().then(() => newTabTools.getThumbnails());
+		}
+		break;
+	}
+	return false;
+}
+browser.runtime.onMessage.addListener(pageMessageHandler);
+
 (function() {
 	newTabTools.updateThemeColours = newTabTools.updateThemeColours.bind(newTabTools);
 	let uiElements = {

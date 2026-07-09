@@ -291,10 +291,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		(globalThis as any).chrome.management = {
 			getSelf: vi.fn((cb: Function) => cb({ version: '1.0.0' })),
 		};
-		if (!(globalThis as any).chrome.extension) {
-			(globalThis as any).chrome.extension = {};
-		}
-		(globalThis as any).chrome.extension.getViews = vi.fn(() => []);
 		(globalThis as any).browser.menus = {
 			create: vi.fn(),
 			update: vi.fn(),

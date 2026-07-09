@@ -42,9 +42,20 @@ async function makeZip() {
 	});
 }
 
-async function readZip(file) {
-	let views = chrome.extension.getViews().filter(v => v.location.pathname == '/newTab.xhtml');
+/**
+ * Tell every open new-tab page that a restore has finished rewriting the
+ * stored data. Each page refreshes itself — wallpaper, full grid rebuild,
+ * thumbnails — on this message (see pageMessageHandler in newTab.js). This
+ * replaces the MV2-only extension.getViews() access to page globals
+ * (Slice A of the MV3 migration). When no page is open the broadcast rejects
+ * with "Receiving end does not exist" — swallowed.
+ * @returns {Promise<void>}
+ */
+function notifyRestoreComplete() {
+	return browser.runtime.sendMessage({name: 'Page.restoreComplete'}).catch(() => {});
+}
 
+async function readZip(file) {
 	let reader = new zip.ZipReader(new zip.BlobReader(file));
 	let entries = await reader.getEntries();
 
@@ -78,10 +89,9 @@ async function readZip(file) {
 
 	let backgroundFile = entries.find(e => e.filename == 'background');
 	if (backgroundFile) {
-		Background.setBackground(await getAsBlob(backgroundFile));
-		for (let v of views) {
-			await v.newTabTools.refreshBackgroundImage();
-		}
+		// Awaited so the Page.restoreComplete broadcast (below) only goes out
+		// once the wallpaper is actually written.
+		await Background.setBackground(await getAsBlob(backgroundFile));
 	}
 
 	if (prefs) {
@@ -149,6 +159,8 @@ async function readZip(file) {
 		for (let host of restoredNeverCaptureHosts) {
 			await purgeNeverCaptureHost(host);
 		}
+		// Everything the backup carried is written — pages refresh themselves.
+		await notifyRestoreComplete();
 		return;
 	}
 
@@ -189,18 +201,7 @@ async function readZip(file) {
 		await purgeNeverCaptureHost(host);
 	}
 
-	for (let v of views) {
-		// Full grid rebuild — `Updater.updateGrid` reuses existing Site
-		// instances when their URL still matches, which after a restore
-		// means the in-memory `_link` reference points to the pre-restore
-		// data. The custom thumbnails (and any other link metadata) only
-		// show up after a manual page reload. `Grid.refresh()` strips the
-		// DOM children and re-renders from scratch, which forces every
-		// site to pick up its newly-restored link.
-		await v.Grid.refresh();
-		// `Grid.refresh()` doesn't pull screenshots from the Thumbnails
-		// IDB store on its own — kick that off so auto-captured tile
-		// images appear immediately.
-		v.newTabTools.getThumbnails();
-	}
+	// The restore data is fully written — pages refresh themselves (wallpaper,
+	// full grid rebuild, thumbnails) on this broadcast.
+	await notifyRestoreComplete();
 }

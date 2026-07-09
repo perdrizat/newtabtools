@@ -9,7 +9,7 @@
  * Loads the real `export.js` via `vm.runInThisContext` with mocked browser
  * APIs and a fake zip transport layer. Characterizes:
  *   - makeZip: what gets included, pref-key filtering, tile-image extraction
- *   - readZip: benign round-trip, view refresh, tile rehydration
+ *   - readZip: benign round-trip, restore-complete broadcast, tile rehydration
  *   - readZip with malicious inputs: javascript: URLs in tiles (§2.1),
  *     unexpected pref keys (§2.5), HTML in tile titles
  *   - readZip edge cases: missing entries, empty zip
@@ -118,12 +118,6 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		};
 		(globalThis as any).chrome.downloads = mockDownloads;
 
-		// --- Mock chrome.extension.getViews ---
-		if (!(globalThis as any).chrome.extension) {
-			(globalThis as any).chrome.extension = {};
-		}
-		(globalThis as any).chrome.extension.getViews = vi.fn(() => []);
-
 		// --- URL.createObjectURL ---
 		if (typeof URL.createObjectURL !== 'function') {
 			URL.createObjectURL = vi.fn(() => 'blob:mock-url');
@@ -174,6 +168,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		mockStorageLocal.set.mockClear();
 		mockDownloads.download.mockClear();
 		mockPurgeNeverCaptureHost.mockClear();
+		((globalThis as any).browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockClear();
 	});
 
 	// ======================== makeZip ========================
@@ -633,6 +628,77 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
 			expect(storedPrefs).not.toHaveProperty('neverCaptureHosts');
 			expect(mockPurgeNeverCaptureHost).not.toHaveBeenCalled();
+		});
+	});
+
+	// ======================== readZip — Page.restoreComplete broadcast ========================
+
+	describe('readZip — Page.restoreComplete broadcast (Slice A)', () => {
+		// Slice A (MV3_MIGRATION.md): readZip no longer reaches into page
+		// globals via chrome.extension.getViews(); it broadcasts
+		// 'Page.restoreComplete' once the restore data is fully written and
+		// every open new-tab page refreshes itself.
+		function sendMessageMock(): ReturnType<typeof vi.fn> {
+			return (globalThis as any).browser.runtime.sendMessage;
+		}
+
+		it('broadcasts Page.restoreComplete exactly once after a full restore', async () => {
+			const tiles = [{ id: 1, url: 'https://a.com', title: 'A', position: 0 }];
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'dark' })),
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+			]);
+
+			await readZip(new Blob());
+
+			const broadcasts = sendMessageMock().mock.calls.filter(
+				(c: unknown[]) => (c[0] as { name?: string })?.name === 'Page.restoreComplete');
+			expect(broadcasts).toHaveLength(1);
+		});
+
+		it('broadcasts only after prefs and tiles have been written', async () => {
+			const tiles = [{ id: 1, url: 'https://a.com', title: 'A', position: 0 }];
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'dark' })),
+				mockZipEntry('tiles.json', JSON.stringify(tiles)),
+			]);
+
+			await readZip(new Blob());
+
+			const broadcastOrder = sendMessageMock().mock.invocationCallOrder[0];
+			expect(broadcastOrder).toBeGreaterThan(mockStorageLocal.set.mock.invocationCallOrder[0]);
+			expect(broadcastOrder).toBeGreaterThan(
+				(mockTiles.putTile as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
+		});
+
+		it('broadcasts on the prefs-only path too, after the never-capture purge', async () => {
+			// A prefs-only backup returns early (no tiles.json) — the pages
+			// still need the broadcast (e.g. a restored wallpaper).
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ neverCaptureHosts: ['example.com'] })),
+			]);
+
+			await readZip(new Blob());
+
+			expect(sendMessageMock()).toHaveBeenCalledWith({ name: 'Page.restoreComplete' });
+			expect(sendMessageMock().mock.invocationCallOrder[0])
+				.toBeGreaterThan(mockPurgeNeverCaptureHost.mock.invocationCallOrder[0]);
+		});
+
+		it('swallows the rejection when no new-tab page is open', async () => {
+			sendMessageMock().mockImplementationOnce(
+				() => Promise.reject(new Error('Receiving end does not exist')));
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'light' })),
+			]);
+
+			await expect(readZip(new Blob())).resolves.toBeUndefined();
+		});
+
+		it('does not broadcast from makeZip (export touches no page state)', async () => {
+			await makeZip();
+
+			expect(sendMessageMock()).not.toHaveBeenCalledWith({ name: 'Page.restoreComplete' });
 		});
 	});
 

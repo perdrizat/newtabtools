@@ -5,6 +5,19 @@ This document is the living checklist for the migration and the durable state ac
 context windows. Update it as each slice lands. It supersedes the previous version of
 this file; the corrected directives below are decisions of record.
 
+## Status board (live)
+
+| Step | Status | Commit |
+|---|---|---|
+| Phase 0 — spike + bisect | ✓ done | `653042a`, `dd02699` |
+| Decisions: min_version 152.0, E2E on release FF | ✓ approved by maintainer | — |
+| Slice A — getViews → messaging | ~ in progress (agent implementing) | — |
+| Slice B — event-page resilience | pending | — |
+| Slice C — async normalization | pending | — |
+| Slice D — the MV3 flip | pending | — |
+| Final gate — full test/UAT/audit/build | pending | — |
+| Post-flip retest on ESR 140 | backlog | — |
+
 ## Strategic decisions (updated 2026-07-09)
 
 1. **Firefox-only MV3.** Chrome stays deferred (ROADMAP stage 3). Firefox MV3 uses
@@ -133,18 +146,23 @@ Harness invocations that worked (bake into Slice D):
 Gates per slice: red/green fast tests, `pnpm lint`, `pnpm typecheck`, `pnpm test:e2e`.
 UAT: full suite after Slice D.
 
-### Slice A — kill `extension.getViews()` (MV2-safe)
-- [ ] Page-side `runtime.onMessage` listener in `newTab.js` handling
-      `Page.updateGrid` (→ `Updater.updateGrid()`) and `Page.restoreComplete`
-      (→ `newTabTools.refreshBackgroundImage()`, `Grid.refresh()`,
-      `newTabTools.getThumbnails()`).
-- [ ] `background.js` `Tiles.pinTile` handler: replace getViews loop with broadcast.
-- [ ] `export.js` `readZip`: replace views access with broadcast; keep the message
-      response to the initiating page as the completion signal.
-- [ ] Removes 2 of the 4 hardcoded `/newTab.xhtml` pathname checks.
-- [ ] Tests: integration coverage for the new listener + broadcasts
-      (`background-messages.test.ts`, `backup-restore.test.ts` mocks currently fake
-      `getViews` views — rework them onto the message pattern).
+### Slice A — kill `extension.getViews()` (MV2-safe) — ✓ DONE
+- [x] Page-side `runtime.onMessage` listener in `newTab.js` (`pageMessageHandler`):
+      `Page.updateGrid` → `Updater.updateGrid()`; `Page.restoreComplete` →
+      `refreshBackgroundImage()` + `Grid.refresh()` + `getThumbnails()`. Always
+      returns false (never claims sendResponse routing); typeof-guards the
+      fx-newTab.js globals.
+- [x] `background.js` `Tiles.pinTile`: broadcast `Page.updateGrid`, rejection swallowed.
+- [x] `export.js` `readZip`: `notifyRestoreComplete()` broadcast at both exit
+      points; `Background.setBackground` now awaited first. Note: the prefs-only
+      restore path now also triggers a page refresh (previously it didn't — accepted
+      improvement).
+- [x] Both hardcoded `/newTab.xhtml` pathname checks removed; `grep chrome.extension`
+      in webextension/ is empty.
+- [x] Tests: new `page-messages.test.ts` (7); pinTile + restore broadcast coverage
+      reworked in `background-messages.test.ts` / `backup-restore.test.ts`; deleted
+      source-grep `backup-restore-refresh.test.ts` (regression now behavioral).
+- [x] Gates: fast 1139 ✓, lint ✓, typecheck ✓, E2E 124 ✓.
 
 ### Slice B — event-page resilience (MV2-safe)
 - [ ] `menus.create` → `runtime.onInstalled` + duplicate-tolerant create.

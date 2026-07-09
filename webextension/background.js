@@ -140,11 +140,11 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return true;
 	case 'Tiles.pinTile':
 		Tiles.pinTile(message.title, message.url).then(function(id) {
-			for (let view of chrome.extension.getViews()) {
-				if (view.location.pathname == '/newTab.xhtml') {
-					view.Updater.updateGrid();
-				}
-			}
+			// Broadcast so any open new-tab pages re-render the grid (Slice A
+			// of the MV3 migration — replaces the extension.getViews()
+			// loop; see pageMessageHandler in newTab.js). When no page is open
+			// the promise rejects with "Receiving end does not exist" — swallow.
+			browser.runtime.sendMessage({name: 'Page.updateGrid'}).catch(() => {});
 			sendResponse(id);
 		}, console.error);
 		return true;
