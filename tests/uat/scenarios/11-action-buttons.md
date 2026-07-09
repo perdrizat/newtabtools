@@ -114,8 +114,10 @@ and remove (no refresh button). Verify the never-capture toggle:
   title is still fully readable at the bottom, and the buttons are a small overlay
   rather than a full-tile cover. **The X reads as a solid alarm-red button with a
   white icon — clearly distinct from the copper accent — standing out from the
-  neutral edit/never-capture/pin trio (which sit on a small dark scrim); the X stays
-  legible whatever the thumbnail behind it. The never-capture button shows a
+  neutral edit/never-capture/pin trio (each its own small light, frosted-glass
+  pill — translucent white with a hairline ring + soft drop shadow, no shared
+  bar behind them); the X stays legible whatever the thumbnail behind it. The
+  never-capture button shows a
   camera-with-off-slash icon at rest (host not listed) and a plain camera icon when
   active (host listed).** Pass = action row visible, title legible, no large-area
   occlusion, and the X is the obvious destructive control.

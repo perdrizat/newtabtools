@@ -19,6 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
+const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 
 // ---------------------------------------------------------------------------
 // Markup assertions (static — no runtime needed)
@@ -96,6 +97,25 @@ describe('Never-capture UI — i18n keys', () => {
 	it('nevercapture_remove exists', () => {
 		expect(messages.nevercapture_remove).toBeTruthy();
 		expect(messages.nevercapture_remove.message).toBeTruthy();
+	});
+});
+
+// ---------------------------------------------------------------------------
+// CSS assertions (static — no runtime needed)
+// ---------------------------------------------------------------------------
+
+describe('Never-capture UI — CSS (newTab.css)', () => {
+	let css: string;
+	// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
+	beforeAll(() => { css = fs.readFileSync(CSS_PATH, 'utf8'); });
+
+	it('#options-nevercapture-host grows to fill the row (UAT scenario 22 — placeholder clipped at the input edge)', () => {
+		// The row's Add button previously left the input at its intrinsic
+		// (UA default) width, too narrow for the placeholder string. It now
+		// shares the flex-grow treatment already used by the other row inputs
+		// (#options-pinURL-input etc.) so it fills the available row width
+		// without changing the row's left-aligned layout.
+		expect(css).toMatch(/#options-nevercapture-host[^{]*\{[^}]*flex:\s*1/);
 	});
 });
 

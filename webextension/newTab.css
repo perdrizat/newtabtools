@@ -1523,8 +1523,13 @@ svg {
 	padding: 0;
 	/* Each button stands on its own surface, NOT a shared bar: the shared float
 	   shadow (ring + drop shadow, theme-adaptive) so the pill reads on any
-	   background. Same token as the drag handle / "+ Pin tile". */
-	box-shadow: var(--ntt-float-shadow);
+	   background. Same token as the drag handle / "+ Pin tile". A second,
+	   slightly stronger hairline + drop shadow is stacked on top (UAT scenario 23:
+	   the light chip alone under-separates from mostly-white thumbnails) — the
+	   hairline uses the `--ntt-line` token so it stays theme-appropriate rather
+	   than hard-coding a colour, and the extra drop shadow is subtle enough not to
+	   change the chip's look against darker thumbnails. */
+	box-shadow: var(--ntt-float-shadow), 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--ntt-line);
 	color: rgba(0,0,0,0.7);
 }
 .ntt-action-btn:hover {
@@ -1720,7 +1725,8 @@ svg {
 }
 #options-pinURL-input,
 #options-url-input,
-#options-title-input {
+#options-title-input,
+#options-nevercapture-host {
 	width: 0;
 	min-width: 0;
 	flex: 1;

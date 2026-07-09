@@ -143,6 +143,19 @@ describe('Tile redesign — CSS (newTab.css)', () => {
 		expect(css).toMatch(/\.ntt-action-btn\s*\{[^}]*backdrop-filter:\s*blur/);
 	});
 
+	it('.ntt-action-btn stacks an extra hairline + drop shadow on the shared float shadow (UAT scenario 23 — light chip separation)', () => {
+		// The base (light) chip blended white-on-white against mostly-white
+		// thumbnails. A second box-shadow layer — a hairline ring using the
+		// theme-adaptive --ntt-line token plus a soft drop shadow — is stacked
+		// on top of the shared --ntt-float-shadow token so the chip stays
+		// legible without changing the overall light-chip design.
+		const rule = css.match(/\.ntt-action-btn\s*\{[^}]*\}/);
+		expect(rule).toBeTruthy();
+		const body = rule![0];
+		expect(body).toMatch(/box-shadow:\s*var\(--ntt-float-shadow\)\s*,/);
+		expect(body).toMatch(/var\(--ntt-line\)/);
+	});
+
 	it('action button SVGs are not hidden by blanket svg{display:none}', () => {
 		const blanketHide = /^[^.#[:\s]*svg\s*\{[^}]*display:\s*none/m;
 		if (blanketHide.test(css)) {

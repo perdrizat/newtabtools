@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 
 - `Thumbnails.delete` and `cleanupThumbnails` reached the raw IDB connection unguarded on event-page wake (missed by the pre-2.1.0 sweep); now readiness-gated via `withStore`.
+- Never-capture host input widened to the row (placeholder no longer clips); tile action chips gained a `--ntt-line` hairline + soft shadow so they separate from light thumbnails; UAT scenario 11 prose updated to the light-chip design.
 
 ## [2.1.0] — 2026-07-09
 
