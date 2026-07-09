@@ -19,12 +19,13 @@ this file; the corrected directives below are decisions of record.
 | Final gate — full test/UAT/audit/build | ✓ done — all gates green, v2.1.0 | see tag `v2.1.0` |
 | Post-flip retest on ESR 140 | backlog (once next ESR ships / on demand) | — |
 
-| Pre-release fixes (mv3-code-review §2.1/§2.2 + queue) | ~ in progress (agent executing items 1-3 + object-URL fix; §4/§5 cleanups stay post-release) | — |
+| Pre-release fixes (mv3-code-review §2.1/§2.2 + queue) | ✓ done (fast 1190, E2E 126; §4/§5 cleanups → MODERNIZATION arc) | `1904fbe` |
 | Next-arc plan (Modules vs HTML5 sequencing) | ✓ done — **modules first**; plan in [`MODERNIZATION.md`](MODERNIZATION.md) | — |
 
-**Migration complete 2026-07-09.** Tagged v2.1.0 (Firefox ≥152, MV3). **Do not
-push/submit until the "Pre-release fixes" section above is executed** — §2.1/§2.2
-(unguarded `db` on event-page wake) is confirmed user-visible.
+**Migration complete 2026-07-09.** Released as v2.1.0 (Firefox ≥152, MV3); tag
+`v2.1.0` moved to include the pre-release fixes (`1904fbe`). Release is CLEAR to
+push/submit. Remaining review cleanups (§4.1 helpers, §4.3 broadcast queue, §3.1
+action sweep) execute inside the MODERNIZATION arc.
 
 ## Strategic decisions (updated 2026-07-09)
 
