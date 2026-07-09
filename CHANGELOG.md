@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- MV3_MIGRATION.md rewritten as the live migration plan (branch `mv3-migration`): ES modules and XHTML→HTML descoped from the flip, `pendingCaptures` directive corrected to `storage.session`, spike questions + slice checklist added.
+
 ## [2.0.7] — 2026-07-06
 
 ### Added
