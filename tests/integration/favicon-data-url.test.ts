@@ -136,7 +136,9 @@ describe('manifest CSP — favicons via img-src, NOT a connect-src wildcard (§1
 	// by `img-src https:` (paint-only). The earlier `connect-src https:` wildcard
 	// (any-HTTPS read access) was removed — see audit/2026-05-31-csp-tightening.md.
 
-	let manifest: { content_security_policy: string };
+	// MV3 nests the CSP string under `content_security_policy.extension_pages`
+	// (MV3_MIGRATION.md Slice D) — the directive checks below are unchanged.
+	let manifest: { content_security_policy: { extension_pages: string } };
 
 	function connectSrc(csp: string): string {
 		return (csp.match(/connect-src[^;]*/) || [''])[0];
@@ -154,18 +156,18 @@ describe('manifest CSP — favicons via img-src, NOT a connect-src wildcard (§1
 	it('connect-src does NOT carry a bare https: wildcard', () => {
 		// The directive may still name a specific https host (firefox.settings…),
 		// but must not contain the standalone `https:` token.
-		const directive = connectSrc(manifest.content_security_policy);
+		const directive = connectSrc(manifest.content_security_policy.extension_pages);
 		expect(directive).not.toMatch(/(^|\s)https:(\s|$)/);
 	});
 
 	it('connect-src still includes self and the named Mozilla settings host', () => {
-		const directive = connectSrc(manifest.content_security_policy);
+		const directive = connectSrc(manifest.content_security_policy.extension_pages);
 		expect(directive).toMatch(/'self'/);
 		expect(directive).toMatch(/https:\/\/firefox\.settings\.services\.mozilla\.com/);
 	});
 
 	it('img-src carries https: so remote favicons can be painted via <img>', () => {
-		const csp = manifest.content_security_policy;
+		const csp = manifest.content_security_policy.extension_pages;
 		const imgSrc = (csp.match(/img-src[^;]*/) || [''])[0];
 		expect(imgSrc).toMatch(/(^|\s)https:(\s|$)/);
 	});

@@ -21,27 +21,41 @@ const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json'
 // eslint-disable-next-line ntt/no-source-grep -- loading manifest for structural validation
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
 
+// MV3 moves the CSP from a bare string to `{ extension_pages: "..." }`. All
+// the directive-shape assertions below still apply to that inner string —
+// only the shape of the container changed (audit/2026-07-09-mv3-inventory.md
+// §3.5).
+const CSP: string = manifest.content_security_policy && manifest.content_security_policy.extension_pages;
+
 describe('manifest.json — security configuration', () => {
+	describe('Manifest version (MV3 flip — MV3_MIGRATION.md Slice D)', () => {
+		it('is manifest_version 3', () => {
+			expect(manifest.manifest_version).toBe(3);
+		});
+	});
+
 	describe('Content Security Policy (audit §2.3)', () => {
-		it('declares a content_security_policy as a non-empty string', () => {
-			expect(typeof manifest.content_security_policy).toBe('string');
-			expect(manifest.content_security_policy.length).toBeGreaterThan(0);
+		it('declares content_security_policy as an object with a non-empty extension_pages string (MV3 shape)', () => {
+			expect(typeof manifest.content_security_policy).toBe('object');
+			expect(manifest.content_security_policy).not.toBeNull();
+			expect(typeof CSP).toBe('string');
+			expect(CSP.length).toBeGreaterThan(0);
 		});
 
 		it('locks script-src to \'self\'', () => {
-			expect(manifest.content_security_policy).toMatch(/script-src\s+'self'/);
+			expect(CSP).toMatch(/script-src\s+'self'/);
 		});
 
 		it('forbids object-src (no plugin embeds)', () => {
-			expect(manifest.content_security_policy).toMatch(/object-src\s+'none'/);
+			expect(CSP).toMatch(/object-src\s+'none'/);
 		});
 
 		it('does not allow \'unsafe-eval\' anywhere (would defeat the point of CSP)', () => {
-			expect(manifest.content_security_policy).not.toMatch(/'unsafe-eval'/);
+			expect(CSP).not.toMatch(/'unsafe-eval'/);
 		});
 
 		it('does not allow \'unsafe-inline\' in script-src (the XSS gateway)', () => {
-			const scriptSrcMatch = /script-src\s+([^;]+)/.exec(manifest.content_security_policy);
+			const scriptSrcMatch = /script-src\s+([^;]+)/.exec(CSP);
 			expect(scriptSrcMatch).not.toBeNull();
 			expect(scriptSrcMatch![1]).not.toMatch(/'unsafe-inline'/);
 		});
@@ -49,11 +63,11 @@ describe('manifest.json — security configuration', () => {
 
 	describe('CSP — wallpaper picker (Mozilla CDN)', () => {
 		it('allows connect-src to Mozilla Remote Settings API', () => {
-			expect(manifest.content_security_policy).toMatch(/connect-src[^;]*firefox\.settings\.services\.mozilla\.com/);
+			expect(CSP).toMatch(/connect-src[^;]*firefox\.settings\.services\.mozilla\.com/);
 		});
 
 		it('allows img-src from Mozilla CDN for wallpaper images', () => {
-			expect(manifest.content_security_policy).toMatch(/img-src[^;]*firefox-settings-attachments\.cdn\.mozilla\.net/);
+			expect(CSP).toMatch(/img-src[^;]*firefox-settings-attachments\.cdn\.mozilla\.net/);
 		});
 	});
 
@@ -97,7 +111,7 @@ describe('manifest.json — security configuration', () => {
 		// The real manifest: every guarded directive that is present must be clean.
 		GUARDED_DIRECTIVES.forEach((name) => {
 			it(`real manifest ${name} carries no scheme/* wildcard`, () => {
-				const directive = directiveOf(manifest.content_security_policy, name);
+				const directive = directiveOf(CSP, name);
 				if (directive === '') {
 					return; // directive absent → nothing to over-permit
 				}
@@ -134,9 +148,9 @@ describe('manifest.json — security configuration', () => {
 	});
 
 	describe('Minimum version', () => {
-		it('requires at least Firefox ESR 140 (current ESR, supports browser_specific_settings.gecko.data_collection_permissions)', () => {
+		it('requires at least Firefox 152 (captureVisibleTab under MV3 is unavailable below this version — see MV3_MIGRATION.md spike/bisect)', () => {
 			const minVersion = parseFloat(manifest.browser_specific_settings.gecko.strict_min_version);
-			expect(minVersion).toBeGreaterThanOrEqual(140);
+			expect(minVersion).toBeGreaterThanOrEqual(152);
 		});
 	});
 
@@ -161,12 +175,68 @@ describe('manifest.json — security configuration', () => {
 			expect(manifest.permissions).toContain('webRequest');
 		});
 
-		it('keeps <all_urls> for programmatic captureVisibleTab', () => {
-			expect(manifest.permissions).toContain('<all_urls>');
-		});
-
 		it('does not list thumbnail.js in background scripts', () => {
 			expect(manifest.background.scripts).not.toContain('thumbnail.js');
+		});
+	});
+
+	describe('Permissions (MV3 split — MV3_MIGRATION.md "Capture pipeline & permissions")', () => {
+		it('moves <all_urls> to host_permissions, exactly, and out of permissions', () => {
+			expect(manifest.host_permissions).toEqual(['<all_urls>']);
+			expect(manifest.permissions).not.toContain('<all_urls>');
+		});
+
+		it('permissions keeps the API-permission set (no host patterns)', () => {
+			expect(manifest.permissions).toEqual([
+				'idle',
+				'menus',
+				'search',
+				'sessions',
+				'storage',
+				'tabs',
+				'topSites',
+				'webNavigation',
+				'webRequest',
+			]);
+		});
+
+		it('optional_permissions is unchanged (API permissions only)', () => {
+			expect(manifest.optional_permissions).toEqual(['bookmarks', 'downloads', 'history']);
+		});
+	});
+
+	describe('Toolbar action (MV3 — browser_action renamed to action)', () => {
+		it('does not declare browser_action', () => {
+			expect((manifest as any).browser_action).toBeUndefined();
+		});
+
+		it('declares action with the same icon/popup/title fields, and no browser_style', () => {
+			expect(manifest.action).toBeDefined();
+			expect(manifest.action.default_icon).toBe('images/tools-light.svg');
+			expect(manifest.action.theme_icons).toEqual([
+				{ dark: 'images/tools-light.svg', light: 'images/tools-dark.svg', size: 16 },
+			]);
+			expect(manifest.action.default_popup).toBe('action.html');
+			expect(manifest.action.default_title).toBe('__MSG_extensionName__');
+			expect(manifest.action.browser_style).toBeUndefined();
+		});
+	});
+
+	describe('Background (MV3 — classic scripts array retained, no service worker)', () => {
+		it('keeps background.scripts as the same 6-file array', () => {
+			expect(manifest.background.scripts).toEqual([
+				'common.js',
+				'tiles.js',
+				'prefs.js',
+				'background.js',
+				'lib/zip.js',
+				'export.js',
+			]);
+		});
+
+		it('declares no persistent key and no service_worker key', () => {
+			expect(manifest.background.persistent).toBeUndefined();
+			expect(manifest.background.service_worker).toBeUndefined();
 		});
 	});
 });

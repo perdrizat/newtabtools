@@ -381,6 +381,15 @@ function resizeThumbnail(dataURL, targetWidth) {
  * @returns {Promise<{dataURL: string|null, favIconUrl: string|null}>}
  */
 async function captureTab(tabId, windowId) {
+	// Firefox hides tabs.captureVisibleTab entirely when the extension lacks
+	// (or has lost) the <all_urls> host permission it requires — the API
+	// isn't merely denied, `typeof` is `undefined` (spike finding, 2026-07-09).
+	// startCaptureSession() already guards on browser.permissions.contains()
+	// before creating a session, but this is a second, independent guard for
+	// any other caller (e.g. the action popup's Thumbnails.capture message).
+	if (typeof browser.tabs.captureVisibleTab !== 'function') {
+		return {dataURL: null, favIconUrl: null};
+	}
 	let tab;
 	try {
 		tab = await browser.tabs.get(tabId);
@@ -517,8 +526,40 @@ var captureSessions = new Map();
  * activation, which doesn't survive event-page suspension in-memory) —
  * the full A/B/C flow starts when the user switches to the tab, since
  * SPAs often only render after activation.
+ *
+ * Host permissions are user-revocable at runtime in MV3 (unlike MV2's
+ * install-time-only grant), so this first confirms <all_urls> is still
+ * held before creating any session — no timers, no watchers, if it's been
+ * revoked. The check is async, so the granted case takes one extra
+ * microtask/promise tick before `_startCaptureSession` runs; callers here
+ * are all fire-and-forget, so this does not change observable ordering.
+ * @param {number} tabId
+ * @param {number} windowId
+ * @param {string} url
+ * @returns {Promise<void>}
  */
-function startCaptureSession(tabId, windowId, url) {
+async function startCaptureSession(tabId, windowId, url) {
+	let granted;
+	try {
+		granted = await browser.permissions.contains({origins: ['<all_urls>']});
+	} catch (ex) {
+		granted = false;
+	}
+	if (!granted) {
+		return;
+	}
+	_startCaptureSession(tabId, windowId, url);
+}
+
+/**
+ * Internal implementation of `startCaptureSession` — see there for the
+ * capture-stage documentation. Split out so the permission guard above can
+ * wrap it without duplicating the session-setup logic.
+ * @param {number} tabId
+ * @param {number} windowId
+ * @param {string} url
+ */
+function _startCaptureSession(tabId, windowId, url) {
 	// Privacy guard: never capture sites the user has opted-out of.
 	// Accepted millisecond startup race (same class as Blocked/Filters): if the
 	// list is updated concurrently with a navigation the guard may miss one
@@ -701,11 +742,13 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 	}
 
 	if (!['http:', 'https:', 'ftp:'].includes(new URL(details.url).protocol)) {
-		chrome.browserAction.disable(details.tabId);
+		// browser.action is promise-based in MV3; enable/disable on a since-
+		// closed tab can reject, so this fire-and-forget call needs a catch.
+		browser.action.disable(details.tabId).catch(console.error);
 		return;
 	}
 
-	chrome.browserAction.enable(details.tabId);
+	browser.action.enable(details.tabId).catch(console.error);
 
 	Tiles.ensureReady().then(async function({cache}) {
 		if (cache.includes(details.url)) {
@@ -766,9 +809,9 @@ browser.tabs.query({}).then(function(tabs) {
 		if (tab.url == NEW_TAB_URL) {
 			chrome.tabs.reload(tab.id);
 		} else if (!['http:', 'https:', 'ftp:'].includes(new URL(tab.url).protocol)) {
-			chrome.browserAction.disable(tab.id);
+			browser.action.disable(tab.id).catch(console.error);
 		} else {
-			chrome.browserAction.enable(tab.id);
+			browser.action.enable(tab.id).catch(console.error);
 		}
 	}
 }).catch(console.error);

@@ -105,7 +105,20 @@ console.log();
 				`geckodriver reject it ("binary is not a Firefox executable"):\n         ${noise}\n         ` +
 				'Likely the Ubuntu snap shim with xdg-utils missing — install xdg-utils, use the Mozilla APT build, or set $FIREFOX_BIN.');
 		} else {
-			ok('Firefox (release)', `${versionLine[0]} (${bin}, ${where})`);
+			// MV3_MIGRATION.md Slice D: tabs.captureVisibleTab is `undefined`
+			// under MV3 on every Firefox build through 151.0 (spike/bisect) and
+			// a working function from 152.0 — fail fast here with an actionable
+			// message instead of letting the capture E2E/UAT scenarios time out
+			// obscurely on an under-versioned binary.
+			const versionMatch = versionLine[0].match(/Mozilla Firefox (\d+)\.(\d+)/);
+			const majorVersion = versionMatch ? parseInt(versionMatch[1], 10) : NaN;
+			if (Number.isNaN(majorVersion) || majorVersion < 152) {
+				fail('Firefox (release)', `${versionLine[0]} is below the minimum required version (152) — ` +
+					'MV3 tabs.captureVisibleTab does not exist below Firefox 152 (see MV3_MIGRATION.md spike). ' +
+					'Install a newer release build or point $FIREFOX_BIN at one.');
+			} else {
+				ok('Firefox (release)', `${versionLine[0]} (${bin}, ${where})`);
+			}
 		}
 	}
 }

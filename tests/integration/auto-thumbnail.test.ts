@@ -339,6 +339,21 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		);
 		(globalThis as any).chrome.tabs.query = vi.fn().mockResolvedValue([]);
 		(globalThis as any).chrome.i18n = { getMessage: vi.fn((k: string) => k) };
+		// MV3: startCaptureSession() guards on the <all_urls> host permission
+		// still being held (users can revoke it at runtime); the default
+		// jest-webextension-mock `permissions.contains` is a bare `jest.fn()`
+		// (resolves `undefined`, i.e. "not granted") — override to "granted" so
+		// the existing capture-flow tests below exercise the granted path.
+		// permission-revoked behavior is covered separately below.
+		(globalThis as any).chrome.permissions = { contains: vi.fn().mockResolvedValue(true) };
+		// MV3: chrome.browserAction -> browser.action (Slice D rename). The
+		// mock's `action`/`browserAction` alias already exists, but its
+		// `enable`/`disable` are bare `jest.fn()`s (resolve `undefined`) —
+		// background.js now awaits/`.catch()`s these as real Promises.
+		(globalThis as any).chrome.action = {
+			enable: vi.fn().mockResolvedValue(undefined),
+			disable: vi.fn().mockResolvedValue(undefined),
+		};
 
 		// --- Load background.js ---
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
@@ -658,6 +673,49 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		(globalThis as any).chrome.tabs.get.mockImplementation(
 			() => Promise.resolve({ active: true, windowId: 1, incognito: false })
 		);
+	});
+
+	// --- MV3 permission guards (host permissions are user-revocable at
+	// runtime, unlike MV2's install-time-only grant — MV3_MIGRATION.md
+	// "Capture pipeline & permissions") ---
+
+	describe('MV3 permission guards', () => {
+		afterEach(() => {
+			// Restore the granted-by-default mock the rest of this file relies on.
+			(globalThis as any).chrome.permissions.contains = vi.fn().mockResolvedValue(true);
+		});
+
+		it('startCaptureSession bails when the <all_urls> host permission has been revoked — no session, no captureVisibleTab call', async () => {
+			(globalThis as any).chrome.permissions.contains = vi.fn().mockResolvedValue(false);
+
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			// The permission check is an extra async hop ahead of session
+			// creation (Tiles.ensureReady -> tabs.get -> permissions.contains) —
+			// flush generously so it resolves before asserting.
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(captureCallCount()).toBe(0);
+			expect(getCaptureSessions().has(42)).toBe(false);
+		});
+
+		it('captureTab resolves {dataURL: null, favIconUrl: null} without throwing when captureVisibleTab is absent from the browser API', async () => {
+			// Firefox hides tabs.captureVisibleTab entirely (not merely denies
+			// it) when the extension lacks the host permission the API needs —
+			// simulate that by deleting it, rather than mocking a throw.
+			const original = (globalThis as any).chrome.tabs.captureVisibleTab;
+			delete (globalThis as any).chrome.tabs.captureVisibleTab;
+
+			try {
+				const captureTab = (globalThis as any).captureTab as
+					(tabId: number, windowId: number) => Promise<{dataURL: string | null; favIconUrl: string | null}>;
+				const result = await captureTab(42, 1);
+				expect(result).toEqual({ dataURL: null, favIconUrl: null });
+			} finally {
+				(globalThis as any).chrome.tabs.captureVisibleTab = original;
+			}
+		});
 	});
 
 	// --- Thumbnails.delete message handler ---

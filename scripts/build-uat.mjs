@@ -12,11 +12,25 @@ const MANIFEST_PATH = path.join(TMP_DIR, 'manifest.json');
 fs.rmSync(TMP_DIR, { recursive: true, force: true });
 fs.cpSync(path.join(ROOT, 'webextension'), TMP_DIR, { recursive: true });
 
-// 2. Patch manifest.json to promote optional permissions
+// 2. Patch manifest.json to promote optional permissions. MV3 splits
+// permissions into API permissions (`permissions`/`optional_permissions`)
+// and host permissions (`host_permissions`/`optional_host_permissions`,
+// the latter not currently used but handled defensively if it ever is) —
+// only the API side gets merged/promoted here; host_permissions is left
+// alone (MV3_MIGRATION.md Slice D).
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
+let manifestChanged = false;
 if (manifest.optional_permissions) {
 	manifest.permissions = [...(manifest.permissions || []), ...manifest.optional_permissions];
 	delete manifest.optional_permissions;
+	manifestChanged = true;
+}
+if (manifest.optional_host_permissions) {
+	manifest.host_permissions = [...(manifest.host_permissions || []), ...manifest.optional_host_permissions];
+	delete manifest.optional_host_permissions;
+	manifestChanged = true;
+}
+if (manifestChanged) {
 	fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, '\t'));
 }
 

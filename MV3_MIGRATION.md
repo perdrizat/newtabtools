@@ -13,8 +13,8 @@ this file; the corrected directives below are decisions of record.
 | Decisions: min_version 152.0, E2E on release FF | ✓ approved by maintainer | — |
 | Slice A — getViews → messaging | ✓ done (fast 1139, E2E 124) | `12b410c` |
 | Slice B — event-page resilience | ✓ done (fast 1152, E2E 124) | `6bb6017` |
-| Slice C — async normalization | ~ in progress (agent implementing) | — |
-| Slice D — the MV3 flip | pending | — |
+| Slice C — async normalization | ✓ done (fast 1153, E2E 124) | `03ffabc` |
+| Slice D — the MV3 flip | ~ in progress (agent implementing) | — |
 | Final gate — full test/UAT/audit/build | pending | — |
 | Post-flip retest on ESR 140 | backlog | — |
 
@@ -196,24 +196,28 @@ UAT: full suite after Slice D.
       weakened.
 - [x] Gates: fast 1153 ✓, lint ✓, typecheck ✓, E2E 124 ✓.
 
-### Slice D — the flip (atomic)
-- [ ] `manifest.json`: `manifest_version: 3`; `browser_action` → `action`
-      (keep `theme_icons`, drop `browser_style`); CSP string → `{"extension_pages": "..."}`
-      (directives unchanged); `<all_urls>` → `host_permissions`;
-      `bookmarks`/`downloads`/`history` stay in `optional_permissions` (API perms);
-      `background.scripts` unchanged, no `persistent` key.
-- [ ] `chrome.browserAction` → `browser.action` (4 sites).
-- [ ] `permissions.contains` guard in the capture path.
-- [ ] `tests/unit/manifest.test.ts`: CSP-as-object assertions, `manifest_version === 3`,
-      host_permissions split (red first).
-- [ ] `scripts/build-uat.mjs`: permission-merge logic must handle
-      `host_permissions`/`optional_permissions` in MV3.
-- [ ] Test harness prefs from the spike → `tests/e2e/run_esr_tests.sh` and
-      `tests/uat/_tools/browser-daemon.mjs` (+ preflight if needed).
-- [ ] New E2E test: force suspension via `extensions.background.idle.timeout`,
-      verify respawn recovery (capture, menus, IDB access).
-- [ ] Security-boundary acknowledgement in the commit message: permission-model
-      change (install-prompt + revocable host permissions), CSP format change.
+### Slice D — the flip (atomic) — ✓ DONE
+- [x] `manifest.json` flipped: MV3, `action` (no `browser_style`), CSP object
+      (directives byte-identical), `<all_urls>` → `host_permissions`,
+      `strict_min_version` 152.0, `background.scripts` unchanged.
+- [x] `browser.action.enable/disable` (4 sites, with rejection handling).
+- [x] Capture degradation double-guard: `permissions.contains` in
+      `startCaptureSession` (no session when revoked) + API-existence check in
+      `captureTab` (Firefox hides the method without the grant).
+- [x] `manifest.test.ts` updated red-first (17 red → 45/45 green).
+- [x] `build-uat.mjs` handles MV3 permission split; UAT preflight now fails fast
+      on Firefox < 152.
+- [x] E2E harness on release Firefox (default `firefox`, `$FIREFOX_ESR_BIN` still
+      honored; CI installs release `firefox`); suite-wide
+      `extensions.background.idle.timeout=10000` so the event page really
+      suspends between tests; cleanup pkill scoped to the test profile.
+- [x] New `tests/e2e/event-page-lifecycle.test.ts`: post-suspension IDB
+      reconnect (message round-trip) + full capture pipeline through a
+      respawned event page. (One orchestrator fix during review: poll from the
+      extension page, not the navigated content page.)
+- [x] Gates: fast 1162 ✓, lint ✓, typecheck ✓, lint:webext 0 findings ✓,
+      E2E 126 ✓ on Firefox 152 (MV3, with real suspensions).
+- [x] Security-boundary acknowledgement in the commit message.
 
 ### Final gate
 - [ ] Full `pnpm test` (fast + E2E), full UAT suite (all scenarios), `pnpm lint`,

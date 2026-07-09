@@ -29,7 +29,11 @@ jobs:
           node-version-file: '.node-version'
           cache: 'pnpm'
 
-      - name: Install Firefox ESR
+      - name: Install Firefox (release)
+        # MV3_MIGRATION.md Slice D: tabs.captureVisibleTab requires Firefox
+        # >= 152 under MV3 (spike/bisect: undefined on every build through
+        # 151.0). Mozilla's APT repo has no ESR build that new yet, so E2E
+        # moved from firefox-esr to the release channel.
         run: |
           sudo install -d -m 0755 /etc/apt/keyrings
           wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
@@ -39,7 +43,7 @@ jobs:
           Pin: origin packages.mozilla.org
           Pin-Priority: 1000
           ' | sudo tee /etc/apt/preferences.d/mozilla
-          sudo apt-get update && sudo apt-get install -y firefox-esr
+          sudo apt-get update && sudo apt-get install -y firefox
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

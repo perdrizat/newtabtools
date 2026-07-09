@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - MV3 Slice A: removed both `extension.getViews()` sites — background/export now broadcast `Page.updateGrid`/`Page.restoreComplete`; new page-side `runtime.onMessage` listener; restore refresh (incl. prefs-only path) is message-driven.
 - MV3 Slice B: respawn-safe background — duplicate-tolerant menu creation, IDB auto-reconnect (`onclose`/`onversionchange` + retryable `waitForDB`), `pendingCaptures` moved to `storage.session`, thumbnail cleanup capped at once daily, `storage.onChanged` listener registration made synchronous.
 - MV3 Slice C: background/popup callback-style `chrome.*` calls normalized to promise-based `browser.*` (async `captureTab` rewrite preserving session-identity semantics); `chrome.browserAction` kept for the Slice D rename.
+- MV3 Slice D: manifest flipped to MV3 (`action`, CSP object, `host_permissions: ["<all_urls>"]`, `strict_min_version` 152.0); capture path degrades gracefully when host permissions are revoked; E2E tier moved to release-channel Firefox with a 10s event-page idle timeout + new suspension-recovery E2E test; `build-uat.mjs`/UAT preflight updated for MV3/Firefox ≥152.
 
 ## [2.0.7] — 2026-07-06
 
