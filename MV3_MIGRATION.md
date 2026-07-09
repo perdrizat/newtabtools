@@ -309,12 +309,11 @@ review round (queued below).
 Items marked *(review 2026-07-09)* were raised or endorsed by the external code
 review of the migration; disposition per maintainer decision 2026-07-09.
 
-- **Fix: unrevoked object URL in `export.js`** *(review 2026-07-09 §1a — accepted;
-  queued behind the in-flight review round, no code changes until it closes).*
-  `makeZip`'s `URL.createObjectURL(blob)` is never revoked — pre-existing leak, one
-  blob per backup export until the event page suspends. Fix shape: revoke from a
-  `downloads.onChanged` listener when that download id reaches a terminal state
-  (`complete`/`interrupted`); TDD as usual.
+- ~~**Fix: unrevoked object URL in `export.js`**~~ — **DONE** in the pre-release
+  fix batch (`1904fbe`, revoke on `downloads.onChanged` terminal state).
+- All other open items in this section were absorbed into the MODERNIZATION arc
+  on 2026-07-09 (see [`MODERNIZATION.md`](MODERNIZATION.md) "Folded-in extras");
+  this backlog is closed — MODERNIZATION.md is the live tracker.
 - **Retest the finished MV3 build against Firefox 140/ESR.** The Fx-152 capture gate
   was established with a minimal probe during the spike (2026-07-09). Once the real
   migrated extension exists, re-run it (probe + E2E capture tests) on ESR 140 to

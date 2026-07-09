@@ -1,25 +1,34 @@
 # Modernization Arc — Background ES Modules, then HTML5 Page
 
-**Status: PLANNED** (authored 2026-07-09). Successor arc to the completed MV3
-migration ([`MV3_MIGRATION.md`](MV3_MIGRATION.md)). One document for the whole
-arc, two stages: **M — background ES-module rewrite** (first), **H — XHTML→HTML5
-conversion** (second). This file is the living checklist once work starts; update
-it per slice, like MV3_MIGRATION.md was.
+**Status: STAGE M IN PROGRESS** on branch `modernization-m` (started 2026-07-09).
+Successor arc to the completed MV3 migration ([`MV3_MIGRATION.md`](MV3_MIGRATION.md)).
+One document for the whole arc, two stages: **M — background ES-module rewrite**
+(first), **H — XHTML→HTML5 conversion** (second). This file is the living
+checklist; update it per slice, like MV3_MIGRATION.md was.
 
-Prerequisite: the MV3 pre-release fix queue (MV3_MIGRATION.md "Pre-release
-fixes") is executed and 2.1.0 is released. Stage M deliberately *replaces* some
-of those point fixes with structural equivalents — see M2.
+Prerequisite (met 2026-07-09): the MV3 pre-release fix queue is executed and
+2.1.0 is released. Stage M deliberately *replaces* some of those point fixes with
+structural equivalents — see M2.
+
+**Folded-in extras (maintainer 2026-07-09):** Stage M also absorbs every open
+MV3_MIGRATION.md backlog/review item that is not HTML5-shaped: the §4.1 helper
+dedups (M2/M5), the §4.3 early-broadcast queue (M5), the §3.1 action-sweep move
+(M5), the ESR-140 retest (parallel verification task), and the three cosmetic
+UAT findings (new slice M6). Excluded as HTML5-shaped: nothing — all XHTML items
+were already Stage H.
 
 ## Status board (live)
 
 | Step | Status | Commit |
 |---|---|---|
 | Sequencing decision (M before H) | ✓ decided 2026-07-09 | — |
-| M1 — globalThis bridge + module entry flip | pending | — |
+| ESR-140 retest (MV3 capture gate confirmation) | ~ in progress (parallel agent) | — |
+| M1 — globalThis bridge + module entry flip | ~ in progress (agent implementing) | — |
 | M2 — `lib/db.js` + tiles store (ready-gated) | pending | — |
 | M3 — capture pipeline module + image seam | pending | — |
 | M4 — backup/export module + zip.js ESM vendoring | pending | — |
-| M5 — `lib/platform.js` + entry consolidation | pending | — |
+| M5 — `lib/platform.js` + entry consolidation + review leftovers | pending | — |
+| M6 — cosmetic UAT findings (placeholder clip, chip contrast, scenario text) | pending | — |
 | M gate — full E2E + full UAT + audit | pending | — |
 | H1 — case-trap prefix fixes (XHTML-safe) | pending | — |
 | H2 — markup conversion + rename + touchpoints | pending | — |
@@ -130,6 +139,9 @@ unloaded lib files.
       `_ready` state redesigned (set on success only — supersedes the tiles.js:53
       fix); **internal rename `getAllTiles` → `getGridTiles`** (wire name frozen);
       update `tiles-shim.js`'s NOTE comment.
+- [ ] Unify the `['http:','https:','ftp:']` protocol constant across
+      background/tiles/action-sweep (MV3 review §4.1) — **export.js's copy stays
+      independent** (restore security boundary, decision of record).
 - [ ] idb re-evaluation checkpoint (Decision 4) — record outcome.
 - [ ] Tests: per-file migration begins — tests covering tiles/db behavior move
       from vm-load to native `import` of the lib modules (tiles-pin,
@@ -175,9 +187,25 @@ unloaded lib files.
       `addListener` top-level in one readable file); old `background.js`
       dissolves; delete emptied files; eslint glob cleanup (script-mode block
       shrinks to the page files + dual-scope bridge files).
+- [ ] MV3 review §3.1: action-button sweep moves from per-respawn top-level to a
+      `runtime.onInstalled`/`onStartup` seed + `webNavigation.onCompleted`
+      maintenance (per-tab action state persists outside the event page).
+- [ ] MV3 review §4.3: `pageMessageHandler` (newTab.js) queues early `Page.*`
+      broadcasts and flushes once the fx-newTab.js globals exist (replaces the
+      silent typeof-guard drop).
 - [ ] Docs: CONTRIBUTING architecture section, TESTING.md test-writing idioms
       (import, not vm), MV3_MIGRATION.md backlog items closed, this file's board.
 - [ ] Gates: fast, lint, typecheck, `pnpm lint:webext`, E2E.
+
+### M6 — cosmetic UAT findings (UI-visible, so before the full-UAT gate)
+- [ ] Never-capture host input: placeholder no longer clips at the input edge
+      (shorten placeholder or widen input; UAT scenario 22 observation).
+- [ ] Action-row chips: no white-on-white blend against mostly-white thumbnails
+      (scenario 23 observation — add a subtle scrim/border token treatment).
+- [ ] `tests/uat/scenarios/11-action-buttons.md`: update stale "dark scrim" prose
+      to the current light-chip design.
+- [ ] Gates: fast, lint, typecheck, E2E; visual verification lands in the M gate's
+      full UAT run.
 
 ### M final gate
 - [ ] Full `pnpm test`, **full UAT suite** (background swap is invisible, but
