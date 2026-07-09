@@ -114,17 +114,17 @@ describe('Design tokens — tokens.css', () => {
 	});
 
 	describe('newTab.html links tokens.css', () => {
-		let xhtml: string;
+		let html: string;
 
 		beforeAll(() => {
 			// eslint-disable-next-line ntt/no-source-grep -- wiring check: stylesheet link
-			xhtml = fs.readFileSync(
+			html = fs.readFileSync(
 				path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 			);
 		});
 
 		it('has a <link> to tokens.css', () => {
-			expect(xhtml).toMatch(/<link[^>]+href="tokens\.css"/);
+			expect(html).toMatch(/<link[^>]+href="tokens\.css"/);
 		});
 	});
 });

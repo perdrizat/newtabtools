@@ -67,10 +67,10 @@ Shipped in a single-sitting agentic migration on branch `mv3-migration`. Full re
 ## Later — Chrome extension (stage 3)
 
 After Firefox MV3 ships and bakes. Single-source / dual-build (shared `webextension/`
-with per-target manifest variants), **not** a long-lived parallel branch. Requires the
-Chrome-only work deferred from MV3: `chrome.offscreen` for DOM, a polyfill, and routing
-the Firefox-only APIs through a capability layer (`lib/platform.js`). The previous
-maintainer's `chrome` branch is historical reference only — do not merge it.
+with per-target manifest variants), **not** a long-lived parallel branch. The capability
+layer Chrome needs to fork already exists (`lib/platform.js`, built in MODERNIZATION.md
+Stage M) — remaining Chrome-only work is `chrome.offscreen` for DOM and a polyfill. The
+previous maintainer's `chrome` branch is historical reference only — do not merge it.
 
 ---
 
@@ -79,12 +79,9 @@ maintainer's `chrome` branch is historical reference only — do not merge it.
 Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 
 **Tooling / debt**
-- Extract pure logic from the legacy monolith scripts into `webextension/lib/` ES
-  modules. Now a **post-MV3** backlog item (deferred during the migration itself —
-  see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) "Post-MV3 backlog"): a clean rewrite of
-  the background as ES modules behind the frozen message contract, with a
-  `lib/platform.js` capability layer designed against Chrome's service-worker
-  constraints.
+- ~~Extract pure logic from the legacy monolith scripts into `webextension/lib/` ES
+  modules.~~ **Done** — see [`MODERNIZATION.md`](MODERNIZATION.md) Stage M and git
+  history.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The suite walks a first-run journey on a seeded environment: `00-uat-init`,
@@ -131,8 +128,10 @@ alternatives. Detail lives in git history / the linked docs.
 - **Full rewrite considered and rejected** (2026-07-09). A clean-slate rewrite
   (incl. Chrome-first) would have discarded the behavior-encoding test suite
   (~1130 fast tests, architecture-coupled) and the edge-case knowledge in the
-  capture pipeline, for benefits reachable incrementally. Migrated instead; the
-  ES-module rewrite of the background stays a later, separate backlog item.
+  capture pipeline, for benefits reachable incrementally. Migrated instead.
+  **Outcome:** the ES-module rewrite of the background shipped as
+  [`MODERNIZATION.md`](MODERNIZATION.md) Stage M (2026-07-09), followed by the
+  HTML5 page conversion in Stage H.
 - **Chrome via single-source / dual-build, not parallel branches** — long-lived branches
   carry permanent merge cost.
 - **AMO: new listing / ID `newtabtools@symlink.ch`, not ID-transfer** — clean state

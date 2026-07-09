@@ -152,17 +152,17 @@ describe('Wiring checks — action.js (source scan)', () => {
 });
 
 describe('Remove-thumbnail button — newTab.html (source scan)', () => {
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(
+		html = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
 
 	it('site template has action buttons container for thumbnail actions', () => {
-		expect(xhtml).toContain('ntt-actions');
+		expect(html).toContain('ntt-actions');
 	});
 });
 

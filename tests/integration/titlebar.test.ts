@@ -135,26 +135,26 @@ describe('_layoutTitlebar — measures the card container and sets the slot widt
 });
 
 describe('Titlebar — Board A chrome (newTab.html)', () => {
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: titlebar structure
-		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
+		html = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
 	});
 
 	it('drops the wordmark, masthead, and lock/cogwheel button cluster (§1)', () => {
-		expect(xhtml).not.toContain('ntt-wordmark');
-		expect(xhtml).not.toContain('ntt-masthead');
-		expect(xhtml).not.toContain('ntt-titlebar-buttons');
-		expect(xhtml).not.toContain('locked-toggle');
+		expect(html).not.toContain('ntt-wordmark');
+		expect(html).not.toContain('ntt-masthead');
+		expect(html).not.toContain('ntt-titlebar-buttons');
+		expect(html).not.toContain('locked-toggle');
 	});
 
 	it('keeps a single titlebar action button (#options-toggle) labelled Edit', () => {
-		expect(xhtml).toMatch(/<button id="options-toggle"[^>]*data-message="options_edit"/);
+		expect(html).toMatch(/<button id="options-toggle"[^>]*data-message="options_edit"/);
 	});
 
 	it('has no clock or divider element in the redesigned titlebar', () => {
-		expect(xhtml).not.toContain('ntt-clock');
-		expect(xhtml).not.toContain('ntt-titlebar-divider');
+		expect(html).not.toContain('ntt-clock');
+		expect(html).not.toContain('ntt-titlebar-divider');
 	});
 });

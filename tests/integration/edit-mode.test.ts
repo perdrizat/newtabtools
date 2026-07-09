@@ -24,7 +24,7 @@ import { mountSite } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 
 describe('edit mode — CSS affordances (§2)', () => {
@@ -107,23 +107,23 @@ describe('edit mode — CSS affordances (§2)', () => {
 });
 
 describe('edit mode — markup + defaults (§2)', () => {
-	let xhtml: string;
+	let html: string;
 	let prefs: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template + pref defaults
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: pref default
 		prefs = fs.readFileSync(PREFS_PATH, 'utf8');
 	});
 
 	it('the tile template carries the drag handle and add-tile elements', () => {
-		expect(xhtml).toContain('ntt-drag-handle');
-		expect(xhtml).toContain('ntt-add-tile');
+		expect(html).toContain('ntt-drag-handle');
+		expect(html).toContain('ntt-add-tile');
 	});
 
 	it('the standalone lock checkbox is gone from the drawer (lock is now edit-mode)', () => {
-		expect(xhtml).not.toMatch(/<input[^>]*name="locked"/);
+		expect(html).not.toMatch(/<input[^>]*name="locked"/);
 	});
 
 	it('the board is locked by default (§2 — no accidental drags)', () => {

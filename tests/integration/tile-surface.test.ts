@@ -20,21 +20,21 @@ import { mountSite } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 describe('tile surface — kebab-at-rest affordance (§3c)', () => {
 	let css: string;
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template + CSS structure
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	it('tile template carries a .ntt-actions-kebab rest affordance', () => {
-		expect(xhtml).toContain('ntt-actions-kebab');
+		expect(html).toContain('ntt-actions-kebab');
 	});
 
 	it('.ntt-actions-kebab sits top-right and is visible at rest', () => {

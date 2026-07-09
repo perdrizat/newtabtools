@@ -10,47 +10,47 @@ import { mountSite } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 describe('Tile redesign — template (newTab.html)', () => {
-	let xhtml: string;
+	let markup: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		markup = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	it('tile template has .newtab-site wrapper with draggable', () => {
-		expect(xhtml).toMatch(/<div class="newtab-site" draggable="true">/);
+		expect(markup).toMatch(/<div class="newtab-site" draggable="true">/);
 	});
 
 	it('tile template has .newtab-link anchor with .newtab-thumbnail inside', () => {
-		expect(xhtml).toMatch(/<a class="newtab-link">/);
-		expect(xhtml).toContain('newtab-thumbnail');
+		expect(markup).toMatch(/<a class="newtab-link">/);
+		expect(markup).toContain('newtab-thumbnail');
 	});
 
 	it('tile template has .ntt-pin-stripe element', () => {
-		expect(xhtml).toContain('ntt-pin-stripe');
+		expect(markup).toContain('ntt-pin-stripe');
 	});
 
 	it('tile template has .ntt-overlay with .ntt-favicon and .newtab-title', () => {
-		expect(xhtml).toContain('ntt-overlay');
-		expect(xhtml).toContain('ntt-favicon');
-		expect(xhtml).toContain('newtab-title');
+		expect(markup).toContain('ntt-overlay');
+		expect(markup).toContain('ntt-favicon');
+		expect(markup).toContain('newtab-title');
 	});
 
 	it('tile template has .ntt-actions container for hover action buttons', () => {
-		expect(xhtml).toContain('ntt-actions');
+		expect(markup).toContain('ntt-actions');
 	});
 
 	it('tile template has .ntt-stat-chip slot', () => {
-		expect(xhtml).toContain('ntt-stat-chip');
+		expect(markup).toContain('ntt-stat-chip');
 	});
 
 	it('old newtab-control-pin/block/thumbnail input buttons are removed', () => {
-		expect(xhtml).not.toContain('newtab-control-pin');
-		expect(xhtml).not.toContain('newtab-control-block');
-		expect(xhtml).not.toContain('newtab-control-thumbnail');
+		expect(markup).not.toContain('newtab-control-pin');
+		expect(markup).not.toContain('newtab-control-block');
+		expect(markup).not.toContain('newtab-control-thumbnail');
 	});
 });
 
@@ -64,7 +64,7 @@ describe('Tile template structural integrity — HTML5 mis-nesting regression gu
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural regression guard: needs the raw markup to re-parse it
-		realHtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		realHtml = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	/** Parses `html` as a full HTML5 document — the same parser class Firefox

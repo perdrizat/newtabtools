@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 // Return the body of the FIRST CSS rule whose selector list ends with `selector`
 // immediately before the opening brace. Anchored on `selector\s*{` so
@@ -38,13 +38,13 @@ function ruleBody(css: string, selector: string): string {
 
 describe('typography role discipline (§6)', () => {
 	let css: string;
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS/markup rule presence
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup attribute presence
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	// Textual content that must NOT be monospace.
@@ -89,6 +89,6 @@ describe('typography role discipline (§6)', () => {
 	it('no inline font-style:italic survives in the markup', () => {
 		// The Advanced-tab filter helptext, restore warning, and reset warning
 		// shipped as inline italic — the least legible combination in the UI.
-		expect(xhtml).not.toMatch(/font-style:\s*italic/);
+		expect(html).not.toMatch(/font-style:\s*italic/);
 	});
 });

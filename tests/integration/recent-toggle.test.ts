@@ -23,7 +23,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?(?:get\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -40,38 +40,38 @@ function extractMethod(source: string, methodName: string): string {
 }
 
 describe('Recently-closed toggle — placement in the Page tab Title Bar group', () => {
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural check: drawer markup placement
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	it('the recent control is a role="switch" toggle (not a segmented radio)', () => {
-		expect(xhtml).toMatch(/role="switch"[^>]*data-pref="recent"/);
-		expect(xhtml).toMatch(/class="ntt-toggle-row" data-pref="recent"/);
+		expect(html).toMatch(/role="switch"[^>]*data-pref="recent"/);
+		expect(html).toMatch(/class="ntt-toggle-row" data-pref="recent"/);
 	});
 
 	it('the recent toggle sits inside the Title Bar group', () => {
-		const groupIdx = xhtml.indexOf('data-group="titlebar"');
-		const bgIdx = xhtml.indexOf('id="options-bg-group"'); // next group after titlebar
-		const recentIdx = xhtml.indexOf('class="ntt-toggle-row" data-pref="recent"');
+		const groupIdx = html.indexOf('data-group="titlebar"');
+		const bgIdx = html.indexOf('id="options-bg-group"'); // next group after titlebar
+		const recentIdx = html.indexOf('class="ntt-toggle-row" data-pref="recent"');
 		expect(groupIdx).toBeGreaterThan(-1);
 		expect(recentIdx).toBeGreaterThan(groupIdx);
 		expect(recentIdx).toBeLessThan(bgIdx);
 	});
 
 	it('recent is the first titlebar toggle, above the search toggle', () => {
-		const recentIdx = xhtml.indexOf('data-pref="recent"');
-		const searchIdx = xhtml.indexOf('data-pref="titleBarSearch"');
+		const recentIdx = html.indexOf('data-pref="recent"');
+		const searchIdx = html.indexOf('data-pref="titleBarSearch"');
 		expect(recentIdx).toBeGreaterThan(-1);
 		expect(searchIdx).toBeGreaterThan(-1);
 		expect(recentIdx).toBeLessThan(searchIdx);
 	});
 
 	it('the recent control is NOT a segmented Off/Top radiogroup anymore', () => {
-		expect(xhtml).not.toMatch(/role="radiogroup" data-pref="recent"/);
-		expect(xhtml).not.toMatch(/data-message="options_recent_top"/);
+		expect(html).not.toMatch(/role="radiogroup" data-pref="recent"/);
+		expect(html).not.toMatch(/data-message="options_recent_top"/);
 	});
 });
 

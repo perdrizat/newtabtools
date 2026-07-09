@@ -63,11 +63,11 @@ describe('Tile aspect ratio CSS — newTab.css', () => {
 });
 
 describe('Tile aspect ratio UI — newTab.html', () => {
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(
+		html = fs.readFileSync(
 			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
@@ -75,23 +75,23 @@ describe('Tile aspect ratio UI — newTab.html', () => {
 	it('has a tileAspect segmented control in the Tile tab (Phase 3-2 reshuffle)', () => {
 		// Phase 3-2 reshuffle: the legacy `<select name="tileAspect">` was
 		// replaced by a 5-button segmented radiogroup with `data-pref="tileAspect"`.
-		expect(xhtml).toMatch(/data-pref="tileAspect"/);
+		expect(html).toMatch(/data-pref="tileAspect"/);
 	});
 
 	it('offers all five aspect options (fill, 16-9, 4-3, 1-1, 3-4)', () => {
-		expect(xhtml).toMatch(/data-value="fill"/);
-		expect(xhtml).toMatch(/data-value="16-9"/);
-		expect(xhtml).toMatch(/data-value="4-3"/);
-		expect(xhtml).toMatch(/data-value="1-1"/);
-		expect(xhtml).toMatch(/data-value="3-4"/);
+		expect(html).toMatch(/data-value="fill"/);
+		expect(html).toMatch(/data-value="16-9"/);
+		expect(html).toMatch(/data-value="4-3"/);
+		expect(html).toMatch(/data-value="1-1"/);
+		expect(html).toMatch(/data-value="3-4"/);
 	});
 
 	it('uses i18n data-message attributes for the row label and the Fill option', () => {
 		// Row label.
-		expect(xhtml).toContain('options_tile_aspect');
+		expect(html).toContain('options_tile_aspect');
 		// Only the "Fill viewport" label is localized — the four ratios
 		// (16:9, 4:3, etc.) are bare strings in the segmented buttons per
 		// UX decision.
-		expect(xhtml).toContain('options_tile_aspect_fill');
+		expect(html).toContain('options_tile_aspect_fill');
 	});
 });

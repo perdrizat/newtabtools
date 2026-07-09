@@ -16,7 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
@@ -26,39 +26,39 @@ const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 // ---------------------------------------------------------------------------
 
 describe('Never-capture UI — markup', () => {
-	let xhtml: string;
+	let html: string;
 	// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup structure
-	beforeAll(() => { xhtml = fs.readFileSync(XHTML_PATH, 'utf8'); });
+	beforeAll(() => { html = fs.readFileSync(HTML_PATH, 'utf8'); });
 
 	it('advanced panel contains a form group with id="options-nevercapture"', () => {
-		const advanced = xhtml.slice(
-			xhtml.indexOf('data-drawer-panel="advanced"'),
-			xhtml.indexOf('data-drawer-panel="advanced"') + 4000,
+		const advanced = html.slice(
+			html.indexOf('data-drawer-panel="advanced"'),
+			html.indexOf('data-drawer-panel="advanced"') + 4000,
 		);
 		expect(advanced).toMatch(/id="options-nevercapture"/);
 	});
 
 	it('the heading is wired to data-message="nevercapture_title"', () => {
-		expect(xhtml).toMatch(/data-message="nevercapture_title"/);
+		expect(html).toMatch(/data-message="nevercapture_title"/);
 	});
 
 	it('the helptext is wired to data-message="nevercapture_helptext"', () => {
-		expect(xhtml).toMatch(/data-message="nevercapture_helptext"/);
+		expect(html).toMatch(/data-message="nevercapture_helptext"/);
 	});
 
 	it('there is an input with id="options-nevercapture-host" and data-placeholder="nevercapture_placeholder_host"', () => {
-		expect(xhtml).toMatch(/id="options-nevercapture-host"/);
-		expect(xhtml).toMatch(/data-placeholder="nevercapture_placeholder_host"/);
+		expect(html).toMatch(/id="options-nevercapture-host"/);
+		expect(html).toMatch(/data-placeholder="nevercapture_placeholder_host"/);
 	});
 
 	it('there is an add button with id="options-nevercapture-add" wired to nevercapture_add', () => {
-		expect(xhtml).toMatch(/id="options-nevercapture-add"/);
-		expect(xhtml).toMatch(/data-message="nevercapture_add"/);
+		expect(html).toMatch(/id="options-nevercapture-add"/);
+		expect(html).toMatch(/data-message="nevercapture_add"/);
 	});
 
 	it('options-nevercapture sits before #options-export in document order', () => {
-		const ncPos = xhtml.indexOf('id="options-nevercapture"');
-		const exportPos = xhtml.indexOf('id="options-export"');
+		const ncPos = html.indexOf('id="options-nevercapture"');
+		const exportPos = html.indexOf('id="options-export"');
 		expect(ncPos).toBeGreaterThan(0);
 		expect(exportPos).toBeGreaterThan(0);
 		expect(ncPos).toBeLessThan(exportPos);

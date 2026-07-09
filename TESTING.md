@@ -30,8 +30,8 @@ These tools must be present on your host machine to develop and test this extens
 
 | Tool | Version | Why | How to verify |
 |---|---|---|---|
-| **Node.js** | 22 LTS (or newer; see `.node-version`) | Runs Vitest, Puppeteer, web-ext | `node --version` |
-| **pnpm** | 10.x (auto-installed by corepack from `packageManager` in `package.json`) | Package manager — required (npm/yarn are blocked by `scripts/check-pnpm.js`) | `pnpm --version` |
+| **Node.js** | >= 24 (see `.node-version` / `engines.node`) | Runs Vitest, Puppeteer, web-ext | `node --version` |
+| **pnpm** | 11.x (auto-installed by corepack from `packageManager` in `package.json`) | Package manager — required (npm/yarn are blocked by `scripts/check-pnpm.js`) | `pnpm --version` |
 | **Firefox (release), >= 152** | latest | Canonical **E2E** target (`$FIREFOX_ESR_BIN` overrides the binary) | `firefox --version` |
 | **`web-ext` CLI** | latest | Mozilla's dev tool | `web-ext --version` |
 | **geckodriver** | latest | **UAT tier** Selenium driver (auto-fetched by Selenium Manager on first run) | `geckodriver --version` |
@@ -52,17 +52,17 @@ curl -fsSL https://fnm.vercel.app/install | bash
 #    Restart your shell (or `source ~/.bashrc`) so `fnm` is on PATH and its
 #    shell hook is active before the next step.
 
-# 1. Install Node (the version comes from .node-version — currently 22)
+# 1. Install Node (the version comes from .node-version — currently 24)
 fnm install   # or: nvm install
 fnm use       # or: nvm use
 
 # 2. Activate corepack and the pinned pnpm version (from package.json)
 corepack enable
-corepack prepare pnpm@10.0.0 --activate  # adjust to whatever `packageManager` says
+corepack prepare pnpm@11.6.0 --activate  # adjust to whatever `packageManager` says
 
 # 3. Verify
-node --version    # >= v22
-pnpm --version    # >= v10
+node --version    # >= v24
+pnpm --version    # >= v11
 
 # 4. Install project dependencies (the .npmrc minimum-release-age=604800 guard
 #    refuses any package version less than 7 days old)
@@ -169,7 +169,7 @@ The files below make up the test scaffold. A new maintainer should not need to r
 
 | File | Purpose |
 |---|---|
-| [`package.json`](package.json) | `"type": "module"` (tests are ESM); pinned dev deps; `packageManager: pnpm@10.x`; `engines.node >=22`; `preinstall` runs `scripts/check-pnpm.js`; package scripts for `dev`, `lint`, `lint:webext`, `test:unit`, `test:integration`, `test:fast`, `test:e2e`, `test`. |
+| [`package.json`](package.json) | `"type": "module"` (tests are ESM); pinned dev deps; `packageManager: pnpm@11.x`; `engines.node >=24`; `preinstall` runs `scripts/check-pnpm.js`; package scripts for `dev`, `lint`, `lint:webext`, `test:unit`, `test:integration`, `test:fast`, `test:e2e`, `test`. |
 | [`package-lock.json`](package-lock.json) | **Tracked**. Reproducible installs across machines and CI. |
 | [`.npmrc`](.npmrc) | `minimum-release-age=604800` (7 days, pnpm-native) — refuses to install package versions less than 7 days old as supply-chain hygiene. Enforced because the project pins pnpm via `packageManager` and rejects npm/yarn in `scripts/check-pnpm.js`. Also `engine-strict=true`, `auto-install-peers=true`. |
 | [`vitest.config.js`](vitest.config.js) | Vitest with two `projects`: `fast` (jsdom env, includes Unit + Integration) and `e2e` (node env, `fileParallelism: false`, 60-second test timeout, includes `tests/e2e/**/*.test.js`). |
@@ -233,7 +233,7 @@ The guiding principle: every feature a user could exercise from the new tab page
 Tests fall into four categories:
 
 **1. Smoke — the extension loads and renders.**
-The single most valuable E2E test is: install the extension, open `about:newtab`, and assert the page renders with **zero console errors**. Most regressions show up as console errors before they show up as broken UI. Also verify the XHTML document parses (not a blank page or XML parse error) and the tile grid is visible with cells.
+The single most valuable E2E test is: install the extension, open `about:newtab`, and assert the page renders with **zero console errors**. Most regressions show up as console errors before they show up as broken UI. Also verify the HTML5 document parses cleanly (not a blank page) and the tile grid is visible with cells.
 
 **2. Feature acceptance — happy-path workflows.**
 Every user-facing feature should have at least one E2E test exercising the primary workflow: perform an action → observe the result → reload → confirm persistence. The *depth* of E2E coverage depends on the feature's importance:
