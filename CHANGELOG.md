@@ -24,6 +24,10 @@ Manifest V3 migration (Firefox-only). Minimum Firefox is now **152.0**.
 ### Fixed
 
 - MV3 respawn-reload bug (caught by UAT): new-tab-page reload sweep moved from top-level (re-ran every event-page respawn, reloading open pages every ~30s and killing drawer/edit-mode state) into `runtime.onInstalled`.
+- Wake-race db access (audit §2.1/§2.2, widened): all db-touching message handlers + the capture path's `ensureReady` now guard on `waitForDB()`; `Tiles._ready` set only after a successful read (was stuck true on a thrown transaction); deterministic wake-race regression suite added.
+- `pickAndStore` re-guards the IDB connection after its async chain and catches failures (connection could drop mid-capture, losing the thumbnail as an unhandled rejection).
+- `pendingCaptures` read-modify-writes serialized through one write chain (concurrent background-tab navigations could clobber each other's deferred captures).
+- Backup export now revokes its object URL when the download completes/fails (previously leaked one blob per export).
 
 ## [2.0.7] — 2026-07-06
 

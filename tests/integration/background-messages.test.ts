@@ -415,16 +415,22 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			thumbnailStore.openCursor.mockClear();
 		});
 
-		it('Thumbnails.save — writes to IDB when url and image are present', () => {
+		it('Thumbnails.save — writes to IDB when url and image are present', async () => {
+			// The write is wrapped in waitForDB() (audit §2.1) — the handler
+			// itself still returns synchronously (fire-and-forget, no response
+			// channel), but the actual db.transaction() call is now deferred a
+			// microtask behind waitForDB().
 			const result = listener(
 				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(false); // synchronous handler
-			expect(mockDB.transaction as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('thumbnails', 'readwrite');
-			expect(thumbnailStore.put).toHaveBeenCalledWith(
-				expect.objectContaining({ url: 'https://f.com', image: 'data:image/png;base64,abc' }),
-			);
+			await vi.waitFor(() => {
+				expect(mockDB.transaction as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('thumbnails', 'readwrite');
+				expect(thumbnailStore.put).toHaveBeenCalledWith(
+					expect.objectContaining({ url: 'https://f.com', image: 'data:image/png;base64,abc' }),
+				);
+			});
 		});
 
 		it('Thumbnails.save — skips write when url is missing', () => {
@@ -445,20 +451,21 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			expect(mockDB.transaction as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
 		});
 
-		it('Thumbnails.get — sends empty Map when no thumbnails exist', () => {
+		it('Thumbnails.get — sends empty Map when no thumbnails exist', async () => {
 			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration([]));
 			const result = listener(
 				{ name: 'Thumbnails.get', urls: ['https://h.com'] },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			expect(sendResponse).toHaveBeenCalledTimes(1);
+			// waitForDB() guard (audit §2.1) defers the cursor open a microtask.
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
 			const sentMap: Map<string, string> = sendResponse.mock.calls[0][0];
 			expect(sentMap).toBeInstanceOf(Map);
 			expect(sentMap.size).toBe(0);
 		});
 
-		it('Thumbnails.get — sends matching thumbnails, omits non-matching', () => {
+		it('Thumbnails.get — sends matching thumbnails, omits non-matching', async () => {
 			const entries = [
 				{ url: 'https://match.com', image: 'data:img1', used: '2026-05-01' },
 				{ url: 'https://nomatch.com', image: 'data:img2', used: '2026-05-01' },
@@ -469,7 +476,7 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 				validSender, sendResponse,
 			);
 			expect(result).toBe(true);
-			expect(sendResponse).toHaveBeenCalledTimes(1);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
 			const sentMap: Map<string, string> = sendResponse.mock.calls[0][0];
 			expect(sentMap.get('https://match.com')).toBe('data:img1');
 			expect(sentMap.has('https://nomatch.com')).toBe(false);
@@ -561,16 +568,16 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 			expect(thumbnailStore.put).not.toHaveBeenCalled();
 		});
 
-		it('still writes when the url host is NOT in the never-capture list', () => {
+		it('still writes when the url host is NOT in the never-capture list', async () => {
 			(globalThis as any).NeverCapture._list = ['other.com'];
 			const result = listener(
 				{ name: 'Thumbnails.save', url: 'https://f.com', image: 'data:image/png;base64,abc' },
 				validSender, sendResponse,
 			);
 			expect(result).toBe(false);
-			expect(thumbnailStore.put).toHaveBeenCalledWith(
+			await vi.waitFor(() => expect(thumbnailStore.put).toHaveBeenCalledWith(
 				expect.objectContaining({ url: 'https://f.com' }),
-			);
+			));
 		});
 	});
 

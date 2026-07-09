@@ -764,6 +764,102 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		expect(storedObj.image).toBeInstanceOf(Blob);
 	});
 
+	// --- pickAndStore re-guards db after its awaits (audit §2.4) ---
+
+	it('pickAndStore re-guards the DB after the isBlank/favicon/resize awaits — a connection drop mid-chain does not raise an unhandled rejection, and the write retries after reconnect', async () => {
+		const originalLocalGet = (globalThis as any).chrome.storage.local.get;
+		const unhandledSpy = vi.fn();
+		process.on('unhandledRejection', unhandledSpy);
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0); // A
+
+			// Simulate the connection dropping (the real onclose/onversionchange
+			// handlers set `db = undefined`) exactly while pickAndStore's chain is
+			// mid-flight — at the `browser.storage.local.get` await that follows
+			// the isBlank/favicon awaits.
+			(globalThis as any).chrome.storage.local.get = vi.fn((keys: Record<string, unknown>) => {
+				(globalThis as any).db = undefined;
+				return Promise.resolve(keys);
+			});
+
+			// Let network idle fire (2s) to trigger pickAndStore.
+			await vi.advanceTimersByTimeAsync(2000);
+			// Flush isBlank + storage.local.get (drops db) + resizeThumbnail +
+			// the re-guarding waitForDB() + the final db.transaction().put().
+			for (let i = 0; i < 6; i++) {
+				await vi.advanceTimersByTimeAsync(0);
+			}
+
+			expect(unhandledSpy).not.toHaveBeenCalled();
+			// waitForDB() reopens the connection (indexedDB.open mock always
+			// succeeds here) — the write retries and lands rather than being
+			// silently lost.
+			expect(thumbnailStore.put).toHaveBeenCalled();
+			const storedObj = thumbnailStore.put.mock.calls[0][0];
+			expect(storedObj.url).toBe('https://example.com');
+		} finally {
+			process.off('unhandledRejection', unhandledSpy);
+			(globalThis as any).chrome.storage.local.get = originalLocalGet;
+		}
+	});
+
+	// --- pendingCaptures: serialized read-modify-write (audit §2.3) ---
+
+	it('two concurrent onCompleted RMW writes for different background tabs both survive (serialized helper)', async () => {
+		const originalSessionGet = (globalThis as any).chrome.storage.session.get;
+		let releaseGets: Array<() => void> = [];
+		(globalThis as any).chrome.storage.session.get = vi.fn((key: string) => {
+			return new Promise(resolve => {
+				releaseGets.push(() => resolve(key in sessionStore ? { [key]: sessionStore[key] } : {}));
+			});
+		});
+
+		try {
+			// Both tabs inactive so both onCompleted calls defer into pendingCaptures.
+			(globalThis as any).chrome.tabs.get = vi.fn()
+				.mockResolvedValue({ active: false, windowId: 1, incognito: false });
+			(globalThis as any).Tiles.ensureReady.mockResolvedValue(
+				{ cache: ['https://example.com', 'https://second.example.com'], list: [] },
+			);
+
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			onCompletedListener({ frameId: 0, tabId: 43, url: 'https://second.example.com' });
+
+			// Flush both handlers up to (but not through) their storage.session
+			// .get() calls.
+			for (let i = 0; i < 5; i++) {
+				await vi.advanceTimersByTimeAsync(0);
+			}
+
+			// The serialized helper funnels both writes through ONE in-flight
+			// promise chain — tab 43's get() must not have been issued yet, since
+			// tab 42's read-modify-write (get -> mutate -> set) hasn't completed.
+			// Without the serialized helper both onCompleted calls would reach
+			// storage.session.get() independently and this would be 2.
+			expect(releaseGets.length).toBe(1);
+
+			// Release every get() as it becomes available, repeatedly, until the
+			// whole serialized chain has drained (each release may enqueue the
+			// NEXT write's get() call).
+			for (let round = 0; round < 5 && releaseGets.length; round++) {
+				const pending = releaseGets.splice(0);
+				pending.forEach(r => r());
+				await vi.advanceTimersByTimeAsync(0);
+				await vi.advanceTimersByTimeAsync(0);
+			}
+
+			expect(42 in getPendingCapturesObj()).toBe(true);
+			expect(43 in getPendingCapturesObj()).toBe(true);
+		} finally {
+			(globalThis as any).chrome.storage.session.get = originalSessionGet;
+			(globalThis as any).chrome.tabs.get = vi.fn(
+				() => Promise.resolve({ active: true, windowId: 1, incognito: false }),
+			);
+		}
+	});
+
 	// --- NeverCapture guards ---
 
 	describe('NeverCapture guards', () => {

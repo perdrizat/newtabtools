@@ -63,7 +63,10 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 	let mockBackground: Record<string, ReturnType<typeof vi.fn>>;
 	let mockTiles: Record<string, ReturnType<typeof vi.fn> | unknown>;
 	let mockStorageLocal: Record<string, ReturnType<typeof vi.fn>>;
-	let mockDownloads: Record<string, ReturnType<typeof vi.fn>>;
+	let mockDownloads: {
+		download: ReturnType<typeof vi.fn>;
+		onChanged: { addListener: ReturnType<typeof vi.fn>; removeListener: ReturnType<typeof vi.fn> } | undefined;
+	};
 	let mockPurgeNeverCaptureHost: ReturnType<typeof vi.fn>;
 
 	beforeAll(() => {
@@ -115,6 +118,7 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		// --- Mock chrome.downloads ---
 		mockDownloads = {
 			download: vi.fn().mockResolvedValue(42),
+			onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
 		};
 		(globalThis as any).chrome.downloads = mockDownloads;
 
@@ -167,6 +171,8 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 		mockStorageLocal.get.mockClear();
 		mockStorageLocal.set.mockClear();
 		mockDownloads.download.mockClear();
+		mockDownloads.onChanged = { addListener: vi.fn(), removeListener: vi.fn() };
+		(globalThis as any).chrome.downloads = mockDownloads;
 		mockPurgeNeverCaptureHost.mockClear();
 		((globalThis as any).browser.runtime.sendMessage as ReturnType<typeof vi.fn>).mockClear();
 	});
@@ -253,6 +259,93 @@ describe('backup/restore — export.js (Phase 1 slot 3)', () => {
 			expect(mockDownloads.download).toHaveBeenCalledWith(
 				expect.objectContaining({ filename: 'newtabtools.zip', saveAs: true }),
 			);
+		});
+	});
+
+	// ======================== makeZip — object URL revocation (post-MV3 backlog item 1a) ========================
+
+	describe('makeZip — object URL revocation', () => {
+		let createSpy: ReturnType<typeof vi.fn>;
+		let revokeSpy: ReturnType<typeof vi.fn>;
+
+		beforeEach(() => {
+			createSpy = vi.fn(() => 'blob:mock-url');
+			revokeSpy = vi.fn();
+			(URL as any).createObjectURL = createSpy;
+			(URL as any).revokeObjectURL = revokeSpy;
+		});
+
+		it('registers a downloads.onChanged listener scoped to the created download id', async () => {
+			mockDownloads.download.mockResolvedValueOnce(101);
+
+			await makeZip();
+
+			expect(mockDownloads.onChanged!.addListener).toHaveBeenCalledTimes(1);
+			expect(revokeSpy).not.toHaveBeenCalled();
+		});
+
+		it('revokes the object URL when the download reaches "complete"', async () => {
+			mockDownloads.download.mockResolvedValueOnce(101);
+
+			await makeZip();
+			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
+
+			onChangedListener({ id: 101, state: { current: 'complete' } });
+
+			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
+			expect(mockDownloads.onChanged!.removeListener).toHaveBeenCalledWith(onChangedListener);
+		});
+
+		it('revokes the object URL when the download reaches "interrupted"', async () => {
+			mockDownloads.download.mockResolvedValueOnce(102);
+
+			await makeZip();
+			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
+
+			onChangedListener({ id: 102, state: { current: 'interrupted' } });
+
+			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
+		});
+
+		it('ignores onChanged events for a different download id', async () => {
+			mockDownloads.download.mockResolvedValueOnce(103);
+
+			await makeZip();
+			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
+
+			onChangedListener({ id: 999, state: { current: 'complete' } });
+
+			expect(revokeSpy).not.toHaveBeenCalled();
+		});
+
+		it('ignores a non-terminal state change (e.g. "in_progress") for the same download id', async () => {
+			mockDownloads.download.mockResolvedValueOnce(104);
+
+			await makeZip();
+			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
+
+			onChangedListener({ id: 104, state: { current: 'in_progress' } });
+
+			expect(revokeSpy).not.toHaveBeenCalled();
+		});
+
+		it('revokes immediately and rethrows when browser.downloads.download rejects', async () => {
+			mockDownloads.download.mockRejectedValueOnce(new Error('download failed'));
+
+			await expect(makeZip()).rejects.toThrow('download failed');
+
+			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
+		});
+
+		it('does not throw when browser.downloads.onChanged is absent (defensive guard)', async () => {
+			const saved = mockDownloads.onChanged;
+			mockDownloads.onChanged = undefined;
+			(globalThis as any).chrome.downloads = mockDownloads;
+
+			await expect(makeZip()).resolves.toBeDefined();
+
+			mockDownloads.onChanged = saved;
+			(globalThis as any).chrome.downloads = mockDownloads;
 		});
 	});
 

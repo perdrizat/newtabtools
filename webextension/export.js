@@ -35,11 +35,47 @@ async function makeZip() {
 	// been granted, `browser.downloads` is undefined and this throws — same
 	// as the old callback-style `chrome.downloads.download(...)` call did
 	// with no guard of its own.
-	return browser.downloads.download({
-		url: URL.createObjectURL(blob),
-		filename: 'newtabtools.zip',
-		saveAs: true
-	});
+	let url = URL.createObjectURL(blob);
+
+	// Revoke the blob URL once this specific download reaches a terminal
+	// state — previously never revoked (leaked one blob per export until the
+	// event page happened to suspend). Scoped to `downloadId` via the closure
+	// below so unrelated downloads.onChanged events (any other download the
+	// user has running) are ignored.
+	//
+	// Event-page note: this listener lives only as long as the event page's
+	// in-memory JS context does. If the page suspends mid-download, the
+	// listener — and its closure over `url` — die with the document, but so
+	// does the document's own object-URL registry (blob URLs are
+	// document-scoped), so there is nothing left to revoke either way.
+	let downloadId;
+	function onDownloadChanged(delta) {
+		if (delta.id !== downloadId || !delta.state) {
+			return;
+		}
+		if (['complete', 'interrupted'].includes(delta.state.current)) {
+			URL.revokeObjectURL(url);
+			browser.downloads.onChanged.removeListener(onDownloadChanged);
+		}
+	}
+	if (browser.downloads && browser.downloads.onChanged) {
+		browser.downloads.onChanged.addListener(onDownloadChanged);
+	}
+
+	try {
+		downloadId = await browser.downloads.download({
+			url,
+			filename: 'newtabtools.zip',
+			saveAs: true
+		});
+		return downloadId;
+	} catch (ex) {
+		URL.revokeObjectURL(url);
+		if (browser.downloads && browser.downloads.onChanged) {
+			browser.downloads.onChanged.removeListener(onDownloadChanged);
+		}
+		throw ex;
+	}
 }
 
 /**

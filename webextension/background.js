@@ -118,8 +118,14 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 
 	switch (message.name) {
 	case 'Tiles.isPinned':
-		Tiles.ensureReady().then(() => {
+		// Wrapped in waitForDB() (audit §2.1): this is the toolbar popup's sole
+		// wake message — on an event-page wake, db can still be opening when it
+		// fires, and Tiles.ensureReady()/getAllTiles() reach db directly.
+		waitForDB().then(() => Tiles.ensureReady()).then(() => {
 			sendResponse(Tiles.isPinned(message.url));
+		}).catch(function(event) {
+			console.error(event);
+			sendResponse(null);
 		});
 		return true;
 	case 'Tiles.getAllTiles':
@@ -133,13 +139,16 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		});
 		return true;
 	case 'Tiles.getTile':
-		Tiles.getTile(message.url).then(sendResponse, console.error);
+		// waitForDB() guard (audit §2.1) — these three were the "missed by the
+		// report" unguarded handlers; response shape unchanged (no sendResponse
+		// on error, matching the pre-existing sibling pattern).
+		waitForDB().then(() => Tiles.getTile(message.url)).then(sendResponse, console.error);
 		return true;
 	case 'Tiles.putTile':
-		Tiles.putTile(message.tile).then(sendResponse, console.error);
+		waitForDB().then(() => Tiles.putTile(message.tile)).then(sendResponse, console.error);
 		return true;
 	case 'Tiles.removeTile':
-		Tiles.removeTile(message.tile).then(sendResponse, console.error);
+		waitForDB().then(() => Tiles.removeTile(message.tile)).then(sendResponse, console.error);
 		return true;
 	// Exposes the existing Tiles.clear() (single IDB objectStore.clear) over
 	// the message protocol. Added to support hermetic E2E test cleanup, but
@@ -174,32 +183,43 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		let {url, image} = message;
 		// Never-capture guard: refuse to store a thumbnail for a listed host.
 		if (url && image && !NeverCapture.matches(url)) {
-			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
-				url,
-				image,
-				stored: today,
-				used: today
-			});
+			// waitForDB() guard (audit §2.1): fire-and-forget write, so no
+			// sendResponse either way — just don't reach db before it's open.
+			waitForDB().then(function() {
+				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
+					url,
+					image,
+					stored: today,
+					used: today
+				});
+			}).catch(console.error);
 		}
 		return false;
 	case 'Thumbnails.get':
+		// waitForDB() guard (audit §2.1): this fires on every new-tab-page
+		// load, so an event-page wake races it against the still-opening db.
 		let map = new Map();
-		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
-			let cursor = this.result;
-			if (cursor) {
-				let thumb = cursor.value;
-				if (message.urls.includes(thumb.url)) {
-					map.set(thumb.url, thumb.image);
-					if (thumb.used != today) {
-						thumb.used = today;
-						cursor.update(thumb);
+		waitForDB().then(function() {
+			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					let thumb = cursor.value;
+					if (message.urls.includes(thumb.url)) {
+						map.set(thumb.url, thumb.image);
+						if (thumb.used != today) {
+							thumb.used = today;
+							cursor.update(thumb);
+						}
 					}
+					cursor.continue();
+				} else {
+					sendResponse(map);
 				}
-				cursor.continue();
-			} else {
-				sendResponse(map);
-			}
-		};
+			};
+		}).catch(function(event) {
+			console.error(event);
+			sendResponse(map);
+		});
 		return true;
 
 	case 'Thumbnails.capture':
@@ -213,23 +233,29 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// A cached `data:` favicon comes back as a `favicon` Blob; a remote
 		// favicon comes back as its `faviconUrl` string for the page to render
 		// live via <img>. The page-side handler distinguishes the two.
+		// waitForDB() guard (audit §2.1).
 		let faviconMap = new Map();
-		db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
-			let cursor = this.result;
-			if (cursor) {
-				let row = cursor.value;
-				if (message.urls.includes(row.url)) {
-					if (row.favicon) {
-						faviconMap.set(row.url, row.favicon);
-					} else if (row.faviconUrl) {
-						faviconMap.set(row.url, row.faviconUrl);
+		waitForDB().then(function() {
+			db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					let row = cursor.value;
+					if (message.urls.includes(row.url)) {
+						if (row.favicon) {
+							faviconMap.set(row.url, row.favicon);
+						} else if (row.faviconUrl) {
+							faviconMap.set(row.url, row.faviconUrl);
+						}
 					}
+					cursor.continue();
+				} else {
+					sendResponse(faviconMap);
 				}
-				cursor.continue();
-			} else {
-				sendResponse(faviconMap);
-			}
-		};
+			};
+		}).catch(function(event) {
+			console.error(event);
+			sendResponse(faviconMap);
+		});
 		return true;
 
 	case 'Thumbnails.getFaviconsByHost':
@@ -237,26 +263,32 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// `www.` dropped) instead of exact URL. Favicons are per-site, so a
 		// recently-closed deep article URL can reuse the favicon stored for any
 		// page on the same site. Returns a `host -> (Blob | string)` map.
+		// waitForDB() guard (audit §2.1).
 		let faviconsByHost = new Map();
 		let wantedHosts = new Set(message.hosts || []);
-		db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
-			let cursor = this.result;
-			if (cursor) {
-				let row = cursor.value;
-				let host = null;
-				try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
-				if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
-					if (row.favicon) {
-						faviconsByHost.set(host, row.favicon);
-					} else if (row.faviconUrl) {
-						faviconsByHost.set(host, row.faviconUrl);
+		waitForDB().then(function() {
+			db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					let row = cursor.value;
+					let host = null;
+					try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
+					if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
+						if (row.favicon) {
+							faviconsByHost.set(host, row.favicon);
+						} else if (row.faviconUrl) {
+							faviconsByHost.set(host, row.faviconUrl);
+						}
 					}
+					cursor.continue();
+				} else {
+					sendResponse(faviconsByHost);
 				}
-				cursor.continue();
-			} else {
-				sendResponse(faviconsByHost);
-			}
-		};
+			};
+		}).catch(function(event) {
+			console.error(event);
+			sendResponse(faviconsByHost);
+		});
 		return true;
 
 	case 'Thumbnails.delete':
@@ -728,8 +760,13 @@ function pickAndStore(tabId) {
 			// live via <img> (no fetch / no connect-src wildcard).
 			record.faviconUrl = favIconUrl;
 		}
+		// Re-guard db (audit §2.4): the isBlank/favicon/resize awaits above
+		// give the connection time to drop via onclose/onversionchange —
+		// waitForDB() re-opens it if so, instead of throwing on a stale
+		// `db` reference and losing the freshly-captured thumbnail silently.
+		await waitForDB();
 		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
-	});
+	}).catch(console.error);
 }
 
 // ---------------------------------------------------------------------------
@@ -750,7 +787,12 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 
 	browser.action.enable(details.tabId).catch(console.error);
 
-	Tiles.ensureReady().then(async function({cache}) {
+	// waitForDB() guard (audit §2.1): Tiles.ensureReady() reaches db directly
+	// via getAllTiles() — on an event-page wake this can otherwise fire
+	// before db finishes opening, which (pre-fix) permanently loses this
+	// capture AND sticky-disables the cache for the rest of the respawn
+	// (tiles.js §2.2). Inserted ahead of the existing chain, not restructured.
+	waitForDB().then(() => Tiles.ensureReady()).then(async function({cache}) {
 		if (cache.includes(details.url)) {
 			// Never-capture privacy guard: skip both paths for listed hosts.
 			if (NeverCapture.matches(details.url)) {
@@ -765,41 +807,98 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 			} else {
 				// Unbounded wait for tab activation — doesn't survive event-page
 				// suspension in-memory, so it lives in storage.session instead.
-				await browser.storage.session.get('pendingCaptures').then(function(result) {
-					let pendingCaptures = result.pendingCaptures || {};
-					pendingCaptures[details.tabId] = {
-						url: details.url,
-						windowId: tab.windowId,
-					};
-					return browser.storage.session.set({pendingCaptures});
+				await addPendingCapture(details.tabId, {
+					url: details.url,
+					windowId: tab.windowId,
 				});
 			}
 		}
 	}).catch(console.error);
 });
 
-chrome.tabs.onActivated.addListener(function(activeInfo) {
-	browser.storage.session.get('pendingCaptures').then(function(result) {
-		let pendingCaptures = result.pendingCaptures || {};
-		let pending = pendingCaptures[activeInfo.tabId];
-		if (!pending) {
-			return;
+// ---------------------------------------------------------------------------
+// pendingCaptures: serialized storage.session read-modify-write (audit §2.3)
+// ---------------------------------------------------------------------------
+
+// Chains every pendingCaptures mutation onto one promise, so two concurrent
+// callers (e.g. two `onCompleted` events for different background tabs)
+// can't both read the same storage.session snapshot and clobber each other's
+// write — the second caller's get() only starts once the first's set() has
+// finished. Also dedups the three previously open-coded RMW blocks (§4.1).
+var pendingWriteChain = Promise.resolve();
+
+/**
+ * Queue a pendingCaptures read-modify-write behind any already in flight.
+ * @param {function(Record<string, {url: string, windowId: number}>): *} mutate
+ *   Receives the current pendingCaptures object (mutate in place); its
+ *   return value becomes this call's resolved value.
+ * @returns {Promise<*>}
+ */
+function enqueuePendingCapturesWrite(mutate) {
+	let result = pendingWriteChain.then(async function() {
+		let {pendingCaptures} = await browser.storage.session.get('pendingCaptures');
+		pendingCaptures = pendingCaptures || {};
+		let returnValue = mutate(pendingCaptures);
+		await browser.storage.session.set({pendingCaptures});
+		return returnValue;
+	});
+	// Keep the chain alive even if this write failed, so a later caller still
+	// gets a turn instead of every subsequent write rejecting forever.
+	pendingWriteChain = result.catch(function(event) {
+		console.error(event);
+	});
+	return result;
+}
+
+/**
+ * Record a deferred capture for a background tab.
+ * @param {number} tabId
+ * @param {{url: string, windowId: number}} data
+ * @returns {Promise<void>}
+ */
+function addPendingCapture(tabId, data) {
+	return enqueuePendingCapturesWrite(function(pendingCaptures) {
+		pendingCaptures[tabId] = data;
+	});
+}
+
+/**
+ * Remove and return the deferred capture for a tab, if any.
+ * @param {number} tabId
+ * @returns {Promise<{url: string, windowId: number}|undefined>}
+ */
+function takePendingCapture(tabId) {
+	return enqueuePendingCapturesWrite(function(pendingCaptures) {
+		let pending = pendingCaptures[tabId];
+		if (pending) {
+			delete pendingCaptures[tabId];
 		}
-		delete pendingCaptures[activeInfo.tabId];
-		return browser.storage.session.set({pendingCaptures}).then(function() {
+		return pending;
+	});
+}
+
+/**
+ * Discard the deferred capture for a tab, if any (no return value needed —
+ * used for cleanup on tab close).
+ * @param {number} tabId
+ * @returns {Promise<void>}
+ */
+function removePendingCapture(tabId) {
+	return enqueuePendingCapturesWrite(function(pendingCaptures) {
+		delete pendingCaptures[tabId];
+	});
+}
+
+chrome.tabs.onActivated.addListener(function(activeInfo) {
+	takePendingCapture(activeInfo.tabId).then(function(pending) {
+		if (pending) {
 			startCaptureSession(activeInfo.tabId, pending.windowId, pending.url);
-		});
+		}
 	}).catch(console.error);
 });
 
 chrome.tabs.onRemoved.addListener(function(tabId) {
-	browser.storage.session.get('pendingCaptures').then(function(result) {
-		let pendingCaptures = result.pendingCaptures || {};
-		if (tabId in pendingCaptures) {
-			delete pendingCaptures[tabId];
-			return browser.storage.session.set({pendingCaptures});
-		}
-	}).catch(console.error);
+	removePendingCapture(tabId).catch(console.error);
 	captureSessions.delete(tabId);
 	disarmNetworkIdle(tabId);
 });
