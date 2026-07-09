@@ -256,18 +256,50 @@ UAT: full suite after Slice D.
 
 ## Post-MV3 backlog (explicitly deferred)
 
+Items marked *(review 2026-07-09)* were raised or endorsed by the external code
+review of the migration; disposition per maintainer decision 2026-07-09.
+
+- **Fix: unrevoked object URL in `export.js`** *(review 2026-07-09 §1a — accepted;
+  queued behind the in-flight review round, no code changes until it closes).*
+  `makeZip`'s `URL.createObjectURL(blob)` is never revoked — pre-existing leak, one
+  blob per backup export until the event page suspends. Fix shape: revoke from a
+  `downloads.onChanged` listener when that download id reaches a terminal state
+  (`complete`/`interrupted`); TDD as usual.
 - **Retest the finished MV3 build against Firefox 140/ESR.** The Fx-152 capture gate
   was established with a minimal probe during the spike (2026-07-09). Once the real
   migrated extension exists, re-run it (probe + E2E capture tests) on ESR 140 to
   confirm the gate is a genuine upstream version restriction and not a temporary
   issue or a side effect of our own probe/migration choices. If capture turns out to
   work on 140, lower `strict_min_version` accordingly.
-- XHTML→HTML conversion (dedicated high-risk task; full UAT review).
+- XHTML→HTML conversion (dedicated high-risk task; full UAT review). *(review
+  2026-07-09 §3b concurs; hazards inventoried in audit/2026-07-09-mv3-inventory.md
+  §2. Slots as the natural first step of the ES-module arc / Chrome prep — not
+  ahead of the AMO submission.)*
 - ES-module extraction of the background as a clean rewrite behind the frozen
   message contract, with `lib/platform.js` capability layer — designed against
-  service-worker constraints as Chrome preparation.
-- Chrome/stage 3 (ROADMAP unchanged): offscreen/`OffscreenCanvas` for the capture
-  pipeline, polyfill, dual-manifest build, CWS review posture for `<all_urls>`.
+  service-worker constraints as Chrome preparation. *(review 2026-07-09 §3a
+  concurs; deliberately excluded from the flip so MV3-semantics regressions and
+  refactor regressions could never be confounded.)*
+- Chrome/stage 3 (ROADMAP unchanged): offscreen/`OffscreenCanvas` +
+  `createImageBitmap` for the capture pipeline's canvas/`Image` usage *(review
+  2026-07-09 §2a — agreed as Chrome-prep, rejected as a Firefox-only change:
+  Firefox event pages keep DOM by design and the pipeline is freshly verified)*,
+  polyfill, dual-manifest build, CWS review posture for `<all_urls>`.
+
+### Considered and rejected (decisions of record)
+
+- **`idb` library to replace the hand-rolled IndexedDB wrapper** *(review
+  2026-07-09 §3c — declined 2026-07-09).* (1) The extension ships zero third-party
+  runtime deps by supply-chain policy (sole exception: vendored, reproducibility-
+  documented `zip.js`); vendoring `idb` adds reviewed attack/review surface to
+  replace ~60 well-tested wrapper lines — and the reconnect semantics added in
+  Slice B would still have to be hand-written on top. (2) `idb` is an ES module;
+  the script-mode background cannot import it until the module extraction lands,
+  so the suggestion is blocked on that arc regardless. Revisit at module-extraction
+  time (alternative: promisify the raw cursor walks ourselves, no dependency).
+- **Persisting `captureSessions`/`networkIdleWatchers`** — remains rejected; see
+  the "State in the event page" directive above (≤2s lifetime, event-anchored to
+  a fresh idle clock, self-healing on loss; measured in the spike).
 
 ## Reference: inventory anchors (2026-07-09 survey)
 

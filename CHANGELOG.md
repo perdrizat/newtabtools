@@ -11,6 +11,7 @@ Manifest V3 migration (Firefox-only). Minimum Firefox is now **152.0**.
 ### Changed
 
 - MV3_MIGRATION.md rewritten as the live migration plan (branch `mv3-migration`): ES modules and XHTML→HTML descoped from the flip, `pendingCaptures` directive corrected to `storage.session`, spike questions + slice checklist added.
+- MV3_MIGRATION.md backlog updated from external code review: object-URL revocation fix queued (code deferred until reviews close), XHTML/ES-module items cross-referenced, `idb` and capture-session persistence recorded as considered-and-rejected.
 - MV3 spike findings recorded: temporary installs auto-grant host permissions; capture APIs are absent under MV3 until exactly Firefox 152.0 (bisected) → planned `strict_min_version` 152.0 and E2E on release-channel Firefox; post-MV3 note to retest against ESR 140.
 - Added `audit/2026-07-09-mv3-inventory.md`: full file:line codebase inventory (background, front end, test infra) backing the migration plan.
 - MV3 Slice A: removed both `extension.getViews()` sites — background/export now broadcast `Page.updateGrid`/`Page.restoreComplete`; new page-side `runtime.onMessage` listener; restore refresh (incl. prefs-only path) is message-driven.
