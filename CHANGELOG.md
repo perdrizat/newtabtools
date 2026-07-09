@@ -4,12 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [3.0.0] — 2026-07-09
+
+HTML5 page conversion — Stage H of the modernization arc (see `MODERNIZATION.md`).
 
 ### Changed
 
-- Modernization H2: the new-tab page is now HTML5 — `newTab.xhtml` → `newTab.html` (`<!DOCTYPE html>`, charset meta, xmlns dropped, 10 self-closing non-void tags expanded to prevent parser mis-nesting); all path touchpoints renamed (manifest, E2E/UAT tooling, ~16 structural tests); `loads-cleanly` E2E now asserts DOCTYPE + no-quirks-mode.
-- Modernization H3: 26 HTML-namespace `createElementNS` sites collapsed to `createElement` (newTab.js ×7, fx-newTab.js ×12, awesomebar.js ×7); `HTML_NAMESPACE`/`HTML_NS` constants deleted; `icons.js` SVG creation stays namespaced (required).
+- The new-tab page is now HTML5 (H2) — `newTab.xhtml` → `newTab.html` (`<!DOCTYPE html>`, charset meta, xmlns dropped, 10 self-closing non-void tags expanded to prevent parser mis-nesting); all path touchpoints renamed (manifest, E2E/UAT tooling, ~16 structural tests); `loads-cleanly` E2E now asserts DOCTYPE + no-quirks-mode. Full UAT 11/11 on the converted page.
+- 26 HTML-namespace `createElementNS` sites collapsed to `createElement` (H3; newTab.js ×7, fx-newTab.js ×12, awesomebar.js ×7); `HTML_NAMESPACE`/`HTML_NS` constants deleted; `icons.js` SVG creation stays namespaced (required).
+- Docs + tooling sweep (H4): README/CONTRIBUTING/TESTING/ROADMAP reflect the modular lib/ background and HTML5 page; i18n scripts drop the dead `.xhtml` filter; stale Node/pnpm versions in TESTING.md corrected (≥24 / 11.x).
+
+### Fixed
+
+- Page JS made parser-agnostic ahead of the HTML5 flip (H1) — the pin-URL autocomplete's `nodeName != 'li'` walk (would crash under an HTML parser) normalized; also fixed an inert uppercase tag filter in the i18n-render E2E test.
+
+## [2.2.0] — 2026-07-09
+
+Background ES-module rewrite — Stage M of the modernization arc. (Released from
+`modernization-m` on main; if main's 2.2.0 section wording differs at merge
+time, prefer main's.)
+
+### Changed
 
 - Modernization M1: background flipped to a single ES-module entry (`lib/background-main.js`, `type: module`) over a `globalThis` bridge in the six background files; behavior-identical, page scripts unchanged.
 - zip.js re-vendored as the unbundled ESM core tree (`lib/zip/`, 25 files from the same pinned `@zip.js/zip.js`) + `lib/zip-global.js` bridge — the old single-file UMD build doesn't survive module loading; `update-zip` script rewritten accordingly.
@@ -31,7 +46,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Action-button seed sweep re-runs after extension disable→re-enable (session-flag guard at wake) — restores the self-heal lost with the per-respawn sweep.
 - Early `Page.*` broadcast replays are fault-isolated (per-replay try/catch).
 - M7 cleanups: single `withObjectStore` in `lib/db.js`; dead webRequest listener closures removed; backup/zip module lazy-loads on first use (25-file zip tree no longer parses on every event-page respawn).
-- Modernization H1: page JS made parser-agnostic ahead of the HTML5 flip — the pin-URL autocomplete's `nodeName != 'li'` walk (would crash under an HTML parser) normalized; also fixed an inert uppercase tag filter in the i18n-render E2E test.
 
 ## [2.1.0] — 2026-07-09
 
