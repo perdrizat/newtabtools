@@ -6,15 +6,8 @@
 
 Promise.all([
 	Prefs.init(),
-	initDB()
+	waitForDB()
 ]).then(function() {
-	if (initDB.waitingQueue) {
-		for (let waiting of initDB.waitingQueue) {
-			waiting.resolve.call();
-		}
-		delete initDB.waitingQueue;
-	}
-
 	let previousVersion = Prefs.version;
 	chrome.management.getSelf(function({version: currentVersion}) {
 		if (previousVersion != currentVersion) {
@@ -23,18 +16,23 @@ Promise.all([
 	});
 }).catch(function(event) {
 	console.error(event);
-	db = 'broken';
-	if (initDB.waitingQueue) {
-		for (let waiting of initDB.waitingQueue) {
-			waiting.reject.call();
-		}
-		delete initDB.waitingQueue;
-	}
 });
 
 var db;
+// Memoizes the in-flight initDB() call so concurrent waitForDB() callers
+// share one open request; cleared on settle (success or failure) so a LATER
+// call retries from scratch. See waitForDB() below.
+var dbInitPromise;
 const NEW_TAB_URL = chrome.runtime.getURL('newTab.xhtml');
 
+/**
+ * Open (or reopen) the IndexedDB connection, resolving once `db` is set.
+ * Attaches `onclose`/`onversionchange` handlers that clear `db` when the
+ * connection drops — independent of event-page respawn (e.g. another
+ * context bumping the DB version) — so `waitForDB()` knows to reopen it.
+ * @returns {Promise<void>} Rejects with the triggering event on a genuine
+ *   open failure (`onblocked`/`onerror`).
+ */
 function initDB() {
 	return new Promise(function(resolve, reject) {
 		let request = indexedDB.open('newTabTools', 9);
@@ -42,6 +40,13 @@ function initDB() {
 		request.onsuccess = function(/* event */) {
 			// console.log(event.type, event);
 			db = this.result;
+			db.onclose = function() {
+				db = undefined;
+			};
+			db.onversionchange = function() {
+				db.close();
+				db = undefined;
+			};
 			resolve();
 		};
 
@@ -74,20 +79,25 @@ function initDB() {
 	});
 }
 
+/**
+ * Resolve once the IndexedDB connection is ready, (re)opening it if needed.
+ * Concurrent callers dedupe onto the same in-flight `initDB()` call via
+ * `dbInitPromise`; once that call settles the dedup is cleared, so a LATER
+ * call — after a dropped connection (`onclose`/`onversionchange`) or a
+ * failed open — retries `initDB()` from scratch instead of being doomed for
+ * the lifetime of the context.
+ * @returns {Promise<void>}
+ */
 function waitForDB() {
-	return new Promise(function(resolve, reject) {
-		if (db) {
-			if (db == 'broken') {
-				reject('Database connection failed.');
-			} else {
-				resolve();
-			}
-			return;
-		}
-
-		initDB.waitingQueue = initDB.waitingQueue || [];
-		initDB.waitingQueue.push({resolve, reject});
-	});
+	if (db) {
+		return Promise.resolve();
+	}
+	if (!dbInitPromise) {
+		dbInitPromise = initDB().finally(function() {
+			dbInitPromise = undefined;
+		});
+	}
+	return dbInitPromise;
 }
 
 function getTZDateString(date = new Date()) {
@@ -486,7 +496,6 @@ function isBlank(dataURL) {
 // ---------------------------------------------------------------------------
 
 var captureSessions = new Map();
-var pendingCaptures = new Map();
 
 /**
  * Start a multi-stage capture session for a tab.
@@ -498,8 +507,10 @@ var pendingCaptures = new Map();
  *   After C (or 2s timeout), pickAndStore selects the best capture.
  *
  * Background tabs that haven't been activated yet are deferred via
- * pendingCaptures — the full A/B/C flow starts when the user switches
- * to the tab, since SPAs often only render after activation.
+ * `storage.session`'s `pendingCaptures` (an unbounded wait for tab
+ * activation, which doesn't survive event-page suspension in-memory) —
+ * the full A/B/C flow starts when the user switches to the tab, since
+ * SPAs often only render after activation.
  */
 function startCaptureSession(tabId, windowId, url) {
 	// Privacy guard: never capture sites the user has opted-out of.
@@ -705,10 +716,16 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 				if (tab.active) {
 					startCaptureSession(details.tabId, tab.windowId, details.url);
 				} else {
-					pendingCaptures.set(details.tabId, {
-						url: details.url,
-						windowId: tab.windowId,
-					});
+					// Unbounded wait for tab activation — doesn't survive event-page
+					// suspension in-memory, so it lives in storage.session instead.
+					browser.storage.session.get('pendingCaptures').then(function(result) {
+						let pendingCaptures = result.pendingCaptures || {};
+						pendingCaptures[details.tabId] = {
+							url: details.url,
+							windowId: tab.windowId,
+						};
+						return browser.storage.session.set({pendingCaptures});
+					}).catch(console.error);
 				}
 			});
 		}
@@ -716,15 +733,27 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 });
 
 chrome.tabs.onActivated.addListener(function(activeInfo) {
-	let pending = pendingCaptures.get(activeInfo.tabId);
-	if (pending) {
-		pendingCaptures.delete(activeInfo.tabId);
-		startCaptureSession(activeInfo.tabId, pending.windowId, pending.url);
-	}
+	browser.storage.session.get('pendingCaptures').then(function(result) {
+		let pendingCaptures = result.pendingCaptures || {};
+		let pending = pendingCaptures[activeInfo.tabId];
+		if (!pending) {
+			return;
+		}
+		delete pendingCaptures[activeInfo.tabId];
+		return browser.storage.session.set({pendingCaptures}).then(function() {
+			startCaptureSession(activeInfo.tabId, pending.windowId, pending.url);
+		});
+	}).catch(console.error);
 });
 
 chrome.tabs.onRemoved.addListener(function(tabId) {
-	pendingCaptures.delete(tabId);
+	browser.storage.session.get('pendingCaptures').then(function(result) {
+		let pendingCaptures = result.pendingCaptures || {};
+		if (tabId in pendingCaptures) {
+			delete pendingCaptures[tabId];
+			return browser.storage.session.set({pendingCaptures});
+		}
+	}).catch(console.error);
 	captureSessions.delete(tabId);
 	disarmNetworkIdle(tabId);
 });
@@ -741,27 +770,43 @@ chrome.tabs.query({}, function(tabs) {
 	}
 });
 
-browser.menus.create({
+/**
+ * Register a context menu item, tolerating the "already exists" duplicate
+ * error. Event-page top-level code re-runs on every MV3 respawn, so these
+ * `create()` calls fire repeatedly for ids that already exist; Firefox
+ * reports that via `runtime.lastError` inside the optional create callback
+ * rather than throwing. Reading it here "checks" it so it doesn't surface
+ * as an unhandled error — a duplicate on respawn is expected, not worth
+ * logging.
+ * @param {object} props browser.menus.create() properties (id/title/contexts).
+ */
+function createMenuTolerant(props) {
+	browser.menus.create(props, function() {
+		return browser.runtime.lastError;
+	});
+}
+
+createMenuTolerant({
 	id: 'edit',
 	title: chrome.i18n.getMessage('contextmenu_edit'),
 	contexts: ['link'],
 });
-browser.menus.create({
+createMenuTolerant({
 	id: 'pin',
 	title: chrome.i18n.getMessage('contextmenu_pin'),
 	contexts: ['link'],
 });
-browser.menus.create({
+createMenuTolerant({
 	id: 'unpin',
 	title: chrome.i18n.getMessage('contextmenu_unpin'),
 	contexts: ['link'],
 });
-browser.menus.create({
+createMenuTolerant({
 	id: 'block',
 	title: chrome.i18n.getMessage('contextmenu_block'),
 	contexts: ['link'],
 });
-browser.menus.create({
+createMenuTolerant({
 	id: 'options',
 	title: chrome.i18n.getMessage('contextmenu_options'),
 	contexts: ['page'],
@@ -853,10 +898,24 @@ function purgeNeverCaptureHost(pattern) {
 	}));
 }
 
+/**
+ * One-shot-per-respawn idle listener. `cleanupThumbnails()` itself is
+ * guarded to run at most once per day (`thumbnailCleanupLastRun` in
+ * `storage.local`) — the listener re-arms on every MV3 event-page respawn
+ * (top-level code re-runs), so without the date guard it would run once per
+ * respawn instead of once per day.
+ * @param {string} state chrome.idle.onStateChanged state ('idle', 'active', 'locked').
+ */
 function idleListener(state) {
 	if (state == 'idle') {
 		chrome.idle.onStateChanged.removeListener(idleListener);
-		cleanupThumbnails();
+		let today = getTZDateString();
+		chrome.storage.local.get({thumbnailCleanupLastRun: null}, function(result) {
+			if (result.thumbnailCleanupLastRun !== today) {
+				cleanupThumbnails();
+				chrome.storage.local.set({thumbnailCleanupLastRun: today});
+			}
+		});
 	}
 }
 

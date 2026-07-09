@@ -138,8 +138,16 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 	// Globals that background.js defines — we'll access them for assertions
 	let getCaptureSessions: () => Map<number, any>;
-	let getPendingCaptures: () => Map<number, any>;
+	let getPendingCapturesObj: () => Record<string, any>;
 	let getNetworkIdleWatchers: () => Map<number, any>;
+
+	// Mocked browser.storage.session backing store — pendingCaptures (Slice B
+	// of the MV3 migration) now lives here instead of an in-memory Map, since
+	// it waits for tab activation (unbounded) and must survive an event-page
+	// respawn. `chrome`/`browser` are the same object under jest-webextension-
+	// mock, but the beforeAll below replaces `chrome.storage` wholesale (to
+	// control `local` for thumbnailSize), so `session` is re-added here.
+	let sessionStore: Record<string, unknown>;
 
 	beforeAll(async () => {
 		vi.useFakeTimers();
@@ -275,11 +283,28 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			}
 		};
 
-		// --- chrome.storage.local.get mock (for thumbnailSize) ---
+		// --- chrome.storage.local.get mock (for thumbnailSize) + browser.storage.session mock ---
+		sessionStore = {};
 		(globalThis as any).chrome.storage = {
 			local: {
 				get: vi.fn((keys: Record<string, unknown>, cb: Function) => cb(keys)),
 				set: vi.fn(),
+			},
+			session: {
+				get: vi.fn((key: string) => {
+					if (key in sessionStore) {
+						return Promise.resolve({ [key]: sessionStore[key] });
+					}
+					return Promise.resolve({});
+				}),
+				set: vi.fn((obj: Record<string, unknown>) => {
+					Object.assign(sessionStore, obj);
+					return Promise.resolve();
+				}),
+				remove: vi.fn((key: string) => {
+					delete sessionStore[key];
+					return Promise.resolve();
+				}),
 			},
 		};
 
@@ -337,7 +362,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 
 		// Access background.js globals via globalThis (script-mode = global scope)
 		getCaptureSessions = () => (globalThis as any).captureSessions;
-		getPendingCaptures = () => (globalThis as any).pendingCaptures;
+		getPendingCapturesObj = () => (sessionStore.pendingCaptures as Record<string, any>) || {};
 		getNetworkIdleWatchers = () => (globalThis as any).networkIdleWatchers;
 	});
 
@@ -347,7 +372,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		thumbnailStore.delete.mockClear();
 		(mockDB.transaction as ReturnType<typeof vi.fn>).mockClear();
 		getCaptureSessions().clear();
-		getPendingCaptures().clear();
+		sessionStore = {};
 		getNetworkIdleWatchers().clear();
 	});
 
@@ -398,9 +423,12 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			(_tabId: number, cb: Function) => cb({ active: false, windowId: 1, incognito: false })
 		);
 		onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+		// pendingCaptures now round-trips through the mocked browser.storage.session
+		// (get → mutate → set), an extra microtask hop beyond the in-memory Map.
+		await vi.advanceTimersByTimeAsync(0);
 		await vi.advanceTimersByTimeAsync(0);
 		expect(captureCallCount()).toBe(0);
-		expect(getPendingCaptures().has(42)).toBe(true);
+		expect(42 in getPendingCapturesObj()).toBe(true);
 	});
 
 	// --- Multi-stage capture: A, B, C ---
@@ -464,12 +492,16 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	// --- onActivated path (background tab) ---
 
 	it('onActivated starts full A/B/C capture for pending tab', async () => {
-		getPendingCaptures().set(42, { url: 'https://example.com', windowId: 1 });
+		sessionStore.pendingCaptures = { 42: { url: 'https://example.com', windowId: 1 } };
 		onActivatedListener({ tabId: 42 });
+		// Consuming the entry round-trips through storage.session (get → delete →
+		// set) before startCaptureSession fires — flush that chain, then A.
+		await vi.advanceTimersByTimeAsync(0);
 		await vi.advanceTimersByTimeAsync(0); // A
 
 		expect(captureCallCount()).toBe(1); // A
-		expect(getPendingCaptures().has(42)).toBe(false);
+		expect(getCaptureSessions().has(42)).toBe(true);
+		expect(42 in getPendingCapturesObj()).toBe(false);
 
 		await vi.advanceTimersByTimeAsync(500); // B
 		expect(captureCallCount()).toBe(2); // A + B
@@ -505,16 +537,20 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		expect(captureCallCount()).toBe(4); // old A + new A + new B + new C
 	});
 
-	it('onRemoved cleans up captureSessions, pendingCaptures, and network idle', () => {
+	it('onRemoved cleans up captureSessions, pendingCaptures, and network idle', async () => {
 		getCaptureSessions().set(42, { url: 'x', captures: [], timers: [] });
-		getPendingCaptures().set(42, { url: 'x', windowId: 1 });
+		sessionStore.pendingCaptures = { 42: { url: 'x', windowId: 1 } };
 		getNetworkIdleWatchers().set(42, { timer: 0, startTime: 0, callback: vi.fn(), resetCount: 0 });
 
 		onRemovedListener(42);
-
+		// pendingCaptures cleanup now round-trips through storage.session
+		// (get → delete → set) — captureSessions/networkIdleWatchers stay
+		// synchronous, unchanged.
 		expect(getCaptureSessions().has(42)).toBe(false);
-		expect(getPendingCaptures().has(42)).toBe(false);
 		expect(getNetworkIdleWatchers().has(42)).toBe(false);
+		await vi.advanceTimersByTimeAsync(0);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(42 in getPendingCapturesObj()).toBe(false);
 	});
 
 	// --- Network idle monitor ---
@@ -640,7 +676,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			thumbnailStore.put.mockClear();
 			(mockDB.transaction as ReturnType<typeof vi.fn>).mockClear();
 			getCaptureSessions().clear();
-			getPendingCaptures().clear();
+			sessionStore = {};
 			getNetworkIdleWatchers().clear();
 			// Reset NeverCapture to empty before each test
 			(globalThis as any).NeverCapture._list = [];
@@ -678,7 +714,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			await vi.advanceTimersByTimeAsync(0);
 			expect(captureCallCount()).toBe(0);
 			expect(getCaptureSessions().has(42)).toBe(false);
-			expect(getPendingCaptures().has(42)).toBe(false);
+			expect(42 in getPendingCapturesObj()).toBe(false);
 		});
 
 		it('webNavigation.onCompleted for a listed cached URL — no pendingCaptures entry (inactive tab)', async () => {
@@ -689,7 +725,7 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 			await vi.advanceTimersByTimeAsync(0);
 			expect(captureCallCount()).toBe(0);
-			expect(getPendingCaptures().has(42)).toBe(false);
+			expect(42 in getPendingCapturesObj()).toBe(false);
 		});
 	});
 });

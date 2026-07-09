@@ -11,8 +11,8 @@ this file; the corrected directives below are decisions of record.
 |---|---|---|
 | Phase 0 — spike + bisect | ✓ done | `653042a`, `dd02699` |
 | Decisions: min_version 152.0, E2E on release FF | ✓ approved by maintainer | — |
-| Slice A — getViews → messaging | ~ in progress (agent implementing) | — |
-| Slice B — event-page resilience | pending | — |
+| Slice A — getViews → messaging | ✓ done (fast 1139, E2E 124) | `12b410c` |
+| Slice B — event-page resilience | ~ in progress (agent implementing) | — |
 | Slice C — async normalization | pending | — |
 | Slice D — the MV3 flip | pending | — |
 | Final gate — full test/UAT/audit/build | pending | — |
@@ -164,14 +164,25 @@ UAT: full suite after Slice D.
       source-grep `backup-restore-refresh.test.ts` (regression now behavioral).
 - [x] Gates: fast 1139 ✓, lint ✓, typecheck ✓, E2E 124 ✓.
 
-### Slice B — event-page resilience (MV2-safe)
-- [ ] `menus.create` → `runtime.onInstalled` + duplicate-tolerant create.
-- [ ] IDB: `onclose`/`onversionchange` handlers; `waitForDB()` retries `initDB()`
-      from unset/broken state.
-- [ ] `pendingCaptures` → `browser.storage.session` (map semantics preserved;
-      `onActivated` consumer becomes async).
-- [ ] Idle-cleanup last-run-date guard (`storage.local`).
-- [ ] Audit: every listener registered synchronously at top level.
+### Slice B — event-page resilience (MV2-safe) — ✓ DONE
+- [x] `menus.create` ×5 via `createMenuTolerant()` — duplicate error on respawn is
+      read from `runtime.lastError` and swallowed; creation stays top-level
+      (chosen over `onInstalled`: survives respawn AND browser restart).
+- [x] IDB: `onclose`/`onversionchange` clear the `db` global; `waitForDB()` memoizes
+      one in-flight `initDB()` (`dbInitPromise`), cleared on settle → later calls
+      retry. Terminal `'broken'` sentinel + hand-rolled waitingQueue removed;
+      failing open still rejects current callers (database-error UI preserved).
+- [x] `pendingCaptures` → `storage.session` key (object by tabId); enqueue/consume/
+      cleanup are async RMW. Known benign race: two near-simultaneous background-tab
+      navigations can drop one deferred capture (self-heals on next visit).
+- [x] Idle-cleanup guarded by `thumbnailCleanupLastRun` date in `storage.local`
+      (at most daily, was once per respawn).
+- [x] Listener audit: one violation found+fixed — `prefs.js` `storage.onChanged`
+      registration hoisted out of the async `storage.local.get` callback. Reviewed:
+      legacy-key removal event now reaches `prefsChanged`, harmless (`parsePrefs`
+      ignores unknown keys; fires once, only on v1-upgraded profiles).
+- [x] Gates: fast 1152 ✓ (+13, new `event-page-resilience.test.ts`), lint ✓,
+      typecheck ✓, E2E 124 ✓.
 
 ### Slice C — async normalization (MV2-safe)
 - [ ] ~15 callback-style call sites → `browser.*` promises: `storage.local.get/set`

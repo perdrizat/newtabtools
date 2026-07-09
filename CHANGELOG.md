@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - MV3 spike findings recorded: temporary installs auto-grant host permissions; capture APIs are absent under MV3 until exactly Firefox 152.0 (bisected) → planned `strict_min_version` 152.0 and E2E on release-channel Firefox; post-MV3 note to retest against ESR 140.
 - Added `audit/2026-07-09-mv3-inventory.md`: full file:line codebase inventory (background, front end, test infra) backing the migration plan.
 - MV3 Slice A: removed both `extension.getViews()` sites — background/export now broadcast `Page.updateGrid`/`Page.restoreComplete`; new page-side `runtime.onMessage` listener; restore refresh (incl. prefs-only path) is message-driven.
+- MV3 Slice B: respawn-safe background — duplicate-tolerant menu creation, IDB auto-reconnect (`onclose`/`onversionchange` + retryable `waitForDB`), `pendingCaptures` moved to `storage.session`, thumbnail cleanup capped at once daily, `storage.onChanged` listener registration made synchronous.
 
 ## [2.0.7] — 2026-07-06
 

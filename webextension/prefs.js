@@ -69,10 +69,17 @@ var Prefs = {
 			});
 		}
 
+		// Registered synchronously here — not inside the storage.local.get
+		// callback below — so it's live the instant init() runs, rather than
+		// only once that async read resolves. init() itself is called
+		// synchronously at background.js's top level, so this keeps every
+		// respawn's listener registration synchronous top-to-bottom (MV3
+		// event-page respawn hygiene; see MV3_MIGRATION.md).
+		chrome.storage.onChanged.addListener(this.prefsChanged.bind(this));
+
 		return new Promise(resolve => {
 			chrome.storage.local.get(prefs => {
 				this.parsePrefs(prefs);
-				chrome.storage.onChanged.addListener(this.prefsChanged.bind(this));
 				resolve();
 			});
 		});
