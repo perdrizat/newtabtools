@@ -3,9 +3,9 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Tiles, Background */
-/* globals Blocked, compareVersions, db, Filters, Prefs */
+/* globals Blocked, compareVersions, Filters, Prefs, Tiles */
 
-var Tiles = {
+globalThis.Tiles = {
 	_ready: false,
 	_cache: [],
 	_list: [],
@@ -44,7 +44,7 @@ var Tiles = {
 	},
 	getAll() {
 		return new Promise(function(resolve, reject) {
-			let op = db.transaction('tiles').objectStore('tiles').getAll();
+			let op = globalThis.db.transaction('tiles').objectStore('tiles').getAll();
 			op.onsuccess = () => resolve(op.result);
 			op.onerror = reject;
 		});
@@ -52,7 +52,7 @@ var Tiles = {
 	getAllTiles() { // NOTE: misleading name — returns the rows×columns grid-fit subset, not all tiles; rename deferred to the MV3 tiles.js module-extraction (audit/2026-06-10 §4.5).
 		let count = Prefs.rows * Prefs.columns;
 		return new Promise(resolve => {
-			let op = db.transaction('tiles').objectStore('tiles').getAll();
+			let op = globalThis.db.transaction('tiles').objectStore('tiles').getAll();
 			op.onsuccess = async () => {
 				this._ready = true;
 				let links = [];
@@ -139,7 +139,7 @@ var Tiles = {
 	},
 	getTile(url) {
 		return new Promise(function(resolve, reject) {
-			let op = db.transaction('tiles').objectStore('tiles').index('url').get(url);
+			let op = globalThis.db.transaction('tiles').objectStore('tiles').index('url').get(url);
 			op.onsuccess = () => resolve(op.result || null);
 			op.onerror = reject;
 		});
@@ -149,7 +149,7 @@ var Tiles = {
 			this._list.push(tile.url);
 		}
 		return new Promise(function(resolve, reject) {
-			let op = db.transaction('tiles', 'readwrite').objectStore('tiles').put(tile);
+			let op = globalThis.db.transaction('tiles', 'readwrite').objectStore('tiles').put(tile);
 			op.onsuccess = () => resolve(op.result);
 			op.onerror = reject;
 		});
@@ -161,14 +161,14 @@ var Tiles = {
 			index = this._list.indexOf(tile.url);
 		}
 		return new Promise(function(resolve, reject) {
-			let op = db.transaction('tiles', 'readwrite').objectStore('tiles').delete(tile.id);
+			let op = globalThis.db.transaction('tiles', 'readwrite').objectStore('tiles').delete(tile.id);
 			op.onsuccess = () => resolve();
 			op.onerror = reject;
 		});
 	},
 	clear() {
 		return new Promise(function(resolve, reject) {
-			let op = db.transaction('tiles', 'readwrite').objectStore('tiles').clear();
+			let op = globalThis.db.transaction('tiles', 'readwrite').objectStore('tiles').clear();
 			op.onsuccess = () => resolve();
 			op.onerror = reject;
 		});
@@ -178,7 +178,7 @@ var Tiles = {
 			return Promise.resolve();
 		}
 		return new Promise(function(resolve) {
-			db.transaction('tiles').objectStore('tiles').getAll().onsuccess = function() {
+			globalThis.db.transaction('tiles').objectStore('tiles').getAll().onsuccess = function() {
 				let p = 0;
 				for (let tile of this.result.filter(t => 'position' in t).sort((a, b) => a.position - b.position)) {
 					if (p != tile.position) {
@@ -192,10 +192,10 @@ var Tiles = {
 	}
 };
 
-var Background = {
+globalThis.Background = {
 	getBackground() {
 		return new Promise(function(resolve) {
-			db.transaction('background').objectStore('background').getAll().onsuccess = function() {
+			globalThis.db.transaction('background').objectStore('background').getAll().onsuccess = function() {
 				if (this.result[0]) {
 					resolve(this.result[0]);
 				}
@@ -205,7 +205,7 @@ var Background = {
 	},
 	setBackground(file) {
 		return new Promise(function(resolve) {
-			let backgroundOS = db.transaction('background', 'readwrite').objectStore('background');
+			let backgroundOS = globalThis.db.transaction('background', 'readwrite').objectStore('background');
 			backgroundOS.clear().onsuccess = function() {
 				if (file) {
 					backgroundOS.add(file).onsuccess = function() {

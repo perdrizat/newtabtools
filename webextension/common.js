@@ -4,7 +4,7 @@
 
 /* exported compareVersions */
 
-function compareVersions(a, b) {
+globalThis.compareVersions = function(a, b) {
 	function splitApart(name) {
 		var parts = [];
 		var lastIsDigit = false;
@@ -57,4 +57,4 @@ function compareVersions(a, b) {
 		}
 	}
 	return 0;
-}
+};

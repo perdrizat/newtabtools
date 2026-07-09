@@ -12,6 +12,10 @@ const webExtGlobals = {
 	...globals.webextensions,
 	browser: 'readonly',
 	chrome: 'readonly',
+	// ES2020 added `globalThis`; the webextension/**/*.js glob below pins
+	// ecmaVersion to 2018 for parser compat with the rest of that glob, so it
+	// isn't picked up automatically the way a newer ecmaVersion preset would.
+	globalThis: 'readonly',
 };
 
 // Extension-specific globals exposed on the new tab page and background page.
@@ -136,10 +140,12 @@ const projectRules = {
 
 export default [
 	{
-		// Vendored zip.js library (minified dist from @zip.js/zip.js) — not subject to project style.
-		// Firefox-generated test-profile and ephemeral artifact directories — not our code.
+		// Vendored zip.js library (unbundled ESM "core" build from
+		// @zip.js/zip.js, copied verbatim by scripts/update-zip.mjs) — not
+		// subject to project style. Firefox-generated test-profile and
+		// ephemeral artifact directories — not our code.
 		ignores: [
-			'webextension/lib/zip.js',
+			'webextension/lib/zip/**',
 			'tests/e2e/test-profile/**',
 			'tests/e2e/_artifacts/**',
 			'tests/uat/artifacts/**',
@@ -149,7 +155,8 @@ export default [
 	js.configs.recommended,
 	{
 		// Legacy script-tag files in webextension/, loaded via <script> in
-		// newTab.xhtml and the MV2 background array.
+		// newTab.xhtml and the MV3 background module entry (side-effect
+		// imported from lib/background-main.js — MODERNIZATION.md M1).
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2018,

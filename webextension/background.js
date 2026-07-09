@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, makeZip, NeverCapture, Prefs, readZip, Tiles */
+/* globals Background, makeZip, NeverCapture, Prefs, purgeNeverCaptureHost, readZip, Tiles */
 
 Promise.all([
 	Prefs.init(),
@@ -17,7 +17,15 @@ Promise.all([
 	console.error(event);
 });
 
-var db;
+// `db` lives on globalThis (not a local `var`), not just for tiles.js's
+// benefit (audit §1.9) but because background.js's own module scope would
+// otherwise shadow it: with a plain `var db;` in this module, a later
+// `globalThis.db = …` write would leave that local `db` binding permanently
+// `undefined` while every unqualified `db` read in *this* file kept
+// resolving to the stale local, not the freshly-set global. Every read and
+// write in this file goes through `globalThis.db` explicitly so there is
+// only ever one binding.
+
 // Memoizes the in-flight initDB() call so concurrent waitForDB() callers
 // share one open request; cleared on settle (success or failure) so a LATER
 // call retries from scratch. See waitForDB() below.
@@ -38,13 +46,13 @@ function initDB() {
 
 		request.onsuccess = function(/* event */) {
 			// console.log(event.type, event);
-			db = this.result;
-			db.onclose = function() {
-				db = undefined;
+			globalThis.db = this.result;
+			globalThis.db.onclose = function() {
+				globalThis.db = undefined;
 			};
-			db.onversionchange = function() {
-				db.close();
-				db = undefined;
+			globalThis.db.onversionchange = function() {
+				globalThis.db.close();
+				globalThis.db = undefined;
 			};
 			resolve();
 		};
@@ -55,21 +63,21 @@ function initDB() {
 
 		request.onupgradeneeded = function(/* event */) {
 			// console.log(event.type, event);
-			db = this.result;
+			globalThis.db = this.result;
 
-			if (!db.objectStoreNames.contains('tiles')) {
-				db.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
+			if (!globalThis.db.objectStoreNames.contains('tiles')) {
+				globalThis.db.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
 			}
 			if (!this.transaction.objectStore('tiles').indexNames.contains('url')) {
 				this.transaction.objectStore('tiles').createIndex('url', 'url');
 			}
 
-			if (!db.objectStoreNames.contains('background')) {
-				db.createObjectStore('background', { autoIncrement: true });
+			if (!globalThis.db.objectStoreNames.contains('background')) {
+				globalThis.db.createObjectStore('background', { autoIncrement: true });
 			}
 
-			if (!db.objectStoreNames.contains('thumbnails')) {
-				db.createObjectStore('thumbnails', { keyPath: 'url' });
+			if (!globalThis.db.objectStoreNames.contains('thumbnails')) {
+				globalThis.db.createObjectStore('thumbnails', { keyPath: 'url' });
 			}
 			if (!this.transaction.objectStore('thumbnails').indexNames.contains('used')) {
 				this.transaction.objectStore('thumbnails').createIndex('used', 'used');
@@ -88,7 +96,7 @@ function initDB() {
  * @returns {Promise<void>}
  */
 function waitForDB() {
-	if (db) {
+	if (globalThis.db) {
 		return Promise.resolve();
 	}
 	if (!dbInitPromise) {
@@ -186,7 +194,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 			// waitForDB() guard (audit §2.1): fire-and-forget write, so no
 			// sendResponse either way — just don't reach db before it's open.
 			waitForDB().then(function() {
-				db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
+				globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put({
 					url,
 					image,
 					stored: today,
@@ -200,7 +208,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// load, so an event-page wake races it against the still-opening db.
 		let map = new Map();
 		waitForDB().then(function() {
-			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
+			globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
 				let cursor = this.result;
 				if (cursor) {
 					let thumb = cursor.value;
@@ -236,7 +244,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// waitForDB() guard (audit §2.1).
 		let faviconMap = new Map();
 		waitForDB().then(function() {
-			db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+			globalThis.db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
 				let cursor = this.result;
 				if (cursor) {
 					let row = cursor.value;
@@ -267,7 +275,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		let faviconsByHost = new Map();
 		let wantedHosts = new Set(message.hosts || []);
 		waitForDB().then(function() {
-			db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
+			globalThis.db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor().onsuccess = function() {
 				let cursor = this.result;
 				if (cursor) {
 					let row = cursor.value;
@@ -292,7 +300,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		return true;
 
 	case 'Thumbnails.delete':
-		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
+		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').delete(message.url);
 		return false;
 
 	case 'Thumbnails.purgeHost':
@@ -313,7 +321,7 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 		// "Reset all settings" so a factory reset doesn't leave captured images
 		// of visited sites on disk.
 		waitForDB().then(function() {
-			db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').clear().onsuccess = function() {
+			globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').clear().onsuccess = function() {
 				sendResponse();
 			};
 		});
@@ -765,7 +773,7 @@ function pickAndStore(tabId) {
 		// waitForDB() re-opens it if so, instead of throwing on a stale
 		// `db` reference and losing the freshly-captured thumbnail silently.
 		await waitForDB();
-		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
+		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').put(record);
 	}).catch(console.error);
 }
 
@@ -997,7 +1005,7 @@ browser.menus.onShown.addListener(info => {
 
 function cleanupThumbnails() {
 	let expiry = getTZDateString(new Date(Date.now() - 1209600000)); // ms in two weeks.
-	let index = db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').index('used');
+	let index = globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').index('used');
 	let keyRange = IDBKeyRange.upperBound(expiry);
 
 	index.openCursor(keyRange).onsuccess = function() {
@@ -1031,13 +1039,13 @@ function cleanupThumbnails() {
  * @param {string} pattern  A NeverCapture host pattern, e.g. '.example.com' or 'example.com'.
  * @returns {Promise<{thumbnails: number, tiles: number}>}
  */
-function purgeNeverCaptureHost(pattern) {
+globalThis.purgeNeverCaptureHost = function(pattern) {
 	return waitForDB().then(() => new Promise(function(resolve) {
 		let thumbCount = 0;
 		let tileCount = 0;
 
 		// Pass 1: thumbnails store — delete matching records.
-		db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
+		globalThis.db.transaction('thumbnails', 'readwrite').objectStore('thumbnails').openCursor().onsuccess = function() {
 			let cursor = this.result;
 			if (cursor) {
 				let row = cursor.value;
@@ -1050,7 +1058,7 @@ function purgeNeverCaptureHost(pattern) {
 				cursor.continue();
 			} else {
 				// Pass 2: tiles store — strip auto-thumbnail image from matching tiles.
-				db.transaction('tiles', 'readwrite').objectStore('tiles').openCursor().onsuccess = function() {
+				globalThis.db.transaction('tiles', 'readwrite').objectStore('tiles').openCursor().onsuccess = function() {
 					let tileCursor = this.result;
 					if (tileCursor) {
 						let row = tileCursor.value;
@@ -1071,7 +1079,7 @@ function purgeNeverCaptureHost(pattern) {
 			}
 		};
 	}));
-}
+};
 
 /**
  * One-shot-per-respawn idle listener. `cleanupThumbnails()` itself is

@@ -23,10 +23,29 @@
 		"tests/integration/**/*.js",
 		"tests/**/*.ts"
 	],
+	// `exclude` only prunes candidates matched by `include`'s globs — it does
+	// NOT stop tsc from following a real `import` out of an included file and
+	// pulling the imported file into the program anyway (a well-known tsconfig
+	// gotcha). That matters here: webextension/lib/background-main.js and
+	// webextension/lib/zip-global.js (MODERNIZATION.md M1) are real ES-module
+	// entries that `import` the six background files at webextension/'s
+	// top level (common.js, tiles.js, prefs.js, background.js, export.js) and
+	// the vendored webextension/lib/zip/** tree (scripts/update-zip.mjs).
+	// Those six background files were NEVER part of this program before M1
+	// (only loaded via classic <script>, invisible to tsc's module graph) —
+	// fully typing ~2000 lines of pre-existing legacy JS is out of scope for
+	// M1's behavior-preserving globalThis-bridge conversion. The vendored zip
+	// tree is third-party code we don't touch or type by our own rules.
+	// Excluding the two *entry* files here (not the files they import) keeps
+	// tsc from ever making them program roots, so it never follows their
+	// imports in the first place — this is the whole fix, not a per-file
+	// `@ts-nocheck` scattered across 30 files.
 	"exclude": [
 		"node_modules",
-		"webextension/lib/zip.js",
 		"tests/e2e/test-profile",
-		"tests/e2e/_artifacts"
+		"tests/e2e/_artifacts",
+		"webextension/lib/background-main.js",
+		"webextension/lib/zip-global.js",
+		"webextension/lib/zip/**"
 	]
 }

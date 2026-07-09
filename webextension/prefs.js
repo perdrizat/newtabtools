@@ -3,9 +3,9 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Prefs, Blocked, Filters, NeverCapture */
-/* globals Grid, newTabTools, Updater */
+/* globals Blocked, Filters, Grid, NeverCapture, newTabTools, Updater */
 
-var Prefs = {
+globalThis.Prefs = {
 	_theme: 'system',
 	_opacity: 80,
 	_rows: 3,
@@ -217,7 +217,7 @@ var Prefs = {
 	},
 };
 
-var Blocked = {
+globalThis.Blocked = {
 	_list: [],
 	/**
 	 * Persist the current list. Never rejects — a write failure is logged
@@ -248,7 +248,7 @@ var Blocked = {
 	}
 };
 
-var Filters = {
+globalThis.Filters = {
 	_list: Object.create(null),
 	// Fire-and-forget: failure is logged, never surfaced to callers.
 	_saveList() {
@@ -306,7 +306,7 @@ var Filters = {
  *
  * The list is persisted under the storage key 'neverCaptureHosts'.
  */
-var NeverCapture = {
+globalThis.NeverCapture = {
 	/** @type {string[]} */
 	_list: [],
 

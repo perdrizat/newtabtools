@@ -7,7 +7,7 @@
 
 zip.configure({ useWebWorkers: false });
 
-async function makeZip() {
+globalThis.makeZip = async function() {
 	let writer = new zip.ZipWriter(new zip.BlobWriter());
 
 	let background = await Background.getBackground();
@@ -76,7 +76,7 @@ async function makeZip() {
 		}
 		throw ex;
 	}
-}
+};
 
 /**
  * Tell every open new-tab page that a restore has finished rewriting the
@@ -91,7 +91,7 @@ function notifyRestoreComplete() {
 	return browser.runtime.sendMessage({name: 'Page.restoreComplete'}).catch(() => {});
 }
 
-async function readZip(file) {
+globalThis.readZip = async function(file) {
 	let reader = new zip.ZipReader(new zip.BlobReader(file));
 	let entries = await reader.getEntries();
 
@@ -240,4 +240,4 @@ async function readZip(file) {
 	// The restore data is fully written — pages refresh themselves (wallpaper,
 	// full grid rebuild, thumbnails) on this broadcast.
 	await notifyRestoreComplete();
-}
+};

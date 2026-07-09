@@ -222,16 +222,13 @@ describe('manifest.json — security configuration', () => {
 		});
 	});
 
-	describe('Background (MV3 — classic scripts array retained, no service worker)', () => {
-		it('keeps background.scripts as the same 6-file array', () => {
-			expect(manifest.background.scripts).toEqual([
-				'common.js',
-				'tiles.js',
-				'prefs.js',
-				'background.js',
-				'lib/zip.js',
-				'export.js',
-			]);
+	describe('Background (MV3 — single ES-module entry, MODERNIZATION.md M1)', () => {
+		it('declares a single-file background.scripts array pointing at the module entry', () => {
+			expect(manifest.background.scripts).toEqual(['lib/background-main.js']);
+		});
+
+		it('declares background.type as "module" (globalThis bridge — MODERNIZATION.md Decision 2)', () => {
+			expect(manifest.background.type).toBe('module');
 		});
 
 		it('declares no persistent key and no service_worker key', () => {

@@ -28,7 +28,7 @@
     "i18n:check": "node scripts/i18n-check.mjs",
     "i18n:stale": "node scripts/i18n-stale.mjs",
     "i18n:purge": "node scripts/i18n-purge.mjs",
-    "update-zip": "VER=$(node -p \"require('@zip.js/zip.js/package.json').version\") && printf '/*\\n * @zip.js/zip.js v%s — zip-core.min.js\\n * Source: https://github.com/gildas-lormeau/zip.js\\n * License: BSD-3-Clause\\n * Installed as devDependency; copied via: pnpm update-zip\\n */\\n' \"$VER\" | cat - node_modules/@zip.js/zip.js/dist/zip-core.min.js > webextension/lib/zip.js"
+    "update-zip": "node scripts/update-zip.mjs"
   },
   "repository": {
     "type": "git",
