@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-07-09
+
 ### Changed
 
 - Modernization M1: background flipped to a single ES-module entry (`lib/background-main.js`, `type: module`) over a `globalThis` bridge in the six background files; behavior-identical, page scripts unchanged.
