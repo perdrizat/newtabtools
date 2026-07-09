@@ -45,8 +45,8 @@ and released as **2.2.0**. Stage H (this branch) ships as the next release =
 they belong under main's `## [2.2.0]` heading; H entries go under
 `## [3.0.0]`).
 | H1 — case-trap prefix fixes (XHTML-safe) | ✓ done (fast 1253, E2E 126; 1 real bug fixed — autocomplete `nodeName != 'li'` walk; bonus: inert uppercase tag filter in i18n-render E2E fixed) | — |
-| H2 — markup conversion + rename + touchpoints | ✓ done (fast 1257, E2E 126 on the HTML5 page; 10 tags expanded, mis-nesting regression test proven non-tautological; full UAT gate next) | — |
-| H3 — `createElementNS` collapse | pending | — |
+| H2 — markup conversion + rename + touchpoints | ✓ done (fast 1257, E2E 126, **full UAT 11/11 on the HTML5 page — visual parity confirmed, zero defects**) | — |
+| H3 — `createElementNS` collapse | ~ in progress (agent implementing) | — |
 | H4 — tooling/i18n/UAT constants sweep | pending | — |
 | H gate — full E2E + full UAT + audit | pending | — |
 
