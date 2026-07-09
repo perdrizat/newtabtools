@@ -193,6 +193,12 @@ UAT: full suite after Slice D.
 
 ## Post-MV3 backlog (explicitly deferred)
 
+- **Retest the finished MV3 build against Firefox 140/ESR.** The Fx-152 capture gate
+  was established with a minimal probe during the spike (2026-07-09). Once the real
+  migrated extension exists, re-run it (probe + E2E capture tests) on ESR 140 to
+  confirm the gate is a genuine upstream version restriction and not a temporary
+  issue or a side effect of our own probe/migration choices. If capture turns out to
+  work on 140, lower `strict_min_version` accordingly.
 - XHTML→HTML conversion (dedicated high-risk task; full UAT review).
 - ES-module extraction of the background as a clean rewrite behind the frozen
   message contract, with `lib/platform.js` capability layer — designed against
