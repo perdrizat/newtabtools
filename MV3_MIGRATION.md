@@ -15,8 +15,11 @@ this file; the corrected directives below are decisions of record.
 | Slice B — event-page resilience | ✓ done (fast 1152, E2E 124) | `6bb6017` |
 | Slice C — async normalization | ✓ done (fast 1153, E2E 124) | `03ffabc` |
 | Slice D — the MV3 flip | ✓ done (fast 1162, E2E 126 on FF152/MV3) | `a0eb4fa` |
-| Final gate — full test/UAT/audit/build | ~ in progress: audit ✓, docs ✓ (`7012019`), UAT 10/11 → found respawn-reload bug, fix in progress | — |
-| Post-flip retest on ESR 140 | backlog | — |
+| UAT-found respawn-reload bug | ✓ fixed (fast 1166, E2E 126, UAT 22+23 re-run clean) | `dbd72dc` |
+| Final gate — full test/UAT/audit/build | ✓ done — all gates green, v2.1.0 | see tag `v2.1.0` |
+| Post-flip retest on ESR 140 | backlog (once next ESR ships / on demand) | — |
+
+**Migration complete 2026-07-09.** Released as v2.1.0 (Firefox ≥152, MV3).
 
 ## Strategic decisions (updated 2026-07-09)
 
@@ -219,13 +222,15 @@ UAT: full suite after Slice D.
       E2E 126 ✓ on Firefox 152 (MV3, with real suspensions).
 - [x] Security-boundary acknowledgement in the commit message.
 
-### Final gate
-- [ ] Full `pnpm test` (fast + E2E), full UAT suite (all scenarios), `pnpm lint`,
-      `pnpm typecheck`, `pnpm lint:webext` (web-ext lint against MV3),
-      `pnpm audit --audit-level=high`.
+### Final gate — ✓ DONE
+- [x] fast 1166 ✓ · E2E 126 ✓ (FF152/MV3, real suspensions) · lint ✓ · typecheck ✓ ·
+      lint:webext 0 findings ✓ · audit clean ✓.
+- [x] Full UAT suite run 20260709-110359: 10/11 → found the respawn-reload bug
+      (below), fixed (`dbd72dc`), scenarios 22+23 re-run clean (run
+      20260709-1224xx, 2/2, no reload observations).
 
 **UAT run 20260709-110359 (full suite, 10/11):**
-- [ ] **REAL BUG (fix in progress): respawn-triggered page reloads.** The top-level
+- [x] **REAL BUG — FIXED (`dbd72dc`): respawn-triggered page reloads.** The top-level
       `tabs.query` sweep's `tabs.reload(NEW_TAB_URL)` branch re-runs on every
       event-page respawn → open new-tab pages reload every ~30-60s, killing the
       drawer (scenario 22 observed 4×) and edit mode (scenario 23 FAILED on
@@ -241,10 +246,13 @@ UAT: full suite after Slice D.
 - Environmental, no action: Cloudflare-interstitial thumbnails from seeding
       (phoronix), harness focus-stealing / stale screenshot frames, about:newtab
       prologue omission (known harness behavior).
-- [ ] Version bump (`pnpm version patch` per daily rule — or minor, maintainer's call),
-      CHANGELOG promotion, `pnpm build` artifact in `dist/`.
-- [ ] Docs sweep: CONTRIBUTING.md architecture section (MV2→MV3), TESTING.md,
-      README, docs/amo-listing.md reviewer notes.
+- [x] Version bump: **minor → 2.1.0** (MV3 + min-version raise is feature-class
+      within the 2.x line), CHANGELOG promoted to `## [2.1.0] — 2026-07-09`,
+      `pnpm build` artifact in `dist/`.
+- [x] Docs sweep (`7012019`): CONTRIBUTING/CLAUDE/AGENTS, TESTING.md,
+      tests/e2e/README.md, README.md, ROADMAP.md (3 new decisions of record),
+      docs/amo-submission-notes.md (MV3 + host-permission revocability for
+      reviewers). PRIVACY.md needed no change.
 
 ## Post-MV3 backlog (explicitly deferred)
 
