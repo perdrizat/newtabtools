@@ -2414,7 +2414,7 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		}
 		if (newTabTools.pinURLAutocomplete.compareDocumentPosition(event.target) & Node.DOCUMENT_POSITION_CONTAINED_BY) {
 			let target = event.target;
-			while (target.nodeName != 'li') {
+			while (target.nodeName.toLowerCase() != 'li') {
 				target = target.parentNode;
 			}
 			if (target != newTabTools.pinURLBlocked) {

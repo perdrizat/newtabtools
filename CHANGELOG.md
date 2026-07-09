@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Action-button seed sweep re-runs after extension disable→re-enable (session-flag guard at wake) — restores the self-heal lost with the per-respawn sweep.
 - Early `Page.*` broadcast replays are fault-isolated (per-replay try/catch).
 - M7 cleanups: single `withObjectStore` in `lib/db.js`; dead webRequest listener closures removed; backup/zip module lazy-loads on first use (25-file zip tree no longer parses on every event-page respawn).
+- Modernization H1: page JS made parser-agnostic ahead of the HTML5 flip — the pin-URL autocomplete's `nodeName != 'li'` walk (would crash under an HTML parser) normalized; also fixed an inert uppercase tag filter in the i18n-render E2E test.
 
 ## [2.1.0] — 2026-07-09
 

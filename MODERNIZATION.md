@@ -38,7 +38,7 @@ constants,capture,thumbnail-image,backup,platform,messages,background-main}.js`;
 = the 5 dual-scope symbols; backup/zip lazy-loads on demand. Version stays 2.1.0
 (same-day rule) — release/bump decision at arc end. Branch `modernization-m` is
 merge-ready; Stage H continues on `modernization-h`.
-| H1 — case-trap prefix fixes (XHTML-safe) | pending | — |
+| H1 — case-trap prefix fixes (XHTML-safe) | ✓ done (fast 1253, E2E 126; 1 real bug fixed — autocomplete `nodeName != 'li'` walk; bonus: inert uppercase tag filter in i18n-render E2E fixed) | — |
 | H2 — markup conversion + rename + touchpoints | pending | — |
 | H3 — `createElementNS` collapse | pending | — |
 | H4 — tooling/i18n/UAT constants sweep | pending | — |
@@ -267,7 +267,14 @@ under the parser it ships with.
 - [ ] `scripts/i18n-stale.mjs` / `i18n-purge.mjs` extension filters;
       `localization.test.ts` extension branch; any remaining `.xhtml` grep hit
       in the repo (target: only historical audit/ docs mention it).
-- [ ] Docs: CONTRIBUTING "Core" line, TESTING.md, README.
+- [ ] **Full docs sweep (maintainer directive 2026-07-09): update ALL relevant
+      documentation, especially README.md** — architecture/feature claims
+      (modular ES-module background, HTML5 page), the test-count blurb, the
+      Quick Start (load-temporary-addon steps mention manifest.json — verify),
+      plus CONTRIBUTING "Core"/architecture lines, TESTING.md XHTML gotchas
+      (delete), ROADMAP.md (Stage H shipped, backlog prune),
+      docs/amo-listing.md + amo-submission-notes.md if they reference the page
+      file, and MODERNIZATION.md's own close-out.
 - [ ] Gates: fast, lint, typecheck, E2E.
 
 ### H final gate
