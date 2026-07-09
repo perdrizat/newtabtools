@@ -21,6 +21,7 @@ declare global {
 	var Prefs: any;
 	var Blocked: any;
 	var Filters: any;
+	var NeverCapture: any;
 	var compareVersions: any;
 	var Tiles: any;
 	var Background: any;

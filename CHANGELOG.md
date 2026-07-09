@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Modernization M1: background flipped to a single ES-module entry (`lib/background-main.js`, `type: module`) over a `globalThis` bridge in the six background files; behavior-identical, page scripts unchanged.
 - zip.js re-vendored as the unbundled ESM core tree (`lib/zip/`, 25 files from the same pinned `@zip.js/zip.js`) + `lib/zip-global.js` bridge — the old single-file UMD build doesn't survive module loading; `update-zip` script rewritten accordingly.
 - Modernization M2: IndexedDB behind `lib/db.js` `withStore()` (raw `db` global removed — unguarded access now unrepresentable; `waitForDB` handler wraps collapsed); `Tiles`/`Background` as real ES modules in `lib/tiles-store.js` (`getAllTiles`→`getGridTiles` internal rename, wire name frozen); shared `SAFE_PROTOCOLS` in `lib/constants.js` (restore boundary's copy stays independent); first test batch migrated vm-load→native import.
+- Modernization M3: capture pipeline extracted to `lib/capture.js`; image processing behind `lib/thumbnail-image.js` (the documented Chrome/OffscreenCanvas seam); background.js halved (1063→545 lines); webRequest listeners defer bridge-name resolution to first event (eval-time ReferenceError avoided); favicon tests import real modules instead of regex-extracting source.
 
 ### Fixed
 

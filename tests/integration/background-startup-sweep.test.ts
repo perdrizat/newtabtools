@@ -31,6 +31,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { withStore } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import { getTZDateString, resetNetworkIdleTimer } from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -167,6 +168,14 @@ describe('background.js — startup tab sweep (reload vs. onInstalled)', () => {
 		// test for the canonical explanation of this pattern).
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+
+		// M3: bridge lib/capture.js's exports background.js needs at its own
+		// top level (the webRequest listeners' resetNetworkIdleTimer closure —
+		// see background.js's own comment) and lazily (getTZDateString, used by
+		// cleanupThumbnails/idleListener, unused by this test's flows but still
+		// referenced by the message dispatcher).
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
 
 		// --- Browser / Chrome API gaps ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;

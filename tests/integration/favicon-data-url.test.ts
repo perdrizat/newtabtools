@@ -20,61 +20,34 @@
  * its letter glyph. The fix decodes `data:` URLs directly into a Blob
  * (base64 via `atob`, otherwise `decodeURIComponent`) and only routes
  * `http(s):` URLs through `fetch`.
+ *
+ * MODERNIZATION.md slice M3: `fetchFaviconBlob` (lib/capture.js) and
+ * `dataURLtoBlob` (lib/thumbnail-image.js) are real ES module exports now —
+ * this natively imports them instead of regex-extracting the function bodies
+ * out of background.js's source and re-running them in a hand-built vm
+ * sandbox. `fetchFaviconBlob` itself never calls `fetch` (see the module's own
+ * doc comment) — the `fetchSpy`/sandbox `fetch` override below is retained
+ * purely as a regression guard proving that stays true.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
+import { fetchFaviconBlob as realFetchFaviconBlob } from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BG_PATH = path.resolve(__dirname, '../../webextension/background.js');
-
-function extractFunction(source: string, name: string): string {
-	// Top-level function declarations are at column 0.
-	const sig = new RegExp(`^function\\s+${name}\\s*\\(`, 'm');
-	const match = source.match(sig);
-	if (!match || match.index === undefined) { throw new Error(`${name} not found`); }
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') { depth++; }
-		else if (source[i] === '}') { depth--; if (depth === 0) { return source.substring(start, i + 1); } }
-	}
-	throw new Error('Unbalanced braces');
-}
 
 describe('fetchFaviconBlob — data: URL handling (CSP-safe)', () => {
 	let fetchFaviconBlob: (url: string | null) => Promise<Blob | null>;
 	let fetchSpy: ReturnType<typeof vi.fn>;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading top-level function for behavioral test
-		const source = fs.readFileSync(BG_PATH, 'utf8');
-		const fnBody = extractFunction(source, 'fetchFaviconBlob');
-		// Also pull `dataURLtoBlob` if it exists yet (red on first run).
-		let helperBody = '';
-		try {
-			helperBody = extractFunction(source, 'dataURLtoBlob');
-		} catch { /* will surface as missing global in test */ }
-		fetchSpy = vi.fn();
-		const sandbox: any = {
-			fetch: fetchSpy,
-			atob: globalThis.atob,
-			Blob: globalThis.Blob,
-			Uint8Array: globalThis.Uint8Array,
-			Promise: globalThis.Promise,
-			decodeURIComponent: globalThis.decodeURIComponent,
-		};
-		vm.createContext(sandbox);
-		vm.runInContext(`${helperBody}\n${fnBody}\nthis.__fetchFaviconBlob = fetchFaviconBlob;`, sandbox);
-		fetchFaviconBlob = sandbox.__fetchFaviconBlob;
-	});
-
 	beforeEach(() => {
-		fetchSpy.mockReset();
+		// A global `fetch` spy — asserted-against below to prove
+		// fetchFaviconBlob never calls it, for any input.
+		fetchSpy = vi.fn();
+		(globalThis as any).fetch = fetchSpy;
+		fetchFaviconBlob = realFetchFaviconBlob;
 	});
 
 	it('decodes a base64 data: URL into a Blob without calling fetch()', async () => {

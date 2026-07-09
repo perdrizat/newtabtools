@@ -25,6 +25,12 @@ import vm from 'node:vm';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+// M3 (MODERNIZATION.md): captureTab/startCaptureSession/fetchFaviconBlob/
+// pickAndStore moved from background.js to lib/capture.js — this wiring
+// check now source-scans the new home. The 'Thumbnails.getFavicons' message
+// handler itself did NOT move (background.js keeps all message dispatch), so
+// that one test still scans background.js.
+const CAPTURE_PATH = path.resolve(__dirname, '../../webextension/lib/capture.js');
 const BG_PATH = path.resolve(__dirname, '../../webextension/background.js');
 
 function extractMethod(source: string, methodName: string): string {
@@ -41,12 +47,12 @@ function extractMethod(source: string, methodName: string): string {
 	throw new Error('Unbalanced braces');
 }
 
-describe('background.js — favicon capture + storage wiring', () => {
+describe('lib/capture.js — favicon capture + storage wiring', () => {
 	let source: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: capture pipeline
-		source = fs.readFileSync(BG_PATH, 'utf8');
+		source = fs.readFileSync(CAPTURE_PATH, 'utf8');
 	});
 
 	it('captureTab resolves {dataURL, favIconUrl} — favIconUrl threads `tab.favIconUrl` through', () => {
@@ -80,10 +86,19 @@ describe('background.js — favicon capture + storage wiring', () => {
 		expect(source).toMatch(/record\.favicon\s*=\s*faviconBlob/);
 		expect(source).toMatch(/record\.faviconUrl\s*=\s*favIconUrl/);
 	});
+});
+
+describe('background.js — Thumbnails.getFavicons message handler wiring', () => {
+	let bgSource: string;
+
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: message dispatch
+		bgSource = fs.readFileSync(BG_PATH, 'utf8');
+	});
 
 	it('Thumbnails.getFavicons message handler walks the store and returns a Map', () => {
-		expect(source).toMatch(/case\s+['"]Thumbnails\.getFavicons['"]/);
-		expect(source).toMatch(/sendResponse\(faviconMap\)/);
+		expect(bgSource).toMatch(/case\s+['"]Thumbnails\.getFavicons['"]/);
+		expect(bgSource).toMatch(/sendResponse\(faviconMap\)/);
 	});
 });
 

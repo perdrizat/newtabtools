@@ -38,6 +38,18 @@
  * ES module (a bridge shim importing lib/tiles-store.js), so its dynamic
  * `import()` below picks up its own `Tiles`/`Background` real-import chain
  * transparently — no change needed to how it's loaded here.
+ *
+ * MODERNIZATION.md slice M3 grows the bridged surface again: the entire
+ * capture pipeline (lib/capture.js) — `getTZDateString`,
+ * `resetNetworkIdleTimer`, `disarmNetworkIdle`, `startCaptureSession`,
+ * `removeCaptureSession`, `addPendingCapture`, `takePendingCapture`,
+ * `removePendingCapture`, `purgeNeverCaptureHost` — is now bridged onto
+ * `globalThis` by lib/background-main.js the same way. `purgeNeverCaptureHost`
+ * in particular used to be *defined* by background.js itself
+ * (`globalThis.purgeNeverCaptureHost = function …`); it's now a real export
+ * of lib/capture.js that background.js only calls, so this file's assertion
+ * for it moves from "background.js defines…" to "the bridge exposes…", same
+ * framing as `withStore`/`SAFE_PROTOCOLS` below.
  */
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
@@ -45,6 +57,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { withStore } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import {
+	getTZDateString,
+	resetNetworkIdleTimer,
+	disarmNetworkIdle,
+	startCaptureSession,
+	removeCaptureSession,
+	addPendingCapture,
+	takePendingCapture,
+	removePendingCapture,
+	purgeNeverCaptureHost,
+} from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -148,6 +171,25 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
+		// M3: bridge lib/capture.js's exports onto globalThis BEFORE
+		// background.js loads — the same set of assignments
+		// lib/background-main.js makes in production (see that file's header
+		// comment). background.js's top-level webRequest listeners wrap
+		// `resetNetworkIdleTimer` in a closure (see background.js's own
+		// comment), so — unlike withStore/SAFE_PROTOCOLS, which are also
+		// read lazily — none of these need to land before background.js's
+		// `import()` below for correctness; they're bridged here up front
+		// anyway to mirror production exactly.
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
+		(globalThis as any).disarmNetworkIdle = disarmNetworkIdle;
+		(globalThis as any).startCaptureSession = startCaptureSession;
+		(globalThis as any).removeCaptureSession = removeCaptureSession;
+		(globalThis as any).addPendingCapture = addPendingCapture;
+		(globalThis as any).takePendingCapture = takePendingCapture;
+		(globalThis as any).removePendingCapture = removePendingCapture;
+		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
+
 		// --- Native import(), in the manifest's declared background.scripts
 		// order (audit §1: common.js, tiles.js, prefs.js, background.js,
 		// lib/zip.js [now lib/zip-global.js], export.js) ---
@@ -228,10 +270,39 @@ describe('module-scope bridge — every §1.9 cross-file global lands on globalT
 	});
 
 	// ------------------------------------------------------------------
-	// background.js → purgeNeverCaptureHost
+	// lib/capture.js (M3) → the capture-pipeline bridge surface.
+	// purgeNeverCaptureHost used to be *defined* by background.js itself; it's
+	// now a real lib/capture.js export that background.js only calls, bridged
+	// onto globalThis the same way as the rest of this section.
 	// ------------------------------------------------------------------
-	it('background.js defines globalThis.purgeNeverCaptureHost', () => {
+	it('lib/background-main.js\'s bridge exposes globalThis.purgeNeverCaptureHost (now from lib/capture.js)', () => {
 		expect(typeof (globalThis as any).purgeNeverCaptureHost).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.getTZDateString', () => {
+		expect(typeof (globalThis as any).getTZDateString).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.resetNetworkIdleTimer', () => {
+		expect(typeof (globalThis as any).resetNetworkIdleTimer).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.disarmNetworkIdle', () => {
+		expect(typeof (globalThis as any).disarmNetworkIdle).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.startCaptureSession', () => {
+		expect(typeof (globalThis as any).startCaptureSession).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.removeCaptureSession', () => {
+		expect(typeof (globalThis as any).removeCaptureSession).toBe('function');
+	});
+
+	it('lib/background-main.js\'s bridge exposes globalThis.addPendingCapture/takePendingCapture/removePendingCapture', () => {
+		expect(typeof (globalThis as any).addPendingCapture).toBe('function');
+		expect(typeof (globalThis as any).takePendingCapture).toBe('function');
+		expect(typeof (globalThis as any).removePendingCapture).toBe('function');
 	});
 
 	// ------------------------------------------------------------------

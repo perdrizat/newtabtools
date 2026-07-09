@@ -32,6 +32,25 @@
  * `vm.runInThisContext` with mocked chrome.* APIs and exercise the captured
  * listeners behaviorally (using fake timers), rather than source-scanning.
  * Source-scanning is reserved for pure wiring checks (e.g. "no executeScript").
+ *
+ * MODERNIZATION.md slice M3: the capture pipeline itself (session/network-
+ * idle state, captureTab, pickAndStore, fetchFaviconBlob, pendingCaptures,
+ * purgeNeverCaptureHost) now lives in lib/capture.js, and resizeThumbnail/
+ * isBlank/dataURLtoBlob in lib/thumbnail-image.js — both real ES modules,
+ * natively imported below. The webNavigation.onCompleted/tabs.onActivated/
+ * tabs.onRemoved/runtime.onMessage LISTENERS are still registered by
+ * background.js itself (still bridge-mode), so this file keeps vm-loading
+ * background.js for those — with lib/capture.js's exports bridged onto
+ * globalThis beforehand, the same pattern established in M2's
+ * db-wake-race.test.ts/background-messages.test.ts. Direct-unit-style access
+ * to armNetworkIdle/disarmNetworkIdle/captureTab (previously read off
+ * `globalThis` because background.js defined them itself) now goes through
+ * the native import bindings instead — same underlying function, reached
+ * without the vm/global indirection. `captureSessions`/`networkIdleWatchers`
+ * are module-private in lib/capture.js now; `_captureSessionsForTests`/
+ * `_networkIdleWatchersForTests` are the documented test-only escape hatches
+ * (same convention as lib/db.js's `_resetForTests`) replacing the old
+ * `globalThis.captureSessions`/`globalThis.networkIdleWatchers` reads.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -41,6 +60,21 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { withStore, _resetForTests } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import {
+	getTZDateString,
+	armNetworkIdle,
+	disarmNetworkIdle,
+	resetNetworkIdleTimer,
+	startCaptureSession,
+	removeCaptureSession,
+	captureTab,
+	addPendingCapture,
+	takePendingCapture,
+	removePendingCapture,
+	purgeNeverCaptureHost,
+	_captureSessionsForTests,
+	_networkIdleWatchersForTests,
+} from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -248,6 +282,20 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 
+		// M3: bridge the real lib/capture.js exports onto globalThis, same as
+		// production's lib/background-main.js does — background.js is still
+		// bridge-mode and reaches the whole capture pipeline as bare
+		// identifiers (see this file's own header comment for the pattern).
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
+		(globalThis as any).disarmNetworkIdle = disarmNetworkIdle;
+		(globalThis as any).startCaptureSession = startCaptureSession;
+		(globalThis as any).removeCaptureSession = removeCaptureSession;
+		(globalThis as any).addPendingCapture = addPendingCapture;
+		(globalThis as any).takePendingCapture = takePendingCapture;
+		(globalThis as any).removePendingCapture = removePendingCapture;
+		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
+
 		// --- captureVisibleTab mock — returns a data URL ---
 		captureDataURL = 'data:image/png;base64,AAAA';
 		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(
@@ -384,10 +432,12 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 		onMessageListener = (globalThis as any).chrome.runtime.onMessage
 			.addListener.mock.calls[0][0];
 
-		// Access background.js globals via globalThis (script-mode = global scope)
-		getCaptureSessions = () => (globalThis as any).captureSessions;
+		// M3: captureSessions/networkIdleWatchers are module-private to
+		// lib/capture.js now (no globalThis global to read) — these test-only
+		// escape hatches are live references onto the real Maps.
+		getCaptureSessions = () => _captureSessionsForTests;
 		getPendingCapturesObj = () => (sessionStore.pendingCaptures as Record<string, any>) || {};
-		getNetworkIdleWatchers = () => (globalThis as any).networkIdleWatchers;
+		getNetworkIdleWatchers = () => _networkIdleWatchersForTests;
 	});
 
 	beforeEach(() => {
@@ -618,7 +668,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	// --- Network idle monitor ---
 
 	it('network idle fires after 2s of no network activity', async () => {
-		const armNetworkIdle = (globalThis as any).armNetworkIdle as Function;
 		const callback = vi.fn();
 		armNetworkIdle(99, callback);
 
@@ -631,7 +680,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	});
 
 	it('webRequest resets the idle timer', async () => {
-		const armNetworkIdle = (globalThis as any).armNetworkIdle as Function;
 		const webRequestListener = (globalThis as any).chrome.webRequest.onBeforeRequest
 			.addListener.mock.calls[0][0];
 
@@ -649,8 +697,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 	});
 
 	it('disarmNetworkIdle cancels the timer', async () => {
-		const armNetworkIdle = (globalThis as any).armNetworkIdle as Function;
-		const disarmNetworkIdle = (globalThis as any).disarmNetworkIdle as Function;
 		const callback = vi.fn();
 		armNetworkIdle(99, callback);
 
@@ -717,8 +763,6 @@ describe('background.js — multi-stage capture (behavioral)', () => {
 			delete (globalThis as any).chrome.tabs.captureVisibleTab;
 
 			try {
-				const captureTab = (globalThis as any).captureTab as
-					(tabId: number, windowId: number) => Promise<{dataURL: string | null; favIconUrl: string | null}>;
 				const result = await captureTab(42, 1);
 				expect(result).toEqual({ dataURL: null, favIconUrl: null });
 			} finally {

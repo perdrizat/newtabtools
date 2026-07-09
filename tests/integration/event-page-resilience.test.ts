@@ -41,6 +41,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { withStore } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import { getTZDateString, resetNetworkIdleTimer } from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -175,6 +176,12 @@ describe('background.js — event-page respawn resilience (Slice B)', () => {
 		// SAFE_PROTOCOLS onto globalThis (see the file header comment).
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+
+		// M3: bridge lib/capture.js's exports background.js needs — the
+		// webRequest listeners' resetNetworkIdleTimer closure at load time, and
+		// getTZDateString (idleListener/cleanupThumbnails, both under test here).
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
 
 		// --- Browser / Chrome API gaps (mirrors background-messages.test.ts) ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;

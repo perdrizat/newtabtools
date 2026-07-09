@@ -26,6 +26,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { withStore } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import { getTZDateString, resetNetworkIdleTimer, purgeNeverCaptureHost } from '../../webextension/lib/capture.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -208,6 +209,15 @@ describe('background.js — runtime.onMessage boundary (Phase 1 slot 1)', () => 
 		// idiom).
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+
+		// M3: bridge lib/capture.js's exports the same way — background.js's
+		// top-level `chrome.webRequest.*.addListener(…)` calls need
+		// `resetNetworkIdleTimer` reachable (wrapped in a closure, see
+		// background.js's own comment), and 'Thumbnails.purgeHost' below
+		// dispatches through the real `purgeNeverCaptureHost`.
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
+		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
 
 		// --- Browser / Chrome API gaps ---
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;

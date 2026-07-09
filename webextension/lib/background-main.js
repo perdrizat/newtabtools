@@ -46,6 +46,24 @@
  * are guaranteed to land before any asynchronous listener callback in
  * background.js can possibly run, regardless of where they're written here.
  *
+ * M3 (MODERNIZATION.md, "carve the capture pipeline into real ES modules")
+ * adds lib/capture.js's exports the same way: `getTZDateString`,
+ * `resetNetworkIdleTimer`, `disarmNetworkIdle`, `startCaptureSession`,
+ * `removeCaptureSession`, `addPendingCapture`, `takePendingCapture`,
+ * `removePendingCapture`, `purgeNeverCaptureHost` (which moves here from
+ * being defined directly by background.js — it's now a real export of
+ * lib/capture.js instead of a `globalThis.purgeNeverCaptureHost = …`
+ * assignment inside background.js). Every one of these is read LAZILY by
+ * background.js — from inside a message-handler case or another listener's
+ * callback body, never at background.js's own top level — so the same
+ * "bridge in this file's trailing body, order doesn't matter" reasoning
+ * above applies to all of them. The one exception, `resetNetworkIdleTimer`,
+ * IS referenced at background.js's top level (the three
+ * `chrome.webRequest.*.addListener(resetNetworkIdleTimer, …)` calls); rather
+ * than special-case its bridge ordering, background.js wraps it in a local
+ * closure at each call site (see that file's own comment) so the identifier
+ * lookup itself is deferred to first use, same as everything else here.
+ *
  * No other logic lives in this file — M5 consolidates listener registration
  * here for real; this slice only flips the loading mechanism plus these
  * bridge assignments, otherwise behavior-identical.
@@ -56,9 +74,29 @@ import '../tiles.js';
 import '../prefs.js';
 import { withStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
+import {
+	getTZDateString,
+	resetNetworkIdleTimer,
+	disarmNetworkIdle,
+	startCaptureSession,
+	removeCaptureSession,
+	addPendingCapture,
+	takePendingCapture,
+	removePendingCapture,
+	purgeNeverCaptureHost,
+} from './capture.js';
 import '../background.js';
 import './zip-global.js';
 import '../export.js';
 
 globalThis.withStore = withStore;
 globalThis.SAFE_PROTOCOLS = SAFE_PROTOCOLS;
+globalThis.getTZDateString = getTZDateString;
+globalThis.resetNetworkIdleTimer = resetNetworkIdleTimer;
+globalThis.disarmNetworkIdle = disarmNetworkIdle;
+globalThis.startCaptureSession = startCaptureSession;
+globalThis.removeCaptureSession = removeCaptureSession;
+globalThis.addPendingCapture = addPendingCapture;
+globalThis.takePendingCapture = takePendingCapture;
+globalThis.removePendingCapture = removePendingCapture;
+globalThis.purgeNeverCaptureHost = purgeNeverCaptureHost;

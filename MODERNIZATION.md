@@ -25,7 +25,7 @@ were already Stage H.
 | ESR-140 retest (MV3 capture gate confirmation) | ✓ done — gate CONFIRMED on the real 2.1.0 build (capture APIs absent on 140; min-version enforced even on temp installs; keep 152.0) | — |
 | M1 — globalThis bridge + module entry flip | ✓ done (fast 1225, E2E 126, no wake-latency regression; zip spike FAILED → M4's ESM vendoring pulled forward: `lib/zip/` 25-file tree + `zip-global.js` bridge; AMO zip-reproducibility note now stale → M-gate docs) | — |
 | M2 — `lib/db.js` + tiles store (ready-gated) | ✓ done (fast 1228, E2E 126; `db` global dead, `withStore` gate; bonus: `Thumbnails.delete`+`cleanupThumbnails` were still unguarded, now gated; `getGridTiles` rename; SAFE_PROTOCOLS unified, export.js independent) | — |
-| M3 — capture pipeline module + image seam | pending | — |
+| M3 — capture pipeline module + image seam | ✓ done (fast 1234, E2E 126; background.js 1063→545 lines; agent-caught eval-time bridge-reference bug fixed via deferred closures; favicon test extraction hack deleted) | — |
 | M4 — backup/export module + zip.js ESM vendoring | pending | — |
 | M5 — `lib/platform.js` + entry consolidation + review leftovers | pending | — |
 | M6 — cosmetic UAT findings (placeholder clip, chip contrast, scenario text) | pending | — |

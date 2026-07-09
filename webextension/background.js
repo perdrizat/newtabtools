@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Background, makeZip, NeverCapture, Prefs, purgeNeverCaptureHost, readZip, SAFE_PROTOCOLS, Tiles, withStore */
+/* globals addPendingCapture, Background, disarmNetworkIdle, getTZDateString, makeZip, NeverCapture, Prefs, purgeNeverCaptureHost, readZip, removeCaptureSession, removePendingCapture, resetNetworkIdleTimer, SAFE_PROTOCOLS, startCaptureSession, takePendingCapture, Tiles, withStore */
 
 Prefs.init().then(async function() {
 	let previousVersion = Prefs.version;
@@ -27,11 +27,22 @@ Prefs.init().then(async function() {
 // warm-up was redundant — the first caller (whichever event wakes the page)
 // now triggers the lazy open, same as before minus the one redundant kick.
 
-const NEW_TAB_URL = chrome.runtime.getURL('newTab.xhtml');
+// M3 (MODERNIZATION.md, "carve the auto-thumbnail capture pipeline into real
+// ES modules"): the entire capture pipeline — network-idle watching,
+// captureTab/fetchFaviconBlob, the A/B/C capture-session state machine, the
+// storage.session-backed pendingCaptures queue, and purgeNeverCaptureHost —
+// moved to lib/capture.js; the DOM Image/canvas resize + blankness-detection
+// code (resizeThumbnail/isBlank/dataURLtoBlob) moved to
+// lib/thumbnail-image.js, a narrow seam a service-worker/Chrome build can
+// swap for an OffscreenCanvas implementation without this file changing at
+// all. This file (still bridge-mode) reaches all of it as bare identifiers
+// bridged onto `globalThis` by lib/background-main.js, same mechanism as
+// `withStore`/`SAFE_PROTOCOLS` above. `getTZDateString` moved alongside
+// (lib/capture.js's `pickAndStore` needs it) and is bridged back here too,
+// since the message handlers/`cleanupThumbnails`/`idleListener` below still
+// need it.
 
-function getTZDateString(date = new Date()) {
-	return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map(p => p.toString().padStart(2, '0')).join('-');
-}
+const NEW_TAB_URL = chrome.runtime.getURL('newTab.xhtml');
 
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 	// Sender validation. Only the extension's own pages may message the
@@ -284,437 +295,36 @@ chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
 });
 
 // ---------------------------------------------------------------------------
-// Network idle monitor
+// Network idle monitor — networkIdleWatchers/armNetworkIdle/disarmNetworkIdle/
+// resetNetworkIdleTimer moved to lib/capture.js in M3 (module-local in-memory
+// Map, per MODERNIZATION.md's in-memory-state directive). The three listeners
+// below stay here (this file keeps all listener registrations) and reach
+// `resetNetworkIdleTimer` via the same globalThis bridge as `withStore` — but
+// wrapped in a local closure rather than passed directly. `resetNetworkIdleTimer`
+// is used at TOP LEVEL here (registered at module-evaluation time), before
+// lib/background-main.js's own body (where the bridge assignment happens) can
+// run — ES module evaluation always finishes evaluating an imported module
+// (this file) before the importing module's (lib/background-main.js's) own
+// top-level statements execute, so a bare top-level reference to
+// `resetNetworkIdleTimer` here would throw ReferenceError. Deferring the
+// lookup inside a closure, invoked only when a real webRequest event fires
+// (long after evaluation completes), sidesteps that entirely —
+// `disarmNetworkIdle`/`startCaptureSession`/etc. don't need this treatment
+// because they're only ever read from inside other listener callbacks below
+// (already lazy).
 // ---------------------------------------------------------------------------
 
-var networkIdleWatchers = new Map();
-
-function armNetworkIdle(tabId, callback) {
-	disarmNetworkIdle(tabId);
-	let watcher = {
-		startTime: Date.now(),
-		callback: callback,
-		resetCount: 0,
-		timer: setTimeout(function() {
-			let elapsed = Date.now() - watcher.startTime;
-			networkIdleWatchers.delete(tabId);
-			callback(elapsed);
-		}, 2000),
-	};
-	networkIdleWatchers.set(tabId, watcher);
-}
-
-function disarmNetworkIdle(tabId) {
-	let watcher = networkIdleWatchers.get(tabId);
-	if (watcher) {
-		clearTimeout(watcher.timer);
-		networkIdleWatchers.delete(tabId);
-	}
-}
-
-function resetNetworkIdleTimer(details) {
-	let watcher = networkIdleWatchers.get(details.tabId);
-	if (watcher) {
-		watcher.resetCount++;
-		clearTimeout(watcher.timer);
-		watcher.timer = setTimeout(function() {
-			let elapsed = Date.now() - watcher.startTime;
-			networkIdleWatchers.delete(details.tabId);
-			watcher.callback(elapsed);
-		}, 2000);
-	}
-}
-
-chrome.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
-chrome.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
-chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+chrome.webRequest.onBeforeRequest.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
+chrome.webRequest.onCompleted.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
+chrome.webRequest.onErrorOccurred.addListener(function(details) { resetNetworkIdleTimer(details); }, {urls: ['<all_urls>']});
 
 // ---------------------------------------------------------------------------
-// Thumbnail helpers: resize, capture, blankness detection
+// Thumbnail helpers (resize/capture/blankness-detection) and the multi-stage
+// (A/B/C) capture-session state machine moved to lib/capture.js (session glue)
+// and lib/thumbnail-image.js (the DOM Image/canvas seam) in M3. This file
+// reaches `startCaptureSession` from the 'Thumbnails.capture' message handler
+// above and the webNavigation.onCompleted/tabs.onActivated listeners below.
 // ---------------------------------------------------------------------------
-
-function resizeThumbnail(dataURL, targetWidth) {
-	return new Promise(function(resolve) {
-		let img = new Image();
-		img.onload = function() {
-			let scale = targetWidth / img.width;
-			let canvas = document.createElement('canvas');
-			canvas.width = targetWidth;
-			canvas.height = Math.min(targetWidth, scale * img.height);
-			let ctx = canvas.getContext('2d');
-			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-			canvas.toBlob(resolve);
-		};
-		img.src = dataURL;
-	});
-}
-
-/**
- * Capture the visible tab and return the data URL and favicon URL.
- * Verifies the target tab is still active before capturing — if the user
- * switched tabs, captureVisibleTab would screenshot the wrong page.
- * dataURL is null if the tab is gone/inactive or captureVisibleTab fails.
- * @param {number} tabId
- * @param {number} windowId
- * @returns {Promise<{dataURL: string|null, favIconUrl: string|null}>}
- */
-async function captureTab(tabId, windowId) {
-	// Firefox hides tabs.captureVisibleTab entirely when the extension lacks
-	// (or has lost) the <all_urls> host permission it requires — the API
-	// isn't merely denied, `typeof` is `undefined` (spike finding, 2026-07-09).
-	// startCaptureSession() already guards on browser.permissions.contains()
-	// before creating a session, but this is a second, independent guard for
-	// any other caller (e.g. the action popup's Thumbnails.capture message).
-	if (typeof browser.tabs.captureVisibleTab !== 'function') {
-		return {dataURL: null, favIconUrl: null};
-	}
-	let tab;
-	try {
-		tab = await browser.tabs.get(tabId);
-	} catch (ex) {
-		// Tab is gone — same as the old callback's `runtime.lastError` check.
-		return {dataURL: null, favIconUrl: null};
-	}
-	if (!tab.active) {
-		return {dataURL: null, favIconUrl: null};
-	}
-	// `favIconUrl` can become available before or after the screenshot
-	// is ready — grab whichever value is current at this moment.
-	let favIconUrl = tab.favIconUrl || null;
-	let dataURL;
-	try {
-		dataURL = await browser.tabs.captureVisibleTab(windowId, {format: 'png'});
-	} catch (ex) {
-		return {dataURL: null, favIconUrl};
-	}
-	return {dataURL: dataURL || null, favIconUrl};
-}
-
-/**
- * Decode a `data:` URL into a Blob without going through `fetch`.
- * The manifest CSP is `connect-src 'self' https://firefox.settings.services.mozilla.com`
- * (no wildcard — see audit/2026-05-31-csp-tightening.md), which blocks
- * `fetch('data:…')`. Many sites (Mozilla properties, Wikipedia, SPAs) inline
- * their favicon as a data URL, so we decode in-process. Returns `null` for
- * malformed input.
- */
-function dataURLtoBlob(dataURL) {
-	let m = /^data:([^,;]*)(;base64)?,(.*)$/.exec(dataURL);
-	if (!m) {
-		return null;
-	}
-	let mime = m[1] || 'application/octet-stream';
-	let isBase64 = !!m[2];
-	let payload = m[3];
-	let bytes;
-	try {
-		let binary = isBase64 ? atob(payload) : decodeURIComponent(payload);
-		bytes = new Uint8Array(binary.length);
-		for (let i = 0; i < binary.length; i++) {
-			bytes[i] = binary.charCodeAt(i);
-		}
-	} catch (ex) {
-		return null;
-	}
-	return new Blob([bytes], { type: mime });
-}
-
-/**
- * Turn a tab's `favIconUrl` into a cached favicon Blob, or `null`.
- *
- * Only `data:` URLs are cached here: they're decoded in-process (see
- * `dataURLtoBlob`), capped at ~64 KB so we don't bloat the IDB store. Remote
- * `http(s):` favicons are deliberately NOT fetched — that required a
- * `connect-src https:` wildcard in the manifest CSP (any-HTTPS read access),
- * which the 2026-05-31 review flagged. Instead they render live on the page as
- * `<img src="https://…/favicon.ico">`, governed by `img-src https:` (paint-only,
- * can't exfiltrate). See `audit/2026-05-31-csp-tightening.md`. So this returns
- * null for non-`data:` URLs and the page falls back to a live <img> via the
- * stored `favIconUrl` string.
- */
-function fetchFaviconBlob(favIconUrl) {
-	if (!favIconUrl || !favIconUrl.startsWith('data:')) {
-		return Promise.resolve(null);
-	}
-	let blob = dataURLtoBlob(favIconUrl);
-	if (!blob || blob.size === 0 || blob.size > 64 * 1024) {
-		return Promise.resolve(null);
-	}
-	return Promise.resolve(blob);
-}
-
-/**
- * Detect if a screenshot is blank (single-color).
- * Decodes onto a 50×50 canvas, samples all pixels.
- * Returns Promise<boolean>: true if >97% of pixels share the dominant color.
- */
-function isBlank(dataURL) {
-	return new Promise(function(resolve) {
-		let img = new Image();
-		img.onload = function() {
-			let size = 50;
-			let canvas = document.createElement('canvas');
-			canvas.width = size;
-			canvas.height = size;
-			let ctx = canvas.getContext('2d');
-			ctx.drawImage(img, 0, 0, size, size);
-			let data = ctx.getImageData(0, 0, size, size).data;
-			let totalPixels = size * size;
-
-			// Find dominant color (first pixel as seed).
-			let dr = data[0], dg = data[1], db = data[2];
-			let matchCount = 0;
-			let tolerance = 5;
-
-			for (let i = 0; i < data.length; i += 4) {
-				if (Math.abs(data[i] - dr) <= tolerance &&
-					Math.abs(data[i + 1] - dg) <= tolerance &&
-					Math.abs(data[i + 2] - db) <= tolerance) {
-					matchCount++;
-				}
-			}
-
-			let ratio = matchCount / totalPixels;
-			resolve(ratio > 0.97);
-		};
-		img.onerror = function() {
-			resolve(true); // Treat decode failures as blank.
-		};
-		img.src = dataURL;
-	});
-}
-
-// ---------------------------------------------------------------------------
-// Multi-stage capture sessions
-// ---------------------------------------------------------------------------
-
-var captureSessions = new Map();
-
-/**
- * Start a multi-stage capture session for a tab.
- *
- * All tabs (both active on load and activated from background):
- *   A — immediate capture
- *   B — 500ms later (SPA first meaningful paint)
- *   C — on network idle, capped at 2s (user may scroll)
- *   After C (or 2s timeout), pickAndStore selects the best capture.
- *
- * Background tabs that haven't been activated yet are deferred via
- * `storage.session`'s `pendingCaptures` (an unbounded wait for tab
- * activation, which doesn't survive event-page suspension in-memory) —
- * the full A/B/C flow starts when the user switches to the tab, since
- * SPAs often only render after activation.
- *
- * Host permissions are user-revocable at runtime in MV3 (unlike MV2's
- * install-time-only grant), so this first confirms <all_urls> is still
- * held before creating any session — no timers, no watchers, if it's been
- * revoked. The check is async, so the granted case takes one extra
- * microtask/promise tick before `_startCaptureSession` runs; callers here
- * are all fire-and-forget, so this does not change observable ordering.
- * @param {number} tabId
- * @param {number} windowId
- * @param {string} url
- * @returns {Promise<void>}
- */
-async function startCaptureSession(tabId, windowId, url) {
-	let granted;
-	try {
-		granted = await browser.permissions.contains({origins: ['<all_urls>']});
-	} catch (ex) {
-		granted = false;
-	}
-	if (!granted) {
-		return;
-	}
-	_startCaptureSession(tabId, windowId, url);
-}
-
-/**
- * Internal implementation of `startCaptureSession` — see there for the
- * capture-stage documentation. Split out so the permission guard above can
- * wrap it without duplicating the session-setup logic.
- * @param {number} tabId
- * @param {number} windowId
- * @param {string} url
- */
-function _startCaptureSession(tabId, windowId, url) {
-	// Privacy guard: never capture sites the user has opted-out of.
-	// Accepted millisecond startup race (same class as Blocked/Filters): if the
-	// list is updated concurrently with a navigation the guard may miss one
-	// capture — acceptable given the infrequency of list mutations.
-	if (NeverCapture.matches(url)) {
-		return;
-	}
-
-	// Clean up any prior session for this tab (SPA navigations can trigger
-	// multiple onCompleted events for the same tabId).
-	let oldSession = captureSessions.get(tabId);
-	if (oldSession) {
-		oldSession.timers.forEach(function(t) { clearTimeout(t); });
-	}
-	captureSessions.delete(tabId);
-	disarmNetworkIdle(tabId);
-
-	let session = {
-		url: url,
-		windowId: windowId,
-		captures: [],
-		timers: [],
-	};
-	captureSessions.set(tabId, session);
-
-	// Capture A: immediate.
-	captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
-		if (dataURL && captureSessions.get(tabId) === session) {
-			session.captures.push({label: 'A', dataURL: dataURL});
-		}
-		if (favIconUrl && captureSessions.get(tabId) === session) {
-			session.favIconUrl = favIconUrl;
-		}
-	});
-
-	// Capture B: 500ms later.
-	let timerB = setTimeout(function() {
-		if (captureSessions.get(tabId) !== session) {
-			return;
-		}
-		captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
-			if (dataURL && captureSessions.get(tabId) === session) {
-				session.captures.push({label: 'B', dataURL: dataURL});
-			}
-			if (favIconUrl && captureSessions.get(tabId) === session) {
-				session.favIconUrl = favIconUrl;
-			}
-		});
-	}, 500);
-	session.timers.push(timerB);
-
-	// Capture C: on network idle, capped at 2s.
-	// Hard deadline at 2s ensures we finalize even if network never goes idle.
-	// Kept short because users frequently scroll within 2s.
-	let finalized = false;
-
-	let hardDeadline = setTimeout(function() {
-		if (!finalized && captureSessions.get(tabId) === session) {
-			finalized = true;
-			disarmNetworkIdle(tabId);
-			captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
-				if (dataURL && captureSessions.get(tabId) === session) {
-					session.captures.push({label: 'C', dataURL: dataURL});
-				}
-				if (favIconUrl && captureSessions.get(tabId) === session) {
-					session.favIconUrl = favIconUrl;
-				}
-				pickAndStore(tabId);
-			});
-		}
-	}, 2000);
-	session.timers.push(hardDeadline);
-
-	armNetworkIdle(tabId, function(elapsed) {
-		if (finalized || captureSessions.get(tabId) !== session) {
-			return;
-		}
-		if (elapsed <= 2000) {
-			// Network idle within 2s — take Capture C, then finalize.
-			captureTab(tabId, windowId).then(function({dataURL, favIconUrl}) {
-				if (dataURL && captureSessions.get(tabId) === session) {
-					session.captures.push({label: 'C', dataURL: dataURL});
-				}
-				if (favIconUrl && captureSessions.get(tabId) === session) {
-					session.favIconUrl = favIconUrl;
-				}
-				if (!finalized && captureSessions.get(tabId) === session) {
-					finalized = true;
-					clearTimeout(hardDeadline);
-					pickAndStore(tabId);
-				}
-			});
-		} else {
-			// Network idle after 2s — skip C (user may have scrolled), finalize with A/B.
-			if (!finalized && captureSessions.get(tabId) === session) {
-				finalized = true;
-				clearTimeout(hardDeadline);
-				pickAndStore(tabId);
-			}
-		}
-	});
-}
-
-/**
- * Select the best capture from the session and write it to IDB.
- * Picks the latest non-blank capture. If all are blank, keeps the latest.
- */
-function pickAndStore(tabId) {
-	let session = captureSessions.get(tabId);
-	if (!session || session.captures.length === 0) {
-		captureSessions.delete(tabId);
-		return;
-	}
-
-	let url = session.url;
-
-	// Re-check never-capture list. Closes the in-flight-session race: if the
-	// user added the host to the list after the session started, we must not
-	// store the capture that was taken before the list update landed.
-	if (NeverCapture.matches(url)) {
-		captureSessions.delete(tabId);
-		return;
-	}
-	let favIconUrl = session.favIconUrl || null;
-	let captures = session.captures;
-	captureSessions.delete(tabId);
-
-	// Clear any remaining timers.
-	session.timers.forEach(function(t) { clearTimeout(t); });
-
-	// Check blankness of all captures in parallel, then pick the best.
-	// Fetch the favicon in parallel so we don't add latency to the
-	// thumbnail finalisation.
-	Promise.all([
-		Promise.all(captures.map(function(c) { return isBlank(c.dataURL); })),
-		fetchFaviconBlob(favIconUrl),
-	]).then(async function(results) {
-		let blankResults = results[0];
-		let faviconBlob = results[1];
-
-		// Pick latest non-blank; fall back to latest overall.
-		let bestIndex = captures.length - 1; // default: latest
-		for (let i = captures.length - 1; i >= 0; i--) {
-			if (!blankResults[i]) {
-				bestIndex = i;
-				break;
-			}
-		}
-
-		let best = captures[bestIndex];
-
-		let prefs = await browser.storage.local.get({'thumbnailSize': 600});
-		let blob = await resizeThumbnail(best.dataURL, prefs.thumbnailSize);
-		let today = getTZDateString();
-		let record = {
-			url: url,
-			image: blob,
-			stored: today,
-			used: today,
-		};
-		if (faviconBlob) {
-			// data: favicon, decoded + cached as a Blob (offline-capable).
-			record.favicon = faviconBlob;
-		} else if (favIconUrl && /^https?:\/\//.test(favIconUrl)) {
-			// Remote favicon: store the URL so the page can render it
-			// live via <img> (no fetch / no connect-src wildcard).
-			record.faviconUrl = favIconUrl;
-		}
-		// Re-guard the store (audit §2.4): the isBlank/favicon/resize awaits
-		// above give the connection time to drop via onclose/onversionchange —
-		// withStore() re-opens it if so, instead of throwing on a stale
-		// connection and losing the freshly-captured thumbnail silently.
-		await withStore('thumbnails', 'readwrite', function(store) {
-			store.put(record);
-		});
-	}).catch(console.error);
-}
 
 // ---------------------------------------------------------------------------
 // Navigation triggers
@@ -764,77 +374,13 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 });
 
 // ---------------------------------------------------------------------------
-// pendingCaptures: serialized storage.session read-modify-write (audit §2.3)
+// pendingCaptures: serialized storage.session read-modify-write — the
+// pendingWriteChain/enqueuePendingCapturesWrite machinery and the
+// addPendingCapture/takePendingCapture/removePendingCapture helpers built on
+// it moved to lib/capture.js in M3. This file calls the bridged helpers from
+// webNavigation.onCompleted (above) and the tabs.onActivated/onRemoved
+// listeners below.
 // ---------------------------------------------------------------------------
-
-// Chains every pendingCaptures mutation onto one promise, so two concurrent
-// callers (e.g. two `onCompleted` events for different background tabs)
-// can't both read the same storage.session snapshot and clobber each other's
-// write — the second caller's get() only starts once the first's set() has
-// finished. Also dedups the three previously open-coded RMW blocks (§4.1).
-var pendingWriteChain = Promise.resolve();
-
-/**
- * Queue a pendingCaptures read-modify-write behind any already in flight.
- * @param {function(Record<string, {url: string, windowId: number}>): *} mutate
- *   Receives the current pendingCaptures object (mutate in place); its
- *   return value becomes this call's resolved value.
- * @returns {Promise<*>}
- */
-function enqueuePendingCapturesWrite(mutate) {
-	let result = pendingWriteChain.then(async function() {
-		let {pendingCaptures} = await browser.storage.session.get('pendingCaptures');
-		pendingCaptures = pendingCaptures || {};
-		let returnValue = mutate(pendingCaptures);
-		await browser.storage.session.set({pendingCaptures});
-		return returnValue;
-	});
-	// Keep the chain alive even if this write failed, so a later caller still
-	// gets a turn instead of every subsequent write rejecting forever.
-	pendingWriteChain = result.catch(function(event) {
-		console.error(event);
-	});
-	return result;
-}
-
-/**
- * Record a deferred capture for a background tab.
- * @param {number} tabId
- * @param {{url: string, windowId: number}} data
- * @returns {Promise<void>}
- */
-function addPendingCapture(tabId, data) {
-	return enqueuePendingCapturesWrite(function(pendingCaptures) {
-		pendingCaptures[tabId] = data;
-	});
-}
-
-/**
- * Remove and return the deferred capture for a tab, if any.
- * @param {number} tabId
- * @returns {Promise<{url: string, windowId: number}|undefined>}
- */
-function takePendingCapture(tabId) {
-	return enqueuePendingCapturesWrite(function(pendingCaptures) {
-		let pending = pendingCaptures[tabId];
-		if (pending) {
-			delete pendingCaptures[tabId];
-		}
-		return pending;
-	});
-}
-
-/**
- * Discard the deferred capture for a tab, if any (no return value needed —
- * used for cleanup on tab close).
- * @param {number} tabId
- * @returns {Promise<void>}
- */
-function removePendingCapture(tabId) {
-	return enqueuePendingCapturesWrite(function(pendingCaptures) {
-		delete pendingCaptures[tabId];
-	});
-}
 
 chrome.tabs.onActivated.addListener(function(activeInfo) {
 	takePendingCapture(activeInfo.tabId).then(function(pending) {
@@ -846,7 +392,7 @@ chrome.tabs.onActivated.addListener(function(activeInfo) {
 
 chrome.tabs.onRemoved.addListener(function(tabId) {
 	removePendingCapture(tabId).catch(console.error);
-	captureSessions.delete(tabId);
+	removeCaptureSession(tabId);
 	disarmNetworkIdle(tabId);
 });
 
@@ -969,75 +515,11 @@ function cleanupThumbnails() {
 	});
 }
 
-/**
- * Purge all captured data for a single host pattern from both the thumbnails
- * and tiles stores.
- *
- * Two sequential cursor passes:
- *   1. thumbnails — delete every record whose URL matches `pattern`.
- *   2. tiles — for every matching tile that holds an auto-captured thumbnail
- *      (`imageIsThumbnail: true`), strip the `image` and `imageIsThumbnail`
- *      fields and update the record in place (the tile itself is kept).
- *      Tiles with a custom image (no `imageIsThumbnail`) are untouched.
- *
- * Unparseable URLs in either store are skipped silently (same idiom used by
- * `Thumbnails.getFaviconsByHost` at background.js:237). Host matching keys on
- * URL.hostname (no port) — the canonical never-capture entry is a port-less
- * host, so a listed `example.com` also covers `example.com:8443`.
- *
- * Awaits DB readiness internally (via withStore) so callers on the restore
- * path (readZip, which runs without a preceding message-handler wrap) can't
- * crash on an unopened connection. M2: both passes now run inside ONE
- * withStore(['thumbnails', 'tiles'], …) transaction (the multi-store shape)
- * instead of the pre-M2 code's two sequential `db.transaction()` calls — an
- * incidental atomicity improvement, not a behavior change either pass relies on.
- *
- * @param {string} pattern  A NeverCapture host pattern, e.g. '.example.com' or 'example.com'.
- * @returns {Promise<{thumbnails: number, tiles: number}>}
- */
-globalThis.purgeNeverCaptureHost = function(pattern) {
-	return withStore(['thumbnails', 'tiles'], 'readwrite', function(tx) {
-		return new Promise(function(resolve) {
-			let thumbCount = 0;
-			let tileCount = 0;
-
-			// Pass 1: thumbnails store — delete matching records.
-			tx.objectStore('thumbnails').openCursor().onsuccess = function() {
-				let cursor = this.result;
-				if (cursor) {
-					let row = cursor.value;
-					let host = null;
-					try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-					if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
-						cursor.delete();
-						thumbCount++;
-					}
-					cursor.continue();
-				} else {
-					// Pass 2: tiles store — strip auto-thumbnail image from matching tiles.
-					tx.objectStore('tiles').openCursor().onsuccess = function() {
-						let tileCursor = this.result;
-						if (tileCursor) {
-							let row = tileCursor.value;
-							let host = null;
-							try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-							if (host && NeverCapture.hostMatchesPattern(host, pattern)
-								&& row.image && row.imageIsThumbnail) {
-								delete row.image;
-								delete row.imageIsThumbnail;
-								tileCursor.update(row);
-								tileCount++;
-							}
-							tileCursor.continue();
-						} else {
-							resolve({ thumbnails: thumbCount, tiles: tileCount });
-						}
-					};
-				}
-			};
-		});
-	});
-};
+// purgeNeverCaptureHost moved to lib/capture.js in M3 (thumbnails-domain, but
+// driven entirely by the same never-capture/thumbnails-store machinery as
+// the rest of that file) — bridged onto globalThis by lib/background-main.js,
+// same as withStore/SAFE_PROTOCOLS. Reached from this file's
+// 'Thumbnails.purgeHost' handler above and export.js's restore path.
 
 /**
  * One-shot-per-respawn idle listener. `cleanupThumbnails()` itself is

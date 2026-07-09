@@ -39,6 +39,18 @@ import vm from 'node:vm';
 import { Tiles as RealTiles, Background as RealBackground } from '../../webextension/lib/tiles-store.js';
 import { withStore, _resetForTests } from '../../webextension/lib/db.js';
 import { SAFE_PROTOCOLS } from '../../webextension/lib/constants.js';
+import {
+	getTZDateString,
+	resetNetworkIdleTimer,
+	disarmNetworkIdle,
+	startCaptureSession,
+	removeCaptureSession,
+	addPendingCapture,
+	takePendingCapture,
+	removePendingCapture,
+	purgeNeverCaptureHost,
+	_captureSessionsForTests,
+} from '../../webextension/lib/capture.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.resolve(__dirname, '../../webextension/background.js');
@@ -265,6 +277,20 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		(globalThis as any).withStore = withStore;
 		(globalThis as any).SAFE_PROTOCOLS = SAFE_PROTOCOLS;
 		(globalThis as any).compareVersions = vi.fn(); // Prefs.history is false below — never actually called.
+
+		// M3: bridge the real lib/capture.js exports onto globalThis, same as
+		// production's lib/background-main.js does — background.js is still
+		// bridge-mode and reaches the whole capture pipeline as bare
+		// identifiers (see this file's own header comment for the pattern).
+		(globalThis as any).getTZDateString = getTZDateString;
+		(globalThis as any).resetNetworkIdleTimer = resetNetworkIdleTimer;
+		(globalThis as any).disarmNetworkIdle = disarmNetworkIdle;
+		(globalThis as any).startCaptureSession = startCaptureSession;
+		(globalThis as any).removeCaptureSession = removeCaptureSession;
+		(globalThis as any).addPendingCapture = addPendingCapture;
+		(globalThis as any).takePendingCapture = takePendingCapture;
+		(globalThis as any).removePendingCapture = removePendingCapture;
+		(globalThis as any).purgeNeverCaptureHost = purgeNeverCaptureHost;
 
 		(globalThis as any).chrome.runtime.onMessage.addListener.mockClear();
 		(globalThis as any).chrome.webNavigation.onCompleted.addListener.mockClear();
@@ -540,7 +566,12 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 				await vi.advanceTimersByTimeAsync(0);
 				await vi.advanceTimersByTimeAsync(0);
 
-				const captureSessions = (globalThis as any).captureSessions as Map<number, unknown>;
+				// M3: captureSessions moved to lib/capture.js and is module-private
+				// (no `globalThis.captureSessions` global to poke anymore) —
+				// `_captureSessionsForTests` is the same test-only escape hatch
+				// pattern as lib/db.js's `_resetForTests` (a live reference onto the
+				// real Map, not a copy).
+				const captureSessions = _captureSessionsForTests;
 				expect(captureSessions.has(42)).toBe(false); // still waiting on the DB
 
 				latestOpen().resolve();
