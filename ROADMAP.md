@@ -53,24 +53,16 @@ tiers; all 7 pre-takeover security findings resolved). The remaining last mile:
   `tests/uat/newtabtools_knowngood.zip` (see `docs/amo-listing.md` "Screenshots
   checklist"). The UAT browser daemon already renders that fixture at Full HD and can
   produce these.
-- [ ] First submission to the AMO Developer Hub. ID/listing decision is settled: new
-  listing under `newtabtools@symlink.ch`, v1.0.0 (not an ID-transfer). Listing copy,
-  `PRIVACY.md`, `LICENSE`, and reviewer notes are in place.
+- [ ] First submission to the AMO Developer Hub — the submitted build is now the
+  **MV3** build (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)). ID/listing decision is
+  settled: new listing under `newtabtools@symlink.ch`, v1.0.0 (not an ID-transfer).
+  Listing copy, `PRIVACY.md`, `LICENSE`, and reviewer notes are in place.
 
-## Next — Firefox MV3 (stage 2)
+## Next — Firefox MV3 (stage 2) — DONE 2026-07-09
 
-The major arc after shipping. Gated, not immediate. Full plan and contributor
-directives in [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
-
-- **Gate to start:** full Unit + Integration suite green in CI on a clean clone; the
-  minimum E2E suite green against Firefox ESR; at least one real bug fix shipped under
-  the TDD flow; maintainer comfortable navigating `newTab.js` / `tiles.js` / the
-  background scripts.
-- **Calendar time-box:** re-decide by **2027-Q2** regardless of the substantive gate —
-  Mozilla has signalled a multi-year MV2 wind-down, so indefinite deferral is a
-  strategic risk. The time-box commits to *re-deciding*, not to acting.
-- **Shape:** Firefox-first (MV3 event pages keep DOM access, halving scope vs. Chrome);
-  no TypeScript / no build step; ES-module extraction of the background scripts.
+Shipped in a single-sitting agentic migration on branch `mv3-migration`. Full record
+(status board, slice-by-slice checklist, spike/bisect findings) in
+[`MV3_MIGRATION.md`](MV3_MIGRATION.md) and git history (`a0eb4fa` and its ancestors).
 
 ## Later — Chrome extension (stage 3)
 
@@ -88,8 +80,11 @@ Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 
 **Tooling / debt**
 - Extract pure logic from the legacy monolith scripts into `webextension/lib/` ES
-  modules. Bundled with MV3 — MV2 script-mode files can't import ES modules, so doing
-  it now would mean maintaining duplicate copies.
+  modules. Now a **post-MV3** backlog item (deferred during the migration itself —
+  see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) "Post-MV3 backlog"): a clean rewrite of
+  the background as ES modules behind the frozen message contract, with a
+  `lib/platform.js` capability layer designed against Chrome's service-worker
+  constraints.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The suite walks a first-run journey on a seeded environment: `00-uat-init`,
@@ -126,6 +121,18 @@ alternatives. Detail lives in git history / the linked docs.
   in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - **Firefox-only, MV2, for now** (2026-05-02). Chrome forces MV3; doing both during the
   takeover means migrating without a safety net. Deferred behind the gate above.
+  **Outcome (2026-07-09): the MV3 flip shipped** (see `MV3_MIGRATION.md`). Firefox
+  stays the only target; Chrome remains deferred to stage 3 above.
+- **Minimum Firefox raised to 152.0** (2026-07-09). Empirically bisected: Firefox
+  exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions only from 152.0
+  (`undefined` on every build through 151.0, official binaries 146–152 bisected).
+  Not a permission gate — a Firefox-version gate. Consequence: the E2E tier moved
+  from Firefox ESR to release-channel Firefox until a 152-based ESR ships.
+- **Full rewrite considered and rejected** (2026-07-09). A clean-slate rewrite
+  (incl. Chrome-first) would have discarded the behavior-encoding test suite
+  (~1130 fast tests, architecture-coupled) and the edge-case knowledge in the
+  capture pipeline, for benefits reachable incrementally. Migrated instead; the
+  ES-module rewrite of the background stays a later, separate backlog item.
 - **Chrome via single-source / dual-build, not parallel branches** — long-lived branches
   carry permanent merge cost.
 - **AMO: new listing / ID `newtabtools@symlink.ch`, not ID-transfer** — clean state

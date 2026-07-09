@@ -14,8 +14,8 @@ this file; the corrected directives below are decisions of record.
 | Slice A — getViews → messaging | ✓ done (fast 1139, E2E 124) | `12b410c` |
 | Slice B — event-page resilience | ✓ done (fast 1152, E2E 124) | `6bb6017` |
 | Slice C — async normalization | ✓ done (fast 1153, E2E 124) | `03ffabc` |
-| Slice D — the MV3 flip | ~ in progress (agent implementing) | — |
-| Final gate — full test/UAT/audit/build | pending | — |
+| Slice D — the MV3 flip | ✓ done (fast 1162, E2E 126 on FF152/MV3) | `a0eb4fa` |
+| Final gate — full test/UAT/audit/build | ~ in progress (UAT running, docs sweep) | — |
 | Post-flip retest on ESR 140 | backlog | — |
 
 ## Strategic decisions (updated 2026-07-09)

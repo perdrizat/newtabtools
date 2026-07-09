@@ -58,13 +58,13 @@ All development on this project is test-driven. Before writing any code, please 
 
 ### Development Workflow
 
-1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js and Firefox ESR.
+1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js and Firefox (release-channel, >= 152).
 2.  **TDD:** We follow a strict red/green TDD workflow. Unit and Integration tests run on every save; E2E tests run at feature completion.
 3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`pnpm dev`, `pnpm test:fast`, etc.). This project uses **pnpm** as the package manager (enforced by a `preinstall` guard so the `minimumReleaseAge` supply-chain rule in `pnpm-workspace.yaml` actually applies).
 
 ### Build
 
-Currently, there is no build step for the Firefox-only MV2 extension. You can run the extension locally using Mozilla's `web-ext` tool.
+Currently, there is no build step for the Firefox-only MV3 extension. You can run the extension locally using Mozilla's `web-ext` tool.
 
 ```bash
 # Run the extension locally
@@ -82,9 +82,9 @@ web-ext build --source-dir webextension/
 
 ### Architecture
 
-- **Target:** Firefox-first, Firefox-only (Manifest V2). Chrome support and MV3 migration are currently deferred (see [`ROADMAP.md`](ROADMAP.md)).
-- **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab`.
-- **Background Scripts:** Persistent scripts split across multiple files (`common.js`, `tiles.js`, `prefs.js`, `background.js`) using a mix of `chrome.*` callbacks and `browser.*` promises.
+- **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred (see [`ROADMAP.md`](ROADMAP.md)).
+- **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab` (XHTML→HTML conversion is a separate, explicitly deferred task — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)).
+- **Background Scripts:** A non-persistent **event page** (classic `background.scripts` array, no service worker — full DOM/`window`/canvas/IndexedDB access) split across multiple files (`common.js`, `tiles.js`, `prefs.js`, `background.js`), using promise-based `browser.*` throughout. The event page suspends after ~30s idle and respawns on events; respawn-hygiene directives (menus, IDB reconnect, session-backed pending state) live in [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
 
 ### Patterns & Conventions
 
@@ -96,17 +96,17 @@ web-ext build --source-dir webextension/
 - **Production files in `webextension/`:** stay `.js`. Add JSDoc types to function signatures, exported objects, and `browser.*` callback parameters. `checkJs: true` checks every `.js` by default — no per-file `// @ts-check` needed.
 - **Test files in `tests/`:** all `.ts`. New tests must be TypeScript too.
 - **WebExtension API types** come from `@types/firefox-webext-browser`. (`@types/chrome` joins it if/when Chrome support arrives.)
-- **Modules:** `webextension/lib/` is reserved for ES modules; eslint enforces module-mode there. Pure-logic extraction into `lib/` is deferred to the MV3 migration (MV2 script-mode files can't import ES modules) — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
+- **Modules:** `webextension/lib/` is reserved for ES modules; eslint enforces module-mode there. Pure-logic extraction into `lib/` is deferred to the post-MV3 ES-module extraction item (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) backlog / [`ROADMAP.md`](ROADMAP.md)) — the classic script-mode background files can't import ES modules until that lands.
 - **Don't introduce a build step.** If a feature seems to need TS-only ergonomics JSDoc can't express, simplify the design rather than adding a compiler.
 - **Don't suppress type errors** with `// @ts-ignore`. Fix the underlying JSDoc, or use `// @ts-expect-error` + a one-line reason (it preserves the signal once the issue is fixed).
 - **Don't add `.ts` files under `webextension/`.** The escape hatch (renaming `.js`→`.ts` later) is preserved by not using it now.
 
-For the MV3/Chrome forward-compatibility rules new code should also follow (promise-based `browser.*`, no DOM in background scope where it'll matter, avoid widening `<all_urls>`), see [`MV3_MIGRATION.md`](MV3_MIGRATION.md).
+MV3 has landed; the remaining forward-compat concern is **Chrome** (stage 3, deferred). New code should still avoid assumptions that would break under a Chrome service worker (no persistent background-scope DOM state) and avoid widening `host_permissions` beyond the current `<all_urls>` grant — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)'s post-MV3 backlog.
 
 ### After Finishing Feature Work
 
-- **Always run E2E tests** with `pnpm test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script handles the full Firefox ESR lifecycle (launch, port wait, test run, cleanup) automatically.
-- **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox ESR with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
+- **Always run E2E tests** with `pnpm test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script (`run_esr_tests.sh`, name unchanged) handles the full Firefox lifecycle (launch, port wait, test run, cleanup) automatically — release-channel Firefox by default (no Firefox ESR ≥152 exists yet; `$FIREFOX_ESR_BIN` still overrides the binary).
+- **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
 
 ### Before Committing
 
@@ -133,7 +133,7 @@ Every dependency is **exact-pinned** (no `^`/`~`) with a tracked `pnpm-lock.yaml
 The following classes of change loosen a security boundary and **must** be called out in either an `audit/` doc or the PR/commit description before merging:
 
 - **CSP changes** in `webextension/manifest.json` — any directive widening, including adding wildcards like `https:` or `*` to `connect-src`, `img-src`, `style-src`, etc.
-- **New required permissions** in `webextension/manifest.json` (`permissions` array). Optional permissions are fine; promoting optional → required is a boundary change.
+- **New required permissions** in `webextension/manifest.json` (`permissions` array) or a widened **`host_permissions`** array (MV3 splits host-match patterns like `<all_urls>` out of `permissions`). Optional permissions are fine; promoting optional → required is a boundary change. Note `host_permissions` is user-revocable at runtime (Firefox shows it in the install prompt) — code that depends on it must degrade gracefully, not throw, when revoked.
 - **Allow-list additions** in `webextension/export.js` (the restore allow-list grows).
 - **Removing URL/protocol validation** anywhere (`isValidURL`, the `safeProtocols` allow-list in `export.js`, the `safeHexColor` / `safeBackgroundUrl` regexes, etc.).
 - **Adding `style.X = template + userInput + template`** patterns where the template includes CSS that consumes URLs (`url(...)`, `background`, `background-image`, etc.). Always prefer `style.setProperty('--var', validatedValue)` over interpolating into a shorthand.
@@ -152,9 +152,9 @@ Contributions generated with the help of AI are welcome but must follow the stan
 
 ### Key Files
 
-- [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV2).
+- [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV3).
 - [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
 - [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
 - [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
 - [`ROADMAP.md`](ROADMAP.md): Direction, scope/non-goals, backlog, and the load-bearing decisions of record.
-- [`MV3_MIGRATION.md`](MV3_MIGRATION.md): The Manifest V3 migration plan (next major stage) + forward-compat directives for new code.
+- [`MV3_MIGRATION.md`](MV3_MIGRATION.md): The completed Manifest V3 migration's record (status board, slice checklists, spike findings) + the post-MV3 backlog directives for new code.

@@ -2,7 +2,7 @@
 
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want — **PowerTools for your browser**, extending the new tab experience much like Microsoft PowerToys does for Windows.
 
-**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests against Firefox ESR (Puppeteer + WebDriver BiDi), plus an LLM-driven UAT tier — run on every change.
+**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests against release-channel Firefox (Puppeteer + WebDriver BiDi), plus an LLM-driven UAT tier — run on every change.
 
 ## Main features
 
@@ -18,9 +18,9 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 ## What's in this repo
 
-- `webextension/` — the extension source. Currently MV2, Firefox-only, minimum version pinned to the latest Firefox ESR.
-- [`MV3_MIGRATION.md`](MV3_MIGRATION.md) — the active migration plan for Manifest V3 (Firefox-only first, Chrome deferred).
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against Firefox ESR for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
+- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152.
+- [`MV3_MIGRATION.md`](MV3_MIGRATION.md) — the completed Manifest V3 migration's record (status board, slice checklists, spike findings); Chrome remains deferred (see `ROADMAP.md`).
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against release-channel Firefox (>= 152) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — direction (Now / Next / Later), scope & non-goals, backlog, and the load-bearing decisions of record.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, AI-assisted contribution guardrails.
@@ -31,7 +31,7 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
 ### Quick Start
 
-1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and Firefox ESR. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and release-channel Firefox (>= 152). See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
 
 2. **Clone and install:**
    ```bash

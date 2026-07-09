@@ -4,7 +4,7 @@ This is the testing guide for this repository. Any contributor working on this c
 
 ## Scope and Ground Rules
 
-- **Firefox-first, Firefox-only:** This extension targets Firefox via `applications.gecko` in `manifest.json`, runs on **Manifest V2**, and has a minimum version pinned to the **latest ESR**. Do not introduce Chromium-only assumptions or MV3 constructs (`background.service_worker`, `action` replacing `browser_action`, `host_permissions` split out from `permissions`, `declarativeNetRequest`). MV3 migration is a project-shaped decision tracked in [`ROADMAP.md`](ROADMAP.md), not a side effect of bug fixes.
+- **Firefox-first, Firefox-only:** This extension targets Firefox via `browser_specific_settings.gecko` in `manifest.json`, runs on **Manifest V3** (`strict_min_version` **152.0** — the version Firefox first exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions; see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) spike findings), with a non-persistent **event page** background (classic `background.scripts` array, no service worker — full DOM/`window`/canvas access, suspends after idle and respawns on events). Do not introduce Chrome-only assumptions (`background.service_worker`, offscreen documents, `declarativeNetRequest`) — Chrome support is a project-shaped decision tracked in [`ROADMAP.md`](ROADMAP.md), not a side effect of bug fixes.
 - **JavaScript on production, TypeScript on tests, no build step.** Production `.js` files under `webextension/` carry types via JSDoc; test files under `tests/` use full TypeScript. Both are checked by `tsc --noEmit` (`allowJs: true`, `checkJs: true`). `web-ext run` consumes `webextension/` directly — no compilation between source and runtime. See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Rules for new code" for the full language rules.
 - **Red/green TDD is mandatory:** Write a failing test first, watch it fail for the right reason, and write the minimum code to make it pass.
 - **Never skip or weaken tests:** Fix them or delete them with justification in the commit message. Never use `--no-verify`.
@@ -32,13 +32,12 @@ These tools must be present on your host machine to develop and test this extens
 |---|---|---|---|
 | **Node.js** | 22 LTS (or newer; see `.node-version`) | Runs Vitest, Puppeteer, web-ext | `node --version` |
 | **pnpm** | 10.x (auto-installed by corepack from `packageManager` in `package.json`) | Package manager — required (npm/yarn are blocked by `scripts/check-pnpm.js`) | `pnpm --version` |
-| **Firefox ESR** | latest | Canonical **E2E** target | `firefox-esr --version` |
+| **Firefox (release), >= 152** | latest | Canonical **E2E** target (`$FIREFOX_ESR_BIN` overrides the binary) | `firefox --version` |
 | **`web-ext` CLI** | latest | Mozilla's dev tool | `web-ext --version` |
-| **Firefox (release)** | latest | **UAT tier** target (release channel) | `firefox --version` |
 | **geckodriver** | latest | **UAT tier** Selenium driver (auto-fetched by Selenium Manager on first run) | `geckodriver --version` |
 | **Claude Code CLI** | latest | **UAT tier** agent driver (`claude -p`) | `claude --version` |
 
-> The bottom three are **only** needed to run `pnpm test:uat` (pre-release tier). The Unit/Integration/E2E tiers don't require them, and CI doesn't install them. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing Firefox (ESR + release) and the UAT tooling" below.
+> Release-channel Firefox now serves **both** the E2E and UAT tiers — MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0, and no ESR build that new exists yet in Mozilla's APT repo (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)). When a 152-based ESR reaches the APT repo, E2E can move back to it; `$FIREFOX_ESR_BIN` still works as a binary override in the meantime. The bottom two (geckodriver, Claude Code CLI) are **only** needed to run `pnpm test:uat` (pre-release tier). The Unit/Integration tiers don't require any Firefox binary, and CI doesn't install the UAT-only tools. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing the E2E & UAT (Firefox) and verify tooling" below.
 
 ### Installing Node.js and dependencies
 
@@ -72,12 +71,13 @@ pnpm install
 
 ### Installing the E2E & UAT (Firefox) and verify tooling
 
-Firefox **ESR** is the canonical **E2E** target; **release-channel** Firefox is the **UAT** target. They're deliberately different stacks — E2E drives ESR via `web-ext` + WebDriver BiDi, UAT drives release Firefox via Selenium + geckodriver (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)). Both install from the same Mozilla APT repository and coexist fine. The UAT-only pieces (release Firefox, geckodriver, the Claude Code CLI) are needed **only** for `pnpm test:uat` — the Unit/Integration/E2E tiers and CI don't use them.
+Both the **E2E** and **UAT** tiers now target **release-channel Firefox (>= 152)** — MV3's `tabs.captureVisibleTab`/`captureTab` don't exist on any Firefox build before 152.0, and Mozilla's APT repo has no ESR that new yet (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)). They're still deliberately different stacks under the hood — E2E drives it via `web-ext` + WebDriver BiDi, UAT drives it via Selenium + geckodriver (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)) — but only one Firefox install is needed now. `$FIREFOX_ESR_BIN` still works as an E2E binary override (e.g. once a 152-based ESR ships) — the env var name is unchanged for backwards compatibility. The UAT-only pieces (geckodriver, the Claude Code CLI) are needed **only** for `pnpm test:uat` — the Unit/Integration/E2E tiers and CI don't use them.
 
 On Ubuntu/WSL, install from the official Mozilla APT repository (avoids Snap-related issues and pins everyone to the same builds):
 
 ```bash
-# 1. Add the Mozilla APT repository (provides both firefox-esr and firefox)
+# 1. Add the Mozilla APT repository (provides release firefox; also firefox-esr,
+#    kept for when a 152-based ESR ships)
 sudo install -d -m 0755 /etc/apt/keyrings
 wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | sudo tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
@@ -89,17 +89,18 @@ Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 ' | sudo tee /etc/apt/preferences.d/mozilla
 
-# 3. Install Firefox ESR (E2E target) and release Firefox (UAT target)
-sudo apt update && sudo apt install -y firefox-esr firefox
+# 3. Install release Firefox (E2E + UAT target, >= 152)
+sudo apt update && sudo apt install -y firefox
 
 # 4. Verify E2E & UAT tooling**
-firefox-esr --version    # E2E target present (Firefox ESR)
-firefox --version        # UAT target present (release-channel Firefox)
+firefox --version        # E2E + UAT target present (release-channel Firefox, >= 152)
 claude /login            # UAT agent — Claude Code CLI signed in (one-time; re-run to confirm the session)
 pnpm build               # build the extension .xpi
 node tests/uat/_tools/browser-smoke.mjs
 # expect: "new-tab grid rendered" + a screenshot under tests/uat/artifacts/
 ```
+
+UAT preflight (`pnpm test:uat:preflight`) fails fast if the detected Firefox is below 152.
 
 The .xpi lives under `dist/`, UAT-specific evidence (screenshots, scenario reports) lives under `tests/uat/artifacts/` (all git-ignored). See [`tests/uat/README.md`](tests/uat/README.md) for the full tool inventory.
 
@@ -108,7 +109,7 @@ The .xpi lives under `dist/`, UAT-specific evidence (screenshots, scenario repor
 The repository uses GitHub Actions to automatically run the full test suite on every push and pull request.
 
 - **Workflow:** Defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-- **Environment:** Ubuntu runners with Firefox ESR installed via the Mozilla APT repository.
+- **Environment:** Ubuntu runners with release-channel Firefox (>= 152) installed via the Mozilla APT repository.
 - **Instrumentation:** The CI job runs with `E2E_VERBOSE: 1` enabled. If an E2E test fails, Puppeteer's logs and UUID discovery chatter will be visible in the job's terminal output.
 - **Artifacts:** If the E2E suite fails in CI, any failure screenshots captured by `captureFailure()` are automatically uploaded as a ZIP archive. To find them, go to the **Actions** tab, click on the failed run, and scroll down to the **Artifacts** section.
 - **UAT is *not* run in CI** — and shouldn't be on the normal push/PR path. Three blockers: (1) **auth** — `claude -p` uses the developer's Claude Code *subscription*; CI has no logged-in session, and the plan deliberately does not read `ANTHROPIC_API_KEY` (API-key mode is deferred). (2) **Non-determinism** — although the local runner gates its exit code on the report's assertions, those assertions include LLM *visual* judgments that aren't reproducible run-to-run, so UAT must never gate a merge. (3) **Cost** — every run spends model tokens. If UAT is ever automated, it should be a **separate, manually-triggered (`workflow_dispatch`) or scheduled pre-release** job that installs release Firefox + geckodriver, runs in **API-key mode against a budget**, uploads the `report.json`/`summary.md`/screenshots as artifacts, and **always exits 0** (advisory, non-blocking). Not the push/PR gate. Tracked in [`ROADMAP.md`](ROADMAP.md) under deferred CI automation.
@@ -126,7 +127,7 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm lint:webext` | Run `web-ext lint` (Mozilla policy check) | Quality |
 | `pnpm typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
 | `pnpm test:fast` | Run Unit + Integration tests | TDD Loop |
-| `pnpm test:e2e` | Run full E2E suite against Firefox ESR | Validation |
+| `pnpm test:e2e` | Run full E2E suite against release-channel Firefox (>= 152; `$FIREFOX_ESR_BIN` overrides binary) | Validation |
 | `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
 | `pnpm test:uat` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (pre-release) |
 | `pnpm test:uat:preflight` | Validate the UAT environment only (Node/pnpm versions, release Firefox reports a clean `--version`, built `.xpi`, fixture hash, `claude` CLI, daemon port) without running scenarios or spending tokens | UAT (env check) |
@@ -135,7 +136,7 @@ All four quality/test checks should pass on a clean clone. If `test:e2e` hangs o
 
 ### Running a subset (single file or name filter)
 
-**Vitest is never invoked directly** — no `npx vitest`, no `pnpm exec vitest`. Always go through the pnpm scripts so the correct Vitest project, jsdom/node environment, and (for E2E) the Firefox-ESR lifecycle are set up for you. To narrow a run, **append a filename or path substring** to the script and Vitest treats it as a test-file filter:
+**Vitest is never invoked directly** — no `npx vitest`, no `pnpm exec vitest`. Always go through the pnpm scripts so the correct Vitest project, jsdom/node environment, and (for E2E) the Firefox lifecycle are set up for you. To narrow a run, **append a filename or path substring** to the script and Vitest treats it as a test-file filter:
 
 | To run | Command |
 |---|---|
@@ -150,18 +151,18 @@ The filter is a substring match against the file path, so `pnpm test:fast titleb
 
 - **XHTML, not HTML:** The new tab page is `newTab.xhtml`. *Gotcha:* jsdom parses files as HTML by default, which can hide namespace bugs. For DOM tests, initialize jsdom with `contentType: "application/xhtml+xml"`.
 - **Mixed Callbacks and Promises:** The existing codebase actively uses both `chrome.*` callbacks (e.g., `chrome.tabs.query({}, tabs => {...})`) and `browser.*` promises. The mocking library must support both.
-- **No Chromium-only APIs:** If you reach for a `browser.*` API, verify it exists on Firefox ESR before writing the test.
+- **No Chromium-only APIs:** If you reach for a `browser.*` API, verify it exists on the minimum supported Firefox (152) before writing the test.
 
 ## Project Shape
 
-The WebExtension source lives under `webextension/`. Background scripts are persistent (MV2) and split across `common.js`, `tiles.js`, `prefs.js`, `background.js`, `lib/zip.js`, `export.js`. The new tab page is registered via `chrome_url_overrides.newtab` and lives in `newTab.xhtml` (XHTML, not HTML — see Gotchas).
+The WebExtension source lives under `webextension/`. Background scripts run as a non-persistent **event page** (MV3, classic `background.scripts` array — no service worker) and are split across `common.js`, `tiles.js`, `prefs.js`, `background.js`, `lib/zip.js`, `export.js`. The new tab page is registered via `chrome_url_overrides.newtab` and lives in `newTab.xhtml` (XHTML, not HTML — see Gotchas; the XHTML→HTML conversion is explicitly deferred, see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)).
 
 The codebase touches the following `browser.*` APIs (verify before adding new ones):
 
 - **Always available:** `storage`, `tabs`, `topSites`, `sessions`, `idle`, `menus`, `webNavigation`, `theme`, `permissions`, `runtime`.
 - **Optional, granted at runtime:** `bookmarks`, `history`, `downloads`.
 
-The manifest holds `<all_urls>` in `permissions`. Avoid exercising it in tests; if a test does, comment why.
+The manifest holds `<all_urls>` in `host_permissions` (MV3 splits host-match patterns out of `permissions`). It's shown in the install prompt and is **user-revocable at runtime** — capture code guards with `permissions.contains` and degrades gracefully (no throw) if revoked. Avoid exercising it in tests; if a test does, comment why.
 
 ## Repository Layout (test infrastructure)
 
@@ -176,7 +177,7 @@ The files below make up the test scaffold. A new maintainer should not need to r
 | [`tests/setup.js`](tests/setup.js) | Sets `globalThis.jest = vi`, then `await import('jest-webextension-mock')`. The shim is required because the mock library was written for Jest and references a `jest` global at module load. |
 | [`eslint.config.js`](eslint.config.js) | Flat config (ESLint v10+). Top-level `ignores` list the vendored zip.js files (`webextension/lib/{deflate,inflate,z-worker,zip}.js`). Two file-glob blocks: `webextension/**/*.js` as **script-mode** (legacy `<script>`-loaded code) and `webextension/lib/**/*.js` as **module-mode** (extracted ES modules — where new pure-logic code goes). `no-unused-vars` set to `caughtErrors: 'none'` so legacy `} catch (ex) {}` blocks don't flag. |
 | [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js) | Exports `connectToFirefox()` which calls `puppeteer.connect({ browserWSEndpoint: 'ws://127.0.0.1:9222/session', protocol: 'webDriverBiDi' })`. |
-| [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) | Lifecycle orchestrator: `pkill` stray firefox-esr → `web-ext run --firefox=firefox-esr --args="--remote-debugging-port=9222 -headless"` → wait for port 9222 → `vitest run --project e2e` → cleanup via EXIT trap. Must be executable (`chmod +x`). |
+| [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) | Lifecycle orchestrator (name unchanged from the ESR era): `pkill` stray processes on this run's profile → `web-ext run --firefox=firefox --pref=extensions.background.idle.timeout=10000 --args="--remote-debugging-port=9222 -headless"` (release channel by default; `$FIREFOX_ESR_BIN` overrides) → wait for port 9222 → `vitest run --project e2e` → cleanup via EXIT trap. Must be executable (`chmod +x`). |
 | [`tests/e2e/README.md`](tests/e2e/README.md) | E2E architecture, lifecycle diagram, manual-debug workflow, and the full "why not Playwright" diagnosis. |
 | [`.gitignore`](.gitignore) | Excludes `node_modules/`, `test-results/`, `.vitest-cache/`. Does **not** exclude `package-lock.json`. |
 
@@ -188,7 +189,7 @@ Testing has three deterministic tiers plus a fourth judgment-based tier (UAT), e
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | Vitest + jsdom | `pnpm test:unit` | On every save during TDD |
 | **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `pnpm test:integration` | On every save during TDD |
-| **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR via WebDriver BiDi | `pnpm test:e2e` | At feature completion and pre-commit |
+| **E2E** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) via WebDriver BiDi | `pnpm test:e2e` | At feature completion and pre-commit |
 | **UAT** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + release-channel Firefox) | `pnpm test:uat` | Pre-release only; never on PR/CI |
 
 `pnpm test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
@@ -210,16 +211,16 @@ For code that orchestrates WebExtension APIs. The browser surface is mocked, not
 - **Layout:** Mirror the source path — e.g. `webextension/background.js` is tested by `tests/integration/background.test.js`.
 - **What to assert:** the right API was called with the right arguments; handlers react correctly to stubbed returns including rejection / empty / undefined cases; listeners register exactly once and unregister cleanly when expected.
 - **What NOT to assert:** that Firefox's implementation of a `browser.*` API actually does what the docs say. Trust the platform — that's E2E's job.
-- **Mock-vs-real drift:** If `jest-webextension-mock`'s behavior diverges from actual Firefox ESR, **trust the mock at this tier** and rely on the E2E tier to catch the divergence. If a specific drift bites, stub the correct behavior locally in the test rather than spiraling on upstream mock fixes.
+- **Mock-vs-real drift:** If `jest-webextension-mock`'s behavior diverges from actual Firefox, **trust the mock at this tier** and rely on the E2E tier to catch the divergence. If a specific drift bites, stub the correct behavior locally in the test rather than spiraling on upstream mock fixes.
 
 ### E2E tests (`tests/e2e/`)
 
-E2E tests exercise the extension from the user's perspective in a real Firefox ESR. Every main feature should have at least one E2E test. E2E also covers **visual and layout regression** — things a unit test or mock simply cannot verify.
+E2E tests exercise the extension from the user's perspective in a real Firefox. Every main feature should have at least one E2E test. E2E also covers **visual and layout regression** — things a unit test or mock simply cannot verify.
 
-- **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox ESR launched by `web-ext run`. (Playwright was tried and rejected — its patched-Firefox design cannot drive system ESR. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
+- **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox instance launched by `web-ext run`. The tier runs on **release-channel Firefox** (`firefox`, >= 152) rather than ESR, because MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0 and no ESR that new exists yet in Mozilla's APT repo (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) spike findings). `$FIREFOX_ESR_BIN` still overrides the binary — the runner will move back to ESR once a 152-based build reaches the APT repo. (Playwright was tried and rejected — its patched-Firefox design cannot drive a system Firefox. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
 - **Location:** `tests/e2e/*.test.js` (matching the Unit/Integration naming).
-- **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) launches Firefox ESR with `--remote-debugging-port=9222`, waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
-- **How to run:** Always use `pnpm test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox ESR with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `pnpm test:e2e tests/e2e/my-test.test.js`.
+- **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) (name unchanged) launches Firefox with `--remote-debugging-port=9222` and `extensions.background.idle.timeout=10000` — a short idle timeout so the MV3 event page genuinely suspends and respawns during the suite (deliberate lifecycle stress; see `tests/e2e/event-page-lifecycle.test.ts`) — waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
+- **How to run:** Always use `pnpm test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `pnpm test:e2e tests/e2e/my-test.test.js`.
 - **When to run:**
   1. Once at the end of every completed feature.
   2. Always as part of the "prepare for commit" workflow.
@@ -300,7 +301,7 @@ document.querySelector('.newtab-site .newtab-control-pin');
 User Acceptance Testing tier driven by an LLM agent. Scenarios are written in plain English; an agent (Claude Code in headless mode) walks through each one, takes screenshots, and judges the rendered state against criteria stated in the scenario file. Produces a structured `report.json` + a `summary.md` + screenshot artifacts for human review. Catches the bug class that structural tests miss (occlusion, contrast, layering, "looks broken to a user").
 
 - **Status:** built and runnable (`pnpm test:uat`, optionally with scenario slugs to run a subset). Scenarios are numbered by category — env/smoke `00-uat-init` / `01-default-ui`; tiles `10-tile-surface` / `11-action-buttons`; drawer `20-config` / `21-restore` / `22-advanced-tab` / `23-edit-mode-design`; design `30-typography` / `31-titlebar` / `32-high-contrast`. Tooling inventory + how to run in [`tests/uat/README.md`](tests/uat/README.md).
-- **Architecture — long-lived browser daemon + thin MCP client.** `tests/uat/_tools/browser-daemon.mjs` holds one **Selenium + geckodriver + release-channel Firefox** session for the whole run (a different stack from E2E's ESR + `web-ext` + Puppeteer-BiDi, by design): it pins the `moz-extension://` UUID, **seeds the environment** by real navigation (two passes over a merged US/global + Swiss URL set → `topSites`, accepting cookie banners; plus a top-article-per-news-site visit-then-close to seed the recently-closed row), installs the unsigned extension temporarily (`installAddon`, works on release) **after** the seed so the first render is a thumbnail-free new-user state, and serves an HTTP API on port 9876 (`$UAT_DAEMON_PORT`). `tests/uat/_tools/mcp-server.mjs` is a thin MCP server Claude spawns per scenario that forwards `browser_navigate/click/hover/evaluate/file_upload/take_screenshot/read_screenshot` to the daemon. The runner (`runner.mjs`) owns the daemon lifecycle and runs each scenario's `claude -p`.
+- **Architecture — long-lived browser daemon + thin MCP client.** `tests/uat/_tools/browser-daemon.mjs` holds one **Selenium + geckodriver + release-channel Firefox** session for the whole run (a different stack from E2E's `web-ext` + Puppeteer-BiDi, by design — both now target the same release-channel Firefox binary, but drive it differently): it pins the `moz-extension://` UUID, **seeds the environment** by real navigation (two passes over a merged US/global + Swiss URL set → `topSites`, accepting cookie banners; plus a top-article-per-news-site visit-then-close to seed the recently-closed row), installs the unsigned extension temporarily (`installAddon`, works on release) **after** the seed so the first render is a thumbnail-free new-user state, and serves an HTTP API on port 9876 (`$UAT_DAEMON_PORT`). `tests/uat/_tools/mcp-server.mjs` is a thin MCP server Claude spawns per scenario that forwards `browser_navigate/click/hover/evaluate/file_upload/take_screenshot/read_screenshot` to the daemon. The runner (`runner.mjs`) owns the daemon lifecycle and runs each scenario's `claude -p`.
 - **Screenshots:** rendered at Full HD (100%), saved at full resolution by default (`$UAT_SHOT_SCALE`, default 1); `browser_take_screenshot` writes to disk and returns a path, `browser_read_screenshot` pulls one inline only when the agent must judge it. To reduce token cost, they can be downscaled (e.g. 0.5 → ~960px). Each run writes a flat, timestamped `artifacts/<YYYYMMDD-HHMMSS>/` dir; files lead with their capture/creation time so a filename sort is capture order.
 - **Why not `@playwright/mcp` / `@playwright/cli`?** Playwright's Firefox-extension support is Chromium-only (loading a FF extension needs an unsupported `policies.json` hack into Playwright's *patched* build), so it can't load our extension into a real release Firefox; Selenium does it in one supported call.
 - **Standard preamble + fixture:** every scenario starts by restoring `tests/uat/newtabtools_knowngood.zip` (a checked-in NTT backup) so findings reflect the code change, not profile drift. The restore flow is exercised on every run as a side effect — a broken restore fails UAT loudly.
