@@ -4,8 +4,6 @@
 
 /* globals AwesomeBar, Background, Blocked, compareVersions, Filters, Grid, NeverCapture, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
 
-var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-
 var newTabTools = {
 	getString(name, ...substitutions) {
 		return chrome.i18n.getMessage(name, substitutions);
@@ -530,7 +528,7 @@ var newTabTools = {
 			let thumbnailSize = Prefs.thumbnailSize;
 			let scale = Math.min(thumbnailSize / image.width, thumbnailSize / image.height, 1);
 
-			let canvas = document.createElementNS(HTML_NAMESPACE, 'canvas');
+			let canvas = document.createElement('canvas');
 			canvas.mozOpaque = false;
 			if ('imageSmoothingEnabled' in canvas) {
 				canvas.imageSmoothingEnabled = true;
@@ -1316,14 +1314,14 @@ var newTabTools = {
 				}
 				seen.add(dedup);
 
-				let card = document.createElementNS(HTML_NAMESPACE, 'a');
+				let card = document.createElement('a');
 				card.href = url;
 				card.className = 'ntt-recent-card';
 				card.title = (!title || title == url ? title : title + '\n' + url);
 				card.dataset.sessionId = sessionId;
 				card.onclick = card_onclick;
 
-				let fav = document.createElementNS(HTML_NAMESPACE, 'span');
+				let fav = document.createElement('span');
 				fav.className = 'ntt-recent-favicon';
 				// Letter fallback from the registrable domain (same logic as the
 				// tiles), not the page title — `H` for heise.de, not the headline.
@@ -1345,13 +1343,13 @@ var newTabTools = {
 				}
 				card.appendChild(fav);
 
-				let text = document.createElementNS(HTML_NAMESPACE, 'span');
+				let text = document.createElement('span');
 				text.className = 'ntt-recent-text';
-				let nameEl = document.createElementNS(HTML_NAMESPACE, 'span');
+				let nameEl = document.createElement('span');
 				nameEl.className = 'ntt-recent-name';
 				nameEl.appendChild(document.createTextNode(displayTitle));
 				text.appendChild(nameEl);
-				let urlEl = document.createElementNS(HTML_NAMESPACE, 'span');
+				let urlEl = document.createElement('span');
 				urlEl.className = 'ntt-recent-url';
 				urlEl.appendChild(document.createTextNode(domain));
 				text.appendChild(urlEl);
@@ -1359,7 +1357,7 @@ var newTabTools = {
 
 				let age = newTabTools._formatAge(lastModified);
 				if (age) {
-					let ageEl = document.createElementNS(HTML_NAMESPACE, 'span');
+					let ageEl = document.createElement('span');
 					ageEl.className = 'ntt-recent-age';
 					ageEl.appendChild(document.createTextNode(age));
 					card.appendChild(ageEl);

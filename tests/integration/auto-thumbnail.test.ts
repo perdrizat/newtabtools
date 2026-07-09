@@ -83,6 +83,12 @@ const CAPTURE_PATH = path.resolve(__dirname, '../../webextension/lib/capture.js'
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const EXTENSION_ID = 'newtabtools@symlink.ch';
 
+// Captured before any describe block overwrites `document.createElement`
+// (the capture-pipeline suite below stubs it to always return a mock canvas,
+// and that stub outlives its own describe block within this file) — the
+// fallback-overlay test needs a *real* jsdom element.
+const realCreateElement = document.createElement.bind(document);
+
 function webext(relPath: string): string {
 	return path.join(WEBEXT, relPath);
 }
@@ -1070,10 +1076,9 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 	});
 
 	it('removes .ntt-logo-fallback overlay when thumbnail is loaded', () => {
-		const ns = 'http://www.w3.org/1999/xhtml';
-		const thumbnailEl = document.createElementNS(ns, 'span');
+		const thumbnailEl = realCreateElement('span');
 		thumbnailEl.className = 'newtab-thumbnail';
-		const fallback = document.createElementNS(ns, 'div');
+		const fallback = realCreateElement('div');
 		fallback.className = 'ntt-logo-fallback';
 		thumbnailEl.appendChild(fallback);
 		document.body.appendChild(thumbnailEl);

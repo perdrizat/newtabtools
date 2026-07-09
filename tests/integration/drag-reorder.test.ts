@@ -81,12 +81,13 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 			startup: vi.fn(),
 			getThumbnails: vi.fn().mockResolvedValue(undefined),
 		};
-		(globalThis as any).HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-
-		// Provide document methods fx-newTab.js needs
-		const origCreateElementNS = document.createElementNS.bind(document);
-		document.createElementNS = vi.fn((_ns: string, _tag: string) => {
-			const el = origCreateElementNS('http://www.w3.org/1999/xhtml', 'div');
+		// Provide document methods fx-newTab.js needs. `_setDragData` is the only
+		// createElement call reachable from the Drag/Drop/Transformation paths
+		// this file exercises (a 'div' for the drag-image element) — no more
+		// createElementNS namespace split post-H3, so this overrides createElement.
+		const origCreateElement = document.createElement.bind(document);
+		document.createElement = vi.fn((tag: string) => {
+			const el = origCreateElement(tag);
 			el.classList.add = vi.fn();
 			return el;
 		}) as any;

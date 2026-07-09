@@ -14,8 +14,6 @@
  * startup — the module does not self-init so it loads cleanly under test).
  */
 var AwesomeBar = {
-	HTML_NS: 'http://www.w3.org/1999/xhtml',
-
 	// Per-section dropdown-header labels, as i18n message keys (resolved via
 	// newTabTools.getString at render time — never store display text here).
 	SECTION_LABELS: {
@@ -120,7 +118,7 @@ var AwesomeBar = {
 		}
 
 		// Dropdown anchored under the search box.
-		this.dropdown = document.createElementNS(this.HTML_NS, 'div');
+		this.dropdown = document.createElement('div');
 		this.dropdown.id = 'ntt-awesomebar';
 		this.dropdown.hidden = true;
 		this.searchBox.appendChild(this.dropdown);
@@ -268,7 +266,7 @@ var AwesomeBar = {
 		if (typeof NttIcons !== 'undefined' && NttIcons.create) {
 			return NttIcons.create(name, 15);
 		}
-		let span = document.createElementNS(this.HTML_NS, 'span');
+		let span = document.createElement('span');
 		return span;
 	},
 
@@ -288,14 +286,14 @@ var AwesomeBar = {
 		for (let r of results) {
 			if (r.section !== lastSection) {
 				lastSection = r.section;
-				let header = document.createElementNS(this.HTML_NS, 'div');
+				let header = document.createElement('div');
 				header.className = 'ntt-awesomebar-section';
 				let labelKey = this.SECTION_LABELS[r.section];
 				header.textContent = labelKey ? newTabTools.getString(labelKey) : r.section;
 				this.dropdown.appendChild(header);
 			}
 
-			let row = document.createElementNS(this.HTML_NS, 'div');
+			let row = document.createElement('div');
 			row.className = 'ntt-awesomebar-row';
 			row.dataset.index = String(rowIndex++);
 			if (r.section === 'top') {
@@ -303,14 +301,14 @@ var AwesomeBar = {
 			}
 			row.appendChild(this._iconFor(r.type));
 
-			let text = document.createElementNS(this.HTML_NS, 'span');
+			let text = document.createElement('span');
 			text.className = 'ntt-awesomebar-text';
-			let title = document.createElementNS(this.HTML_NS, 'span');
+			let title = document.createElement('span');
 			title.className = 'ntt-awesomebar-title';
 			title.textContent = r.type === 'search' ? newTabTools.getString('search_prompt', r.query) : r.title;
 			text.appendChild(title);
 			if (r.url) {
-				let url = document.createElementNS(this.HTML_NS, 'span');
+				let url = document.createElement('span');
 				url.className = 'ntt-awesomebar-url';
 				url.textContent = r.url;
 				text.appendChild(url);
