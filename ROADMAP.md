@@ -4,8 +4,10 @@ Forward-looking direction and backlog for New Tab PowerTools. A living document 
 prune entries as they ship or go stale.
 
 - **What shipped** lives in git history and `CHANGELOG.md`, not here.
-- **How it's built / tested** lives in `CONTRIBUTING.md`, `TESTING.md`, and
-  `MV3_MIGRATION.md`.
+- **How it's built / tested** lives in `CONTRIBUTING.md` and `TESTING.md`.
+- Completed-arc working documents (`MV3_MIGRATION.md`, `MODERNIZATION.md`) were
+  removed after their arcs shipped (2026-07-09) — retrieve via git history; their
+  code reviews and inventories live on in `audit/`.
 - This file holds *where we're going* and *why the load-bearing choices were made*.
 
 ---
@@ -53,24 +55,23 @@ tiers; all 7 pre-takeover security findings resolved). The remaining last mile:
   `tests/uat/newtabtools_knowngood.zip` (see `docs/amo-listing.md` "Screenshots
   checklist"). The UAT browser daemon already renders that fixture at Full HD and can
   produce these.
-- [ ] First submission to the AMO Developer Hub — the submitted build is now the
-  **MV3** build (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)). ID/listing decision is
-  settled: new listing under `newtabtools@symlink.ch`, v1.0.0 (not an ID-transfer).
-  Listing copy, `PRIVACY.md`, `LICENSE`, and reviewer notes are in place.
-
-## Next — Firefox MV3 (stage 2) — DONE 2026-07-09
-
-Shipped in a single-sitting agentic migration on branch `mv3-migration`. Full record
-(status board, slice-by-slice checklist, spike/bisect findings) in
-[`MV3_MIGRATION.md`](MV3_MIGRATION.md) and git history (`a0eb4fa` and its ancestors).
+- [ ] First submission to the AMO Developer Hub — ships as **3.0.0**, gated on the
+  page-modules arc ([`PAGE_MODULES.md`](PAGE_MODULES.md), releases as 2.4.0) and
+  the follow-up security/code audit round (maintainer decision 2026-07-10; the
+  premature 3.0.0 tag was renumbered to 2.3.0). ID/listing decision is settled:
+  new listing under `newtabtools@symlink.ch` (not an ID-transfer). Listing copy,
+  `PRIVACY.md`, `LICENSE`, and reviewer notes are in place.
 
 ## Later — Chrome extension (stage 3)
 
-After Firefox MV3 ships and bakes. Single-source / dual-build (shared `webextension/`
-with per-target manifest variants), **not** a long-lived parallel branch. The capability
-layer Chrome needs to fork already exists (`lib/platform.js`, built in MODERNIZATION.md
-Stage M) — remaining Chrome-only work is `chrome.offscreen` for DOM and a polyfill. The
-previous maintainer's `chrome` branch is historical reference only — do not merge it.
+After the AMO release bakes. Single-source / dual-build (shared `webextension/`
+with per-target manifest variants), **not** a long-lived parallel branch. The
+capability layer Chrome forks already exists (`lib/platform.js`) and the image
+pipeline sits behind the `lib/thumbnail-image.js` seam (swap for
+OffscreenCanvas/`createImageBitmap` in a service-worker build) — remaining
+Chrome-only work is that swap, a polyfill, the dual-manifest build, and CWS
+review posture for `<all_urls>`. The previous maintainer's `chrome` branch is
+historical reference only — do not merge it.
 
 ---
 
@@ -79,19 +80,25 @@ previous maintainer's `chrome` branch is historical reference only — do not me
 Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 
 **Tooling / debt**
-- ~~Extract pure logic from the legacy monolith scripts into `webextension/lib/` ES
-  modules.~~ **Done** — see [`MODERNIZATION.md`](MODERNIZATION.md) Stage M and git
-  history.
+- Page scripts as real ES modules / retire the `globalThis` bridge — the successor
+  arc the modernization work deliberately left out. Untangles the
+  `newTabTools ↔ Grid/Page/Updater` global mesh and lets `common.js`/`prefs.js`
+  gain real `export`s. **Planned:** see [`PAGE_MODULES.md`](PAGE_MODULES.md)
+  (ships as 2.4.0).
+- Page-scope `el(tag, className, text?)` DOM builder + `textContent` normalization
+  across the ~37 near-identical `createElement` blocks (2026-07-09 Stage-H review
+  §8 — deferred by design to keep the conversion diff mechanical).
+- Dedupe the near-identical favicon cursor walks in `lib/messages.js`
+  (`getFavicons`/`getFaviconsByHost`; Stage-M review, opportunistic).
+- `lib/background-main.js` is excluded from `checkJs` (documented tsconfig gotcha:
+  excluding the entry keeps tsc from pulling untyped dual-scope imports into the
+  program) — spot-check it manually on change, or find a lint-grade alternative.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
-- The suite walks a first-run journey on a seeded environment: `00-uat-init`,
-  `01-default-ui` (incl. first-run thumbnail + favicon capture), `02-config`,
-  `03-restore`, `04-action-buttons`. More scenarios for differentiating features
+- The 11-scenario suite covers env/smoke (`00`, `01`), tiles (`10`, `11`), drawer
+  (`20`–`23`), and design (`30`–`32`). More scenarios for differentiating features
   that benefit from visual judgment: locked-grid, per-domain filter caps, per-tile
   background colour, backup export, multi-page grids.
-- Aggregate run-level `summary.md` (table of scenarios × verdicts + a section
-  highlighting preamble failures); today the runner writes a per-scenario summary +
-  an aggregate `report.json` + a terminal digest.
 - README troubleshooting section keyed to preflight failure messages.
 - Explore standards-based result surfacing — SARIF (severity-leveled findings, renders
   in IDE/CI) and/or JUnit XML — once the tier is otherwise settled. Open question:
@@ -117,9 +124,26 @@ alternatives. Detail lives in git history / the linked docs.
   and runtime. Re-escalatable to full TS later (a JSDoc `.js` is a rename away). Rules
   in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 - **Firefox-only, MV2, for now** (2026-05-02). Chrome forces MV3; doing both during the
-  takeover means migrating without a safety net. Deferred behind the gate above.
-  **Outcome (2026-07-09): the MV3 flip shipped** (see `MV3_MIGRATION.md`). Firefox
-  stays the only target; Chrome remains deferred to stage 3 above.
+  takeover means migrating without a safety net. **Outcome (2026-07-09): the MV3 flip
+  shipped as 2.1.0** (records: git history, `audit/2026-07-09-mv3-*`). Firefox stays
+  the only target; Chrome remains deferred to stage 3 above.
+- **Event-page state placement** (2026-07-09). `captureSessions`/`networkIdleWatchers`
+  stay in-memory (≤2s lifetime, event-anchored to a fresh idle clock, self-healing on
+  loss — measured); `pendingCaptures` lives in `storage.session` (unbounded wait for
+  tab activation, must survive respawn). Persisting the former was considered and
+  rejected; an in-memory mirror of the latter likewise (the wake event IS the reader).
+- **The 19 `runtime.onMessage` wire names are frozen** (2026-07-09). Internals may
+  rename (`getAllTiles`→`getGridTiles` did); wire strings never do —
+  `tests/integration/message-contract.test.ts` enforces it.
+- **Dual-scope `globalThis` bridge** (2026-07-09). `common.js`/`prefs.js` load both as
+  classic page scripts and into the background module graph, so they assign
+  `globalThis.X = …` instead of using `export`; background modules read them only via
+  `lib/platform.js` accessors. Retires when the page goes modular (see backlog /
+  `PAGE_MODULES.md`).
+- **`idb` library rejected; IndexedDB wrapper stays hand-rolled** (2026-07-09,
+  re-evaluated at module extraction). Zero-runtime-deps policy; `lib/db.js`'s
+  `withStore` is ~50 lines and the reconnect semantics are ours either way. Revisit
+  only if its typing friction recurs.
 - **Minimum Firefox raised to 152.0** (2026-07-09). Empirically bisected: Firefox
   exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions only from 152.0
   (`undefined` on every build through 151.0, official binaries 146–152 bisected).

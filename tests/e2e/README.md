@@ -6,7 +6,7 @@ E2E tests run against **real Firefox** with the unpacked extension installed. Th
 - **`puppeteer-core`** connects to the running Firefox over **WebDriver BiDi** — a W3C standard that mainline Firefox supports out of the box.
 - **Vitest** is the test runner, same as for Unit and Integration tests, with a separate `e2e` project (see [`vitest.config.js`](../../vitest.config.js)).
 
-**Firefox channel:** this tier runs on **release-channel Firefox (>= 152)**, not ESR. MV3's `tabs.captureVisibleTab`/`captureTab` are `undefined` on every Firefox build through 151.0 and only become working functions from 152.0 (empirically bisected — see [`MV3_MIGRATION.md`](../../MV3_MIGRATION.md) spike findings). Mozilla's APT repo has no ESR that new yet, so the default binary moved to release `firefox`; `$FIREFOX_ESR_BIN` still overrides the binary (the env var name is unchanged for backwards compatibility) and the tier can move back to ESR once a 152-based ESR ships.
+**Firefox channel:** this tier runs on **release-channel Firefox (>= 152)**, not ESR. MV3's `tabs.captureVisibleTab`/`captureTab` are `undefined` on every Firefox build through 151.0 and only become working functions from 152.0 (empirically bisected — see [`ROADMAP.md`](../../ROADMAP.md) decisions of record). Mozilla's APT repo has no ESR that new yet, so the default binary moved to release `firefox`; `$FIREFOX_ESR_BIN` still overrides the binary (the env var name is unchanged for backwards compatibility) and the tier can move back to ESR once a 152-based ESR ships.
 
 ## Lifecycle
 
