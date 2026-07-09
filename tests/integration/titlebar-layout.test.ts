@@ -103,7 +103,7 @@ describe('Titlebar layout invariants — CSS rules', () => {
 
 	it('the legacy `#ntt-cogwheel-wrap` styles are gone', () => {
 		// The wrapper used to be `position: absolute; top: 10px; right: 10px`.
-		// All of that is dead now — the wrap div was deleted from the XHTML.
+		// All of that is dead now — the wrap div was deleted from the markup.
 		expect(css).not.toMatch(/#ntt-cogwheel-wrap\s*\{/);
 	});
 });

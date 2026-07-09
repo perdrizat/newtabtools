@@ -35,14 +35,27 @@ were already Stage H.
 **Stage M complete 2026-07-09.** Background is fully modular: `lib/{db,tiles-store,
 constants,capture,thumbnail-image,backup,platform,messages,background-main}.js`;
 `background.js`, `tiles.js` (shim), `export.js` all deleted; `globalThis` surface
-= the 5 dual-scope symbols; backup/zip lazy-loads on demand. Version stays 2.1.0
-(same-day rule) — release/bump decision at arc end. Branch `modernization-m` is
-merge-ready; Stage H continues on `modernization-h`.
-| H1 — case-trap prefix fixes (XHTML-safe) | pending | — |
-| H2 — markup conversion + rename + touchpoints | pending | — |
-| H3 — `createElementNS` collapse | pending | — |
-| H4 — tooling/i18n/UAT constants sweep | pending | — |
-| H gate — full E2E + full UAT + audit | pending | — |
+= the 5 dual-scope symbols; backup/zip lazy-loads on demand.
+
+**Release shape (maintainer, 2026-07-09):** `modernization-m` was MERGED to main
+and released as **2.2.0**. Stage H (this branch) ships as the next release =
+**major bump to 3.0.0** with all remaining updates. H-gate consequences:
+`pnpm version major` at close-out; CHANGELOG must be reconciled with main's
+2.2.0 promotion when merging (our `[Unreleased]` still holds the M entries —
+they belong under main's `## [2.2.0]` heading; H entries go under
+`## [3.0.0]`).
+| H1 — case-trap prefix fixes (XHTML-safe) | ✓ done (fast 1253, E2E 126; 1 real bug fixed — autocomplete `nodeName != 'li'` walk; bonus: inert uppercase tag filter in i18n-render E2E fixed) | — |
+| H2 — markup conversion + rename + touchpoints | ✓ done (fast 1257, E2E 126, **full UAT 11/11 on the HTML5 page — visual parity confirmed, zero defects**) | — |
+| H3 — `createElementNS` collapse | ✓ done (fast 1257, E2E 126, UAT spot-run 01/10/23/31 4/4) | — |
+| H4 — tooling/i18n/UAT constants sweep + full docs sweep (README et al.) | ✓ done (fast 1257, final E2E 126; xhtml gone from tooling; README/CONTRIBUTING/TESTING/ROADMAP current; stale Node/pnpm env table fixed) | — |
+| H gate — E2E + UAT + audit + 3.0.0 | ✓ CLOSED — per-slice E2E ×5 green, full UAT 11/11 post-H2, spot-run 4/4 post-H3, audit clean, version → 3.0.0 | — |
+
+**Stage H complete 2026-07-09 — the modernization arc is DONE.** The page is
+HTML5 (`newTab.html`), the background is fully ES-modular, and the release ships
+as **3.0.0** (maintainer decision; main already carries Stage M as 2.2.0).
+Remaining future arcs (out of scope, unchanged): page scripts as real modules /
+bridge retirement; Chrome (stage 3) via the `lib/platform.js` +
+`lib/thumbnail-image.js` seams.
 
 ## Decisions of record
 
@@ -267,7 +280,14 @@ under the parser it ships with.
 - [ ] `scripts/i18n-stale.mjs` / `i18n-purge.mjs` extension filters;
       `localization.test.ts` extension branch; any remaining `.xhtml` grep hit
       in the repo (target: only historical audit/ docs mention it).
-- [ ] Docs: CONTRIBUTING "Core" line, TESTING.md, README.
+- [ ] **Full docs sweep (maintainer directive 2026-07-09): update ALL relevant
+      documentation, especially README.md** — architecture/feature claims
+      (modular ES-module background, HTML5 page), the test-count blurb, the
+      Quick Start (load-temporary-addon steps mention manifest.json — verify),
+      plus CONTRIBUTING "Core"/architecture lines, TESTING.md XHTML gotchas
+      (delete), ROADMAP.md (Stage H shipped, backlog prune),
+      docs/amo-listing.md + amo-submission-notes.md if they reference the page
+      file, and MODERNIZATION.md's own close-out.
 - [ ] Gates: fast, lint, typecheck, E2E.
 
 ### H final gate

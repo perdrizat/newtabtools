@@ -34,8 +34,6 @@ DOMRect.prototype.intersect = function(other) {
 	return new DOMRect(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
 };
 
-var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-
 /**
  * This singleton allows to transform the grid by repositioning a site's node
  * in the DOM and by showing or hiding the node. It additionally provides
@@ -425,7 +423,7 @@ var Grid = {
 	   * Creates the newtab grid as a flat list of cells (CSS Grid handles rows).
 	   */
 	_renderGrid() {
-		let cell = document.createElementNS(HTML_NAMESPACE, 'div');
+		let cell = document.createElement('div');
 		cell.classList.add('newtab-cell');
 
 		this._node.innerHTML = '';
@@ -489,8 +487,8 @@ var Grid = {
 			let list = newTabTools.databaseError.querySelector('ul');
 
 			let message = newTabTools.getString('database_error_cookies', '$1').split('$1');
-			let item = document.createElementNS(HTML_NAMESPACE, 'li');
-			let code = document.createElementNS(HTML_NAMESPACE, 'code');
+			let item = document.createElement('li');
+			let code = document.createElement('code');
 			code.textContent = chrome.runtime.getURL('');
 			item.appendChild(document.createTextNode(message[0]));
 			item.appendChild(code);
@@ -498,14 +496,14 @@ var Grid = {
 			list.appendChild(item);
 
 			message = newTabTools.getString('database_error_indexeddb').split('`');
-			item = document.createElementNS(HTML_NAMESPACE, 'li');
+			item = document.createElement('li');
 			while (message.length) {
 				let next = message.shift();
 				item.appendChild(document.createTextNode(next));
 
 				next = message.shift();
 				if (next) {
-					code = document.createElementNS(HTML_NAMESPACE, 'code');
+					code = document.createElement('code');
 					code.textContent = next;
 					item.appendChild(code);
 				}
@@ -1010,7 +1008,7 @@ Site.prototype = {
 		if (addTile && !addTile.querySelector('.ntt-add-tile-chip')) {
 			// The label is an opaque chip so it reads over any thumbnail (the slot
 			// keeps its real thumbnail under a light scrim — no opacity dim).
-			let chip = document.createElementNS(HTML_NAMESPACE, 'span');
+			let chip = document.createElement('span');
 			chip.className = 'ntt-add-tile-chip';
 			chip.textContent = newTabTools.getString('tile_add');
 			addTile.textContent = '';
@@ -1033,7 +1031,7 @@ Site.prototype = {
 		];
 
 		for (let def of actions) {
-			let btn = document.createElementNS('http://www.w3.org/1999/xhtml', 'button');
+			let btn = document.createElement('button');
 			btn.className = 'ntt-action-btn';
 			btn.setAttribute('type', 'button');
 			btn.setAttribute('data-action', def.action);
@@ -1080,11 +1078,11 @@ Site.prototype = {
 		}
 		let brandColor = siteBrandColor(this.link);
 
-		let fallback = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+		let fallback = document.createElement('div');
 		fallback.className = 'ntt-logo-fallback';
 		fallback.style.setProperty('--ntt-brand', brandColor);
 
-		let glyphEl = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+		let glyphEl = document.createElement('div');
 		glyphEl.className = 'ntt-logo-glyph';
 		glyphEl.textContent = siteGlyph(this.url);
 		fallback.appendChild(glyphEl);
@@ -1131,7 +1129,7 @@ Site.prototype = {
 		if (fallback) {
 			let glyph = fallback.querySelector('.ntt-logo-glyph');
 			if (glyph) {
-				let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
+				let img = document.createElement('img');
 				img.className = 'ntt-logo-favicon';
 				img.src = src;
 				img.alt = '';
@@ -1141,7 +1139,7 @@ Site.prototype = {
 		if (badge) {
 			badge.textContent = '';
 			badge.style.backgroundColor = '#fff';
-			let img = document.createElementNS('http://www.w3.org/1999/xhtml', 'img');
+			let img = document.createElement('img');
 			img.src = src;
 			img.alt = '';
 			badge.appendChild(img);
@@ -1416,7 +1414,7 @@ var Drag = {
 
 		// Create and use an empty drag element. We don't want to use the default
 		// drag image with its default opacity.
-		let dragElement = document.createElementNS(HTML_NAMESPACE, 'div');
+		let dragElement = document.createElement('div');
 		dragElement.classList.add('newtab-drag');
 		let scrollbox = document.getElementById('newtab-scrollbox');
 		scrollbox.appendChild(dragElement);

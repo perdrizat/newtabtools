@@ -37,7 +37,7 @@ const OUT_DIR = path.join(ROOT, 'assets/screenshots');
 const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
 const BASE = `http://127.0.0.1:${PORT}`;
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB = `moz-extension://${UUID}/newTab.xhtml`;
+const NEWTAB = `moz-extension://${UUID}/newTab.html`;
 const CDN = 'https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/newtab-wallpapers-v2/';
 // A few curated wallpapers from Mozilla's Remote Settings catalog (the same
 // source the in-app picker uses) — distinct light + dark backdrops so the hero

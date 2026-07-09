@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 const LOCALE_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
@@ -43,19 +43,19 @@ function extractMethod(source: string, methodName: string): string {
 }
 
 describe('Phase 4-0 — status bar retired from the chrome', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 
 	beforeAll(() => {
 		/* eslint-disable ntt/no-source-grep -- structural checks: markup/style removal */
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		/* eslint-enable ntt/no-source-grep */
 	});
 
 	it('the #ntt-statusbar markup is removed entirely (Phase 5-1)', () => {
-		expect(xhtml).not.toMatch(/id="ntt-statusbar"/);
-		expect(xhtml).not.toMatch(/ntt-statusbar-hints|ntt-statusbar-kbd|ntt-statusbar-summary|ntt-statusbar-tilecount/);
+		expect(html).not.toMatch(/id="ntt-statusbar"/);
+		expect(html).not.toMatch(/ntt-statusbar-hints|ntt-statusbar-kbd|ntt-statusbar-summary|ntt-statusbar-tilecount/);
 	});
 
 	it('the status-bar CSS is removed (no #ntt-statusbar / .ntt-statusbar-* rules)', () => {
@@ -64,12 +64,12 @@ describe('Phase 4-0 — status bar retired from the chrome', () => {
 	});
 
 	it('the drawer no longer offers a Status bar (titleBarStatus) toggle', () => {
-		expect(xhtml).not.toMatch(/data-pref="titleBarStatus"/);
+		expect(html).not.toMatch(/data-pref="titleBarStatus"/);
 	});
 
 	it('the removed-tile undo notice survives as a standalone floating toast', () => {
 		// The undo container is independent of the (now-deleted) status bar.
-		expect(xhtml).toMatch(/id="newtab-undo-container"/);
+		expect(html).toMatch(/id="newtab-undo-container"/);
 		const rule = css.match(/#newtab-undo-container\s*\{[^}]*\}/);
 		expect(rule).not.toBeNull();
 		expect(rule![0]).toMatch(/position:\s*(fixed|absolute)/);

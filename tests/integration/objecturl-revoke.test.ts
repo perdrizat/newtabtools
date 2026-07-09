@@ -210,8 +210,7 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		const isValidURL = extractMethod(source, 'isValidURL');
 		const _formatAge = extractMethod(source, '_formatAge');
 		vm.runInThisContext(
-			`var HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
-			var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
+			`var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
 			{ filename: 'recent-revoke-harness.js' },
 		);
 		harness = (globalThis as any).newTabTools;
@@ -240,8 +239,15 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 				}),
 			},
 		};
-		document.createElementNS = vi.fn(() => makeMockElement()) as any;
-		document.createElement = vi.fn(() => ({ classList: { add: vi.fn() }, onerror: null, src: '', remove: vi.fn() })) as any;
+		// `refreshRecent` builds 'img' elements via one shape and everything else
+		// (the 'a'/'span' card structure) via `makeMockElement`'s generic shape —
+		// both now go through `document.createElement` (no more createElementNS
+		// namespace split), so the mock dispatches on the tag name.
+		document.createElement = vi.fn((tag: string) =>
+			tag === 'img'
+				? { classList: { add: vi.fn() }, onerror: null, src: '', remove: vi.fn() }
+				: makeMockElement(),
+		) as any;
 		document.createTextNode = vi.fn((text: string) => ({ textContent: text })) as any;
 	});
 

@@ -20,35 +20,35 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const JS_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
 describe('Advanced tab — no native controls (§5/B1)', () => {
-	let xhtml: string;
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drawer markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	it('has no native checkbox anywhere in the drawer body', () => {
-		const drawerBody = xhtml.slice(xhtml.indexOf('id="ntt-drawer-body"'), xhtml.indexOf('id="ntt-drawer-footer"'));
+		const drawerBody = html.slice(html.indexOf('id="ntt-drawer-body"'), html.indexOf('id="ntt-drawer-footer"'));
 		expect(drawerBody).not.toMatch(/<input[^>]*type="checkbox"/);
 	});
 
 	it('the history control is a copper toggle (role=switch, data-pref="history")', () => {
-		expect(xhtml).toMatch(/role="switch"[^>]*class="ntt-toggle"[^>]*data-pref="history"|data-pref="history"[^>]*class="ntt-toggle"[^>]*role="switch"|class="ntt-toggle"[^>]*data-pref="history"/);
+		expect(html).toMatch(/role="switch"[^>]*class="ntt-toggle"[^>]*data-pref="history"|data-pref="history"[^>]*class="ntt-toggle"[^>]*role="switch"|class="ntt-toggle"[^>]*data-pref="history"/);
 	});
 });
 
 describe('Advanced tab — button hierarchy + confirm steps (§5/§7)', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 	let js: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup/CSS/JS
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour
@@ -56,13 +56,13 @@ describe('Advanced tab — button hierarchy + confirm steps (§5/§7)', () => {
 	});
 
 	it('destructive actions (Reset, Restore) carry the danger button class', () => {
-		expect(xhtml).toMatch(/id="options-reset-all"[^>]*class="ntt-btn-danger"|class="ntt-btn-danger"[^>]*id="options-reset-all"/);
-		expect(xhtml).toMatch(/id="options-restore"[^>]*class="ntt-btn-danger"|class="ntt-btn-danger"[^>]*id="options-restore"/);
+		expect(html).toMatch(/id="options-reset-all"[^>]*class="ntt-btn-danger"|class="ntt-btn-danger"[^>]*id="options-reset-all"/);
+		expect(html).toMatch(/id="options-restore"[^>]*class="ntt-btn-danger"|class="ntt-btn-danger"[^>]*id="options-restore"/);
 	});
 
 	it('a primary (copper) action exists per group', () => {
-		expect(xhtml).toMatch(/id="options-pinURL"[^>]*ntt-btn-primary/);
-		expect(xhtml).toMatch(/id="options-filter-set"[^>]*ntt-btn-primary/);
+		expect(html).toMatch(/id="options-pinURL"[^>]*ntt-btn-primary/);
+		expect(html).toMatch(/id="options-filter-set"[^>]*ntt-btn-primary/);
 	});
 
 	it('the button hierarchy classes are styled (primary fill, danger role)', () => {
@@ -104,10 +104,10 @@ describe('Advanced tab — button hierarchy + confirm steps (§5/§7)', () => {
 	});
 
 	it('Reset and Restore have inline Confirm/Cancel rows, hidden by default', () => {
-		expect(xhtml).toMatch(/id="options-reset-confirm-row"[^>]*hidden/);
-		expect(xhtml).toMatch(/id="options-restore-confirm-row"[^>]*hidden/);
-		expect(xhtml).toContain('id="options-reset-confirm"');
-		expect(xhtml).toContain('id="options-restore-confirm"');
+		expect(html).toMatch(/id="options-reset-confirm-row"[^>]*hidden/);
+		expect(html).toMatch(/id="options-restore-confirm-row"[^>]*hidden/);
+		expect(html).toContain('id="options-reset-confirm"');
+		expect(html).toContain('id="options-restore-confirm"');
 	});
 
 	it('resetAllSettings no longer uses window.confirm (the inline row gates it)', () => {
@@ -173,13 +173,13 @@ describe('High-contrast action buttons — differentiate by treatment, not hue',
 });
 
 describe('Themed Restore file button (Advanced › Restore)', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: locale copy
@@ -187,12 +187,12 @@ describe('Themed Restore file button (Advanced › Restore)', () => {
 	});
 
 	it('the native file input is visually hidden and triggered by a styled <label>', () => {
-		expect(xhtml).toMatch(/id="options-restore-file"[^>]*ntt-visually-hidden|ntt-visually-hidden[^>]*id="options-restore-file"/);
-		expect(xhtml).toMatch(/<label[^>]*for="options-restore-file"[^>]*ntt-file-label/);
+		expect(html).toMatch(/id="options-restore-file"[^>]*ntt-visually-hidden|ntt-visually-hidden[^>]*id="options-restore-file"/);
+		expect(html).toMatch(/<label[^>]*for="options-restore-file"[^>]*ntt-file-label/);
 	});
 
 	it('a themed filename display + the choose-file/no-file messages exist', () => {
-		expect(xhtml).toMatch(/ntt-file-name/);
+		expect(html).toMatch(/ntt-file-name/);
 		expect(messages.restore_choose_file).toBeTruthy();
 		expect(messages.backup_no_file).toBeTruthy();
 	});
@@ -204,13 +204,13 @@ describe('Themed Restore file button (Advanced › Restore)', () => {
 });
 
 describe('History-tiles filter — toggle, remove, design language', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 	let js: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour
@@ -218,13 +218,13 @@ describe('History-tiles filter — toggle, remove, design language', () => {
 	});
 
 	it('the filter panel is a toggle: hidden by default + a CSS rule that hides it', () => {
-		expect(xhtml).toMatch(/id="options-filter"[^>]*hidden/);
+		expect(html).toMatch(/id="options-filter"[^>]*hidden/);
 		expect(css).toMatch(/#options-filter\[hidden\]\s*\{[^}]*display:\s*none/s);
 	});
 
 	it('the Filter… button controls the panel (aria-controls + aria-expanded)', () => {
-		expect(xhtml).toMatch(/id="historytiles-filter"[^>]*aria-controls="options-filter"/);
-		expect(xhtml).toMatch(/id="historytiles-filter"[^>]*aria-expanded/);
+		expect(html).toMatch(/id="historytiles-filter"[^>]*aria-controls="options-filter"/);
+		expect(html).toMatch(/id="historytiles-filter"[^>]*aria-expanded/);
 	});
 
 	it('the Filter… click toggles the panel rather than only populating it', () => {
@@ -233,7 +233,7 @@ describe('History-tiles filter — toggle, remove, design language', () => {
 	});
 
 	it('the helptext is no longer centered (left-aligned to the drawer rhythm)', () => {
-		const tag = xhtml.match(/<td[^>]*data-message="filter_helptext"[^>]*>/);
+		const tag = html.match(/<td[^>]*data-message="filter_helptext"[^>]*>/);
 		expect(tag).toBeTruthy();
 		expect(tag![0]).not.toMatch(/text-align:\s*center/);
 	});
@@ -252,13 +252,13 @@ describe('History-tiles filter — toggle, remove, design language', () => {
 });
 
 describe('Tile editor controls — themed + recognizable', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: locale copy
@@ -266,8 +266,8 @@ describe('Tile editor controls — themed + recognizable', () => {
 	});
 
 	it('the thumbnail file picker is a themed <label> (native input hidden), like Restore', () => {
-		expect(xhtml).toMatch(/id="options-savedthumb-input"[^>]*ntt-visually-hidden|ntt-visually-hidden[^>]*id="options-savedthumb-input"/);
-		expect(xhtml).toMatch(/<label[^>]*for="options-savedthumb-input"[^>]*ntt-file-label/);
+		expect(html).toMatch(/id="options-savedthumb-input"[^>]*ntt-visually-hidden|ntt-visually-hidden[^>]*id="options-savedthumb-input"/);
+		expect(html).toMatch(/<label[^>]*for="options-savedthumb-input"[^>]*ntt-file-label/);
 	});
 
 	it('secondary (ghost) drawer buttons have a visible filled surface, not transparent', () => {
@@ -282,14 +282,14 @@ describe('Tile editor controls — themed + recognizable', () => {
 });
 
 describe('Tile dialog redesign — Pin next / Update current, rows, alignment', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 	let js: string;
 	let messages: Record<string, { message: string }>;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rules
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: handler behaviour
@@ -304,25 +304,25 @@ describe('Tile dialog redesign — Pin next / Update current, rows, alignment', 
 	});
 
 	it('the redundant labels are gone (Saved image / Title / current-URL)', () => {
-		const tile = xhtml.slice(xhtml.indexOf('id="options-tile"'), xhtml.indexOf('data-drawer-panel="page"'));
+		const tile = html.slice(html.indexOf('id="options-tile"'), html.indexOf('data-drawer-panel="page"'));
 		expect(tile).not.toMatch(/data-message="tile_savedthumb_label"/);
 		expect(tile).not.toMatch(/data-message="tile_title_label"/);
 		expect(tile).not.toMatch(/id="options-url"[^-]/); // the read-only #options-url label
 	});
 
 	it('URL row has a danger Remove; Title row has a Remove', () => {
-		expect(xhtml).toMatch(/id="options-url-remove"[^>]*ntt-btn-danger|ntt-btn-danger[^>]*id="options-url-remove"/);
-		expect(xhtml).toContain('id="options-title-remove"');
+		expect(html).toMatch(/id="options-url-remove"[^>]*ntt-btn-danger|ntt-btn-danger[^>]*id="options-url-remove"/);
+		expect(html).toContain('id="options-title-remove"');
 	});
 
 	it('Pin-thumbnail row has Remove; Choose-image row has a separate Clear', () => {
-		expect(xhtml).toContain('id="options-savethumb"');
-		expect(xhtml).toContain('id="options-savedthumb-remove"');
-		expect(xhtml).toContain('id="options-savedimg-clear"');
+		expect(html).toContain('id="options-savethumb"');
+		expect(html).toContain('id="options-savedthumb-remove"');
+		expect(html).toContain('id="options-savedimg-clear"');
 	});
 
 	it('a separator divides "Pin next tile" from "Update current tile"', () => {
-		const tilePanel = xhtml.slice(xhtml.indexOf('data-drawer-panel="tile"'), xhtml.indexOf('data-drawer-panel="page"'));
+		const tilePanel = html.slice(html.indexOf('data-drawer-panel="tile"'), html.indexOf('data-drawer-panel="page"'));
 		expect(tilePanel).toMatch(/<hr class="ntt-drawer-divider"/);
 	});
 

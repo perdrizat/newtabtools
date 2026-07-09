@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const filesToCheck = ['newTab.xhtml', 'action.html'];
+const filesToCheck = ['newTab.html', 'action.html'];
 
 for (const file of filesToCheck) {
 	test(`${file} should not contain hardcoded English text nodes`, () => {

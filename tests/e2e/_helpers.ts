@@ -115,7 +115,7 @@ export async function getExtensionUUID(): Promise<string> {
  */
 export async function getNewTabURL(): Promise<string> {
 	const uuid = await getExtensionUUID();
-	return `moz-extension://${uuid}/newTab.xhtml`;
+	return `moz-extension://${uuid}/newTab.html`;
 }
 
 export interface WaitForConditionOpts {
@@ -351,7 +351,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
  * Wait for the grid UI to be ready (Grid.init() has run).
  *
  * Polls `Grid.ready` (which checks `!!Grid._node`) instead of looking for
- * `#newtab-scrollbox`, which is in the static XHTML and exists before any
+ * `#newtab-scrollbox`, which is in the static markup and exists before any
  * JavaScript executes. Uses `waitForCondition` because the extension's CSP
  * blocks `page.waitForFunction` (it relies on `Function()` constructor).
  */

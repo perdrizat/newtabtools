@@ -23,12 +23,12 @@ describe('TileStats module — source presence', () => {
 		expect(source).toContain('TileStats');
 	});
 
-	it('is linked in newTab.xhtml', () => {
+	it('is linked in newTab.html', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: script link in template
-		const xhtml = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+		const html = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
-		expect(xhtml).toContain('stats.js');
+		expect(html).toContain('stats.js');
 	});
 });
 

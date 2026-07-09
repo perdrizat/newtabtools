@@ -41,7 +41,7 @@ if (argLocale === 'en') {
                 if (file !== '_locales') {
                     results = results.concat(getSourceFiles(filePath));
                 }
-            } else if (filePath.endsWith('.js') || filePath.endsWith('.xhtml') || filePath.endsWith('.html') || filePath.endsWith('.json')) {
+            } else if (filePath.endsWith('.js') || filePath.endsWith('.html') || filePath.endsWith('.json')) {
                 results.push(filePath);
             }
         }

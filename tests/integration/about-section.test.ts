@@ -23,40 +23,40 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-describe('About section — newTab.xhtml + version render', () => {
-	let xhtml: string;
+describe('About section — newTab.html + version render', () => {
+	let html: string;
 	let js: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural assertions on shipped markup
-		xhtml = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8');
+		html = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- regex on version-render code path
 		js = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.js'), 'utf8');
 	});
 
 	it('has an About form group in the advanced drawer panel', () => {
-		expect(xhtml).toMatch(/id="options-about"/);
+		expect(html).toMatch(/id="options-about"/);
 	});
 
 	it('declares a version slot the runtime fills', () => {
-		expect(xhtml).toMatch(/data-version-slot/);
+		expect(html).toMatch(/data-version-slot/);
 	});
 
 	it('uses i18n keys for the About header, tagline, and lineage', () => {
-		expect(xhtml).toContain('options_about_header');
-		expect(xhtml).toContain('options_about_tagline');
-		expect(xhtml).toContain('options_about_lineage');
+		expect(html).toContain('options_about_header');
+		expect(html).toContain('options_about_tagline');
+		expect(html).toContain('options_about_lineage');
 	});
 
 	it('uses i18n keys for the Privacy and License link labels', () => {
-		expect(xhtml).toContain('options_about_privacy');
-		expect(xhtml).toContain('options_about_license');
+		expect(html).toContain('options_about_privacy');
+		expect(html).toContain('options_about_license');
 	});
 
 	it('links to the GitHub repo, hosted PRIVACY.md, and hosted LICENSE', () => {
-		expect(xhtml).toContain('href="https://github.com/perdrizat/newtabtools"');
-		expect(xhtml).toContain('href="https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md"');
-		expect(xhtml).toContain('href="https://github.com/perdrizat/newtabtools/blob/master/LICENSE"');
+		expect(html).toContain('href="https://github.com/perdrizat/newtabtools"');
+		expect(html).toContain('href="https://github.com/perdrizat/newtabtools/blob/master/PRIVACY.md"');
+		expect(html).toContain('href="https://github.com/perdrizat/newtabtools/blob/master/LICENSE"');
 	});
 
 	it('populates the version slot via chrome.runtime.getManifest().version (not a hard-coded string)', () => {

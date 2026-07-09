@@ -126,7 +126,7 @@ describe('Drawer Appearance tab — theme card clicks (Phase 3-2)', () => {
 	});
 
 	it('clicking a child of a theme card still selects (delegation works)', () => {
-		// In the production XHTML the card contains a swatch + label spans;
+		// In the production markup the card contains a swatch + label spans;
 		// the handler must walk up via `.closest`.
 		const card = document.querySelector('.ntt-theme-card[data-value="dark"]') as HTMLElement;
 		const child = document.createElement('span');

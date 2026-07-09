@@ -10,47 +10,149 @@ import { mountSite } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 
-describe('Tile redesign — template (newTab.xhtml)', () => {
-	let xhtml: string;
+describe('Tile redesign — template (newTab.html)', () => {
+	let markup: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		markup = fs.readFileSync(HTML_PATH, 'utf8');
 	});
 
 	it('tile template has .newtab-site wrapper with draggable', () => {
-		expect(xhtml).toMatch(/<div class="newtab-site" draggable="true">/);
+		expect(markup).toMatch(/<div class="newtab-site" draggable="true">/);
 	});
 
 	it('tile template has .newtab-link anchor with .newtab-thumbnail inside', () => {
-		expect(xhtml).toMatch(/<a class="newtab-link">/);
-		expect(xhtml).toContain('newtab-thumbnail');
+		expect(markup).toMatch(/<a class="newtab-link">/);
+		expect(markup).toContain('newtab-thumbnail');
 	});
 
 	it('tile template has .ntt-pin-stripe element', () => {
-		expect(xhtml).toContain('ntt-pin-stripe');
+		expect(markup).toContain('ntt-pin-stripe');
 	});
 
 	it('tile template has .ntt-overlay with .ntt-favicon and .newtab-title', () => {
-		expect(xhtml).toContain('ntt-overlay');
-		expect(xhtml).toContain('ntt-favicon');
-		expect(xhtml).toContain('newtab-title');
+		expect(markup).toContain('ntt-overlay');
+		expect(markup).toContain('ntt-favicon');
+		expect(markup).toContain('newtab-title');
 	});
 
 	it('tile template has .ntt-actions container for hover action buttons', () => {
-		expect(xhtml).toContain('ntt-actions');
+		expect(markup).toContain('ntt-actions');
 	});
 
 	it('tile template has .ntt-stat-chip slot', () => {
-		expect(xhtml).toContain('ntt-stat-chip');
+		expect(markup).toContain('ntt-stat-chip');
 	});
 
 	it('old newtab-control-pin/block/thumbnail input buttons are removed', () => {
-		expect(xhtml).not.toContain('newtab-control-pin');
-		expect(xhtml).not.toContain('newtab-control-block');
-		expect(xhtml).not.toContain('newtab-control-thumbnail');
+		expect(markup).not.toContain('newtab-control-pin');
+		expect(markup).not.toContain('newtab-control-block');
+		expect(markup).not.toContain('newtab-control-thumbnail');
+	});
+});
+
+// Direct regression test for MODERNIZATION.md Stage H, slice H2's named risk
+// ("H2 silent mis-nesting"): self-closed non-void tags (`<span ... />`) parse
+// fine under XML but, under an HTML5 parser, the "/" is ignored and every
+// following sibling is silently swallowed as a *descendant* instead of a
+// sibling. newTab.html must parse with the tile template's structure intact.
+describe('Tile template structural integrity — HTML5 mis-nesting regression guard (Stage H2)', () => {
+	let realHtml: string;
+
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- structural regression guard: needs the raw markup to re-parse it
+		realHtml = fs.readFileSync(HTML_PATH, 'utf8');
+	});
+
+	/** Parses `html` as a full HTML5 document — the same parser class Firefox
+	 * (and this suite's jsdom fast tier) uses for `newTab.html` — and returns
+	 * the `<template>` element with the given id, or null. */
+	function parseTemplate(html: string, templateId: string): HTMLTemplateElement | null {
+		const doc = new DOMParser().parseFromString(html, 'text/html');
+		return doc.getElementById(templateId) as HTMLTemplateElement | null;
+	}
+
+	const expectedSiblingClasses = [
+		'newtab-link',
+		'ntt-pin-stripe',
+		'ntt-stat-chip',
+		'ntt-actions-kebab',
+		'ntt-actions',
+		'ntt-drag-handle',
+		'ntt-add-tile',
+		'ntt-overlay',
+	];
+
+	it('the real newTab.html: 8 direct children of .newtab-site are siblings, not nested', () => {
+		const template = parseTemplate(realHtml, 'newtab-site');
+		expect(template).toBeTruthy();
+		const site = template!.content.querySelector('.newtab-site') as HTMLElement;
+		expect(site).toBeTruthy();
+
+		const childClasses = Array.from(site.children).map(c => c.className);
+		expect(childClasses).toEqual(expectedSiblingClasses);
+	});
+
+	it('the real newTab.html: .newtab-thumbnail is a child of .newtab-link (one level deep)', () => {
+		const template = parseTemplate(realHtml, 'newtab-site');
+		const site = template!.content.querySelector('.newtab-site') as HTMLElement;
+		const link = site.children[0];
+		expect(link.className).toBe('newtab-link');
+		expect(link.children.length).toBe(1);
+		expect(link.children[0].className).toBe('newtab-thumbnail');
+	});
+
+	it('the real newTab.html: .ntt-favicon and .newtab-title are children of .ntt-overlay', () => {
+		const template = parseTemplate(realHtml, 'newtab-site');
+		const site = template!.content.querySelector('.newtab-site') as HTMLElement;
+		const overlay = site.children[7];
+		expect(overlay.className).toBe('ntt-overlay');
+		const overlayChildClasses = Array.from(overlay.children).map(c => c.className);
+		expect(overlayChildClasses).toEqual(['ntt-favicon', 'newtab-title']);
+	});
+
+	it('detection check: the OLD (pre-H2) self-closed markup DOES mis-nest under the same HTML5 parser', () => {
+		// This is the pre-H2 template shape verbatim (self-closed non-void
+		// spans, as newTab.xhtml had it). Parsing it with the SAME DOMParser
+		// confirms the tests above are genuinely capable of catching the
+		// mis-nesting bug, not just checking a tautology against markup that
+		// was already expanded.
+		const oldMarkup = `<!DOCTYPE html><html><head></head><body>
+			<template id="newtab-site">
+				<div class="newtab-site" draggable="true">
+					<a class="newtab-link">
+						<span class="newtab-thumbnail" />
+					</a>
+					<span class="ntt-pin-stripe" />
+					<span class="ntt-stat-chip" />
+					<span class="ntt-actions-kebab" />
+					<span class="ntt-actions" />
+					<span class="ntt-drag-handle" />
+					<span class="ntt-add-tile" />
+					<span class="ntt-overlay">
+						<span class="ntt-favicon" />
+						<span class="newtab-title" />
+					</span>
+				</div>
+			</template>
+		</body></html>`;
+		const template = parseTemplate(oldMarkup, 'newtab-site');
+		expect(template).toBeTruthy();
+		const site = template!.content.querySelector('.newtab-site') as HTMLElement;
+		expect(site).toBeTruthy();
+
+		const childClasses = Array.from(site.children).map(c => c.className);
+		// The bug: consecutive self-closed `<span/>`s swallow every following
+		// sibling as a descendant, so the old markup does NOT parse into 8
+		// flat children the way the fixed (H2) markup does.
+		expect(childClasses).not.toEqual(expectedSiblingClasses);
+		// Specifically: `.ntt-stat-chip` gets swallowed as a *descendant* of
+		// `.ntt-pin-stripe` instead of staying a direct sibling.
+		const directChildHasStatChip = Array.from(site.children).some(c => c.className === 'ntt-stat-chip');
+		expect(directChildHasStatChip).toBe(false);
 	});
 });
 

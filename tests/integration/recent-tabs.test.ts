@@ -62,7 +62,6 @@ describe('Recently-closed tabs — newTab.js', () => {
 		const _formatAge = extractMethod(source, '_formatAge');
 
 		globalThis.Prefs = { recent: true };
-		(globalThis as any).HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 		chrome.sessions = {
 			getRecentlyClosed: vi.fn(),
@@ -96,14 +95,15 @@ describe('Recently-closed tabs — newTab.js', () => {
 		harness.recentList = recentList;
 		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
 
-		document.createElementNS = vi.fn(() => makeMockElement()) as any;
-
-		document.createElement = vi.fn(() => ({
-			classList: { add: vi.fn() },
-			onerror: null,
-			src: '',
-			remove: vi.fn(),
-		})) as any;
+		// `refreshRecent` builds 'img' elements via one shape and everything else
+		// (the 'a'/'span' card structure) via `makeMockElement`'s generic shape —
+		// both now go through `document.createElement` (no more createElementNS
+		// namespace split), so the mock dispatches on the tag name.
+		document.createElement = vi.fn((tag: string) =>
+			tag === 'img'
+				? { classList: { add: vi.fn() }, onerror: null, src: '', remove: vi.fn() }
+				: makeMockElement(),
+		) as any;
 
 		document.createTextNode = vi.fn((text: string) => ({ textContent: text })) as any;
 	});
@@ -258,7 +258,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 
 	it('skips tabs with moz-extension:// URLs (filters out own new-tab page)', () => {
 		const items = [
-			{ tab: { url: 'moz-extension://abc-123/newTab.xhtml', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'moz-extension://abc-123/newTab.html', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));

@@ -83,7 +83,7 @@ web-ext build --source-dir webextension/
 ### Architecture
 
 - **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred (see [`ROADMAP.md`](ROADMAP.md)).
-- **Core:** The New Tab page is an XHTML document (`webextension/newTab.xhtml`) registered via `chrome_url_overrides.newtab` (XHTML→HTML conversion is a separate, explicitly deferred task — see [`MV3_MIGRATION.md`](MV3_MIGRATION.md)).
+- **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in MODERNIZATION.md Stage H, slice H2).
 - **Background Scripts:** A non-persistent **event page** (`background: {"scripts": ["lib/background-main.js"], "type": "module"}`, no service worker — full DOM/`window`/canvas/IndexedDB access), using promise-based `browser.*` throughout. `lib/background-main.js` is the single ES-module entry: it side-effect-imports the dual-scope bridge files (`common.js`, `prefs.js` — loaded as classic `<script>`s by the page too, MODERNIZATION.md Decision 2) and registers every listener directly (message dispatch via `lib/messages.js`, webRequest/webNavigation/tabs/menus/idle). The rest of the background is real ES modules under `webextension/lib/`: `lib/messages.js` (the `runtime.onMessage` dispatch table), `lib/platform.js` (the browser-capability seam a future Chrome port forks — permissions/action/menus/i18n wrappers, plus the Decision-2 accessor for the dual-scope globals), `lib/db.js` (IndexedDB), `lib/tiles-store.js` (the Tiles/Background models), `lib/capture.js` + `lib/thumbnail-image.js` (the auto-thumbnail pipeline), and `lib/backup.js` (export/import). The event page suspends after ~30s idle and respawns on events; respawn-hygiene directives (menus, IDB reconnect, session-backed pending state, the action-button sweep) live in [`MODERNIZATION.md`](MODERNIZATION.md) (current) and [`MV3_MIGRATION.md`](MV3_MIGRATION.md) (historical record).
 
 ### Patterns & Conventions
@@ -96,7 +96,7 @@ web-ext build --source-dir webextension/
 - **Production files in `webextension/`:** stay `.js`. Add JSDoc types to function signatures, exported objects, and `browser.*` callback parameters. `checkJs: true` checks every `.js` by default — no per-file `// @ts-check` needed.
 - **Test files in `tests/`:** all `.ts`. New tests must be TypeScript too.
 - **WebExtension API types** come from `@types/firefox-webext-browser`. (`@types/chrome` joins it if/when Chrome support arrives.)
-- **Modules:** `webextension/lib/` is reserved for ES modules; eslint enforces module-mode there. Pure-logic extraction into `lib/` is deferred to the post-MV3 ES-module extraction item (see [`MV3_MIGRATION.md`](MV3_MIGRATION.md) backlog / [`ROADMAP.md`](ROADMAP.md)) — the classic script-mode background files can't import ES modules until that lands.
+- **Modules:** `webextension/lib/` is the module home — the background is fully modular (`lib/background-main.js` + the files it imports; see MODERNIZATION.md Stage M), and new pure-logic code belongs there. The page files (`newTab.js`, `fx-newTab.js`, `icons.js`, `awesomebar.js`, `stats.js`, `action.js`, `tiles-shim.js`) and the dual-scope bridge files (`common.js`, `prefs.js`) stay classic `<script>`-loaded files — converting them is a separate, future arc (MODERNIZATION.md "Out of scope"), not a per-feature decision.
 - **Don't introduce a build step.** If a feature seems to need TS-only ergonomics JSDoc can't express, simplify the design rather than adding a compiler.
 - **Don't suppress type errors** with `// @ts-ignore`. Fix the underlying JSDoc, or use `// @ts-expect-error` + a one-line reason (it preserves the signal once the issue is fixed).
 - **Don't add `.ts` files under `webextension/`.** The escape hatch (renaming `.js`→`.ts` later) is preserved by not using it now.
@@ -153,7 +153,7 @@ Contributions generated with the help of AI are welcome but must follow the stan
 ### Key Files
 
 - [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV3).
-- [`webextension/newTab.xhtml`](webextension/newTab.xhtml): The markup for the new tab page UI.
+- [`webextension/newTab.html`](webextension/newTab.html): The markup for the new tab page UI.
 - [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
 - [`webextension/lib/background-main.js`](webextension/lib/background-main.js): The background's single ES-module entry point — every listener registration lives here (message dispatch registration, webRequest/webNavigation/tabs/menus/idle).
 - [`webextension/lib/messages.js`](webextension/lib/messages.js): The `runtime.onMessage` dispatch table (the 19 frozen wire names — MODERNIZATION.md Decision 3).

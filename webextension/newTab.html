@@ -1,10 +1,12 @@
+<!DOCTYPE html>
 <!--
 This Source Code Form is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
 file, you can obtain one at http://mozilla.org/MPL/2.0/.
 -->
-<html xmlns="http://www.w3.org/1999/xhtml" options-hidden="true" drawer-tab="page">
+<html options-hidden="true" drawer-tab="page">
 <head>
+	<meta charset="utf-8"/>
 	<title data-message="newtab_pageTitle"></title>
 	<link rel="stylesheet" href="tokens.css" type="text/css" />
 	<link rel="stylesheet" href="newTab.css" type="text/css" />
@@ -324,7 +326,7 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 									<td>
 										<div style="display: flex">
 											<input id="options-filter-count" type="text" size="1" maxlength="2" required="" pattern="^\d+$" style="flex: 1; text-align: center;" data-placeholder="filter_placeholder_limit" />
-											<button id="options-filter-set" class="ntt-btn-primary" disabled="" data-message="filter_set" />
+											<button id="options-filter-set" class="ntt-btn-primary" disabled="" data-message="filter_set"></button>
 										</div>
 									</td>
 								</tr>
@@ -423,17 +425,17 @@ file, you can obtain one at http://mozilla.org/MPL/2.0/.
 	<template id="newtab-site">
 		<div class="newtab-site" draggable="true">
 			<a class="newtab-link">
-				<span class="newtab-thumbnail" />
+				<span class="newtab-thumbnail"></span>
 			</a>
-			<span class="ntt-pin-stripe" />
-			<span class="ntt-stat-chip" />
-			<span class="ntt-actions-kebab" />
-			<span class="ntt-actions" />
-			<span class="ntt-drag-handle" />
-			<span class="ntt-add-tile" />
+			<span class="ntt-pin-stripe"></span>
+			<span class="ntt-stat-chip"></span>
+			<span class="ntt-actions-kebab"></span>
+			<span class="ntt-actions"></span>
+			<span class="ntt-drag-handle"></span>
+			<span class="ntt-add-tile"></span>
 			<span class="ntt-overlay">
-				<span class="ntt-favicon" />
-				<span class="newtab-title" />
+				<span class="ntt-favicon"></span>
+				<span class="newtab-title"></span>
 			</span>
 		</div>
 	</template>

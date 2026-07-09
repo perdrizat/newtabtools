@@ -60,8 +60,8 @@ describe('E2E: i18n renders with no key/placeholder leaks', () => {
 			while ((n = walker.nextNode())) {
 				const parent = n.parentElement;
 				if (!parent) { continue; }
-				const tag = parent.tagName;
-				if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') { continue; }
+				const tag = parent.tagName.toLowerCase();
+				if (tag === 'script' || tag === 'style' || tag === 'noscript') { continue; }
 				const text = (n.textContent || '').trim();
 				if (!text) { continue; }
 				if (keySet.has(text)) { bad.push(`raw key rendered: "${text}"`); }

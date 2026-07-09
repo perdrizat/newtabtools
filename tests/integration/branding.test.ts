@@ -23,7 +23,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MESSAGES_PATH = path.resolve(__dirname, '../../webextension/_locales/en/messages.json');
 const MANIFEST_PATH = path.resolve(__dirname, '../../webextension/manifest.json');
-const XHTML_PATH = path.resolve(__dirname, '../../webextension/newTab.xhtml');
+const HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 
 const AMO_URL = 'https://addons.mozilla.org/firefox/addon/newtab-powertools/';
@@ -80,21 +80,21 @@ describe('Branding — internal identifiers untouched', () => {
 });
 
 describe('About section — brand home', () => {
-	let xhtml: string;
+	let html: string;
 	let css: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: About markup
-		xhtml = fs.readFileSync(XHTML_PATH, 'utf8');
+		html = fs.readFileSync(HTML_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: About CSS
 		css = fs.readFileSync(CSS_PATH, 'utf8');
 	});
 
 	function aboutBlock(): string {
-		const start = xhtml.indexOf('id="options-about"');
+		const start = html.indexOf('id="options-about"');
 		expect(start).toBeGreaterThan(-1);
-		const end = xhtml.indexOf('</section>', start);
-		return xhtml.slice(start, end > -1 ? end : undefined);
+		const end = html.indexOf('</section>', start);
+		return html.slice(start, end > -1 ? end : undefined);
 	}
 
 	it('the brand link points to the AMO listing and opens in a new tab', () => {

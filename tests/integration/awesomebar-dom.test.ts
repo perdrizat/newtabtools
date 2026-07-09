@@ -34,7 +34,7 @@ describe('AwesomeBar — DOM wiring', () => {
 	beforeAll(() => {
 		AwesomeBar = loadAwesomeBar();
 		(globalThis as any).NttIcons = {
-			create: () => document.createElementNS('http://www.w3.org/1999/xhtml', 'span'),
+			create: () => document.createElement('span'),
 		};
 		(globalThis as any).newTabTools = {
 			isValidURL: (u: string) => { try { return ['http:', 'https:'].includes(new URL(u).protocol); } catch { return false; } },

@@ -157,7 +157,7 @@ export default [
 		// Script-mode files in webextension/ (MODERNIZATION.md Stage M, slice
 		// M5 — background.js and its tiles.js bridge shim are gone). This is
 		// now exactly: the page files loaded via classic `<script>` in
-		// newTab.xhtml (newTab.js, fx-newTab.js, icons.js, awesomebar.js,
+		// newTab.html (newTab.js, fx-newTab.js, icons.js, awesomebar.js,
 		// stats.js, action.js, tiles-shim.js) plus common.js/prefs.js, the two
 		// dual-scope bridge files (MODERNIZATION.md Decision 2) that are ALSO
 		// side-effect-imported by lib/background-main.js (a real ES module) —

@@ -181,41 +181,41 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 });
 
 // ===========================================================================
-// Wallpaper picker UI — newTab.xhtml (wiring)
+// Wallpaper picker UI — newTab.html (wiring)
 // ===========================================================================
 
-describe('Wallpaper picker UI — newTab.xhtml', () => {
-	let xhtml: string;
+describe('Wallpaper picker UI — newTab.html', () => {
+	let html: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: template structure
-		xhtml = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/newTab.xhtml'), 'utf8'
+		html = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/newTab.html'), 'utf8'
 		);
 	});
 
 	it('has a wallpaper picker container element', () => {
-		expect(xhtml).toContain('id="wallpaper-picker"');
+		expect(html).toContain('id="wallpaper-picker"');
 	});
 
 	it('has a button to open the wallpaper picker', () => {
-		expect(xhtml).toContain('id="options-wallpaper-btn"');
+		expect(html).toContain('id="options-wallpaper-btn"');
 	});
 
 	it('has a wallpaper grid container', () => {
-		expect(xhtml).toContain('id="wallpaper-grid"');
+		expect(html).toContain('id="wallpaper-grid"');
 	});
 
 	it('has a close button for the picker', () => {
-		expect(xhtml).toContain('id="wallpaper-close"');
+		expect(html).toContain('id="wallpaper-close"');
 	});
 
 	it('has an upload custom image option', () => {
-		expect(xhtml).toContain('id="wallpaper-upload"');
+		expect(html).toContain('id="wallpaper-upload"');
 	});
 
 	it('has a reset/no-background option', () => {
-		expect(xhtml).toContain('id="wallpaper-reset"');
+		expect(html).toContain('id="wallpaper-reset"');
 	});
 });
 

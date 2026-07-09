@@ -8,7 +8,7 @@
  *
  * Verifies _locales/ structural integrity:
  *   - en/messages.json is valid JSON with the expected schema
- *   - every key referenced in code (JS getString/getMessage, XHTML data-* attrs,
+ *   - every key referenced in code (JS getString/getMessage, HTML data-* attrs,
  *     manifest __MSG_*__) exists in the en locale
  *   - every non-en locale has valid JSON and the two manifest-required keys
  *
@@ -58,11 +58,11 @@ function collectJSKeys(): Set<string> {
 	return keys;
 }
 
-/** Extract all message keys referenced in XHTML/HTML via data-message, data-placeholder, data-title, data-label. */
+/** Extract all message keys referenced in HTML via data-message, data-placeholder, data-title, data-label. */
 function collectMarkupKeys(): Set<string> {
 	const keys = new Set<string>();
 	const markupFiles = fs.readdirSync(WEBEXT_DIR)
-		.filter(f => f.endsWith('.xhtml') || f.endsWith('.html'))
+		.filter(f => f.endsWith('.html'))
 		.map(f => path.join(WEBEXT_DIR, f));
 
 	for (const file of markupFiles) {
@@ -124,7 +124,7 @@ describe('Localization — _locales/ smoke test (Phase 1 slot 5)', () => {
 		expect(missing, `Missing keys in en: ${missing.join(', ')}`).toEqual([]);
 	});
 
-	it('every XHTML/HTML data-* key exists in en locale', () => {
+	it('every HTML data-* key exists in en locale', () => {
 		const markupKeys = collectMarkupKeys();
 		const missing = [...markupKeys].filter(k => !enKeys.has(k));
 		expect(missing, `Missing keys in en: ${missing.join(', ')}`).toEqual([]);

@@ -280,13 +280,14 @@ describe('Drawer Layout tab — drawerOnChange (Phase 3-1)', () => {
 
 	// --- Regressions caught during Phase 3-1 review ---
 
-	it('regression: identifies range inputs by `type`, not `tagName` (XHTML returns lowercase)', () => {
-		// `Element.tagName` is uppercase in HTML (`INPUT`) but lowercase
-		// in XHTML (`input`). newTab.xhtml is parsed as XML so the original
-		// `tagName === "INPUT"` check silently failed in the real
-		// extension while passing all jsdom tests.
+	it('regression: identifies range inputs by `type`, not `tagName` (case-insensitive)', () => {
+		// `Element.tagName` is uppercase in HTML (`INPUT`); it was lowercase
+		// (`input`) back when newTab.xhtml was parsed as XML (pre-Stage-H),
+		// which is how the original `tagName === "INPUT"` check silently
+		// failed in the real extension while passing all jsdom tests. Kept
+		// as a defense-in-depth regression guard post-HTML5-conversion.
 		const slider = document.querySelector('input[type="range"][data-pref="spacing"]') as HTMLInputElement;
-		// Force tagName to lowercase to simulate XHTML semantics.
+		// Force tagName to lowercase to simulate the old XHTML semantics.
 		Object.defineProperty(slider, 'tagName', { value: 'input', configurable: true });
 		slider.value = '1';
 		harness.drawerOnChange({ target: slider });
