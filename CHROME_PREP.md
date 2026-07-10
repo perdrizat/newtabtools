@@ -24,8 +24,8 @@ by maintainer).
 
 | Arc | Status | Commit(s) |
 |---|---|---|
-| C0 — design decisions of record (menus, theme) | pending | — |
-| C1 — background DOM-guard (no DOM outside thumbnail-image.js) | pending | — |
+| C0 — design decisions of record (menus, theme) | done | `c7ebfcc` |
+| C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | (next commit) |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | pending | — |
 | C3 — type the monoliths + principled harness + retire ALL bridges | pending | — |
 | C4 — split the monoliths into feature modules | pending | — |
@@ -110,12 +110,15 @@ per arc.
       no code.
 
 ### C1 — background DOM-guard
-- [ ] ESLint guard (project rule or `no-restricted-globals`/`no-restricted-
+- [x] ESLint guard (project rule or `no-restricted-globals`/`no-restricted-
       properties` config): `document`/`window`/`Image`/canvas/DOM constructors
       forbidden in `webextension/lib/**` EXCEPT `lib/thumbnail-image.js` (the
       Chrome/OffscreenCanvas swap seam). Red-first: prove the rule fires on a
       violation, then that the tree is clean.
-- [ ] Audit pass over lib/** confirming no existing leak (report, don't assume).
+- [x] Audit pass over lib/** confirming no existing leak (report, don't assume).
+- [x] Gates + targeted E2E: fast 1306/1306, lint/typecheck/lint:webext clean,
+      smoke trio 6/6. Audit verdict: zero existing violations in lib/** —
+      the thumbnail seam was already airtight; the guard is pure insurance.
 
 ### C2 — leaf utilities (Phase-1 remainder)
 - [ ] `el(tag, className, text?)` page DOM-builder leaf + normalize the ~37

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- ESLint guard (`no-restricted-globals` on `webextension/lib/**/*.js`, seam `lib/thumbnail-image.js` and vendored `lib/zip/**` excluded) forbidding `document`/`window`/`Image`/`OffscreenCanvas`/`DOMParser`/`XMLSerializer`/`localStorage` in the background scope, plus a regression test asserting the rule via ESLint's own config resolution (CHROME_PREP.md C1).
+
 ## [2.4.0] — 2026-07-10
 
 The page-modules arc (`PAGE_MODULES.md`, slices P1–P5 + two adjudicated code

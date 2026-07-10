@@ -198,6 +198,29 @@ export default [
 		},
 	},
 	{
+		// Chrome-prep C1 guard: the background scope (webextension/lib/**)
+		// runs as a Firefox event page today (full DOM/window/canvas access)
+		// but must stay portable to a future Chrome MV3 service worker, which
+		// has none of that. lib/thumbnail-image.js is the one designated
+		// Chrome-swap seam (CHROME_PREP.md C1) — everything else in lib/ must
+		// stay DOM/canvas-free so a Chrome port only has to fork that one
+		// file. zip/** is vendored and already globally ignored above; listed
+		// again here so this entry is self-contained and obviously correct.
+		files: ['webextension/lib/**/*.js'],
+		ignores: ['webextension/lib/thumbnail-image.js', 'webextension/lib/zip/**'],
+		rules: {
+			'no-restricted-globals': [2,
+				{ name: 'document', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'window', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'Image', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'OffscreenCanvas', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'DOMParser', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'XMLSerializer', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+				{ name: 'localStorage', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
+			],
+		},
+	},
+	{
 		// E2E tests and helpers. These run in Node but often contain
 		// evaluate() blocks that run in the browser, plus Puppeteer's
 		// own browser-like API. nttGlobals covers extension-specific
