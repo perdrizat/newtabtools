@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `tiles-shim.js` gains a real `Tile` typedef (mirroring `lib/tiles-store.js`'s) and precise `Tiles.*` method signatures, surfaced by fx-newTab.js's now-checked usage; `Tile` also gains `titleIsUserSet` and `Background.setBackground`'s `file` param becomes correctly optional (C3c — both surfaced by newTab.js's now-checked usage).
 - `tsconfig.json`'s `lib` gains `ES2021` (newTab.js's `getThemedImageURL` genuinely calls `String.prototype.replaceAll`; `noEmit: true` so this never affects emitted code) (C3c).
 - `tests/integration/_helpers.ts`'s `ensureSiteEnv`/`mountSite`, and the `fx-newTab.js` import in `drag-reorder.test.ts`/`tile-url-render.test.ts`, drop the computed-path `webextPath(...)` obfuscation for a literal-string dynamic `import()` now that `tsc` type-checks fx-newTab.js directly (still dynamic, not static, to preserve DOM-mount-before-import ordering); the now-dead `webextPath`/`WEBEXT_DIR` helper is deleted (C3c, no remaining call sites).
+- `fx-newTab.js`'s `Transformation`/`Updater`/`UndoDialog` singletons move verbatim to their own `webextension/transformation.js`/`updater.js`/`undo-dialog.js` modules (chrome-prep C4a, CHROME_PREP.md; fx-newTab.js 2550 → 1961 lines); `page-main.js`/`newTab.js` and every test consumer re-point to the new specifiers (no re-export shim). `Cell` gains a real `export` (previously module-local) so the movers can reference it as a type via `import('./fx-newTab.js').Cell`.
 
 ### Fixed
 

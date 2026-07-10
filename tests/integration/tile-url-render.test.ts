@@ -28,7 +28,7 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 	let addTitle: any;
 
 	beforeAll(async () => {
-		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Updater, etc.).
+		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Drag, Drop, etc.).
 		// page-modules P1 (PAGE_MODULES.md): its top level is now
 		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
 		// trailer this test used to strip out was hoisted to page-main.js.

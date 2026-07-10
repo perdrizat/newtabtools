@@ -27,7 +27,7 @@ by maintainer).
 | C0 — design decisions of record (menus, theme) | done | `c7ebfcc` |
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
-| C3 — type the monoliths + principled harness + retire ALL bridges | pending | — |
+| C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | pending | — |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
 | C6 — two-target manifest authoring | pending | — |
@@ -443,12 +443,43 @@ same staged-scaffold logic as P1's bridge):*
       helper.
 
 ### C4 — split the monoliths
-- [ ] fx-newTab.js → grid, site, cell, drag-drop, transformation, updater,
-      undo modules; newTab.js → drawer, wallpaper, theme, startup, message
-      glue. Explicit import graphs; page-main.js stays the only boot site.
-      Slice-per-module-group, commit per green slice (this arc gets its own
-      slice table when it starts).
-- [ ] Gates + FULL E2E per slice group + UAT spot-runs.
+
+*Slicing (2026-07-10). Rules of the arc: MOVE typed code, don't rewrite it
+(types travel unchanged — the C3 risk note); no re-export shims — consumers
+update to the new specifiers in the same slice; every new module keeps the
+no-top-level-cross-calls rule (tripwire after each slice); page-main.js stays
+the only boot site. FULL E2E per slice; purity review per slice.*
+
+- [x] **C4a** — fx-newTab's separable singletons out: `transformation.js`
+      (289 lines), `updater.js` (236 lines), `undo-dialog.js` (154 lines);
+      fx-newTab.js 2550 → 1961 lines. Each moved verbatim (types unchanged);
+      `Cell` gained a real `export` (previously module-local) so the movers
+      can reference it as a type via `import('./fx-newTab.js').Cell` — the
+      only non-mechanical edit, required for the move, not a rewrite of any
+      moved line. `page-main.js`/`newTab.js` re-pointed to the new
+      specifiers (no re-export shim); fx-newTab.js itself now imports all
+      three back (legal Decision-3 cycle: Grid/Site/Drag/Drop call
+      Transformation/Updater/UndoDialog, call-time only). page-main.js's
+      import list grows 8 → 10 entries (`page-module-scope.test.ts`'s
+      derived sanity net updated to match — `common.js` first/`fx-newTab.js`
+      last unchanged, only the length). Gates: fast 1311/1311, lint/
+      typecheck/lint:webext clean, tripwire green (missing-browser-API
+      `ReferenceError`, not TDZ/SyntaxError); targeted E2E
+      drag-layout+drag-reorder+tile-redesign 27/27, loads-cleanly+
+      boot-timing 4/4.
+- [ ] **C4b** — `drag-drop.js` (Drag, Drop, DropTargetShim, DropPreview +
+      their constants — one module; they are one subsystem).
+- [ ] **C4c** — `site.js`, `cell.js`, `grid.js`, `page.js` (Page was missing
+      from the original phase list — it becomes its own small module);
+      fx-newTab.js is DELETED when this lands. UAT spot-run (tiles: 01/10/23).
+- [ ] **C4d** — newTab.js: DESIGN PASS FIRST (the newTabTools god-object's
+      method groups share `this`/uiElements state — unlike fx-newTab's
+      already-separate singletons, this split needs a state-ownership design:
+      likely extract the self-contained subsystems (wallpaper, theme,
+      message glue) as modules and keep drawer+startup as the residual
+      controller; the design pass decides and records it here before code).
+      UAT spot-run (drawer: 20–23).
+- [ ] Gates + FULL E2E per slice + UAT spot-runs as marked.
 
 ### C5 — capability-seam completion (Decision 4)
 - [ ] Divergence audit: every `browser.`/`chrome.` site classified

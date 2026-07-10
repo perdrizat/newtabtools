@@ -18,6 +18,15 @@
  * but redundant duplicate (the module graph caches by specifier), so those
  * three lines were replaced rather than kept alongside the named import.
  *
+ * chrome-prep C4a (CHROME_PREP.md): `Updater`/`UndoDialog` used to be two of
+ * fx-newTab.js's exports; they now live in their own `updater.js`/
+ * `undo-dialog.js` modules (fx-newTab.js still imports both for its own
+ * Grid/Site/Drag/Drop use). This file's import list grows from eight
+ * entries to ten accordingly — `page-module-scope.test.ts`'s derived
+ * `PAGE_FILES_IN_LOAD_ORDER` sanity check was updated to match (its
+ * start/end invariants — `common.js` first, `fx-newTab.js` last — are
+ * unchanged; only the length grew).
+ *
  * Decision 3 of record (PAGE_MODULES.md): no page module executes another
  * module's code at its own top level — every cross-module call happens
  * here, in this file's boot sequence below, or later (event handlers,
@@ -55,7 +64,9 @@ import './tiles-shim.js';
 import { Prefs } from './prefs.js';
 import './awesomebar.js';
 import { newTabTools } from './newTab.js';
-import { Grid, UndoDialog, Updater } from './fx-newTab.js';
+import { UndoDialog } from './undo-dialog.js';
+import { Updater } from './updater.js';
+import { Grid } from './fx-newTab.js';
 
 UndoDialog.init();
 

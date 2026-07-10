@@ -121,8 +121,13 @@ let _siteEnvPromise: Promise<FxNewTabModule> | null = null;
  * callers that need one mutate the (real, imported) singleton directly, in
  * place, per test — see tile-redesign.test.ts for the pattern.
  *
- * Returns fx-newTab.js's module namespace (`Page`/`Grid`/`Updater`/
- * `UndoDialog`/`Site`/`Drag`/`Drop`/`Transformation`).
+ * Returns fx-newTab.js's module namespace (`Page`/`Grid`/`Site`/`Drag`/
+ * `Drop`/`Cell`). chrome-prep C4a (CHROME_PREP.md): `Updater`/`UndoDialog`/
+ * `Transformation` moved out to their own `updater.js`/`undo-dialog.js`/
+ * `transformation.js` modules — a caller that needs one of those three
+ * imports it directly from its own specifier instead of destructuring it off
+ * this function's return value (same singleton either way, since fx-newTab.js
+ * imports all three from these same specifiers).
  *
  * Exported (not just used internally by `mountSite`) so a caller that needs
  * to override one of the seeded defaults (e.g. tile-redesign.test.ts sets

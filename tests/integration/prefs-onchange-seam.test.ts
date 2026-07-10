@@ -113,9 +113,14 @@ describe('Prefs.onChange — registration + firing', () => {
 // ---------------------------------------------------------------------------
 
 describe('page-main.js registers the seam that reproduces the old updateUI/refresh dance', () => {
+	// chrome-prep C4a (CHROME_PREP.md): page-main.js's import list grows from
+	// eight entries to ten — `Updater`/`UndoDialog` moved out of fx-newTab.js
+	// into their own updater.js/undo-dialog.js modules, imported by name just
+	// before fx-newTab.js (which still needs both, for its own Grid/Site/
+	// Drag/Drop use).
 	const PAGE_FILES_IN_LOAD_ORDER = [
 		'common.js', 'icons.js', 'stats.js', 'tiles-shim.js', 'prefs.js',
-		'awesomebar.js', 'newTab.js', 'fx-newTab.js',
+		'awesomebar.js', 'newTab.js', 'undo-dialog.js', 'updater.js', 'fx-newTab.js',
 	];
 
 	let Prefs: any;
@@ -128,19 +133,24 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 	beforeAll(async () => {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
-		// Leaf-import the eight page files first, in page-main.js's order, via
+		// Leaf-import the ten page files first, in page-main.js's order, via
 		// real `import`s (chrome-prep C3d retired the `globalThis` bridge
 		// these used to also land on) — capture the bindings this file needs
 		// so the spies below wrap the actual production objects (crib:
-		// page-main-boot.test.ts).
+		// page-main-boot.test.ts). chrome-prep C4a: `Updater`/`UndoDialog`
+		// moved out of fx-newTab.js into their own modules.
 		let prefsModule: any;
 		let newTabModule: any;
 		let fxNewTabModule: any;
+		let undoDialogModule: any;
+		let updaterModule: any;
 		for (const file of PAGE_FILES_IN_LOAD_ORDER) {
 			const mod = await import(/* @vite-ignore */ webext(file));
 			if (file === 'prefs.js') { prefsModule = mod; }
 			if (file === 'newTab.js') { newTabModule = mod; }
 			if (file === 'fx-newTab.js') { fxNewTabModule = mod; }
+			if (file === 'undo-dialog.js') { undoDialogModule = mod; }
+			if (file === 'updater.js') { updaterModule = mod; }
 		}
 		Prefs = prefsModule.Prefs;
 
@@ -150,16 +160,16 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 		// (crib: page-main-boot.test.ts). (A third boot-trailer step,
 		// pageMessageHandler.flushQueued(), was retired in chrome-prep C3a —
 		// CHROME_PREP.md — so there is nothing left to stub for it.)
-		vi.spyOn(fxNewTabModule.UndoDialog, 'init').mockImplementation(() => {});
+		vi.spyOn(undoDialogModule.UndoDialog, 'init').mockImplementation(() => {});
 		vi.spyOn(newTabModule.newTabTools, 'startup').mockImplementation(() => {});
 
 		updateUISpy = vi.spyOn(newTabModule.newTabTools, 'updateUI').mockImplementation(() => {});
 		markAutoSavedSpy = vi.spyOn(newTabModule.newTabTools, '_markAutoSaved').mockImplementation(() => {});
 		resizeSpy = vi.spyOn(newTabModule.newTabTools, 'resizeOptionsThumbnail').mockImplementation(() => {});
 		refreshSpy = vi.spyOn(fxNewTabModule.Grid, 'refresh').mockResolvedValue(undefined);
-		updateGridSpy = vi.spyOn(fxNewTabModule.Updater, 'updateGrid').mockImplementation(() => {});
+		updateGridSpy = vi.spyOn(updaterModule.Updater, 'updateGrid').mockImplementation(() => {});
 
-		// Import the real entry point — its eight `import './X.js'` lines hit
+		// Import the real entry point — its ten `import './X.js'` lines hit
 		// the module cache already populated above, so no code re-runs; only
 		// page-main.js's own top-level trailer (boot calls + the
 		// `Prefs.onChange(...)` registration) executes.

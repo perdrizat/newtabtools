@@ -35,7 +35,9 @@
  * slice hoisted it out to page-main.js's boot sequence (not imported here —
  * booting in jsdom is out of scope; the real boot is covered by E2E/UAT).
  *
- * Natively `import()`s the eight page files, in page-main.js's exact load
+ * Natively `import()`s the ten page files (chrome-prep C4a, CHROME_PREP.md:
+ * grew from eight — `Updater`/`UndoDialog` moved out of fx-newTab.js into
+ * their own updater.js/undo-dialog.js modules), in page-main.js's exact load
  * order, with the browser/chrome/DOM surface each file's own top level
  * touches (see each import site below) mocked/provided just enough that
  * import doesn't throw.
@@ -67,10 +69,18 @@ function webext(relPath: string): string {
 // runs the same import list plus the boot sequence.
 //
 // page-modules P5 (PAGE_MODULES.md): page-main.js now calls into
-// newTab.js/fx-newTab.js/prefs.js directly, so three of the eight lines are
+// newTab.js/fx-newTab.js/prefs.js directly, so several of the lines are
 // named imports (`import { X } from './Y.js';`) rather than side-effect-only
 // (`import './Y.js';`) — the regex matches either form, still capturing just
 // the specifier.
+//
+// chrome-prep C4a (CHROME_PREP.md): page-main.js's import list grows from
+// eight entries to ten here — `Updater`/`UndoDialog` moved out of
+// fx-newTab.js into their own updater.js/undo-dialog.js modules, imported by
+// name just before fx-newTab.js. The two invariants below (starts with
+// common.js, ends with fx-newTab.js) are unchanged; only the length grew —
+// per the arc's own instruction to update this sanity net honestly rather
+// than hardcode around it.
 // eslint-disable-next-line ntt/no-source-grep -- supplies the expected load order from the single source of truth (page-main.js); the import behavior itself is exercised natively below, not asserted via string match
 const pageMainSource = fs.readFileSync(PAGE_MAIN_PATH, 'utf8');
 const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?'\.\/([^']+)';$/gm)]
@@ -79,7 +89,7 @@ const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import\s+(?:\{[^}
 // Sanity net: if the regex silently matches nothing (or the wrong thing)
 // because page-main.js's import syntax changes, fail loudly here instead of
 // quietly running zero/wrong imports below.
-if (PAGE_FILES_IN_LOAD_ORDER.length !== 8
+if (PAGE_FILES_IN_LOAD_ORDER.length !== 10
 	|| PAGE_FILES_IN_LOAD_ORDER[0] !== 'common.js'
 	|| PAGE_FILES_IN_LOAD_ORDER[PAGE_FILES_IN_LOAD_ORDER.length - 1] !== 'fx-newTab.js') {
 	throw new Error(
@@ -123,7 +133,7 @@ describe('module-scope bridge — page files\' globalThis surface after PAGE_MOD
 		}
 	});
 
-	it('imports all eight page files without throwing (Decision-3 guard: no top-level cross-module calls)', () => {
+	it('imports all ten page files without throwing (Decision-3 guard: no top-level cross-module calls)', () => {
 		expect(importError).toBeNull();
 	});
 
@@ -187,11 +197,11 @@ describe('module-scope bridge — page files\' globalThis surface after PAGE_MOD
 		expect(typeof (globalThis as any).Grid).toBe('undefined');
 	});
 
-	it('fx-newTab.js does not define globalThis.Updater', () => {
+	it('updater.js does not define globalThis.Updater (chrome-prep C4a: moved out of fx-newTab.js)', () => {
 		expect(typeof (globalThis as any).Updater).toBe('undefined');
 	});
 
-	it('fx-newTab.js does not define globalThis.UndoDialog', () => {
+	it('undo-dialog.js does not define globalThis.UndoDialog (chrome-prep C4a: moved out of fx-newTab.js)', () => {
 		expect(typeof (globalThis as any).UndoDialog).toBe('undefined');
 	});
 

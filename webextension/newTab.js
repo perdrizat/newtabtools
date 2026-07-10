@@ -3,19 +3,22 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // page-modules P5 (PAGE_MODULES.md): real imports replace the former
-// `/* globals */` header. `Page`/`Grid`/`Updater` come from fx-newTab.js,
-// which forms a legal ESM cycle with this file (Decision 3) — every
-// cross-reference below is call-time only (inside functions/callbacks),
-// never a top-level read, so the cycle's evaluation order (fx-newTab.js's
-// own top level, which imports this file, finishes before this file's top
-// level runs — see PAGE_MODULES.md's P5 checklist note) never matters.
+// `/* globals */` header. `Page`/`Grid` come from fx-newTab.js, which forms
+// a legal ESM cycle with this file (Decision 3) — every cross-reference
+// below is call-time only (inside functions/callbacks), never a top-level
+// read, so the cycle's evaluation order (fx-newTab.js's own top level, which
+// imports this file, finishes before this file's top level runs — see
+// PAGE_MODULES.md's P5 checklist note) never matters. chrome-prep C4a
+// (CHROME_PREP.md): `Updater` moved out of fx-newTab.js into its own
+// updater.js module — imported directly below instead.
 import { AwesomeBar } from './awesomebar.js';
 import { Background, Tiles } from './tiles-shim.js';
 import { NttIcons } from './icons.js';
 import { TileStats } from './stats.js';
 import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
 import { compareVersions, getString, isValidURL } from './common.js';
-import { Grid, Page, Updater } from './fx-newTab.js';
+import { Grid, Page } from './fx-newTab.js';
+import { Updater } from './updater.js';
 import { el } from './dom.js';
 
 /**

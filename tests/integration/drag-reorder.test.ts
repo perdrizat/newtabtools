@@ -109,9 +109,16 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 
 		const fx = await import('../../webextension/fx-newTab.js');
 		const nt = await import('../../webextension/newTab.js');
+		// chrome-prep C4a (CHROME_PREP.md): Updater/Transformation moved out of
+		// fx-newTab.js into their own modules — imported directly below instead
+		// of destructured off `fx`. Same singleton objects either way (ESM's
+		// module cache dedupes by specifier), since fx-newTab.js itself imports
+		// both from these same specifiers.
+		const updaterMod = await import('../../webextension/updater.js');
+		const transformationMod = await import('../../webextension/transformation.js');
 
 		Grid = fx.Grid;
-		Updater = fx.Updater;
+		Updater = updaterMod.Updater;
 		Updater.updateGrid = vi.fn();
 		newTabTools = nt.newTabTools;
 		newTabTools.page = { firstElementChild: { offsetLeft: 0, offsetTop: 0 } };
@@ -143,7 +150,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 
 		Drag = fx.Drag;
 		Drop = fx.Drop;
-		Transformation = fx.Transformation;
+		Transformation = transformationMod.Transformation;
 		// DropPreview is defined by fx-newTab.js but not directly tested here.
 	});
 
