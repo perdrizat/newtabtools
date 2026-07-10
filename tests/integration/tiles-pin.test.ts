@@ -30,6 +30,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
+import { Prefs, Blocked, Filters } from '../../webextension/prefs.js';
 
 // ---------------------------------------------------------------------------
 // In-memory IndexedDB mock (tiles / background / thumbnails stores), driven
@@ -157,14 +158,19 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 	let mockDb: ReturnType<typeof createMockDB>;
 
 	beforeAll(() => {
-		// Globals lib/tiles-store.js expects (Prefs/Blocked/Filters —
-		// MODERNIZATION.md Decision 2 interim bridge; compareVersions is
-		// pulled from common.js in production, mocked here since getGridTiles
-		// only calls it on the Prefs.history=true path).
-		globalThis.Prefs = { rows: 3, columns: 3, history: false } as any;
-		globalThis.Blocked = { isBlocked: vi.fn(() => false) } as any;
-		globalThis.Filters = { getList: vi.fn(() => ({})) } as any;
-		globalThis.compareVersions = vi.fn(() => 1) as any;
+		// PAGE_MODULES.md P3: lib/tiles-store.js now imports Prefs/Blocked/
+		// Filters/compareVersions for real (rather than reading
+		// getPrefs()/getBlocked()/getFilters()/getCompareVersions() off
+		// globalThis at call time), so replacing `globalThis.X` with a fresh
+		// stand-in object here would no longer reach it — mutate the real
+		// prefs.js singletons in place instead. `history` stays false for
+		// most of this file's tests, so the real `compareVersions` (from
+		// common.js) is never even reached; no stub needed.
+		Prefs.rows = 3;
+		Prefs.columns = 3;
+		Prefs.history = false;
+		Blocked.isBlocked = vi.fn(() => false);
+		Filters.getList = vi.fn(() => ({}));
 	});
 
 	beforeEach(() => {
@@ -276,9 +282,9 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 			{ id: 1, url: 'https://a.com', title: 'A', position: 0 },
 			{ id: 2, url: 'https://b.com', title: 'B', position: 1 },
 		);
-		(globalThis as any).Prefs.rows = 2;
-		(globalThis as any).Prefs.columns = 2;
-		(globalThis as any).Prefs.history = false;
+		Prefs.rows = 2;
+		Prefs.columns = 2;
+		Prefs.history = false;
 
 		const result = await Tiles.getGridTiles();
 		expect(result).toHaveLength(2);
@@ -292,7 +298,7 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 			{ id: 1, url: 'https://a.com', title: 'A', position: 0 },
 			{ id: 2, url: 'https://a.com', title: 'A dup', position: 1 },
 		);
-		(globalThis as any).Prefs.history = false;
+		Prefs.history = false;
 
 		const result = await Tiles.getGridTiles();
 		expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('appears twice'));
@@ -304,9 +310,9 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 		for (let i = 0; i < 20; i++) {
 			mockDb._stores.tiles.push({ id: i + 1, url: `https://${i}.com`, title: `${i}`, position: i });
 		}
-		(globalThis as any).Prefs.rows = 2;
-		(globalThis as any).Prefs.columns = 2;
-		(globalThis as any).Prefs.history = false;
+		Prefs.rows = 2;
+		Prefs.columns = 2;
+		Prefs.history = false;
 
 		const result = await Tiles.getGridTiles();
 		expect(result).toHaveLength(4);
@@ -316,7 +322,7 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 		mockDb._stores.tiles.push(
 			{ id: 1, url: 'https://a.com', title: 'A', position: 0 },
 		);
-		(globalThis as any).Prefs.history = false;
+		Prefs.history = false;
 
 		const { cache, list } = await Tiles.ensureReady();
 		expect(cache).toEqual(['https://a.com']);
@@ -324,7 +330,7 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 	});
 
 	it('ensureReady resolves from cache on second call without re-querying IDB', async () => {
-		(globalThis as any).Prefs.history = false;
+		Prefs.history = false;
 		await Tiles.ensureReady();
 		// Mutate the store — should NOT be picked up
 		mockDb._stores.tiles.push({ id: 99, url: 'https://late.com', title: 'Late', position: 0 });

@@ -16,10 +16,10 @@
  * `Import:restore` message-handler cases — no more `globalThis` bridge for
  * either.
  *
- * `Filters` (prefs.js, a dual-scope bridge file per Decision 2) is read via
- * lib/platform.js's `getFilters()` typed accessor (M5) — the one sanctioned
- * read site for that global across lib/, replacing the former bare-global
- * stopgap this file (and lib/tiles-store.js) used before M5.
+ * `Filters` (prefs.js, a dual-scope bridge file per Decision 2, PAGE_MODULES.md
+ * Decision 6) is a real `export` now, imported directly below; only its
+ * `globalThis.Filters = …` assignment stays bridge-mode, permanently, since
+ * the page still needs it as a classic-`<script>` global.
  *
  * `notifyRestoreComplete()` (the one-off `Page.restoreComplete` broadcast)
  * is gone too — M5's lib/platform.js `broadcastToPages()` absorbs it; every
@@ -29,7 +29,8 @@
 import * as zip from './zip/zip-core.js';
 import { Tiles, Background } from './tiles-store.js';
 import { purgeNeverCaptureHost } from './capture.js';
-import { getFilters, broadcastToPages } from './platform.js';
+import { Filters } from '../prefs.js';
+import { broadcastToPages } from './platform.js';
 
 zip.configure({ useWebWorkers: false });
 
@@ -218,7 +219,7 @@ export async function readZip(file) {
 					if (typeof entry !== 'string') {
 						continue;
 					}
-					let normalized = getFilters().normalizeHost(entry).replace(/:\d+$/, '');
+					let normalized = Filters.normalizeHost(entry).replace(/:\d+$/, '');
 					if (normalized && safeHostPattern.test(normalized) && !seen.has(normalized)) {
 						seen.add(normalized);
 						cleaned.push(normalized);

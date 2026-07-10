@@ -2,10 +2,65 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported Prefs, Blocked, Filters, NeverCapture */
-/* globals Blocked, Filters, Grid, NeverCapture, newTabTools, Updater */
+/**
+ * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6 — permanent, revised
+ * 2026-07-10): `Prefs`/`Blocked`/`Filters`/`NeverCapture` are real `export`s
+ * now, consumed by real `import`s from `lib/background-main.js` and its
+ * background-side consumers (`lib/tiles-store.js`, `lib/capture.js`,
+ * `lib/backup.js`, `lib/messages.js`). The four `globalThis.X = …`
+ * assignments at the bottom of this file SURVIVE this slice — newTab.js/
+ * fx-newTab.js/awesomebar.js still read them as bare identifiers (they stay
+ * vm-loaded classic scripts until P4/P5), and E2E/UAT page-context
+ * evaluation reads them off `globalThis` too (TEST-ONLY thereafter, once the
+ * last production consumer migrates).
+ *
+ * The old direct-coupling branch in `prefsChanged` — sniffing
+ * `'newTabTools' in window` and calling `newTabTools.updateUI`/
+ * `Grid.refresh`/`Updater.updateGrid` directly — is gone. A real import in
+ * that direction would drag the page into the background's module graph
+ * (PAGE_MODULES.md Decision 6, the design problem the slice exists to
+ * solve). `Prefs.onChange(listener)` replaces it: `prefsChanged` invokes
+ * every registered listener with the array of changed pref names — the same
+ * information the old branch consumed. The page registers its listener in
+ * `page-main.js`, after the boot calls, reproducing the old dance exactly;
+ * the background registers none. This file is now scope-pure — no reference
+ * to `newTabTools`/`Grid`/`Updater`/`window` remains below.
+ */
 
-globalThis.Prefs = {
+/**
+ * `Prefs.init()` wires one getter + setter per name in its `names` list via
+ * `__defineGetter__`/`__defineSetter__` — real accessor properties at
+ * runtime, but not literal properties on the object below, so plain
+ * inference can't see them. Declared here and intersected onto the exported
+ * `Prefs` binding (below the object literal) so every consumer — a real
+ * `import`, or the ambient `globalThis.Prefs` merge TypeScript's checked-JS
+ * global-augmentation picks up from the `globalThis.Prefs = …` assignment at
+ * the bottom of this file — sees the real shape.
+ * @typedef {Object} PrefsAccessors
+ * @property {string} theme
+ * @property {number} opacity
+ * @property {number} rows
+ * @property {number} columns
+ * @property {string[]} margin
+ * @property {string} spacing
+ * @property {string} titleSize
+ * @property {string} tileAspect
+ * @property {string} statType
+ * @property {boolean} titleBarSearch
+ * @property {string} actionIconSize
+ * @property {boolean} tileActions
+ * @property {string} tileRadius
+ * @property {boolean} locked
+ * @property {boolean} history
+ * @property {boolean} recent
+ * @property {number} thumbnailSize
+ * @property {string} backgroundUrl
+ * @property {string} backgroundPosition
+ * @property {string} backgroundColor
+ * @property {string|number} version
+ */
+
+const PrefsObject = {
 	_theme: 'system',
 	_opacity: 80,
 	_rows: 3,
@@ -28,7 +83,24 @@ globalThis.Prefs = {
 	_backgroundUrl: '',
 	_backgroundPosition: 'center center',
 	_backgroundColor: '',
+	/** @type {string|number} */
 	_version: -1,
+
+	/** @type {Array<(keys: string[]) => void>} */
+	_listeners: [],
+
+	/**
+	 * Register a listener to be invoked with the array of changed pref names
+	 * whenever `prefsChanged` applies a non-trivial storage change (skipped
+	 * for a thumbnailSize-only change, same as before this seam existed).
+	 * The page registers its updateUI/refresh dance here (page-main.js); the
+	 * background registers none.
+	 * @param {(keys: string[]) => void} listener
+	 * @returns {void}
+	 */
+	onChange(listener) {
+		this._listeners.push(listener);
+	},
 
 	/**
 	 * @returns {Promise<void>} Resolves once the initial storage read has
@@ -65,9 +137,14 @@ globalThis.Prefs = {
 			'version'
 		];
 
+		// `__defineGetter__`/`__defineSetter__` are legacy Annex B methods, not
+		// declared by the `ES2020`/`DOM` libs this project types against — cast
+		// through `any` rather than widen `tsconfig.json`'s `lib` for two calls.
+		let self = /** @type {any} */ (this);
 		for (let n of names) {
-			this.__defineGetter__(n, () => this['_' + n]);
-			this.__defineSetter__(n, function(value) {
+			self.__defineGetter__(n, () => self['_' + n]);
+			self.__defineSetter__(n, /** @param {unknown} value */ function(value) {
+				/** @type {Record<string, unknown>} */
 				let obj = {};
 				obj[n] = value;
 				// Fire-and-forget: failure is logged, never surfaced to callers.
@@ -86,6 +163,7 @@ globalThis.Prefs = {
 		let prefs = await browser.storage.local.get();
 		this.parsePrefs(prefs);
 	},
+	/** @param {Record<string, any>} prefs */
 	parsePrefs(prefs) {
 		if (['system', 'light', 'dark', 'contrast'].includes(prefs.theme)) {
 			this._theme = prefs.theme;
@@ -179,7 +257,9 @@ globalThis.Prefs = {
 			this._version = prefs.version;
 		}
 	},
+	/** @param {Record<string, {newValue: any, oldValue: any}>} changes */
 	prefsChanged(changes) {
+		/** @type {Record<string, any>} */
 		let prefs = Object.create(null);
 		for (let [name, change] of Object.entries(changes)) {
 			if (change.newValue != change.oldValue) {
@@ -198,26 +278,17 @@ globalThis.Prefs = {
 			return;
 		}
 
-		if ('newTabTools' in window) {
-			newTabTools.updateUI(keys);
-			if (typeof newTabTools._markAutoSaved === 'function') {
-				newTabTools._markAutoSaved();
-			}
-			if (keys.includes('rows') || keys.includes('columns')) {
-				Grid.refresh().then(() => {
-					if (document.documentElement.hasAttribute('drawer-open')
-						&& document.documentElement.getAttribute('drawer-tab') === 'tile') {
-						newTabTools.resizeOptionsThumbnail();
-					}
-				});
-			} else if (keys.includes('history')) {
-				Updater.updateGrid();
-			}
+		for (let listener of this._listeners) {
+			listener(keys);
 		}
 	},
 };
 
-globalThis.Blocked = {
+/** @type {typeof PrefsObject & PrefsAccessors} */
+export const Prefs = /** @type {any} */ (PrefsObject);
+
+export const Blocked = {
+	/** @type {string[]} */
 	_list: [],
 	/**
 	 * Persist the current list. Never rejects — a write failure is logged
@@ -228,10 +299,12 @@ globalThis.Blocked = {
 	_saveList() {
 		return browser.storage.local.set({ 'blocked': this._list }).catch(console.error);
 	},
+	/** @param {string} url */
 	block(url) {
 		this._list.push(url);
 		return this._saveList();
 	},
+	/** @param {string} url */
 	unblock(url) {
 		let index = this._list.indexOf(url);
 		if (index >= 0) {
@@ -239,6 +312,7 @@ globalThis.Blocked = {
 		}
 		return this._saveList();
 	},
+	/** @param {string} url */
 	isBlocked(url) {
 		return this._list.includes(url);
 	},
@@ -248,7 +322,7 @@ globalThis.Blocked = {
 	}
 };
 
-globalThis.Filters = {
+export const Filters = {
 	_list: Object.create(null),
 	// Fire-and-forget: failure is logged, never surfaced to callers.
 	_saveList() {
@@ -283,6 +357,10 @@ globalThis.Filters = {
 		let lead = s.startsWith('.') ? '.' : '';
 		return lead + s.replace(/^\.+/, '').replace(/\.+$/, '');
 	},
+	/**
+	 * @param {string} host
+	 * @param {number} limit
+	 */
 	setFilter(host, limit) {
 		if (limit == -1) {
 			delete this._list[host];
@@ -306,7 +384,7 @@ globalThis.Filters = {
  *
  * The list is persisted under the storage key 'neverCaptureHosts'.
  */
-globalThis.NeverCapture = {
+export const NeverCapture = {
 	/** @type {string[]} */
 	_list: [],
 
@@ -435,3 +513,22 @@ globalThis.NeverCapture = {
 		return this._saveList();
 	},
 };
+
+// page-modules P3 (PAGE_MODULES.md): Prefs/Blocked/Filters/NeverCapture are
+// real exports now, but the globalThis bridges SURVIVE — newTab.js/
+// fx-newTab.js/awesomebar.js still read them as bare identifiers (they stay
+// vm-loaded classic scripts until P4/P5) and E2E/UAT page-context evaluation
+// reads them off globalThis too (TEST-ONLY thereafter, once the last
+// production consumer migrates). Cast through `any` on the way out: checked-JS
+// infers/augments an ambient global's type from a bare `globalThis.X = …`
+// assignment's own expression type, and without this cast that inference
+// would override tests/integration/globals.d.ts's deliberately loose
+// `declare global { var Prefs: any; … }` with the full internal shape,
+// breaking every test-only mock that only stubs the handful of properties it
+// actually exercises. Real lib/ consumers are unaffected — they get the full
+// type from the `import { Prefs } from '../prefs.js'` binding above, not from
+// this bridge.
+globalThis.Prefs = /** @type {any} */ (Prefs);
+globalThis.Blocked = /** @type {any} */ (Blocked);
+globalThis.Filters = /** @type {any} */ (Filters);
+globalThis.NeverCapture = /** @type {any} */ (NeverCapture);

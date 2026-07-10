@@ -21,7 +21,7 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 | Step | Status | Commit |
 |---|---|---|
 | P1 — module entry flip (`page-main.js`) + boot orchestration | done | `4de0411` |
-| P2 — leaf modules: icons, stats, tiles-shim | pending | — |
+| P2 — leaf modules: icons, stats, tiles-shim | done | `4e2924b` |
 | P3 — dual-scope endgame: common/prefs real exports + prefs change seam | pending | — |
 | P4 — awesomebar module | pending | — |
 | P5 — the monolith pair (newTab.js + fx-newTab.js) + harness retirement | pending | — |
@@ -260,19 +260,97 @@ the graph with named imports, and the leaves' own test suites go native.)*
       gates already green (fast 1282/1282, lint/typecheck/lint:webext clean);
       targeted E2E is orchestrator-run, not part of this slice.
 
-### P3 — dual-scope endgame (touches background; E2E lifecycle tests are the point)
-- [ ] `common.js`: `export function compareVersions`; `prefs.js`:
-      `export const Prefs/Blocked/Filters/NeverCapture` + `Prefs.onChange()`
-      subscription replacing the `'newTabTools' in window` branch (page
-      registers the updateUI/Grid.refresh listener; background registers none).
-- [ ] Page consumers import them; `lib/background-main.js` named-imports them;
-      `lib/platform.js` loses the five getters (capability wrappers stay);
-      lib consumers (`capture.js`, `tiles-store.js`, `backup.js`,
-      `messages.js`) switch to real imports; `module-scope.test.ts` gains
-      negative assertions (Prefs etc. NOT on `globalThis` anymore).
-- [ ] Stretch: un-exclude `lib/background-main.js` from tsconfig if the typed
-      dual-scope modules make it clean.
-- [ ] Gates + UAT spot-run 20–23 (drawer/auto-save loop).
+### P3 — dual-scope endgame (touches background; FULL E2E per the tiering)
+*(Revised 2026-07-10, same strangler reality as P2: the `globalThis`
+assignments for `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions`
+SURVIVE this slice — newTab.js/fx-newTab.js/awesomebar.js still read them as
+bare identifiers until P4/P5, and E2E/UAT page-context evaluation reads
+`Prefs`/`Filters` too. What P3 retires is the background's READ path: the
+five `lib/platform.js` getters die, lib consumers import for real. The
+planned module-scope.test.ts negative assertions therefore defer to P5.)*
+- [x] `common.js`: `export function compareVersions`; `prefs.js`:
+      `export const Prefs, Blocked, Filters, NeverCapture` — bridge
+      assignments stay (cast through `any` on the way out — see below),
+      comments updated to name remaining consumers.
+- [x] `Prefs.onChange(listener)` subscription replaces the
+      `'newTabTools' in window` branch. The page's listener registers in
+      `page-main.js` (newTab.js can't import until P5; the callback calls
+      `newTabTools.updateUI`/`Grid.refresh`/`Updater.updateGrid` as bare
+      globals at event time — legal per Decision 3, it's post-boot); the
+      background registers none. `prefsChanged` invokes every registered
+      listener with the array of changed pref names (the same info the old
+      branch consumed), after the pre-existing thumbnailSize-only
+      short-circuit. Behavioral coverage:
+      `tests/integration/prefs-onchange-seam.test.ts` (registration/firing,
+      no-listener background scenario, and — leaf-importing the real page
+      files + spying on `newTabTools`/`Grid`/`Updater`, then natively
+      importing `page-main.js` — proof its own registration reproduces the
+      old branch's `updateUI`/`_markAutoSaved`/`Grid.refresh`/
+      `Updater.updateGrid` dance exactly, including the drawer-open/tile-tab
+      conditional for `resizeOptionsThumbnail`).
+- [x] `lib/background-main.js` named-imports common/prefs; `lib/platform.js`
+      loses the five bridge getters (capability wrappers stay); lib consumers
+      (`capture.js`, `tiles-store.js`, `backup.js`, `messages.js`) switch to
+      real imports.
+- [x] Fast-tier migration: every suite that vm-loads `prefs.js`/`common.js`
+      (via `loadModule` or raw vm) moves to native import. Grepped and found:
+      `prefs-persistence.test.ts` (full-file `vm.runInThisContext`),
+      `tile-stats.test.ts`'s "statType — behavioral validation" describe
+      (`vm.runInContext` on a sandbox), `filter-cap.test.ts`'s "Filter host
+      normalization" describe (`vm.runInThisContext`), `never-capture.test.ts`
+      (`loadModule`, fresh `vm.createContext` per test) — all four migrated to
+      native `import`, with `Prefs`/`Blocked`/`Filters`/`NeverCapture` treated
+      as shared singletons (internal state reset per test — `_listeners`,
+      `_list`, `_theme` etc. — rather than a fresh vm context) per the P2
+      `stats.js`-singleton precedent. `common.js` had no dedicated vm-load
+      suite to migrate (only referenced via `globalThis.compareVersions` mock
+      stubs elsewhere, unaffected).
+      **Second-order fallout (not anticipated by the grep above):** three
+      suites exercising `lib/tiles-store.js` directly (`filter-cap.test.ts`'s
+      "Filter matching" describe, `tiles-pin.test.ts`,
+      `background-and-history.test.ts`'s "Hide history tiles" describe) used
+      to override `globalThis.Prefs`/`Blocked`/`Filters` with a fresh
+      stand-in object to drive tiles-store.js's behavior — this worked only
+      because the old `getPrefs()`/`getBlocked()`/`getFilters()` accessors
+      read `globalThis` at call time. Now that tiles-store.js imports these
+      for real, a replacement object is invisible to it; all three migrated
+      to mutate the real singletons' properties in place instead (aliased
+      imports `RealPrefs`/`RealBlocked`/`RealFilters` in `filter-cap.test.ts`,
+      since its OTHER describe block still legitimately relies on the bare
+      `Prefs`/`Filters` identifiers resolving to its own unrelated
+      `globalThis` stub for a vm-loaded newTab.js UI harness). Also found and
+      fixed: `backup-restore.test.ts` had a dead `Filters.normalizeHost` stub
+      (same blind spot — `lib/backup.js` now imports `Filters` for real too),
+      coincidentally still passing only because the stub reimplemented the
+      exact same logic; removed in favor of the real singleton.
+      **JSDoc-fallout ambient-global gotcha (the other unanticipated one):**
+      giving `Prefs` a real, full JSDoc shape (`PrefsAccessors`, covering the
+      `__defineGetter__`/`__defineSetter__`-wired pref properties the plain
+      object literal doesn't statically have) plus reaching it via
+      `background-main.js`'s now-unexcluded, now-checked-JS-eligible
+      `import` caused TypeScript's checked-JS "ambient global inferred from a
+      `globalThis.X = …` assignment" behavior to override
+      `tests/integration/globals.d.ts`'s deliberately loose
+      `declare global { var Prefs: any; … }` with the full internal shape —
+      breaking every test-only partial mock across the suite (not just
+      prefs.js's own file). Fixed at the source: the bridge assignments
+      (`globalThis.Prefs = /** @type {any} */ (Prefs);` etc., in both
+      prefs.js and common.js) cast through `any`, keeping the ambient global
+      loose for tests while `import { Prefs } from '../prefs.js'` still gets
+      the full type for real lib/ consumers.
+- [x] eslint: `common.js`/`prefs.js` move to the module-mode block.
+- [x] Stretch: un-excluded `lib/background-main.js` from tsconfig — clean.
+      Fallout was a handful of JSDoc additions (five listener-callback
+      params via three named top-level functions instead of anonymous
+      `addListener(function(...) {...})` — the JSDoc needs a declaration to
+      attach to; one `tabs.Tab.windowId?: number` optional-vs-required cast,
+      matching the file's existing `tab.id` cast precedent) — well under the
+      "revert if >~15 errors" threshold.
+- [x] Gates + FULL E2E + UAT spot-run 20–23: fast 1296/1296, lint/typecheck/
+      lint:webext clean, E2E 127/127, UAT 4/4 (21-restore's "applied fully
+      live, no reload" is the onChange seam verified end-to-end). *(Fast
+      gates green — see report; FULL E2E + UAT spot-run are orchestrator-run,
+      not part of this slice.)*
 
 ### P4 — awesomebar module
 - [ ] `export const AwesomeBar`; imports NttIcons/Prefs/Tiles; its

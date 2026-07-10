@@ -21,7 +21,6 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -218,21 +217,17 @@ describe('Auto-save indicator — hidden until the first real save', () => {
 	});
 });
 
-describe('prefs.prefsChanged calls _markAutoSaved on the newTabTools singleton', () => {
-	let source: string;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- wiring check: prefsChanged hook
-		source = fs.readFileSync(PREFS_PATH, 'utf8');
-	});
-
-	it('prefsChanged invokes `_markAutoSaved` when the singleton exposes it', () => {
-		// Defensive guard included so older harnesses without the helper
-		// don't crash. Either form is acceptable as long as the call site
-		// is present.
-		expect(source).toMatch(/newTabTools\._markAutoSaved\(\)/);
-	});
-
+describe('page-main.js\'s Prefs.onChange seam calls _markAutoSaved on the newTabTools singleton', () => {
+	// PAGE_MODULES.md P3: prefs.js's `prefsChanged` no longer calls
+	// `newTabTools._markAutoSaved()` directly (that branch moved to
+	// page-main.js's `Prefs.onChange(...)` registration — see prefs.js's own
+	// doc comment). The behavioral proof that the seam actually fires
+	// `_markAutoSaved`/`updateUI`/`Grid.refresh`/`Updater.updateGrid` lives in
+	// tests/integration/prefs-onchange-seam.test.ts (leaf-imports the real
+	// page files + spies, rather than a source-string match here); this file
+	// keeps only the plain wiring check for `_initAutoSaveIndicator`, which is
+	// unrelated to the seam (it's `newTabTools.startup()`'s own `Prefs.init()
+	// .then(...)` call, in newTab.js).
 	it('`_initAutoSaveIndicator` is called during Prefs.init().then(...) startup', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check
 		const newtab = fs.readFileSync(NEWTAB_PATH, 'utf8');

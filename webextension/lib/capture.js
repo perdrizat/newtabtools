@@ -21,8 +21,10 @@
  * (unbounded wait for tab activation, must survive a respawn).
  *
  * `NeverCapture` is a dual-scope bridge global (prefs.js, MODERNIZATION.md
- * Decision 2) — read via lib/platform.js's `getNeverCapture()` typed
- * accessor (M5), the one sanctioned read site for that global across lib/.
+ * Decision 2, PAGE_MODULES.md Decision 6) — a real `export` now, imported
+ * directly below; only its `globalThis.NeverCapture = …` assignment stays
+ * bridge-mode, permanently, since the page still needs it as a classic-
+ * `<script>` global.
  *
  * M5 also moves the browser-capability checks (the `<all_urls>` permission
  * probe in `startCaptureSession`, the capture-API presence probe in
@@ -38,7 +40,8 @@
 import { withStore, withObjectStore } from './db.js';
 import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
 import { getTZDateString } from './constants.js';
-import { getNeverCapture, hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
+import { NeverCapture } from '../prefs.js';
+import { hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
 
 // ---------------------------------------------------------------------------
 // Network idle monitor
@@ -257,7 +260,7 @@ function _startCaptureSession(tabId, windowId, url) {
 	// Accepted millisecond startup race (same class as Blocked/Filters): if the
 	// list is updated concurrently with a navigation the guard may miss one
 	// capture — acceptable given the infrequency of list mutations.
-	if (getNeverCapture().matches(url)) {
+	if (NeverCapture.matches(url)) {
 		return;
 	}
 
@@ -374,7 +377,7 @@ function pickAndStore(tabId) {
 	// Re-check never-capture list. Closes the in-flight-session race: if the
 	// user added the host to the list after the session started, we must not
 	// store the capture that was taken before the list update landed.
-	if (getNeverCapture().matches(url)) {
+	if (NeverCapture.matches(url)) {
 		captureSessions.delete(tabId);
 		return;
 	}
@@ -553,7 +556,7 @@ export function purgeNeverCaptureHost(pattern) {
 					let row = cursor.value;
 					let host = null;
 					try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-					if (host && getNeverCapture().hostMatchesPattern(host, pattern)) {
+					if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
 						cursor.delete();
 						thumbCount++;
 					}
@@ -566,7 +569,7 @@ export function purgeNeverCaptureHost(pattern) {
 							let row = tileCursor.value;
 							let host = null;
 							try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
-							if (host && getNeverCapture().hostMatchesPattern(host, pattern)
+							if (host && NeverCapture.hostMatchesPattern(host, pattern)
 								&& row.image && row.imageIsThumbnail) {
 								delete row.image;
 								delete row.imageIsThumbnail;

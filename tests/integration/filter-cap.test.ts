@@ -31,6 +31,14 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { Tiles } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
+// Aliased: the file's other describe block ("Filter cap UI") relies on the
+// BARE `Filters`/`Prefs`/`Blocked` identifiers resolving to its own
+// per-describe `globalThis.X = {...}` stand-ins (via the ambient `declare
+// global` fallback) — a same-named top-level import would shadow that for
+// the whole file. Only the "Filter matching" describe below (which drives
+// lib/tiles-store.js, now a real importer of these) needs the real
+// singletons, so it uses these aliases explicitly.
+import { Prefs as RealPrefs, Blocked as RealBlocked, Filters as RealFilters } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -311,15 +319,21 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
  */
 describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)', () => {
 	beforeAll(() => {
-		// Provide globals
-		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
-		globalThis.Filters = {
-			_list: Object.create(null),
-			getList() { return Object.assign(Object.create(null), this._list); },
-			setFilter: vi.fn(),
-		};
-		globalThis.Prefs = { rows: 3, columns: 3, history: true };
-		globalThis.compareVersions = vi.fn(() => 1);
+		// PAGE_MODULES.md P3: lib/tiles-store.js now imports Prefs/Blocked/
+		// Filters/compareVersions for real (rather than reading
+		// getPrefs()/getBlocked()/getFilters()/getCompareVersions() off
+		// globalThis at call time), so replacing `globalThis.X` with a fresh
+		// stand-in object here would no longer reach it — mutate the real
+		// prefs.js/common.js singletons in place instead. `Filters.getList()`'s
+		// real implementation already does exactly what the old mock did, and
+		// the real `compareVersions('128.0', '63.0a1')` (see the mocked
+		// `getBrowserInfo()` below) resolves the same way the old `() => 1`
+		// stub did, so neither needs stubbing anymore.
+		RealPrefs.rows = 3;
+		RealPrefs.columns = 3;
+		RealPrefs.history = true;
+		RealBlocked.isBlocked = vi.fn(() => false);
+		RealFilters._list = Object.create(null);
 
 		(globalThis as any).browser = {
 			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
@@ -373,8 +387,8 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 		vi.clearAllMocks();
 		_resetForTests();
 		Tiles._cache = [];
-		(globalThis as any).Filters._list = Object.create(null);
-		(globalThis as any).Blocked.isBlocked.mockReturnValue(false);
+		RealFilters._list = Object.create(null);
+		(RealBlocked.isBlocked as any).mockReturnValue(false);
 	});
 
 	function setupTopSites(sites: Array<{ url: string; title: string }>) {
@@ -382,7 +396,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	}
 
 	it('exact host filter at 0 blocks all tiles from that domain', async () => {
-		Filters._list['example.com'] = 0;
+		RealFilters._list['example.com'] = 0;
 		setupTopSites([
 			{ url: 'https://example.com/page1', title: 'Page 1' },
 			{ url: 'https://example.com/page2', title: 'Page 2' },
@@ -396,7 +410,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('exact host filter at 1 allows only one tile from that domain', async () => {
-		Filters._list['example.com'] = 1;
+		RealFilters._list['example.com'] = 1;
 		setupTopSites([
 			{ url: 'https://example.com/page1', title: 'Page 1' },
 			{ url: 'https://example.com/page2', title: 'Page 2' },
@@ -408,7 +422,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('dot-prefix wildcard matches subdomains', async () => {
-		Filters._list['.example.com'] = 0;
+		RealFilters._list['.example.com'] = 0;
 		setupTopSites([
 			{ url: 'https://sub.example.com/', title: 'Sub' },
 			{ url: 'https://deep.sub.example.com/', title: 'Deep' },
@@ -422,7 +436,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('dot-prefix wildcard also matches bare domain (without leading dot)', async () => {
-		Filters._list['.example.com'] = 0;
+		RealFilters._list['.example.com'] = 0;
 		setupTopSites([
 			{ url: 'https://example.com/', title: 'Bare' },
 			{ url: 'https://other.com/', title: 'Other' },
@@ -444,7 +458,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('blocked sites are filtered out regardless of domain filter', async () => {
-		(globalThis as any).Blocked.isBlocked.mockImplementation((url: string) => url === 'https://evil.com/');
+		(RealBlocked.isBlocked as any).mockImplementation((url: string) => url === 'https://evil.com/');
 		setupTopSites([
 			{ url: 'https://evil.com/', title: 'Evil' },
 			{ url: 'https://good.com/', title: 'Good' },
@@ -472,7 +486,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	// must NOT spill onto other subdomains, and a bare apex filter must NOT catch
 	// `www.`. The dot-prefix form is the only way to span subdomains.
 	it('exact host filter limits ONLY that host, not other subdomains', async () => {
-		Filters._list['www.linkedin.com'] = 2;
+		RealFilters._list['www.linkedin.com'] = 2;
 		setupTopSites([
 			{ url: 'https://www.linkedin.com/feed/', title: 'Feed' },
 			{ url: 'https://www.linkedin.com/jobs/', title: 'Jobs' },
@@ -488,7 +502,7 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('bare apex filter does NOT catch the www subdomain', async () => {
-		Filters._list['linkedin.com'] = 0;
+		RealFilters._list['linkedin.com'] = 0;
 		setupTopSites([
 			{ url: 'https://linkedin.com/', title: 'Apex' },
 			{ url: 'https://www.linkedin.com/feed/', title: 'WWW' },
@@ -500,8 +514,8 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 	});
 
 	it('two filters decrement independently (multi-host independence)', async () => {
-		Filters._list['a.com'] = 1;
-		Filters._list['b.com'] = 1;
+		RealFilters._list['a.com'] = 1;
+		RealFilters._list['b.com'] = 1;
 		setupTopSites([
 			{ url: 'https://a.com/1', title: 'A1' },
 			{ url: 'https://a.com/2', title: 'A2' },
@@ -554,15 +568,15 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 // ==================== Host normalization tests ====================
 
 describe('Filter host normalization — prefs.js Filters.normalizeHost', () => {
+	// PAGE_MODULES.md P3: prefs.js has a real `export` now — `vm.runInThisContext`
+	// can no longer parse it. Natively imports the real module singleton
+	// instead (crib: prefs-persistence.test.ts).
 	let Filters: any;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const prefsSrc = fs.readFileSync(path.resolve(__dirname, '../../webextension/prefs.js'), 'utf8');
+	beforeAll(async () => {
 		(globalThis as any).chrome = (globalThis as any).chrome || {};
 		(globalThis as any).chrome.storage = { local: { set: vi.fn(), get: vi.fn() } };
-		vm.runInThisContext(prefsSrc, { filename: 'prefs.js' });
-		Filters = (globalThis as any).Filters;
+		({ Filters } = await import('../../webextension/prefs.js'));
 	});
 
 	it('trims and lowercases', () => {

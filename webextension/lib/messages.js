@@ -11,9 +11,10 @@
  * the dependencies changed, from background.js's bare-identifier globalThis
  * bridge reads to real `import`s of the lib modules that now own each piece
  * (Tiles/Background, withStore, the capture pipeline). The dual-scope
- * `NeverCapture` global (prefs.js, Decision 2) is read through
- * lib/platform.js's typed accessor, the one sanctioned read site for it
- * across lib/.
+ * `NeverCapture` global (prefs.js, Decision 2, PAGE_MODULES.md Decision 6) is
+ * a real `export` now, imported directly below; only its
+ * `globalThis.NeverCapture = …` assignment stays bridge-mode, permanently,
+ * since the page still needs it as a classic-`<script>` global.
  *
  * `makeZip`/`readZip` (lib/backup.js) are deliberately NOT a static import
  * here (audit finding, 2026-07-09 review, adjudicated): lib/backup.js's own
@@ -36,7 +37,8 @@ import { withObjectStore } from './db.js';
 import { Tiles, Background } from './tiles-store.js';
 import { getTZDateString } from './constants.js';
 import { startCaptureSession, purgeNeverCaptureHost } from './capture.js';
-import { getNeverCapture, broadcastToPages } from './platform.js';
+import { NeverCapture } from '../prefs.js';
+import { broadcastToPages } from './platform.js';
 
 /**
  * The runtime.onMessage listener — dispatch table for the 19 frozen wire
@@ -123,7 +125,7 @@ export function handleMessage(message, sender, sendResponse) {
 	case 'Thumbnails.save':
 		let {url, image} = message;
 		// Never-capture guard: refuse to store a thumbnail for a listed host.
-		if (url && image && !getNeverCapture().matches(url)) {
+		if (url && image && !NeverCapture.matches(url)) {
 			// Fire-and-forget write, so no sendResponse either way — just
 			// don't reach the store before the connection is open.
 			withObjectStore('thumbnails', 'readwrite', function(store) {

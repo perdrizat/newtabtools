@@ -13,77 +13,16 @@
  * holds capability WRAPPERS, not business logic (that stays in
  * lib/capture.js, lib/messages.js, lib/background-main.js, etc.).
  *
- * Also home to the Decision-2 bridge accessor (MODERNIZATION.md): the
- * `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions` globals live on
- * `globalThis`, put there by prefs.js/common.js's own top-level
- * `globalThis.X = …` assignments (those two files are dual-scope — loaded as
- * a classic `<script>` by the page AND side-effect-imported by
- * lib/background-main.js; real `export` syntax would break their page load —
- * see prefs.js/common.js's own doc comments). Every OTHER lib module that
- * needs one of these five reads it through exactly one of the typed getters
- * below rather than a bare identifier of its own — this is the ONLY
- * sanctioned read site for a lib module. The getters still do an untyped
- * `globalThis` read underneath (there is no other way to reach a global that
- * was never `export`ed), but that read now happens in exactly one place per
- * global, decorated with the type its callers actually rely on, instead of a
- * `/* globals X *\/` ESLint directive scattered across the lib/ tree.
- *
- * This accessor retires the day the page itself goes modular (out of scope
- * for this arc — see MODERNIZATION.md "Out of scope"): once prefs.js/
- * common.js can use real `export`, every caller here switches to a real
- * `import` and this file loses these five functions.
+ * PAGE_MODULES.md P3 (the dual-scope endgame) retired the Decision-2 bridge
+ * accessor this file used to hold: `getPrefs()`/`getBlocked()`/
+ * `getFilters()`/`getNeverCapture()`/`getCompareVersions()` are gone. The
+ * background's read path (lib/background-main.js and every other lib
+ * consumer) now does a real `import { Prefs, Blocked, Filters, NeverCapture }
+ * from '../prefs.js'` / `import { compareVersions } from '../common.js'`
+ * instead — those two files' `export`s are real now, only their
+ * `globalThis.X = …` bridge assignments survive (permanently — the page
+ * still needs them; see prefs.js/common.js's own doc comments).
  */
-
-/**
- * @typedef {Object} PrefsGlobal
- * @property {number} rows
- * @property {number} columns
- * @property {boolean} history
- * @property {string|number} version
- * @property {() => Promise<void>} init
- */
-
-/**
- * @typedef {Object} BlockedGlobal
- * @property {(url: string) => boolean} isBlocked
- */
-
-/**
- * @typedef {Object} FiltersGlobal
- * @property {() => Record<string, number>} getList
- * @property {(input: string) => string} normalizeHost
- */
-
-/**
- * @typedef {Object} NeverCaptureGlobal
- * @property {(url: string) => boolean} matches
- * @property {(host: string, pattern: string) => boolean} hostMatchesPattern
- */
-
-/** @returns {PrefsGlobal} */
-export function getPrefs() {
-	return /** @type {PrefsGlobal} */ (/** @type {any} */ (globalThis).Prefs);
-}
-
-/** @returns {BlockedGlobal} */
-export function getBlocked() {
-	return /** @type {BlockedGlobal} */ (/** @type {any} */ (globalThis).Blocked);
-}
-
-/** @returns {FiltersGlobal} */
-export function getFilters() {
-	return /** @type {FiltersGlobal} */ (/** @type {any} */ (globalThis).Filters);
-}
-
-/** @returns {NeverCaptureGlobal} */
-export function getNeverCapture() {
-	return /** @type {NeverCaptureGlobal} */ (/** @type {any} */ (globalThis).NeverCapture);
-}
-
-/** @returns {(a: string|number, b: string|number) => number} */
-export function getCompareVersions() {
-	return /** @type {any} */ (globalThis).compareVersions;
-}
 
 // ---------------------------------------------------------------------------
 // Capability wrappers

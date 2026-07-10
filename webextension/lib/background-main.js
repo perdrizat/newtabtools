@@ -21,12 +21,13 @@
  *
  * `common.js` and `prefs.js` stay dual-scope bridge files PERMANENTLY
  * (MODERNIZATION.md Decision 2: real `export` syntax would break their
- * classic-`<script>` page load in newTab.html). They are still
- * side-effect-imported here so their top-level `globalThis.X = …`
- * assignments run before anything below needs `Prefs`/`Blocked`/`Filters`/
- * `NeverCapture`/`compareVersions` — reached, from this file and every other
- * lib/ module, ONLY through lib/platform.js's typed accessors (the
- * sanctioned Decision-2 read seam), never as a bare identifier. `tiles.js`
+ * classic-`<script>` page load in newTab.html) — but PAGE_MODULES.md P3 gave
+ * them real `export`s too, so this file (and every other lib/ module) now
+ * reaches `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions` via a
+ * real named `import` below, rather than lib/platform.js's now-retired
+ * Decision-2 typed-getter seam. Only the page side (newTab.js/fx-newTab.js/
+ * awesomebar.js until P4/P5) and E2E/UAT page-context evaluation still read
+ * them off `globalThis` — this file no longer does. `tiles.js`
  * (the former `Tiles`/`Background` → `globalThis` bridge shim) is gone: it
  * existed solely so background.js's bare-identifier reads could reach
  * `Tiles`/`Background`, and background.js is dissolved — every consumer
@@ -42,8 +43,7 @@
  * still needs from them — nothing this file assigns.
  */
 
-import '../common.js';
-import '../prefs.js';
+import { Prefs, NeverCapture } from '../prefs.js';
 import { registerMessageHandler } from './messages.js';
 import { Tiles } from './tiles-store.js';
 import { SAFE_PROTOCOLS, getTZDateString, NEW_TAB_PAGE } from './constants.js';
@@ -58,8 +58,6 @@ import {
 	removePendingCapture,
 } from './capture.js';
 import {
-	getPrefs,
-	getNeverCapture,
 	enableAction,
 	disableAction,
 	getMessage,
@@ -78,11 +76,11 @@ registerMessageHandler();
 // Version-check on startup
 // ---------------------------------------------------------------------------
 
-getPrefs().init().then(async function() {
-	let previousVersion = getPrefs().version;
+Prefs.init().then(async function() {
+	let previousVersion = Prefs.version;
 	let {version: currentVersion} = await browser.management.getSelf();
 	if (previousVersion != currentVersion) {
-		getPrefs().version = currentVersion;
+		Prefs.version = currentVersion;
 	}
 }).catch(function(event) {
 	console.error(event);
@@ -100,7 +98,8 @@ chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<a
 // Navigation triggers
 // ---------------------------------------------------------------------------
 
-chrome.webNavigation.onCompleted.addListener(function(details) {
+/** @param {browser.webNavigation._OnCompletedDetails} details */
+function onWebNavigationCompleted(details) {
 	if (details.frameId !== 0) {
 		return;
 	}
@@ -120,40 +119,52 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 	Tiles.ensureReady().then(async function({cache}) {
 		if (cache.includes(details.url)) {
 			// Never-capture privacy guard: skip both paths for listed hosts.
-			if (getNeverCapture().matches(details.url)) {
+			if (NeverCapture.matches(details.url)) {
 				return;
 			}
 			let tab = await browser.tabs.get(details.tabId);
 			if (tab.incognito) {
 				return;
 			}
+			// `tabs.Tab.windowId` is typed optional (some restricted-permission
+			// results omit it), but a tab reached via `tabs.get()` here always has
+			// one in practice.
+			let windowId = /** @type {number} */ (tab.windowId);
 			if (tab.active) {
-				startCaptureSession(details.tabId, tab.windowId, details.url);
+				startCaptureSession(details.tabId, windowId, details.url);
 			} else {
 				// Unbounded wait for tab activation — doesn't survive event-page
 				// suspension in-memory, so it lives in storage.session instead.
 				await addPendingCapture(details.tabId, {
 					url: details.url,
-					windowId: tab.windowId,
+					windowId,
 				});
 			}
 		}
 	}).catch(console.error);
-});
+}
 
-chrome.tabs.onActivated.addListener(function(activeInfo) {
+chrome.webNavigation.onCompleted.addListener(onWebNavigationCompleted);
+
+/** @param {browser.tabs._OnActivatedActiveInfo} activeInfo */
+function onTabActivated(activeInfo) {
 	takePendingCapture(activeInfo.tabId).then(function(pending) {
 		if (pending) {
 			startCaptureSession(activeInfo.tabId, pending.windowId, pending.url);
 		}
 	}).catch(console.error);
-});
+}
 
-chrome.tabs.onRemoved.addListener(function(tabId) {
+chrome.tabs.onActivated.addListener(onTabActivated);
+
+/** @param {number} tabId */
+function onTabRemoved(tabId) {
 	removePendingCapture(tabId).catch(console.error);
 	removeCaptureSession(tabId);
 	disarmNetworkIdle(tabId);
-});
+}
+
+chrome.tabs.onRemoved.addListener(onTabRemoved);
 
 // ---------------------------------------------------------------------------
 // §3.1 (MV3 review, folded into MODERNIZATION.md M5): action-button sweep.

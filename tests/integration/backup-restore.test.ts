@@ -24,9 +24,11 @@
  *     integration tests) so re-deriving them from a mocked IndexedDB here
  *     would blur what this suite characterizes (the backup/restore
  *     validation logic itself, not IndexedDB behavior).
- * `Filters` (prefs.js, a dual-scope bridge file) is still read by
- * lib/backup.js as a bare global, so it's still stubbed via `globalThis`
- * exactly as before.
+ * `Filters` (prefs.js, a dual-scope bridge file per MODERNIZATION.md
+ * Decision 2) gained a real `export` in PAGE_MODULES.md P3, and
+ * lib/backup.js now imports it for real too — no stub needed here anymore;
+ * the real `Filters.normalizeHost()` (pulled in transitively via
+ * lib/backup.js's own import) is used as-is.
  *
  * Characterizes:
  *   - makeZip: what gets included, pref-key filtering, tile-image extraction
@@ -149,20 +151,6 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 		if (typeof URL.createObjectURL !== 'function') {
 			URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 		}
-
-		// --- Stub Filters (prefs.js is not loaded by the harness) ---
-		(globalThis as any).Filters = {
-			normalizeHost(input: unknown): string {
-				let s = String(input == null ? '' : input).trim();
-				if (!s) { return ''; }
-				if (/:\/\//.test(s)) {
-					try { s = new URL(s).host; } catch (e) { /* fall through */ }
-				}
-				s = s.toLowerCase().replace(/^\*\./, '.').replace(/\/.*$/, '');
-				const lead = s.startsWith('.') ? '.' : '';
-				return lead + s.replace(/^\.+/, '').replace(/\.+$/, '');
-			},
-		};
 
 		mockBackground.getBackground.mockResolvedValue(null);
 		mockBackground.setBackground.mockResolvedValue(undefined);

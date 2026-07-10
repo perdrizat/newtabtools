@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `audit/2026-07-10-page-modules-p1-code-review.md`: medium-effort review of P1 (no live bug — strict-mode/bridge/import-order verified clean; flagged page-main.js's untested boot orchestration, action.js's module flip lacking a module-mode test, all-or-nothing boot, and an incomplete removed-behavior sweep).
 - `tests/integration/page-main-boot.test.ts`: behavioral coverage for `page-main.js` (import completeness + `UndoDialog.init()` → `newTabTools.startup()` → `pageMessageHandler.flushQueued()` boot order), replacing a source-grep waiver (P1 review finding 1).
 - `tests/setup.js`: shared `browser.menus` mock (create/update/refresh/onShown/onClicked), replacing two divergent ad-hoc copies in `module-scope.test.ts` and `page-module-scope.test.ts` (P1 review finding 7).
+- `Prefs.onChange(listener)`: subscription seam replacing prefs.js's old `'newTabTools' in window` branch; `page-main.js` registers the page's listener after boot to reproduce the old `updateUI`/`_markAutoSaved`/`Grid.refresh`/`Updater.updateGrid` dance (PAGE_MODULES.md P3, Decision 6).
+- `tests/integration/prefs-onchange-seam.test.ts`: behavioral coverage for the `Prefs.onChange` seam (listener registration/firing, no-listener background scenario, page-main.js's reproduced old-branch behavior).
 
 ### Changed
 
@@ -25,11 +27,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `PAGE_MODULES.md`: recorded the all-or-nothing boot property (a throw in any of page-main.js's eight imports aborts the whole boot) as a deliberate, accepted P1 behavior change (P1 review finding 3).
 - `icons.js`/`stats.js`/`tiles-shim.js` gain real `export`s (`NttIcons`/`TileStats`/`Tiles`/`Background`), keeping their `globalThis` bridge assignments for still-classic-script consumers (PAGE_MODULES.md P2).
 - Their fast-tier suites (`icons.test.ts`, `stats.test.ts`, `tile-stats.test.ts`, `_helpers.ts`'s `mountSite`) move from vm-loading to native `import`.
+- `common.js`/`prefs.js` gain real `export`s (`compareVersions`; `Prefs`/`Blocked`/`Filters`/`NeverCapture`), keeping their `globalThis` bridge assignments (cast through `any` so checked-JS's ambient-global-from-assignment inference doesn't override the deliberately loose test-only `declare global` types) for still-classic-script page consumers + E2E/UAT page-context evaluation (PAGE_MODULES.md P3).
+- `lib/platform.js` loses its five Decision-2 bridge getters (`getPrefs`/`getBlocked`/`getFilters`/`getNeverCapture`/`getCompareVersions`); every lib consumer (`background-main.js`, `tiles-store.js`, `capture.js`, `backup.js`, `messages.js`) now imports `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions` for real.
+- `tsconfig.json`: `lib/background-main.js` no longer excluded from the typechecked program now that common.js/prefs.js are real typed modules; minimal JSDoc added to close the resulting fallout (background-main.js's listener-callback params, prefs.js's dynamic getter/setter wiring + method params, common.js's `compareVersions` internals).
+- Fast-tier suites that vm-loaded `prefs.js` (`prefs-persistence.test.ts`, `tile-stats.test.ts`'s statType behavioral suite, `filter-cap.test.ts`'s host-normalization suite, `never-capture.test.ts`) move to native `import`, with `Prefs`/`Blocked`/`Filters`/`NeverCapture` treated as shared singletons (state reset per test) rather than a fresh `vm` context per suite.
+- Tests exercising `lib/tiles-store.js` (`filter-cap.test.ts`, `tiles-pin.test.ts`, `background-and-history.test.ts`) now mutate the real `Prefs`/`Blocked`/`Filters` singletons in place instead of replacing `globalThis.X` with a stand-in object — the lib's real imports no longer read `globalThis` at call time, so a replacement object is no longer visible to it.
+- `eslint.config.js`: `common.js`/`prefs.js` move into the module-mode block (real `export` syntax needs `sourceType: 'module'`).
 
 ### Removed
 
 - `tests/integration/tile-stats.test.ts`'s source-grep "is imported by page-main.js" test, subsumed by `page-main-boot.test.ts` (P1 review finding 1).
 - Two dead `.replace()` neutralizing strips and their stale comment in `tests/integration/tile-url-render.test.ts` — `fx-newTab.js`'s top level has been definition-only since P1, so there was nothing left to strip (P1 review finding 4).
+- `tests/integration/reset-and-autosave.test.ts`'s `prefsChanged` source-grep test, replaced by `prefs-onchange-seam.test.ts`'s behavioral coverage of the same call site (now in `page-main.js`, not `prefs.js`).
+- `tests/integration/backup-restore.test.ts`'s dead `Filters.normalizeHost` stub — `lib/backup.js` imports the real `Filters` singleton now, so the stand-in was no longer reachable (and coincidentally passed only because it reimplemented the same logic).
 
 ## [2.3.0] — 2026-07-10
 

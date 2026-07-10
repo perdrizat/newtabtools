@@ -26,34 +26,18 @@
 	// `exclude` only prunes candidates matched by `include`'s globs — it does
 	// NOT stop tsc from following a real `import` out of an included file and
 	// pulling the imported file into the program anyway (a well-known tsconfig
-	// gotcha). That matters here: webextension/lib/background-main.js is the
-	// background's real ES-module entry, and it still `import`s the two
-	// PERMANENT dual-scope bridge files at webextension/'s top level
-	// (common.js, prefs.js — MODERNIZATION.md Decision 2: they also load as a
-	// classic <script> on the page, so they keep `globalThis.X = …` instead of
-	// a real `export` and were never part of this typechecked program, only
-	// loaded via classic <script>, invisible to tsc's module graph). Every
-	// OTHER background file background-main.js imports (lib/messages.js,
-	// lib/tiles-store.js, lib/db.js, lib/capture.js, lib/backup.js,
-	// lib/platform.js, …) is a real, fully-typed module already covered by the
-	// `webextension/lib/**/*.js` include glob below — this exclude entry only
-	// needs to stop tsc from following common.js/prefs.js. Excluding the
-	// *entry* file here (not the files it imports) keeps tsc from ever making
-	// it a program root, so it never follows those two imports in the first
-	// place — this is the whole fix, not a per-file `@ts-nocheck` scattered
-	// across the dual-scope files.
-	//
-	// (Historical note: before MODERNIZATION.md Stage M slice M5 dissolved
-	// webextension/background.js, this same exclude entry also kept tsc from
-	// following that file — and, before M4, the former webextension/export.js
-	// — both untyped legacy script-mode files. Both are gone now; only the
-	// two permanent dual-scope bridge files remain reachable through this
-	// import and unexcluded-by-glob.)
+	// gotcha). PAGE_MODULES.md P3 retired the reason
+	// webextension/lib/background-main.js used to be excluded here: it
+	// `import`s common.js/prefs.js — the two PERMANENT dual-scope bridge files
+	// (MODERNIZATION.md Decision 2: they also load as a classic <script> on the
+	// page) — but both gained real `export`s in P3, so they're real, checked
+	// modules now too, and background-main.js is back in the typed program
+	// like every other lib/ file it imports.
 	//
 	// webextension/lib/zip/** (the vendored zip.js ESM tree,
 	// scripts/update-zip.mjs) is third-party code we don't touch or type by
 	// our own rules — excluded even though lib/backup.js (M4) now `import`s
-	// it directly (a real, checked lib/ module), for the same
+	// it directly (a real, checked lib/ module), for the
 	// exclude-doesn't-stop-import-following reason above: without this entry
 	// tsc would still pull the vendored tree into the program via that
 	// import and start reporting on code we don't own.
@@ -61,7 +45,6 @@
 		"node_modules",
 		"tests/e2e/test-profile",
 		"tests/e2e/_artifacts",
-		"webextension/lib/background-main.js",
 		"webextension/lib/zip/**"
 	]
 }

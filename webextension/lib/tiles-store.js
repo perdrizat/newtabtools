@@ -8,18 +8,17 @@
  * through `withStore()` (lib/db.js) — no raw `db`/transaction identifier
  * exists in this file at all.
  *
- * `Prefs`/`Blocked`/`Filters`/`compareVersions` come from the dual-scope
- * bridge files (prefs.js/common.js, MODERNIZATION.md Decision 2), which
- * convert their top-level definitions to `globalThis.X = …` rather than a
- * real `export` (real `export` would break their classic-`<script>` page
- * load). M5's lib/platform.js typed accessors are the one sanctioned read
- * site for each — read here through `getPrefs()`/`getBlocked()`/
- * `getFilters()`/`getCompareVersions()` rather than a bare identifier.
+ * `Prefs`/`Blocked`/`Filters` (prefs.js) and `compareVersions` (common.js)
+ * are dual-scope bridge files (MODERNIZATION.md Decision 2, PAGE_MODULES.md
+ * Decision 6) — real `export`s now, imported directly below. Only their
+ * `globalThis.X = …` assignments stay bridge-mode, permanently, since the
+ * page still needs them as classic-`<script>` globals.
  */
 
 import { withObjectStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
-import { getBlocked, getCompareVersions, getFilters, getPrefs } from './platform.js';
+import { Blocked, Filters, Prefs } from '../prefs.js';
+import { compareVersions } from '../common.js';
 
 /**
  * @typedef {Object} Tile
@@ -88,7 +87,7 @@ export const Tiles = {
 	// tiles-shim.js (page-side proxy) also keeps `getAllTiles` — it mirrors
 	// the wire name, not this internal one.
 	getGridTiles() {
-		let count = getPrefs().rows * getPrefs().columns;
+		let count = Prefs.rows * Prefs.columns;
 		return withObjectStore('tiles', 'readonly', store => new Promise(resolve => {
 			let op = store.getAll();
 			op.onsuccess = async () => {
@@ -112,7 +111,7 @@ export const Tiles = {
 					urlMap.set(t.url, t);
 				}
 
-				if (!getPrefs().history) {
+				if (!Prefs.history) {
 					this._cache = links.map(l => l.url);
 					resolve(links.slice(0, count));
 					return;
@@ -120,17 +119,17 @@ export const Tiles = {
 
 				let {version} = await browser.runtime.getBrowserInfo();
 				let options;
-				if (getCompareVersions()(version, '63.0a1') >= 0) {
+				if (compareVersions(version, '63.0a1') >= 0) {
 					options = { limit: 100, onePerDomain: false, includeBlocked: true };
 				} else {
 					options = { providers: ['places'] };
 				}
 				let r = await browser.topSites.get(options);
 				let urls = this._list.slice();
-				let filters = getFilters().getList();
+				let filters = Filters.getList();
 				let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
 				let remaining = r.filter(s => {
-					if (getBlocked().isBlocked(s.url)) {
+					if (Blocked.isBlocked(s.url)) {
 						return false;
 					}
 					let url = new URL(s.url);

@@ -26,6 +26,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { Tiles } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
+import { Prefs, Blocked, Filters } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -168,13 +169,20 @@ describe('Hide history tiles — lib/tiles-store.js getGridTiles (Phase 1 slot 1
 	}
 
 	beforeAll(() => {
-		globalThis.Blocked = { isBlocked: vi.fn(() => false) };
-		globalThis.Filters = {
-			_list: Object.create(null),
-			getList() { return Object.assign(Object.create(null), this._list); },
-		};
-		globalThis.Prefs = { rows: 2, columns: 2, history: true };
-		globalThis.compareVersions = vi.fn(() => 1);
+		// PAGE_MODULES.md P3: lib/tiles-store.js now imports Prefs/Blocked/
+		// Filters/compareVersions for real (rather than reading
+		// getPrefs()/getBlocked()/getFilters()/getCompareVersions() off
+		// globalThis at call time), so replacing `globalThis.X` with a fresh
+		// stand-in object here would no longer reach it — mutate the real
+		// prefs.js/common.js singletons in place instead. The real
+		// `compareVersions('128.0', '63.0a1')` (see the mocked
+		// `getBrowserInfo()` below) resolves the same way the old `() => 1`
+		// stub did, so it needs no stubbing either.
+		Blocked.isBlocked = vi.fn(() => false);
+		Filters._list = Object.create(null);
+		Prefs.rows = 2;
+		Prefs.columns = 2;
+		Prefs.history = true;
 
 		(globalThis as any).browser = {
 			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },

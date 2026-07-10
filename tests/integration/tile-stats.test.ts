@@ -6,7 +6,6 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'vm';
 import { readNewTabHtml } from './_helpers';
 import { TileStats } from '../../webextension/stats.js';
 
@@ -239,44 +238,38 @@ describe('statType pref — prefs.js', () => {
 });
 
 describe('statType pref — behavioral validation (§4.6)', () => {
+	// PAGE_MODULES.md P3: prefs.js has a real `export` now — `vm.runInContext`
+	// can no longer parse it. Natively imports the real module singleton
+	// instead (crib: prefs-persistence.test.ts).
 	let Prefs: any;
 
 	beforeAll(async () => {
-		const sandbox: Record<string, any> = {
-			chrome: {
-				storage: {
-					local: {
-						get: vi.fn((cb: Function) => cb({})),
-						set: vi.fn(),
-						remove: vi.fn(),
-					},
-					onChanged: { addListener: vi.fn() },
+		(globalThis as any).chrome = {
+			...(globalThis as any).chrome,
+			storage: {
+				local: {
+					get: vi.fn((cb: Function) => cb({})),
+					set: vi.fn(),
+					remove: vi.fn(),
 				},
-				i18n: { getMessage: vi.fn(() => '') },
+				onChanged: { addListener: vi.fn() },
 			},
-			browser: {
-				theme: { onUpdated: { addListener: vi.fn(), removeListener: vi.fn() } },
-				// prefs.js's init() now calls the promise-based browser.storage.local.*
-				// (Slice C of the MV3 migration).
-				storage: {
-					local: {
-						get: vi.fn().mockResolvedValue({}),
-						set: vi.fn().mockResolvedValue(undefined),
-						remove: vi.fn().mockResolvedValue(undefined),
-					},
+			i18n: { getMessage: vi.fn(() => '') },
+		};
+		(globalThis as any).browser = {
+			...(globalThis as any).browser,
+			// prefs.js's init() now calls the promise-based browser.storage.local.*
+			// (Slice C of the MV3 migration).
+			storage: {
+				local: {
+					get: vi.fn().mockResolvedValue({}),
+					set: vi.fn().mockResolvedValue(undefined),
+					remove: vi.fn().mockResolvedValue(undefined),
 				},
 			},
-			window: {},
-			Blocked: { _list: [] },
-			Filters: { _list: {} },
-			Promise,
 		};
 
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(PREFS_PATH, 'utf8');
-		const ctx = vm.createContext(sandbox);
-		vm.runInContext(source, ctx);
-		Prefs = sandbox.Prefs;
+		({ Prefs } = await import('../../webextension/prefs.js'));
 		await Prefs.init();
 	});
 

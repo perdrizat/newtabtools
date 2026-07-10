@@ -6,8 +6,12 @@
  * Integration test: settings panel persistence (Prefs, Blocked, Filters).
  * Phase 1 slot 7 of the migration plan (MIGRATION.md).
  *
- * Loads the real `prefs.js` via `vm.runInThisContext` with mocked
- * `chrome.storage.local`. Characterizes:
+ * Natively imports the real `prefs.js` (PAGE_MODULES.md P3: real `export`s —
+ * `vm.runInThisContext` can no longer parse the `export` syntax) with mocked
+ * `chrome.storage.local`. `Prefs`/`Blocked`/`Filters` are shared module
+ * singletons now, not a fresh `vm` context per suite — internal state is
+ * reset in `beforeEach` instead (same treatment as P2's `stats.js`
+ * singleton). Characterizes:
  *   - Prefs.init: dynamic getter/setter wiring, storage read, change listener
  *   - Prefs.parsePrefs: validation for every pref key (valid, invalid, missing)
  *   - Prefs.prefsChanged: change propagation via parsePrefs
@@ -15,17 +19,14 @@
  *   - Blocked: block, unblock, isBlocked, clear, persistence
  *   - Filters: setFilter, getList, clear, persistence
  *
+ * The seam `prefsChanged` now feeds (`Prefs.onChange(listener)`, replacing
+ * the old `'newTabTools' in window` branch) is covered behaviorally in
+ * tests/integration/prefs-onchange-seam.test.ts.
+ *
  * E2E note: settings panel open/close is covered by tests/e2e/settings-panel.test.js.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 
 // ---------------------------------------------------------------------------
 // Test suite
@@ -38,15 +39,8 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 	let storageData: Record<string, unknown>;
 	let onChangedListeners: Array<(changes: Record<string, { newValue: unknown; oldValue: unknown }>) => void>;
 
-	beforeAll(() => {
-		// Load prefs.js — defines Prefs, Blocked, Filters on globalThis
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const src = fs.readFileSync(PREFS_PATH, 'utf8');
-		vm.runInThisContext(src, { filename: 'prefs.js' });
-
-		Prefs = (globalThis as any).Prefs;
-		Blocked = (globalThis as any).Blocked;
-		Filters = (globalThis as any).Filters;
+	beforeAll(async () => {
+		({ Prefs, Blocked, Filters } = await import('../../webextension/prefs.js'));
 	});
 
 	beforeEach(() => {
@@ -95,6 +89,9 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 
 		Blocked._list = [];
 		Filters._list = Object.create(null);
+		// Prefs is a shared singleton (P3) — clear listeners registered by other
+		// suites in this test run (none of this file's own tests register any).
+		Prefs._listeners.length = 0;
 	});
 
 	// ==================== Prefs.init ====================
@@ -328,10 +325,13 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Prefs._rows).toBe(3);
 	});
 
-	it('prefsChanged skips UI update for thumbnailSize-only change', async () => {
+	it('prefsChanged skips the onChange seam for thumbnailSize-only change', async () => {
 		await Prefs.init();
-		// prefsChanged checks for window.newTabTools — in our env it doesn't exist,
-		// so the UI branch is not taken. This test verifies it doesn't throw.
+		// PAGE_MODULES.md P3: prefsChanged's short-circuit for a
+		// thumbnailSize-only change now skips invoking `Prefs.onChange`
+		// listeners (there are none registered here — nothing to skip
+		// observably — this just verifies the path doesn't throw); see
+		// prefs-onchange-seam.test.ts for the seam's own behavioral coverage.
 		const listener = onChangedListeners[0];
 		expect(() => {
 			listener({ thumbnailSize: { newValue: 800, oldValue: 600 } });
