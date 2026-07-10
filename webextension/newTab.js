@@ -1212,7 +1212,7 @@ export const newTabTools = {
 		let slots = this.computeTitlebarSlots(cardSpace, gap, 186);
 		// `recent` pref off → never show cards (the empty greedy container still
 		// acts as the spacer that pins the masthead right).
-		if (typeof Prefs !== 'undefined' && !Prefs.recent) {
+		if (!Prefs.recent) {
 			slots.cardCount = 0;
 		}
 		titlebar.style.setProperty('--ntt-slot-w', slots.slotWidth + 'px');
@@ -1277,7 +1277,7 @@ export const newTabTools = {
 			}
 
 			let tileURLs = new Set();
-			if (typeof Grid !== 'undefined' && Grid.sites) {
+			if (Grid.sites) {
 				for (let site of Grid.sites) {
 					if (site && site.url) {
 						tileURLs.add(site.url);
@@ -1446,7 +1446,7 @@ export const newTabTools = {
 		// too so anything reading them before reload sees the cleared state.
 		Blocked._list = [];
 		Filters._list = Object.create(null);
-		if (typeof NeverCapture !== 'undefined') { NeverCapture.clear(); }
+		NeverCapture.clear();
 		await new Promise(resolve => chrome.storage.local.clear(resolve));
 		// Reload so every component picks up the cleared state from a
 		// known-clean start.
@@ -1719,9 +1719,7 @@ export const newTabTools = {
 			if (!accepted) {
 				return;
 			}
-			if (typeof TileStats !== 'undefined') {
-				TileStats._hasHistoryPermission = true;
-			}
+			TileStats._hasHistoryPermission = true;
 			if ('Grid' in window) {
 				for (let site of Grid.sites) {
 					if (site && typeof site._renderStatChip === 'function') {
@@ -1738,7 +1736,7 @@ export const newTabTools = {
 		// attribute directly (immediate, no storage round-trip) and persist via
 		// the pref so the drag guard + a reload agree.
 		document.documentElement.removeAttribute('locked');
-		if (typeof Prefs !== 'undefined') { Prefs.locked = false; }
+		Prefs.locked = false;
 		if (this._setEditButtonLabel) { this._setEditButtonLabel(true); }
 		let drawer = document.getElementById('ntt-drawer');
 		if (drawer) {
@@ -1752,7 +1750,7 @@ export const newTabTools = {
 		document.documentElement.removeAttribute('drawer-open');
 		// Closing exits edit mode and re-locks the board (§2).
 		document.documentElement.setAttribute('locked', 'true');
-		if (typeof Prefs !== 'undefined') { Prefs.locked = true; }
+		Prefs.locked = true;
 		if (this._setEditButtonLabel) { this._setEditButtonLabel(false); }
 		let drawer = document.getElementById('ntt-drawer');
 		if (drawer) {
@@ -1773,7 +1771,7 @@ export const newTabTools = {
 		// matches the narrower content area. Re-cache + re-flow the recent row
 		// once the transition has settled. (Drag.start also re-caches.)
 		setTimeout(() => {
-			if (typeof Grid !== 'undefined' && typeof Grid.cacheCellPositions === 'function') {
+			if (typeof Grid.cacheCellPositions === 'function') {
 				Grid.cacheCellPositions();
 			}
 			this.refreshRecent();
@@ -1815,7 +1813,7 @@ export const newTabTools = {
 		if (this.selectedSiteIndex != null) {
 			return;
 		}
-		if (typeof Grid === 'undefined' || !Grid.sites) {
+		if (!Grid.sites) {
 			return;
 		}
 		let first = Grid.sites.findIndex(s => s && s.node);
@@ -2030,9 +2028,7 @@ export const newTabTools = {
 			// Everything is loaded. Initialize the New Tab Page.
 			Page.init();
 			newTabTools._initTitlebar();
-			if (typeof AwesomeBar !== 'undefined') {
-				AwesomeBar.init({ tilesSource: () => Grid.sites });
-			}
+			AwesomeBar.init({ tilesSource: () => Grid.sites });
 			newTabTools._initAutoSaveIndicator();
 			newTabTools.updateUI();
 			newTabTools.refreshBackgroundImage();
@@ -2145,15 +2141,17 @@ export const newTabTools = {
  * response routing that belongs to the background dispatcher
  * (lib/messages.js).
  *
- * MV3 review §4.3 (folded into MODERNIZATION.md M5): `Updater`/`Grid` are
- * defined by fx-newTab.js, which loads AFTER this file — an early broadcast
- * (the background can wake and message a page before fx-newTab.js's own
- * top-level execution finishes) used to be silently dropped by the
- * `typeof … !== 'undefined'` guards below. Instead, an early message is now
- * QUEUED (deduped by name — two queued 'Page.updateGrid's collapse to one
- * flush-time refresh) and replayed by `pageMessageHandler.flushQueued()`,
- * which fx-newTab.js calls at the very end of its own top-level execution
- * (the file that defines the globals, so its end IS the ready signal).
+ * Dispatches directly — no guard, no queue. `Updater`/`Grid` are real
+ * ES-module imports from fx-newTab.js (top of this file), and
+ * PAGE_MODULES.md's P5 import cycle guarantees fx-newTab.js's own top-level
+ * evaluation completes BEFORE this file's top level reaches the
+ * `browser.runtime.onMessage.addListener(pageMessageHandler)` call below —
+ * so by the time the listener can ever be invoked, both names are already
+ * initialized. The former MV3-review-§4.3/MODERNIZATION.md-M5
+ * `typeof … !== 'undefined'` guards and early-broadcast queue (+
+ * `flushQueued()` replay) existed for a load-order hazard that no longer
+ * exists post-P5; retired as provably-unreachable dead code in chrome-prep
+ * C3a (CHROME_PREP.md).
  *
  * @param {{name?: string}} message
  * @returns {boolean} always false — never claims the sendResponse channel
@@ -2161,11 +2159,7 @@ export const newTabTools = {
 export function pageMessageHandler(message) {
 	switch (message && message.name) {
 	case 'Page.updateGrid':
-		if (typeof Updater !== 'undefined') {
-			Updater.updateGrid();
-		} else {
-			pageMessageHandler._enqueue('Page.updateGrid');
-		}
+		Updater.updateGrid();
 		break;
 	case 'Page.restoreComplete':
 		// A restore just rewrote prefs/tiles/background (lib/backup.js's readZip).
@@ -2174,59 +2168,13 @@ export function pageMessageHandler(message) {
 		// `_link` still points at pre-restore data, so only `Grid.refresh()`
 		// picks up the newly-restored links — and finally pull thumbnails for
 		// the rebuilt tiles (`Grid.refresh()` doesn't read the Thumbnails IDB
-		// store on its own). `Grid` is defined by fx-newTab.js (loads later).
-		if (typeof Grid !== 'undefined') {
-			newTabTools.refreshBackgroundImage();
-			Grid.refresh().then(() => newTabTools.getThumbnails());
-		} else {
-			pageMessageHandler._enqueue('Page.restoreComplete');
-		}
+		// store on its own).
+		newTabTools.refreshBackgroundImage();
+		Grid.refresh().then(() => newTabTools.getThumbnails());
 		break;
 	}
 	return false;
 }
-
-/** @type {string[]} Broadcast names that arrived before fx-newTab.js's globals existed. */
-pageMessageHandler._queue = [];
-
-/**
- * Queue a Page.* broadcast name for replay once fx-newTab.js's globals exist.
- * Deduped: queuing the same name twice only replays it once at flush time.
- * @param {string} name
- * @returns {void}
- */
-pageMessageHandler._enqueue = function(name) {
-	if (!pageMessageHandler._queue.includes(name)) {
-		pageMessageHandler._queue.push(name);
-	}
-};
-
-/**
- * Replay every queued broadcast, in the order it was first queued, then
- * clear the queue. Called once by fx-newTab.js at the end of its own
- * top-level execution — by that point `Updater`/`Grid` exist, so each replay
- * takes the direct (non-queuing) branch above.
- *
- * Each replay is wrapped in its own try/catch (audit finding #4, 2026-07-09
- * review): the direct branch's `Grid.refresh()`/`Updater.updateGrid()` runs
- * against a grid that `newTabTools.startup()` is still building
- * asynchronously at this point, so a mis-behaving replay throwing must not
- * abort the rest of the queue (or escape flushQueued() itself) — a later
- * queued name, or a caller relying on flushQueued() itself not throwing,
- * must not be collateral damage from one bad replay.
- * @returns {void}
- */
-pageMessageHandler.flushQueued = function() {
-	let queued = pageMessageHandler._queue;
-	pageMessageHandler._queue = [];
-	for (let name of queued) {
-		try {
-			pageMessageHandler({ name });
-		} catch (ex) {
-			console.error(ex);
-		}
-	}
-};
 
 browser.runtime.onMessage.addListener(pageMessageHandler);
 

@@ -57,6 +57,12 @@ describe('Tile tab auto-selects the first available tile', () => {
 		const openDrawer = extractMethod(source, 'openDrawer');
 		const switchDrawerTab = extractMethod(source, 'switchDrawerTab');
 		const autoSelect = extractMethod(source, '_autoSelectFirstTileIfNeeded');
+		// `openDrawer` unconditionally sets `Prefs.locked` (chrome-prep C3a
+		// retired the dead-true `typeof Prefs !== 'undefined'` guard once
+		// PAGE_MODULES.md's P5 import cycle made it provably unreachable) — the
+		// real `Prefs` always exists in production, so this harness needs a
+		// stand-in.
+		(globalThis as any).Prefs = { locked: false };
 		const code = `
 			var _tileDefaultsHarness = {
 				${openDrawer},

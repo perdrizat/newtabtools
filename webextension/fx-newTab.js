@@ -932,9 +932,6 @@ Site.prototype = {
 			chip.removeAttribute('data-stat-fresh');
 			return;
 		}
-		if (typeof TileStats === 'undefined') {
-			return;
-		}
 		let rank = this.cell ? this.cell.index + 1 : null;
 		TileStats.compute(this.url, statType, rank).then(stat => {
 			if (!stat) {
@@ -1204,12 +1201,10 @@ Site.prototype = {
 				break;
 			}
 			case 'edit':
-				if (typeof newTabTools !== 'undefined') {
-					newTabTools.openDrawer();
-					newTabTools.switchDrawerTab('tile');
-					if (this.cell) {
-						newTabTools.selectedSiteIndex = this.cell.index;
-					}
+				newTabTools.openDrawer();
+				newTabTools.switchDrawerTab('tile');
+				if (this.cell) {
+					newTabTools.selectedSiteIndex = this.cell.index;
 				}
 				break;
 			}
@@ -1225,12 +1220,10 @@ Site.prototype = {
 			if (!this.isPinned) {
 				this.pin();
 			}
-			if (typeof newTabTools !== 'undefined') {
-				newTabTools.openDrawer();
-				newTabTools.switchDrawerTab('tile');
-				if (cellIndex != null) {
-					newTabTools.selectedSiteIndex = cellIndex;
-				}
+			newTabTools.openDrawer();
+			newTabTools.switchDrawerTab('tile');
+			if (cellIndex != null) {
+				newTabTools.selectedSiteIndex = cellIndex;
 			}
 			return;
 		}
@@ -1243,7 +1236,7 @@ Site.prototype = {
 		let docEl = document.documentElement;
 		if (docEl.hasAttribute('drawer-open')) {
 			event.preventDefault();
-			if (typeof newTabTools !== 'undefined' && this.cell) {
+			if (this.cell) {
 				newTabTools.openDrawer();
 				newTabTools.switchDrawerTab('tile');
 				newTabTools.selectedSiteIndex = this.cell.index;

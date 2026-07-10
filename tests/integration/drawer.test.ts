@@ -53,6 +53,17 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 		const switchDrawerTab = extractMethod(source, 'switchDrawerTab');
 		const autoSelectFirstTile = extractMethod(source, '_autoSelectFirstTileIfNeeded');
 
+		// `openDrawer`/`closeDrawer` unconditionally set `Prefs.locked`, and
+		// `_autoSelectFirstTileIfNeeded` (reached whenever `drawer-tab` is
+		// `'tile'`, including via `switchDrawerTab('tile')`) unconditionally
+		// reads `Grid.sites` (chrome-prep C3a retired the dead-true
+		// `typeof Prefs`/`typeof Grid` guards once PAGE_MODULES.md's P5 import
+		// cycle made them provably unreachable) — both real objects always
+		// exist in production, so this harness needs stand-ins. No test here
+		// exercises tile selection itself (that's tile-tab-defaults.test.ts);
+		// an empty `sites` array is enough to let the guarded reads resolve.
+		(globalThis as any).Prefs = { locked: false };
+		(globalThis as any).Grid = { sites: [] };
 		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab}, ${autoSelectFirstTile}, _refreshGridPositionsAfterDrawerTransition() {}, get selectedSiteIndex() { return this._selectedSiteIndex; }, set selectedSiteIndex(i) { this._selectedSiteIndex = i; } };`;
 		vm.runInThisContext(code, { filename: 'drawer-harness.js' });
 		harness = (globalThis as any)._drawerHarness;

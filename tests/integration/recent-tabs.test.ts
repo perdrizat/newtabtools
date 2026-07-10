@@ -96,6 +96,12 @@ describe('Recently-closed tabs — newTab.js', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		Prefs.recent = true;
+		// Default: no visible tiles. Real `Grid` always exists by the time
+		// `refreshRecent` can run (chrome-prep C3a retired the dead-true
+		// `typeof Grid !== 'undefined'` guard once PAGE_MODULES.md's P5
+		// import cycle made it provably unreachable) — tests that care about
+		// the tile-URL-skip behavior override this with real sites.
+		(globalThis as any).Grid = { sites: [] };
 		appendedCards = [];
 
 		// The recently-closed cards now render directly into the titlebar

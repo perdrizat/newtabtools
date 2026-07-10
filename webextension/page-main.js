@@ -23,10 +23,12 @@
  * here, in this file's boot sequence below, or later (event handlers,
  * promise callbacks). fx-newTab.js's own top level is definition-only (its
  * former boot trailer — `UndoDialog.init(); newTabTools.startup();
- * pageMessageHandler.flushQueued();` — was hoisted here in P1); newTab.js's
- * and fx-newTab.js's mutual imports of each other (P5) form a legal ESM
- * cycle for the same reason — every cross-reference between them is
- * call-time only, never a top-level read.
+ * pageMessageHandler.flushQueued();` — was hoisted here in P1; the
+ * `flushQueued()` call itself was retired in chrome-prep C3a — CHROME_PREP.md
+ * — once P5's import cycle made the early-broadcast queue it replayed
+ * provably unreachable); newTab.js's and fx-newTab.js's mutual imports of
+ * each other (P5) form a legal ESM cycle for the same reason — every
+ * cross-reference between them is call-time only, never a top-level read.
  *
  * The remaining `globalThis.X = X;` bridge assignments at the bottom of each
  * page file (see the comment at each file's end) are TEST-ONLY as of P5 —
@@ -51,21 +53,12 @@ import './stats.js';
 import './tiles-shim.js';
 import { Prefs } from './prefs.js';
 import './awesomebar.js';
-import { newTabTools, pageMessageHandler } from './newTab.js';
+import { newTabTools } from './newTab.js';
 import { Grid, UndoDialog, Updater } from './fx-newTab.js';
 
 UndoDialog.init();
 
 newTabTools.startup();
-
-// The ready signal for any 'Page.updateGrid' / 'Page.restoreComplete'
-// broadcast that arrived (and was queued by pageMessageHandler in
-// newTab.js) before boot finished — see pageMessageHandler's own comment in
-// newTab.js. The old `typeof pageMessageHandler !== 'undefined'` guard
-// (dropped here) existed only so fx-newTab.js could also be loaded
-// standalone, without newTab.js, by tests/integration/_helpers.ts's
-// mountSite() harness; page-main.js always has both.
-pageMessageHandler.flushQueued();
 
 // PAGE_MODULES.md P3: the page's half of the Prefs.onChange seam (prefs.js's
 // own doc comment has the background half of the story). Registered after

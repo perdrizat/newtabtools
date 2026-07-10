@@ -26,7 +26,7 @@ by maintainer).
 |---|---|---|
 | C0 — design decisions of record (menus, theme) | done | `c7ebfcc` |
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
-| C2 — leaf utilities: `el()` builder + textContent normalization + color helper | fast-green, gates pending | — |
+| C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | pending | — |
 | C4 — split the monoliths into feature modules | pending | — |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
@@ -146,13 +146,42 @@ per arc.
       every rendering surface the sweep touched).
 
 ### C3 — type the monoliths + principled harness + bridge endgame
+
+*Slicing (2026-07-10): the newTab↔fx-newTab import cycle means tsc pulls BOTH
+files into the program together — so the typing stages through a documented,
+temporary `@ts-nocheck` on the not-yet-typed partner (dies within the arc,
+same staged-scaffold logic as P1's bridge):*
+- *C3a — dead-code retirement (queue, guards) — shrinks the typing surface;*
+- *C3b — fx-newTab.js fully typed, newTab.js `@ts-nocheck` (staged);*
+- *C3c — newTab.js fully typed, scaffold removed, computed-path import
+  pattern retired;*
+- *C3d — principled harness migration + delete ALL bridges + negative
+  assertions + `globals.d.ts`/`nttGlobals` cleanup. FULL E2E at C3d; smoke
+  trio for a–c (a is behavior-removal with test replacement; b/c are
+  type-only).*
 - [ ] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/
       grid-cell shapes, event payloads; no `any`-casts as escape hatches —
       maintainer directive 2). Monoliths enter the typed program; the
       computed-path "hide from tsc" import pattern retires.
-- [ ] Retire `pageMessageHandler`'s dead early-broadcast queue (+ its M5-era
+- [x] Retire `pageMessageHandler`'s dead early-broadcast queue (+ its M5-era
       tests) and the dead-true `typeof` guards (newTab.js 1216–1824 sweep) —
-      provably unreachable since P5's import cycle.
+      provably unreachable since P5's import cycle. (C3a, chrome-prep) Direct
+      dispatch in `pageMessageHandler`; `flushQueued()`/`_queue`/`_enqueue`
+      deleted, `page-main.js`'s boot call dropped. 8 dead-true guards removed
+      across `newTab.js` (`Prefs`×3, `Grid`×3, `NeverCapture`, `TileStats`,
+      `AwesomeBar`) and `fx-newTab.js` (`TileStats`, `newTabTools`×3);
+      property-check guards (e.g. `typeof Grid.cacheCellPositions ===
+      'function'`) and unrelated feature-detection guards (`ResizeObserver`,
+      `document`, `chrome.permissions`) kept. `awesomebar.js` swept too — its
+      one `typeof document` guard is unrelated feature detection, kept.
+      Tests: `page-messages.test.ts`'s queue-replay describe block replaced
+      with direct-dispatch + apparatus-is-gone assertions;
+      `page-main-boot.test.ts`'s boot order shrinks to init→startup;
+      `prefs-onchange-seam.test.ts` drops its now-nonexistent `flushQueued`
+      spy. 3 vm-harness tests (`drawer.test.ts`, `tile-tab-defaults.test.ts`,
+      `recent-tabs.test.ts`) gained `Prefs`/`Grid` stand-ins the removed
+      guards used to make optional. Gates: fast 1309/1309, lint/typecheck/
+      lint:webext clean.
 - [ ] Harness migration (maintainer directive 1): E2E/UAT stop reading page
       globals — state seeding via runtime messages (most already are), UI
       assertions via DOM, drag via synthesized gestures (flakiness accepted

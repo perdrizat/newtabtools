@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - Four vm-harness tests (`recent-tabs.test.ts`, `objecturl-revoke.test.ts`, `favicons.test.ts`, `favicon-overlay-and-pin.test.ts`) that extract page methods by source instead of importing them now also expose the real `el` on `globalThis`, mirroring the existing `isValidURL` exposure, since the C2 sweep introduced the same bare-identifier dependency inside the extracted method bodies.
 
+### Removed
+
+- `pageMessageHandler`'s early-broadcast queue (`_queue`/`_enqueue`/`flushQueued()`) in `newTab.js`/`page-main.js`, and 8 dead-true `typeof Prefs`/`typeof Grid`/`typeof NeverCapture`/`typeof TileStats`/`typeof AwesomeBar`/`typeof newTabTools` guards across `newTab.js`/`fx-newTab.js` — all provably unreachable since PAGE_MODULES.md's P5 import cycle guarantees fx-newTab.js finishes evaluating before newTab.js's listener can ever be invoked (CHROME_PREP.md C3a).
+
 ## [2.4.0] — 2026-07-10
 
 The page-modules arc (`PAGE_MODULES.md`, slices P1–P5 + two adjudicated code

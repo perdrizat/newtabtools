@@ -136,13 +136,14 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 			await import(/* @vite-ignore */ webext(file));
 		}
 
-		// Stub the three boot entry points inert — actually running
+		// Stub the two boot entry points inert — actually running
 		// startup()/init() end-to-end in jsdom is out of scope here; only
 		// page-main.js's OWN Prefs.onChange(...) registration trailer matters
-		// (crib: page-main-boot.test.ts).
+		// (crib: page-main-boot.test.ts). (A third boot-trailer step,
+		// pageMessageHandler.flushQueued(), was retired in chrome-prep C3a —
+		// CHROME_PREP.md — so there is nothing left to stub for it.)
 		vi.spyOn((globalThis as any).UndoDialog, 'init').mockImplementation(() => {});
 		vi.spyOn((globalThis as any).newTabTools, 'startup').mockImplementation(() => {});
-		vi.spyOn((globalThis as any).pageMessageHandler, 'flushQueued').mockImplementation(() => {});
 
 		updateUISpy = vi.spyOn((globalThis as any).newTabTools, 'updateUI').mockImplementation(() => {});
 		markAutoSavedSpy = vi.spyOn((globalThis as any).newTabTools, '_markAutoSaved').mockImplementation(() => {});

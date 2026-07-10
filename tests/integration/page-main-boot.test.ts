@@ -22,8 +22,11 @@
  *   1. Import completeness — its eight side-effect imports resolve and run
  *      without throwing (Decision-3: no cross-module top-level calls).
  *   2. Boot order — after the imports settle, it calls `UndoDialog.init()`,
- *      then `newTabTools.startup()`, then `pageMessageHandler.flushQueued()`,
- *      in that exact order.
+ *      then `newTabTools.startup()`, in that order. (A third boot-trailer
+ *      step, `pageMessageHandler.flushQueued()`, was retired in chrome-prep
+ *      C3a — CHROME_PREP.md — once PAGE_MODULES.md's P5 import cycle made the
+ *      early-broadcast queue it replayed provably unreachable; the boot order
+ *      this suite pins shrank from three steps to two accordingly.)
  *
  * Design: leaf-import the eight page files first (same mechanism as
  * page-module-scope.test.ts), which puts the real UndoDialog/newTabTools/
@@ -78,7 +81,6 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 	let importError: unknown = null;
 	let initSpy: ReturnType<typeof vi.spyOn>;
 	let startupSpy: ReturnType<typeof vi.spyOn>;
-	let flushQueuedSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeAll(async () => {
 		// --- DOM -----------------------------------------------------------
@@ -97,10 +99,9 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 			await import(/* @vite-ignore */ webext(file));
 		}
 
-		// --- stub the three boot entry points inert --------------------------
+		// --- stub the two boot entry points inert -----------------------------
 		initSpy = vi.spyOn((globalThis as any).UndoDialog, 'init').mockImplementation(() => {});
 		startupSpy = vi.spyOn((globalThis as any).newTabTools, 'startup').mockImplementation(() => {});
-		flushQueuedSpy = vi.spyOn((globalThis as any).pageMessageHandler, 'flushQueued').mockImplementation(() => {});
 
 		// --- import the real entry point --------------------------------------
 		// Its eight `import './X.js'` lines hit the module cache this same test
@@ -125,15 +126,13 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 		expect(startupSpy).toHaveBeenCalledTimes(1);
 	});
 
-	it('calls pageMessageHandler.flushQueued() exactly once', () => {
-		expect(flushQueuedSpy).toHaveBeenCalledTimes(1);
-	});
-
-	it('boots in order: UndoDialog.init() -> newTabTools.startup() -> pageMessageHandler.flushQueued()', () => {
+	it('boots in order: UndoDialog.init() -> newTabTools.startup()', () => {
 		const initOrder = initSpy.mock.invocationCallOrder[0];
 		const startupOrder = startupSpy.mock.invocationCallOrder[0];
-		const flushQueuedOrder = flushQueuedSpy.mock.invocationCallOrder[0];
 		expect(initOrder).toBeLessThan(startupOrder);
-		expect(startupOrder).toBeLessThan(flushQueuedOrder);
+	});
+
+	it('pageMessageHandler exposes no flushQueued (chrome-prep C3a retired the replay step)', () => {
+		expect((globalThis as any).pageMessageHandler.flushQueued).toBeUndefined();
 	});
 });
