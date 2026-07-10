@@ -11,6 +11,13 @@
  * @typedef {Object} Tile
  * @property {string} url
  * @property {string} [title]
+ * @property {boolean} [titleIsUserSet] Set/cleared by newTab.js's tile-title
+ *   editing (options-title-set/-remove, options-url-set) to distinguish a
+ *   user-set title from an auto-derived one. NOTE (chrome-prep C3c): missing
+ *   from lib/tiles-store.js's parallel background-side `Tile` typedef too —
+ *   out of this slice's scope (that file belongs to the already-typed
+ *   background program), reported here since this typedef is supposed to
+ *   mirror it.
  * @property {number} [id]
  * @property {number} [position]
  * @property {Blob} [image]
@@ -85,7 +92,16 @@ export const Background = {
 			chrome.runtime.sendMessage({ name: 'Background.getBackground' }, resolve);
 		});
 	},
-	/** @param {File|Blob} file */
+	/**
+	 * `file` is genuinely optional — the background's `setBackground`
+	 * (lib/tiles-store.js) treats an omitted/`null` `file` as "clear the
+	 * stored background" (used by newTab.js's `selectWallpaper`/
+	 * `resetWallpaper`, which call this with no argument, and
+	 * `resetAllSettings`, which passes `null` explicitly). NOTE (chrome-prep
+	 * C3c): this JSDoc previously declared `file` non-optional, which didn't
+	 * match either real call pattern.
+	 * @param {File|Blob|null} [file]
+	 */
 	setBackground(file) {
 		return new Promise(resolve => {
 			chrome.runtime.sendMessage({ name: 'Background.setBackground', file }, resolve);

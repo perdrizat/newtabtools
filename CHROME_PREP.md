@@ -159,10 +159,76 @@ same staged-scaffold logic as P1's bridge):*
   assertions + `globals.d.ts`/`nttGlobals` cleanup. FULL E2E at C3d; smoke
   trio for a–c (a is behavior-removal with test replacement; b/c are
   type-only).*
-- [~] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/
+- [x] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/
       grid-cell shapes, event payloads; no `any`-casts as escape hatches —
       maintainer directive 2). Monoliths enter the typed program; the
       computed-path "hide from tsc" import pattern retires.
+      **C3c (2026-07-10): newTab.js done — both monoliths fully typed, the
+      staged `@ts-nocheck` scaffold removed.** Error trajectory: 390 → 0.
+      Typedef inventory added: `NewTabToolsPageRefs` trimmed back to the
+      three refs fx-newTab.js's cycle import actually reads
+      (`page`/`databaseError`/`selectedSiteIndex`) — every other
+      `uiElements` ref (32 properties) is instead declared directly on the
+      `NewTabToolsObject` literal (the Cell.prototype `position`/`_grid`
+      precedent), because an intersection applied only to the exported
+      binding never helps `this`-typing inside the literal's OWN methods,
+      only external readers; plus `AutocompleteCandidate`, `Link` (reused
+      from tiles-shim.js, mirroring fx-newTab.js's own alias),
+      `Site`/`CellNode`/`SiteNode` (type-only imports from fx-newTab.js —
+      TDZ-safe, types are erased), `WallpaperRecord`/`RawWallpaperRecord`,
+      `SessionTab` (patches a `browser.tabs.Tab` typings gap: `lastModified`
+      is real at runtime for `sessions`-obtained tabs but missing from
+      `@types/firefox-webext-browser`), `DelegatedEventTarget` (the
+      click/change delegated-handler `event.target` shape, shared by
+      `optionsOnClick`/`optionsOnChange`/`drawerOnClick`/`drawerOnChange`).
+      2 `@ts-expect-error` (the `canvas.mozOpaque`/`mozImageSmoothingEnabled`
+      legacy Firefox canvas extensions in `setThumbnail` — global-interface
+      augmentation, same class as C3b's `DOMRect` shim, well under the ~5
+      budget). `tsconfig.json` `lib` gains `ES2021` (newTab.js's
+      `getThemedImageURL` genuinely calls `String.prototype.replaceAll`,
+      unavailable in the prior `ES2020` floor — both the Fx152+ target and
+      this project's Node floor have shipped it for years; `noEmit: true` so
+      this never affects emitted code). Leaf fallout fixed: tiles-shim.js's
+      `Tile` typedef gains `titleIsUserSet` (used, undeclared) and
+      `Background.setBackground`'s `file` param becomes correctly optional
+      (newTab.js's `selectWallpaper`/`resetWallpaper` call it with zero
+      arguments; the background treats omitted/`null` as "clear" — the old
+      JSDoc required a non-optional argument that didn't match either real
+      call pattern). Latent findings surfaced by typing, reported not fixed:
+      `contextMenu`/`contextMenuPin`/`contextMenuUnpin`'s uiElements ids
+      (`context-menu`/`newtabtools-pintile`/`newtabtools-unpintile`) don't
+      exist anywhere in newTab.html — always resolve to `null`, dead but
+      inert (nothing reads them); the pinURL-autocomplete `maybeAddItem`
+      candidate shape assumes `url`/`title` are always present though
+      `browser.tabs.Tab`/`BookmarkTreeNode`/`HistoryItem` declare both
+      optional; a bookmarks-tree folder with `children === undefined` would
+      throw (pre-existing, unguarded before this slice too); `updateThemeColours`
+      never validated a theme color could be an RGB(A) tuple instead of a
+      string (`browser.theme.ThemeColor`'s legacy format) before handing it
+      to `parseColour`; the wallpaper grid's solid-colour `<div>` swatch gets
+      a harmless no-op `.alt` write (only meaningful on `<img>`). Test-side
+      dividend: `tests/integration/_helpers.ts`'s dead `webextPath`/
+      `WEBEXT_DIR` (no remaining call site once C3b/C3c literal-string
+      `import()`s replaced every computed-path use) deleted; `ensureSiteEnv`'s
+      dynamic `import()` of fx-newTab.js stays dynamic — confirmed the
+      existing comment already correctly attributes this to DOM-mount-before-
+      evaluation ordering (newTab.js's top-level DOM-wiring IIFE needs the
+      shipped `newTab.html` body mounted first; a static import is hoisted
+      above a module's own top-level code, so there's no way to sequence
+      "mount then import" with one), not tsc-hiding — no change needed there.
+      Other computed-path `webext(relPath)` dynamic imports remain in
+      `page-module-scope.test.ts`/`page-main-boot.test.ts`/
+      `prefs-onchange-seam.test.ts`/`auto-thumbnail.test.ts`: these load
+      page-main.js/lib/background-main.js, which import action.js/page-main.js
+      — still deliberately OUTSIDE the typed program (their own future
+      slice) — so those stay computed-path on purpose, unrelated to this
+      slice's monoliths. `tsconfig.json`'s `include` keeps the two explicit
+      `webextension/fx-newTab.js`/`webextension/newTab.js` entries rather
+      than a `webextension/*.js` glob: a glob would also match
+      action.js/page-main.js, growing the checked program rather than
+      leaving it identical (rejected per the C3c instruction to simplify
+      only if the result is unchanged). Gates: fast 1310/1310 (incl. the
+      raw-module-eval tripwire), lint/typecheck/lint:webext clean.
       **C3b (2026-07-10): fx-newTab.js done, newTab.js staged.**
       `tsconfig.json` gains explicit `webextension/fx-newTab.js` +
       `webextension/newTab.js` include entries (the ESM cycle pulls both into

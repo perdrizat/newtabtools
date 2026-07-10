@@ -24,19 +24,18 @@ import '../../webextension/icons.js';
 // chrome/browser mock defaults. Deleted once its last consumer migrated to a
 // native import (P4). P5 (PAGE_MODULES.md): `mountSite`'s own `vm` use is
 // gone too — fx-newTab.js gained real `import`/`export` this slice, which
-// `vm.runInThisContext` can no longer parse, so `importPageModules()` below
-// natively `import()`s it instead (a computed-path specifier, so `tsc`
-// doesn't follow the monolith into the typed program — PAGE_MODULES.md's P1
-// precedent, page-module-scope.test.ts). The `vm`/`fs` imports for
-// `mountSite` therefore drop; `fs` stays for `readNewTabHtml`.
+// `vm.runInThisContext` can no longer parse, so `ensureSiteEnv` below
+// natively `import()`s it instead. chrome-prep C3c (CHROME_PREP.md): the
+// computed-path `webextPath(relPath)` specifier this used to hide the
+// (then-unchecked) monolith from `tsc` (PAGE_MODULES.md's P1 precedent,
+// page-module-scope.test.ts) is gone — C3b/C3c typed both monoliths for
+// real, so `webextPath` had no remaining call site (dead export) and is
+// deleted along with the `WEBEXT_DIR` constant it existed to build. The
+// specifier below is now a literal string — see `FxNewTabModule`'s docstring
+// for why the `import()` itself still has to stay dynamic (evaluation
+// order, not tsc-hiding).
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WEBEXT_DIR = path.resolve(__dirname, '../../webextension');
-
-/** Resolves `relPath` (e.g. `'fx-newTab.js'`) to its absolute path under `webextension/`. */
-export function webextPath(relPath: string): string {
-	return path.join(WEBEXT_DIR, relPath);
-}
 
 const NEWTAB_HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 let _newTabHtmlCache: string | undefined;

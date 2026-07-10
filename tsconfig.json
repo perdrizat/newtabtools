@@ -15,7 +15,12 @@
 		"isolatedModules": true,
 
 		"types": ["firefox-webext-browser", "node"],
-		"lib": ["ES2020", "DOM", "DOM.Iterable"]
+		// chrome-prep C3c (CHROME_PREP.md): newTab.js's `getThemedImageURL`
+		// genuinely calls `String.prototype.replaceAll` (ES2021) — both the
+		// Fx152+ target and this project's Node floor have shipped it for
+		// years. Purely a typings-floor bump (`noEmit: true`, so `lib` never
+		// affects emitted code); `target` stays ES2020.
+		"lib": ["ES2020", "ES2021", "DOM", "DOM.Iterable"]
 	},
 	"include": [
 		"webextension/lib/**/*.js",
@@ -25,17 +30,20 @@
 		"tests/integration/**/*.js",
 		"tests/**/*.ts"
 	],
-	// chrome-prep C3b (CHROME_PREP.md): explicit entries for the two page
+	// chrome-prep C3b/C3c (CHROME_PREP.md): explicit entries for the two page
 	// monoliths, not a `webextension/*.js` glob — awesomebar.js/common.js/
 	// dom.js/icons.js/prefs.js/stats.js/tiles-shim.js are pulled into the
 	// program anyway by import-following once fx-newTab.js is included (see
 	// the note below); action.js/page-main.js are NOT imported by either
-	// monolith and stay out until their own slice adds them on purpose.
-	// newTab.js and fx-newTab.js form an ESM cycle (PAGE_MODULES.md Decision
-	// 3), so tsc pulls both into the program together the moment either is
-	// included — the reason C3b stages a temporary `@ts-nocheck` on newTab.js
-	// (CHROME_PREP.md C3 slicing note) rather than typing it for real this
-	// slice.
+	// monolith and stay out until their own slice adds them on purpose. Both
+	// monoliths are now fully typed (C3b fx-newTab.js, C3c newTab.js) — a
+	// `webextension/*.js` glob was reconsidered at C3c and rejected: it would
+	// also match action.js/page-main.js, growing the checked program (not
+	// leaving it identical) rather than simplifying it, since neither is
+	// typed yet. The two explicit entries stay until those files get their
+	// own slice. newTab.js and fx-newTab.js form an ESM cycle (PAGE_MODULES.md
+	// Decision 3), so tsc pulls both into the program together the moment
+	// either is included.
 	//
 	// `exclude` only prunes candidates matched by `include`'s globs — it does
 	// NOT stop tsc from following a real `import` out of an included file and

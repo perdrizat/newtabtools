@@ -15,10 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 
 - Four vm-harness tests (`recent-tabs.test.ts`, `objecturl-revoke.test.ts`, `favicons.test.ts`, `favicon-overlay-and-pin.test.ts`) that extract page methods by source instead of importing them now also expose the real `el` on `globalThis`, mirroring the existing `isValidURL` exposure, since the C2 sweep introduced the same bare-identifier dependency inside the extracted method bodies.
-- `webextension/fx-newTab.js` is fully-typed checked JS (real JSDoc — no `any`-cast escape hatches beyond the documented `globalThis` bridge exception) and enters `tsconfig.json`'s checked program; `webextension/newTab.js` joins it (the ESM cycle pulls both in together) behind a staged, documented `@ts-nocheck` pending its own typing in C3c (CHROME_PREP.md C3b).
+- `webextension/fx-newTab.js` and `webextension/newTab.js` are both fully-typed checked JS (real JSDoc — no `any`-cast escape hatches beyond the documented `globalThis` bridge exceptions); the staged `@ts-nocheck` scaffold on newTab.js is gone (CHROME_PREP.md C3b/C3c, error trajectory 390 → 0).
 - C3b TDZ incident (E2E-caught, fixed in-slice): the `newTabTools` cycle-import typing moved off a top-level `const` read (raw-load `ReferenceError: … before initialization`, page never booted) onto newTab.js's export itself via `NewTabToolsPageRefs` + const-impl/typed-export (the prefs.js `PrefsAccessors` pattern).
-- `tiles-shim.js` gains a real `Tile` typedef (mirroring `lib/tiles-store.js`'s) and precise `Tiles.*` method signatures, surfaced by fx-newTab.js's now-checked usage.
-- `tests/integration/_helpers.ts`'s `ensureSiteEnv`/`mountSite`, and the `fx-newTab.js` import in `drag-reorder.test.ts`/`tile-url-render.test.ts`, drop the computed-path `webextPath(...)` obfuscation for a literal-string dynamic `import()` now that `tsc` type-checks fx-newTab.js directly (still dynamic, not static, to preserve DOM-mount-before-import ordering).
+- `tiles-shim.js` gains a real `Tile` typedef (mirroring `lib/tiles-store.js`'s) and precise `Tiles.*` method signatures, surfaced by fx-newTab.js's now-checked usage; `Tile` also gains `titleIsUserSet` and `Background.setBackground`'s `file` param becomes correctly optional (C3c — both surfaced by newTab.js's now-checked usage).
+- `tsconfig.json`'s `lib` gains `ES2021` (newTab.js's `getThemedImageURL` genuinely calls `String.prototype.replaceAll`; `noEmit: true` so this never affects emitted code) (C3c).
+- `tests/integration/_helpers.ts`'s `ensureSiteEnv`/`mountSite`, and the `fx-newTab.js` import in `drag-reorder.test.ts`/`tile-url-render.test.ts`, drop the computed-path `webextPath(...)` obfuscation for a literal-string dynamic `import()` now that `tsc` type-checks fx-newTab.js directly (still dynamic, not static, to preserve DOM-mount-before-import ordering); the now-dead `webextPath`/`WEBEXT_DIR` helper is deleted (C3c, no remaining call sites).
 
 ### Fixed
 
