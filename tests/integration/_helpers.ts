@@ -145,9 +145,11 @@ export function mountSite(
 			URL.revokeObjectURL = vi.fn();
 		}
 
+		// page-modules P1 (PAGE_MODULES.md): fx-newTab.js's top level is now
+		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
+		// trailer this used to strip out was hoisted to page-main.js, so there is
+		// nothing left here to neutralize before vm-loading the file standalone.
 		let fxSource = fs.readFileSync(fxPath, 'utf8');
-		fxSource = fxSource.replace(/UndoDialog\.init\(\);/, '// UndoDialog.init();');
-		fxSource = fxSource.replace(/newTabTools\.startup\(\);/, '// newTabTools.startup();');
 		vm.runInThisContext(fxSource, { filename: 'fx-newTab.js' });
 
 		_siteEnvLoaded = true;

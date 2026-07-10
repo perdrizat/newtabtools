@@ -115,12 +115,10 @@ describe('module-scope bridge — lib/background-main.js\'s globalThis surface a
 		(globalThis as any).browser.runtime.id = EXTENSION_ID;
 		(globalThis as any).chrome.runtime.getURL = vi.fn((p: string) => `moz-extension://test-uuid/${p}`);
 		(globalThis as any).chrome.management = { getSelf: vi.fn().mockResolvedValue({ version: '1.0.0' }) };
-		(globalThis as any).browser.menus = {
-			create: vi.fn((_props: unknown, cb?: Function) => { if (cb) { cb(); } }),
-			update: vi.fn(),
-			refresh: vi.fn(),
-			onShown: { addListener: vi.fn() },
-		};
+		// browser.menus (create/update/refresh/onShown/onClicked) is now a
+		// shared mock in tests/setup.js, covering this file's and
+		// page-module-scope.test.ts's needs (code review,
+		// 2026-07-10-page-modules-p1-code-review.md finding 7).
 		(globalThis as any).chrome.idle = { onStateChanged: { addListener: vi.fn(), removeListener: vi.fn() } };
 		(globalThis as any).chrome.webRequest = {
 			onBeforeRequest: { addListener: vi.fn() },

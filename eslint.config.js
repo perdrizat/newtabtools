@@ -164,7 +164,11 @@ export default [
 		// classic script syntax (`globalThis.X = …`, no `import`/`export`)
 		// works identically either way, which is the whole point of the
 		// bridge; it stays permanently, unlike the M1–M4 bridges this glob
-		// used to also cover.
+		// used to also cover. PAGE_MODULES.md P1: page-main.js (the page's new
+		// ES-module entry) also lives directly under webextension/ and would
+		// otherwise match this glob too — the more specific
+		// lib/**/*.js-plus-page-main.js block below overrides
+		// sourceType/ecmaVersion for that one file.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2018,
@@ -180,11 +184,21 @@ export default [
 		},
 	},
 	{
-		// Extracted ES modules under webextension/lib/. Our own code (not the
-		// vendored zip.js library, which is ignored above). These are written
-		// as ES modules and consumed both by tests (via Vitest) and, in time,
-		// by refactored portions of the legacy script-tag code.
-		files: ['webextension/lib/**/*.js'],
+		// Extracted ES modules under webextension/lib/, plus page-main.js
+		// (PAGE_MODULES.md P1: the page's new ES-module entry, newTab.html's
+		// sole <script type="module">). Our own code (not the vendored
+		// zip.js library, which is ignored above). These are written as ES
+		// modules and consumed both by tests (via Vitest) and, in time, by
+		// refactored portions of the legacy script-tag code. page-main.js
+		// side-effect-imports the eight classic-script page files (which stay
+		// sourceType: 'script' — the vm test harness depends on that) and
+		// runs the hoisted boot sequence, so it needs `import` syntax; it
+		// lives directly under webextension/, so the general
+		// 'webextension/**/*.js' script-mode block above also matches it —
+		// this more specific, later block overrides sourceType/ecmaVersion
+		// for both it and lib/**/*.js, one object, no drift (code review,
+		// 2026-07-10-page-modules-p1-code-review.md finding 6).
+		files: ['webextension/lib/**/*.js', 'webextension/page-main.js'],
 		languageOptions: {
 			ecmaVersion: 2020,
 			sourceType: 'module',

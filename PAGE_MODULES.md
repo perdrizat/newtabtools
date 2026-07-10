@@ -1,6 +1,6 @@
 # Page Modules Arc — Page Scripts as Real ES Modules / Retire the globalThis Bridge
 
-**Status: PLANNED** (authored 2026-07-10). Successor arc to the 2026-07 background
+**Status: IN PROGRESS** (authored 2026-07-10; execution started 2026-07-10 on branch `page-modules`). Successor arc to the 2026-07 background
 ES-module rewrite + HTML5 page conversion (records: git history; reviews and
 inventories in `audit/2026-07-09-*`). Ships as **2.4.0** (minor, maintainer
 decision; 3.0.0 is reserved for the AMO release once this arc and the follow-up
@@ -20,7 +20,7 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 
 | Step | Status | Commit |
 |---|---|---|
-| P1 — module entry flip (`page-main.js`) + boot orchestration | pending | — |
+| P1 — module entry flip (`page-main.js`) + boot orchestration | in progress | — |
 | P2 — leaf modules: icons, stats, tiles-shim | pending | — |
 | P3 — dual-scope endgame: common/prefs real exports + prefs change seam | pending | — |
 | P4 — awesomebar module | pending | — |
@@ -123,39 +123,89 @@ after P5 (01/10/23/31 — tile grid + titlebar). E2E per slice, always.
 ## Execution checklist (commit per green slice)
 
 Gates per slice unless noted: red/green fast tests, `pnpm lint`,
-`pnpm typecheck`, `pnpm lint:webext`, `pnpm test:e2e`.
+`pnpm typecheck`, `pnpm lint:webext`, plus E2E per the tiering below.
+
+**E2E tiering (maintainer decision 2026-07-10, revised from full-per-slice):**
+- **P2, P4:** targeted E2E only — the touched subsystem's test files plus the
+  smoke trio `loads-cleanly` + `boot-timing` + `event-page-lifecycle`
+  (`pnpm test:e2e tests/e2e/<file> …`; the runner forwards file args).
+- **P3:** FULL suite (touches the background module graph + the prefs seam —
+  the highest-coupling slice; lifecycle interplay is the point).
+- **P5, P gate:** FULL suite + UAT per Decision 7.
+- Rationale: the diffuse-blast-radius failure class P1 hit (`Drag` unbridged,
+  caught by an unrelated E2E file) is now guarded statically — the fast-tier
+  bridge-inventory test plus the TEST-ONLY-bridge policy below. A regression
+  that still slips through surfaces at the next full run and bisects in one
+  step (slices are committed individually).
+
+**TEST-ONLY bridge policy (the enabler):** globals consumed by E2E/UAT
+page-context evaluation (`Tiles`, `Prefs`, `Grid`, `newTabTools`, `NttIcons`,
+`Updater`, `TileStats`, `Filters`, `Drag` — grep before each slice) must
+SURVIVE their file's export conversion as `TEST-ONLY BRIDGE` -marked
+`globalThis` assignments (the fx-newTab.js `Drag` precedent), even where the
+plan below says the assignment "dies" — only production consumers move to real
+imports. The surviving assignments consolidate into `page-main.js` at P5;
+retiring them for real means moving the E2E/UAT harness off page-globals —
+out of scope, ROADMAP backlog.
 
 ### P1 — module entry flip + boot orchestration
-- [ ] Convert cross-file page globals to explicit `globalThis.X =` form:
-      `NttIcons` (icons.js), `TileStats` (stats.js), `Tiles`/`Background`
-      (tiles-shim.js), `AwesomeBar` (awesomebar.js), `newTabTools` +
-      `pageMessageHandler` (newTab.js), `Page`/`Grid`/`Updater`/`UndoDialog`/
-      `Site`/`Cell`/`Drag`/`Drop`/`DropTargetShim`/`DropPreview`/
-      `Transformation` as actually cross-referenced (fx-newTab.js — grep
-      `/* globals */` headers for the true consumer set; keep file-internal
-      names local). `common.js`/`prefs.js` already assign `globalThis`.
-- [ ] fx-newTab.js's top-level trailer (`UndoDialog.init()`,
-      `newTabTools.startup()`, the guarded `flushQueued()`) moves to
-      `page-main.js` — fx-newTab.js's top level becomes definition-only.
-- [ ] New `webextension/page-main.js`: side-effect imports of the eight files in
-      today's order, then `UndoDialog.init(); newTabTools.startup();
-      pageMessageHandler.flushQueued();`. Header comment: the bridge story +
-      Decision 3's no-top-level-cross-calls rule.
-- [ ] `newTab.html`: delete the mid-body common.js tag and the seven bottom
-      tags; one `<script type="module" src="page-main.js"></script>` in
-      `<head>` (defer semantics make placement moot; head keeps fetch early).
-- [ ] `action.html`/`action.js`: same flip (37 lines — module attribute +
-      no bridge needed; it references only its own scope + chrome APIs).
-- [ ] mountSite()'s regex strips of `UndoDialog.init();`/`newTabTools.startup();`
-      become no-ops (the lines left fx-newTab.js) — verify `.replace` tolerates
-      no-match and update the harness comments; zero other test churn expected.
-- [ ] New page module-scope test (mirror of the Stage-M one): jsdom + chrome
-      mocks, dynamic-import the eight files in order, assert every bridge
-      global lands on `globalThis` and that importing throws nothing (the
-      Decision-3 guard).
-- [ ] Boot-timing measurement: capture pre/post `waitForGridReady` deltas from
-      the E2E run logs; record the numbers here.
-- [ ] Gates + **FULL UAT** (11 scenarios — flash detection per Decision 4).
+- [x] Convert cross-file page globals to explicit `globalThis.X =` form.
+      Landed set: `NttIcons` (icons.js), `TileStats` (stats.js),
+      `Tiles`/`Background` (tiles-shim.js), `AwesomeBar` (awesomebar.js),
+      `newTabTools` + `pageMessageHandler` (newTab.js), `Page`/`Grid`/
+      `Updater`/`UndoDialog`/`Drag` (fx-newTab.js — `Drag` isn't
+      cross-referenced in-page but E2E drag-layout drives it via page-context
+      evaluation; `Site`/`Cell`/`Drop`/`DropTargetShim`/`DropPreview`/
+      `Transformation` stay file-local — only the script-mode vm harness
+      reads them). `common.js`/`prefs.js` already assigned `globalThis`.
+- [x] fx-newTab.js's top-level trailer (`UndoDialog.init()`,
+      `newTabTools.startup()`, the guarded `flushQueued()`) moved to
+      `page-main.js` — fx-newTab.js's top level is definition-only.
+- [x] New `webextension/page-main.js`: side-effect imports of the eight files
+      in the former tag order, then the boot calls; header documents the
+      bridge story + Decision 3's rule. eslint got a one-file module-mode
+      carve-out for it; tsconfig deliberately unchanged (adding page-main.js
+      would drag all eight untyped page files into the program via
+      import-following — same rationale as the background-main.js exclusion;
+      P5 revisits).
+- [x] `newTab.html`: mid-body common.js tag + seven bottom tags deleted; one
+      `<script type="module" src="page-main.js"></script>` in `<head>`.
+- [x] `action.html`/`action.js`: same flip (module attribute only —
+      verified action.js references only its own scope + chrome APIs).
+- [x] mountSite()'s regex strips deleted (nothing left to neutralize);
+      harness comment updated. One pre-existing wiring test retargeted
+      (tile-stats.test.ts's "linked in newTab.html" → "imported by
+      page-main.js"); zero other test churn.
+- [x] New page module-scope test: `tests/integration/page-module-scope.test.ts`
+      (RED-proven: pre-fix, fx-newTab.js's trailer threw `ReferenceError:
+      newTabTools is not defined` on native import, and 11 of the bridge
+      globals were undefined).
+- [x] Boot-timing measurement: captured pre/post via
+      `tests/e2e/boot-timing.test.ts` (permanent instrument, single-file run:
+      `pnpm test:e2e tests/e2e/boot-timing.test.ts`; numbers persist to
+      `tests/e2e/_artifacts/boot-timing.txt`).
+      **Pre-flip baseline (2026-07-10, classic scripts, headless FF 152.0.5):**
+      firstTileSeen 99/95/95 (median 95), domInteractive median 26,
+      domContentLoadedEventEnd median 28, fcp median 27 — all ms, page clock.
+      **Post-flip (same day/binary, module entry):** firstTileSeen median
+      95–98 across runs (delta ≈ 0, within the instrument's ±25ms poll
+      granularity), domInteractive median 14–15 (improved — the parser no
+      longer blocks on mid-body classic scripts), domContentLoadedEventEnd
+      median 25–29, fcp median 21–28. **Verdict: the Decision-4 defer risk is
+      a measured non-event**; UAT visual judgment remains the flash gate.
+      Note: BiDi preload scripts don't apply to moz-extension:// pages, so
+      firstTileSeen is harness-polled at 25ms granularity (see the test's
+      header comment).
+- [x] Gates + **FULL UAT**: fast 1282/1282, lint/typecheck/lint:webext clean,
+      E2E 127/127 (one interim failure — E2E's page-context `Drag.start`
+      access needed the bridge too; landed as the marked TEST-ONLY `Drag`
+      bridge), **UAT 11/11, no boot flash observed** (Decision-4 gate closed:
+      measured ≈0 delta + clean visual judgment). Code review
+      `audit/2026-07-10-page-modules-p1-code-review.md` adjudicated same day:
+      findings 1–4, 6–8 executed (behavioral page-main boot test, action.js
+      module-mode test, all-or-nothing-boot risk recorded below, strip sweep
+      completed, eslint blocks merged, shared menus mock, derived load order);
+      finding 5 adjudicated keep-with-TEST-ONLY-marker (maintainer decision).
 
 ### P2 — leaf modules
 - [ ] `icons.js` → `export const NttIcons`; `stats.js` → `export const
@@ -243,6 +293,14 @@ DOM/jsdom setup survives as a plain fixture helper until P5, then dies with
   slice is the actual module-loading gate (as it was for Stage M's M1).
 - **Diff churn collision.** Do not interleave with other work touching
   newTab.js/fx-newTab.js; the P5 diff is large even though mechanical.
+- **Boot is all-or-nothing.** ES-module graph evaluation is a single
+  dependency-ordered pass: a top-level throw in any of page-main.js's eight
+  imports rejects the whole graph, so its boot sequence never runs and the
+  page renders as a permanently inert shell — the old classic `<script>` tags
+  degraded per-script instead (a throwing tag didn't stop the next one).
+  Accepted deliberately in P1 (review 2026-07-10 finding 3): the eight scripts
+  already shared one scope and were already interdependent, so the old
+  model's partial degradation was thin in practice.
 
 ## Out of scope (this arc)
 

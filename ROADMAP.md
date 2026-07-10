@@ -93,6 +93,12 @@ Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 - `lib/background-main.js` is excluded from `checkJs` (documented tsconfig gotcha:
   excluding the entry keeps tsc from pulling untyped dual-scope imports into the
   program) — spot-check it manually on change, or find a lint-grade alternative.
+- Move the E2E/UAT harness off page-global access (`window.Tiles`/`Prefs`/
+  `Grid`/… reached via page-context evaluation) — the reason the page-modules
+  arc keeps TEST-ONLY `globalThis` bridges alive past each file's export
+  conversion (see `PAGE_MODULES.md`, E2E tiering / TEST-ONLY bridge policy).
+  Retiring those bridges for real means driving test setup through messages/UI
+  instead.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The 11-scenario suite covers env/smoke (`00`, `01`), tiles (`10`, `11`), drawer

@@ -3,7 +3,7 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* exported Page */
-/* globals Blocked, NeverCapture, newTabTools, NttIcons, pageMessageHandler, Prefs, Tiles, TileStats */
+/* globals Blocked, NeverCapture, newTabTools, NttIcons, Prefs, Tiles, TileStats */
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -2316,18 +2316,23 @@ var UndoDialog = {
 	}
 };
 
-UndoDialog.init();
+// page-modules P1 (PAGE_MODULES.md, Decision 3): the former top-level boot
+// trailer here (`UndoDialog.init(); newTabTools.startup();
+// pageMessageHandler.flushQueued();`) moved to page-main.js — it was this
+// file's one violation of "no page module executes another module's code at
+// its own top level" (it reached into newTabTools/pageMessageHandler, both
+// from newTab.js). fx-newTab.js's top level is now definition-only.
 
-newTabTools.startup();
-
-// MV3 review §4.3 (MODERNIZATION.md M5): this is the last statement this
-// file's top-level execution runs — `Updater`/`Grid` (defined above) now
-// exist, so this is the ready signal for any 'Page.updateGrid'/
-// 'Page.restoreComplete' broadcast that arrived (and was queued by
-// pageMessageHandler in newTab.js) before this file finished loading.
-// Guarded: fx-newTab.js is also loaded standalone (without newTab.js) by
-// tests/integration/_helpers.ts's mountSite() harness, where
-// pageMessageHandler doesn't exist.
-if (typeof pageMessageHandler !== 'undefined') {
-	pageMessageHandler.flushQueued();
-}
+// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
+// longer lands on `globalThis`; these names are consumed cross-file and by
+// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+globalThis.Page = Page;
+globalThis.Grid = Grid;
+globalThis.Updater = Updater;
+globalThis.UndoDialog = UndoDialog;
+// TEST-ONLY BRIDGE — not production API (review 2026-07-10 finding 5,
+// adjudicated: keep, marked). No page file reads window.Drag; it exists
+// solely so tests/e2e/drag-layout.test.ts can drive Drag.start via
+// page-context evaluation. Production code must not grow a dependency on
+// it; retires in P5 with the rest of the bridge.
+globalThis.Drag = Drag;

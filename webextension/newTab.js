@@ -2428,3 +2428,9 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		newTabTools.applyTileAspect();
 	});
 })();
+
+// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
+// longer lands on `globalThis`; these names are consumed cross-file and by
+// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+globalThis.newTabTools = newTabTools;
+globalThis.pageMessageHandler = pageMessageHandler;

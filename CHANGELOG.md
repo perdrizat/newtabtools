@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `webextension/page-main.js`: the new-tab page's single ES-module entry point, replacing eight classic `<script>` tags (PAGE_MODULES.md P1).
+- `tests/integration/page-module-scope.test.ts`: page-side module-scope regression test asserting the eight page files' bridged globals land on `globalThis` and that importing them runs no cross-module top-level code.
+- `tests/e2e/boot-timing.test.ts`: permanent boot-timing instrument (polled firstTileSeen + navigation/paint entries, persisted to `_artifacts/boot-timing.txt`); P1 boot delta measured ≈ 0.
+- `audit/2026-07-10-page-modules-p1-code-review.md`: medium-effort review of P1 (no live bug — strict-mode/bridge/import-order verified clean; flagged page-main.js's untested boot orchestration, action.js's module flip lacking a module-mode test, all-or-nothing boot, and an incomplete removed-behavior sweep).
+- `tests/integration/page-main-boot.test.ts`: behavioral coverage for `page-main.js` (import completeness + `UndoDialog.init()` → `newTabTools.startup()` → `pageMessageHandler.flushQueued()` boot order), replacing a source-grep waiver (P1 review finding 1).
+- `tests/setup.js`: shared `browser.menus` mock (create/update/refresh/onShown/onClicked), replacing two divergent ad-hoc copies in `module-scope.test.ts` and `page-module-scope.test.ts` (P1 review finding 7).
+
+### Changed
+
+- `newTab.html`/`action.html` now load `page-main.js`/`action.js` as ES modules instead of classic scripts; `icons.js`, `stats.js`, `tiles-shim.js`, `awesomebar.js`, `newTab.js`, `fx-newTab.js` each gain an explicit `globalThis.X = X;` bridge assignment for their cross-file names.
+- `fx-newTab.js`'s top-level boot trailer (`UndoDialog.init(); newTabTools.startup(); pageMessageHandler.flushQueued();`) hoisted into `page-main.js` — fx-newTab.js's top level is now definition-only (PAGE_MODULES.md Decision 3).
+- `tests/integration/action-popup.test.ts` now natively `import()`s `action.js` (module semantics) instead of `vm.runInThisContext` (classic script), matching production's module flip (P1 review finding 2).
+- `tests/integration/page-module-scope.test.ts`'s `PAGE_FILES_IN_LOAD_ORDER` is now parsed from `page-main.js`'s own import lines instead of hardcoded, so the two can't drift (P1 review finding 8).
+- `eslint.config.js`: merged the duplicate `webextension/page-main.js` block into the `webextension/lib/**/*.js` module-mode block (P1 review finding 6).
+- `PAGE_MODULES.md`: recorded the all-or-nothing boot property (a throw in any of page-main.js's eight imports aborts the whole boot) as a deliberate, accepted P1 behavior change (P1 review finding 3).
+
+### Removed
+
+- `tests/integration/tile-stats.test.ts`'s source-grep "is imported by page-main.js" test, subsumed by `page-main-boot.test.ts` (P1 review finding 1).
+- Two dead `.replace()` neutralizing strips and their stale comment in `tests/integration/tile-url-render.test.ts` — `fx-newTab.js`'s top level has been definition-only since P1, so there was nothing left to strip (P1 review finding 4).
+
 ## [2.3.0] — 2026-07-10
 
 HTML5 page conversion (Stage H of the modernization arc) + post-arc review

@@ -35,15 +35,13 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 	let addTitle: any;
 
 	beforeAll(() => {
-		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Updater, etc.)
-		// but lines 1939-1941 call UndoDialog.init() and newTabTools.startup()
-		// which need the full new-tab DOM. We strip those two calls — we only
-		// need the Site prototype definitions.
+		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Updater, etc.).
+		// page-modules P1 (PAGE_MODULES.md): its top level is now
+		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
+		// trailer this test used to strip out was hoisted to page-main.js, so
+		// there is nothing left here to neutralize before vm-loading the file.
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const raw = fs.readFileSync(FX_NEWTAB_PATH, 'utf8');
-		const code = raw
-			.replace(/^UndoDialog\.init\(\);$/m, '// [stripped for test]')
-			.replace(/^newTabTools\.startup\(\);$/m, '// [stripped for test]');
+		const code = fs.readFileSync(FX_NEWTAB_PATH, 'utf8');
 		vm.runInThisContext(code, { filename: 'fx-newTab.js' });
 
 		addTitle = (globalThis as any).Site.prototype.addTitle;

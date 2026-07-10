@@ -24,9 +24,19 @@ describe('TileStats module — source presence', () => {
 		expect(source).toContain('TileStats');
 	});
 
-	it('is linked in newTab.html', () => {
+	// The former "is imported by page-main.js" test here was a source-string
+	// grep (`readFileSync(page-main.js).toContain('./stats.js')`) — the
+	// ntt/no-source-grep antipattern re-licensed with a disable comment (code
+	// review, 2026-07-10-page-modules-p1-code-review.md finding 1). Deleted in
+	// favor of tests/integration/page-main-boot.test.ts, which natively
+	// imports the real page-main.js and proves the wiring behaviorally
+	// (import completeness + boot order), and page-module-scope.test.ts, whose
+	// PAGE_FILES_IN_LOAD_ORDER is now parsed from page-main.js's own source
+	// (finding 8) rather than hardcoded.
+
+	it('newTab.html loads page-main.js as its module entry', () => {
 		const html = readNewTabHtml();
-		expect(html).toContain('stats.js');
+		expect(html).toMatch(/<script[^>]*type="module"[^>]*src="page-main\.js"/);
 	});
 });
 
