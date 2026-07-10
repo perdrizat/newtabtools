@@ -2,8 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported Page */
-/* globals Blocked, NeverCapture, newTabTools, NttIcons, Prefs, Tiles, TileStats */
+// page-modules P5 (PAGE_MODULES.md): real imports replace the former
+// `/* exported */`/`/* globals */` headers. `newTabTools` comes from
+// newTab.js, which forms a legal ESM cycle with this file (Decision 3) —
+// every reference below is call-time only (inside methods/callbacks), never
+// a top-level read. `pageMessageHandler` (also exported by newTab.js) is not
+// referenced by this file's code (only by a comment describing the P1
+// trailer hoist), so it is deliberately not imported here — see the P4
+// precedent (PAGE_MODULES.md) for trusting actual usage over the plan draft.
+import { newTabTools } from './newTab.js';
+import { Blocked, NeverCapture, Prefs } from './prefs.js';
+import { NttIcons } from './icons.js';
+import { Tiles } from './tiles-shim.js';
+import { TileStats } from './stats.js';
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -39,7 +50,7 @@ DOMRect.prototype.intersect = function(other) {
  * in the DOM and by showing or hiding the node. It additionally provides
  * convenience methods to work with a site's DOM node.
  */
-var Transformation = {
+export var Transformation = {
 	/**
 	   * Gets a DOM node's position.
 	   * @param node The DOM node.
@@ -289,7 +300,7 @@ var Transformation = {
  * This singleton represents the whole 'New Tab Page' and takes care of
  * initializing all its components.
  */
-var Page = {
+export var Page = {
 	/**
 	   * Initializes the page.
 	   */
@@ -339,7 +350,7 @@ var Page = {
 /**
  * This singleton represents the grid that contains all sites.
  */
-var Grid = {
+export var Grid = {
 	/**
 	   * The DOM node of the grid.
 	   */
@@ -719,7 +730,7 @@ function siteBrandColor(link) {
  * This class represents a site that is contained in a cell and can be pinned,
  * moved around or deleted.
  */
-function Site(node, link) {
+export function Site(node, link) {
 	this._node = node;
 	this._node._newtabSite = this;
 
@@ -1281,7 +1292,7 @@ Site.prototype = {
 /**
  * This singleton implements site dragging functionality.
  */
-var Drag = {
+export var Drag = {
 	/**
 	   * The site offset to the drag start point.
 	   */
@@ -1433,7 +1444,7 @@ const DELAY_REARRANGE_MS = 100;
 /**
  * This singleton implements site dropping functionality.
  */
-var Drop = {
+export var Drop = {
 	/**
 	   * The last drop target.
 	   */
@@ -2008,7 +2019,7 @@ var DropPreview = {
  * This singleton provides functionality to update the current grid to a new
  * set of pinned and blocked sites. It adds, moves and removes sites.
  */
-var Updater = {
+export var Updater = {
 	/**
 	   * Updates the current grid according to its pinned and blocked sites.
 	   * This removes old, moves existing and creates new sites to fill gaps.
@@ -2205,7 +2216,7 @@ var Updater = {
  * Dialog allowing to undo the removal of single site or to completely restore
  * the grid's original state.
  */
-var UndoDialog = {
+export var UndoDialog = {
 	/**
 	   * The undo dialog's timeout in miliseconds.
 	   */
@@ -2323,9 +2334,13 @@ var UndoDialog = {
 // its own top level" (it reached into newTabTools/pageMessageHandler, both
 // from newTab.js). fx-newTab.js's top level is now definition-only.
 
-// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
-// longer lands on `globalThis`; these names are consumed cross-file and by
-// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+// page-modules P5 (PAGE_MODULES.md): all four names above are real exports
+// now (production consumers — newTab.js, page-main.js — use named imports).
+// TEST-ONLY BRIDGE: these assignments survive solely for E2E/UAT
+// page-context evaluation and any fast-tier suite still reading them as bare
+// identifiers off a computed-path dynamic import. Retiring them for real
+// means moving that harness off page-globals — out of scope, ROADMAP
+// backlog (see PAGE_MODULES.md's TEST-ONLY bridge policy).
 globalThis.Page = Page;
 globalThis.Grid = Grid;
 globalThis.Updater = Updater;
@@ -2334,5 +2349,8 @@ globalThis.UndoDialog = UndoDialog;
 // adjudicated: keep, marked). No page file reads window.Drag; it exists
 // solely so tests/e2e/drag-layout.test.ts can drive Drag.start via
 // page-context evaluation. Production code must not grow a dependency on
-// it; retires in P5 with the rest of the bridge.
+// it; retires in P5 with the rest of the bridge. `Site`/`Drop`/
+// `Transformation` do NOT gain a matching assignment here — this slice gave
+// them real exports instead (PAGE_MODULES.md's P5 checklist), and the fast
+// tier imports the module directly, so a bridge would be redundant.
 globalThis.Drag = Drag;

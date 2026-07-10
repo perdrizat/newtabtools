@@ -2,9 +2,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals AwesomeBar, Background, Blocked, compareVersions, Filters, Grid, NeverCapture, NttIcons, Page, Prefs, Tiles, TileStats, Updater */
+// page-modules P5 (PAGE_MODULES.md): real imports replace the former
+// `/* globals */` header. `Page`/`Grid`/`Updater` come from fx-newTab.js,
+// which forms a legal ESM cycle with this file (Decision 3) — every
+// cross-reference below is call-time only (inside functions/callbacks),
+// never a top-level read, so the cycle's evaluation order (fx-newTab.js's
+// own top level, which imports this file, finishes before this file's top
+// level runs — see PAGE_MODULES.md's P5 checklist note) never matters.
+import { AwesomeBar } from './awesomebar.js';
+import { Background, Tiles } from './tiles-shim.js';
+import { NttIcons } from './icons.js';
+import { TileStats } from './stats.js';
+import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
+import { compareVersions } from './common.js';
+import { Grid, Page, Updater } from './fx-newTab.js';
 
-var newTabTools = {
+export const newTabTools = {
 	getString(name, ...substitutions) {
 		return chrome.i18n.getMessage(name, substitutions);
 	},
@@ -2158,7 +2171,7 @@ var newTabTools = {
  * @param {{name?: string}} message
  * @returns {boolean} always false — never claims the sendResponse channel
  */
-function pageMessageHandler(message) {
+export function pageMessageHandler(message) {
 	switch (message && message.name) {
 	case 'Page.updateGrid':
 		if (typeof Updater !== 'undefined') {
@@ -2429,8 +2442,13 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 	});
 })();
 
-// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
-// longer lands on `globalThis`; these names are consumed cross-file and by
-// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+// page-modules P5 (PAGE_MODULES.md): both names above are real exports now
+// (real production consumers — fx-newTab.js, page-main.js — use the named
+// import). TEST-ONLY BRIDGE: these assignments survive solely for the
+// fast-tier harness (computed-path dynamic imports of this file still read
+// them as bare identifiers in some suites) and E2E/UAT page-context
+// evaluation. Retiring them for real means moving that harness off
+// page-globals — out of scope, ROADMAP backlog (see PAGE_MODULES.md's
+// TEST-ONLY bridge policy).
 globalThis.newTabTools = newTabTools;
 globalThis.pageMessageHandler = pageMessageHandler;

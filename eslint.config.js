@@ -20,12 +20,15 @@ const webExtGlobals = {
 
 // Extension-specific globals exposed on the new tab page and background page.
 // Used inside page.evaluate() callbacks in E2E tests and in integration tests
-// that load/mock the extension scripts.
+// that load/mock the extension scripts. PAGE_MODULES.md P5: pruned to names
+// actually grepped as still in use (bare identifiers in E2E page.evaluate()
+// callbacks, plus `(window as any).X` casts) — `Blocked` and `DropTargetShim`
+// had zero remaining references anywhere under tests/ (E2E or integration) as
+// bare/unimported identifiers, so they're dropped; every name below still has
+// at least one E2E .ts file referencing it.
 const nttGlobals = {
 	Background: 'readonly',
-	Blocked: 'readonly',
 	Drag: 'readonly',
-	DropTargetShim: 'readonly',
 	Filters: 'readonly',
 	Grid: 'readonly',
 	newTabTools: 'readonly',
@@ -154,36 +157,33 @@ export default [
 	},
 	js.configs.recommended,
 	{
-		// Script-mode files in webextension/ (MODERNIZATION.md Stage M, slice
-		// M5 — background.js and its tiles.js bridge shim are gone). This is
-		// now: the page files still loaded as classic-script-syntax modules via
-		// page-main.js's side-effect imports — newTab.js, fx-newTab.js,
-		// action.js. Classic script syntax (`globalThis.X = X;`,
-		// no `import`/`export`) works for these until their own P5 slice
-		// converts them. PAGE_MODULES.md P1: page-main.js (the page's new
-		// ES-module entry) also lives directly under webextension/ and would
-		// otherwise match this glob too — the more specific
-		// lib/**/*.js-plus-page-main.js block below overrides
-		// sourceType/ecmaVersion for that one file. P2: icons.js/stats.js/
-		// tiles-shim.js gained real `export`s and moved to that module-mode
-		// block too (their test suites now natively import them instead of
-		// vm-loading, so nothing here still needs script-mode parsing for
-		// them). P3: common.js/prefs.js — the two dual-scope bridge files
-		// (MODERNIZATION.md Decision 2) that are ALSO side-effect-imported by
-		// lib/background-main.js (a real ES module) — gained real `export`s
-		// too (their `globalThis.X = …` bridge assignments stay, permanently,
-		// since the page still needs them as classic-`<script>` globals) and
-		// moved to the module-mode block below, alongside icons.js/stats.js/
-		// tiles-shim.js, for the same reason: `export` syntax needs
-		// sourceType: 'module' to parse. P4: awesomebar.js gained real
-		// `import`s/`export` too (its own `globalThis.AwesomeBar = ...` bridge
-		// assignment stays, still read as a bare identifier by newTab.js, which
-		// stays classic-script/vm-loaded until P5, plus E2E/UAT page-context)
-		// and moved to the module-mode block below for the same reason.
+		// Extracted ES modules under webextension/lib/, plus every webextension/
+		// page file — all of them are now real ES modules, and every one of
+		// them (including action.js) is loaded via `<script type="module">`
+		// (PAGE_MODULES.md P1). Our own code (not the vendored zip.js library,
+		// which is ignored above). page-main.js side-effect-imports the eight
+		// page files and runs the hoisted boot sequence, so it needs `import`
+		// syntax; icons.js/stats.js/tiles-shim.js (P2), common.js/prefs.js
+		// (P3), awesomebar.js (P4), and newTab.js/fx-newTab.js (P5) all gained
+		// real `import`/`export` syntax in their own slice. action.js has no
+		// `import`/`export` of its own (self-scoped, references only
+		// chrome/browser APIs) but is still parsed as sourceType: 'module' here
+		// to match how the browser actually loads it — there is no remaining
+		// script-mode (`sourceType: 'script'`) webextension/*.js file, so the
+		// former separate script-mode block (MODERNIZATION.md Stage M through
+		// PAGE_MODULES.md P4) is retired; this is now the one block for all of
+		// webextension/**/*.js.
+		//
+		// Every page file's `globalThis.X = X;` bridge assignment (see the
+		// comment at each file's end) is TEST-ONLY as of P5 — E2E/UAT
+		// page-context evaluation and any fast-tier suite still reading a bare
+		// identifier off a computed-path dynamic import (PAGE_MODULES.md's
+		// TEST-ONLY bridge policy); no production consumer reads globals
+		// anymore.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
-			ecmaVersion: 2018,
-			sourceType: 'script',
+			ecmaVersion: 2020,
+			sourceType: 'module',
 			globals: webExtGlobals,
 		},
 		plugins: {
@@ -193,43 +193,6 @@ export default [
 			...projectRules,
 			'ntt/no-hardcoded-text': 2,
 		},
-	},
-	{
-		// Extracted ES modules under webextension/lib/, plus page-main.js
-		// (PAGE_MODULES.md P1: the page's new ES-module entry, newTab.html's
-		// sole <script type="module">). Our own code (not the vendored
-		// zip.js library, which is ignored above). These are written as ES
-		// modules and consumed both by tests (via Vitest) and, in time, by
-		// refactored portions of the legacy script-tag code. page-main.js
-		// side-effect-imports the eight page files and runs the hoisted boot
-		// sequence, so it needs `import` syntax; it lives directly under
-		// webextension/, so the general 'webextension/**/*.js' script-mode
-		// block above also matches it — this more specific, later block
-		// overrides sourceType/ecmaVersion for it, lib/**/*.js, one object, no
-		// drift (code review, 2026-07-10-page-modules-p1-code-review.md
-		// finding 6). PAGE_MODULES.md P2: icons.js/stats.js/tiles-shim.js
-		// gained real `export`s (their `globalThis.X = X;` bridge assignments
-		// stay — still read as bare identifiers by newTab.js/fx-newTab.js,
-		// which stay classic-script/vm-loaded until P5), so `export` syntax
-		// needs this block's sourceType: 'module' too; the general script-mode
-		// block above would otherwise fail to parse them. P3: common.js/prefs.js
-		// gained real `export`s too (their `globalThis.X = X;` bridge
-		// assignments stay — still read as bare identifiers by
-		// newTab.js/fx-newTab.js, which stay classic-script/vm-loaded until P5,
-		// plus E2E/UAT page-context), so they join this block for the same
-		// `export`-needs-module-mode reason. P4: awesomebar.js gained real
-		// `import`s/`export` too (its own `globalThis.AwesomeBar = X;` bridge
-		// assignment stays — still read as a bare identifier by newTab.js,
-		// which stays classic-script/vm-loaded until P5, plus E2E/UAT
-		// page-context), so it joins this block for the same
-		// `export`-needs-module-mode reason.
-		files: ['webextension/lib/**/*.js', 'webextension/page-main.js', 'webextension/icons.js', 'webextension/stats.js', 'webextension/tiles-shim.js', 'webextension/common.js', 'webextension/prefs.js', 'webextension/awesomebar.js'],
-		languageOptions: {
-			ecmaVersion: 2020,
-			sourceType: 'module',
-			globals: webExtGlobals,
-		},
-		rules: projectRules,
 	},
 	{
 		// E2E tests and helpers. These run in Node but often contain

@@ -60,9 +60,15 @@ function webext(relPath: string): string {
 // this order, without throwing — is exercised below by natively importing
 // each one, and page-main-boot.test.ts separately proves the real entry point
 // runs the same import list plus the boot sequence.
+//
+// page-modules P5 (PAGE_MODULES.md): page-main.js now calls into
+// newTab.js/fx-newTab.js/prefs.js directly, so three of the eight lines are
+// named imports (`import { X } from './Y.js';`) rather than side-effect-only
+// (`import './Y.js';`) — the regex matches either form, still capturing just
+// the specifier.
 // eslint-disable-next-line ntt/no-source-grep -- supplies the expected load order from the single source of truth (page-main.js); the import behavior itself is exercised natively below, not asserted via string match
 const pageMainSource = fs.readFileSync(PAGE_MAIN_PATH, 'utf8');
-const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import '\.\/([^']+)';$/gm)]
+const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?'\.\/([^']+)';$/gm)]
 	.map(m => m[1]);
 
 // Sanity net: if the regex silently matches nothing (or the wrong thing)

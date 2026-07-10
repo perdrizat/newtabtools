@@ -6,7 +6,17 @@ import { describe, it, expect, beforeAll, afterEach, beforeEach, vi } from 'vite
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { mountSite, readNewTabHtml } from './_helpers';
+import { mountSite, ensureSiteEnv, readNewTabHtml } from './_helpers';
+// page-modules P5 (PAGE_MODULES.md): fx-newTab.js's Site now real-imports
+// `Prefs`/`TileStats`/`NeverCapture` (from prefs.js/stats.js) instead of
+// reading them off `globalThis` — a stand-in object assigned over
+// `globalThis.X` is invisible to that binding (the P3/P4 "second-order
+// fallout" precedent), so this suite mutates the same real singletons'
+// properties/methods in place instead of replacing them. Static imports of
+// these leaf modules are fine here (unlike the monoliths) — they were
+// already part of the typed program since P2/P3.
+import { Prefs, NeverCapture } from '../../webextension/prefs.js';
+import { TileStats } from '../../webextension/stats.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
@@ -292,22 +302,25 @@ describe('Tile redesign — logo-emanation fallback (newTab.css)', () => {
 describe('Tile redesign — stat chip + favicon glyph (behavioral, §3.2/§3.4)', () => {
 	const tick = () => new Promise(r => setTimeout(r, 0));
 
-	function mountWithStat(stat: unknown) {
-		(globalThis as any).Prefs = (globalThis as any).Prefs || {};
-		(globalThis as any).Prefs.statType = 'visits';
-		(globalThis as any).TileStats = (globalThis as any).TileStats || {};
-		(globalThis as any).TileStats.compute = vi.fn().mockResolvedValue(stat);
-		return mountSite({ url: 'https://example.com/', title: 'Example' });
+	async function mountWithStat(stat: unknown) {
+		// Force the one-time site-env setup (which seeds Prefs.statType = 'none')
+		// to have already run before overriding it below — otherwise, if this is
+		// the first mountSite()-family call in the file, that seed would run
+		// AFTER this override (inside mountSite itself) and clobber it.
+		await ensureSiteEnv();
+		Prefs.statType = 'visits';
+		TileStats.compute = vi.fn().mockResolvedValue(stat);
+		return await mountSite({ url: 'https://example.com/', title: 'Example' });
 	}
 
 	afterEach(() => {
-		// Restore the shared globals so later blocks see the default 'none'.
-		if ((globalThis as any).Prefs) { (globalThis as any).Prefs.statType = 'none'; }
-		if ((globalThis as any).TileStats) { (globalThis as any).TileStats.compute = vi.fn().mockResolvedValue(null); }
+		// Restore the shared singletons so later blocks see the default 'none'.
+		Prefs.statType = 'none';
+		TileStats.compute = vi.fn().mockResolvedValue(null);
 	});
 
 	it('a fresh stat sets [data-stat-fresh] and shows no text', async () => {
-		const { site, cleanup } = mountWithStat({ type: 'fresh' });
+		const { site, cleanup } = await mountWithStat({ type: 'fresh' });
 		await tick();
 		const chip = site.node.querySelector('.ntt-stat-chip');
 		expect(chip.hasAttribute('data-stat-fresh')).toBe(true);
@@ -316,7 +329,7 @@ describe('Tile redesign — stat chip + favicon glyph (behavioral, §3.2/§3.4)'
 	});
 
 	it('a non-fresh (trend) stat clears [data-stat-fresh] and shows the value', async () => {
-		const { site, cleanup } = mountWithStat({ type: 'trend', dir: 'up', value: 5 });
+		const { site, cleanup } = await mountWithStat({ type: 'trend', dir: 'up', value: 5 });
 		await tick();
 		const chip = site.node.querySelector('.ntt-stat-chip');
 		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
@@ -324,16 +337,16 @@ describe('Tile redesign — stat chip + favicon glyph (behavioral, §3.2/§3.4)'
 		cleanup();
 	});
 
-	it('statType none leaves the chip empty with no [data-stat-fresh]', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('statType none leaves the chip empty with no [data-stat-fresh]', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const chip = site.node.querySelector('.ntt-stat-chip');
 		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
 		expect(chip.textContent).toBe('');
 		cleanup();
 	});
 
-	it('_renderFavicon renders the domain glyph via the shared siteGlyph helper', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('_renderFavicon renders the domain glyph via the shared siteGlyph helper', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const favicon = site.node.querySelector('.ntt-favicon');
 		// Same glyph the logo-fallback test asserts (siteGlyph is shared by both).
 		expect(favicon.textContent).toBe('E');
@@ -356,8 +369,8 @@ describe('Tile redesign — controller wiring (newTab.js, §3.1)', () => {
 });
 
 describe('Tile redesign — behavioral (§4.2)', () => {
-	it('Site with no thumbnail renders .ntt-logo-fallback with glyph and brand color', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example', backgroundColor: '#c96442' });
+	it('Site with no thumbnail renders .ntt-logo-fallback with glyph and brand color', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example', backgroundColor: '#c96442' });
 		const fallback = site.node.querySelector('.ntt-logo-fallback');
 		expect(fallback).toBeTruthy();
 		expect(fallback.style.getPropertyValue('--ntt-brand')).toBe('#c96442');
@@ -367,8 +380,8 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('Site with link.image does NOT render a fallback', () => {
-		const { site, cleanup } = mountSite({
+	it('Site with link.image does NOT render a fallback', async () => {
+		const { site, cleanup } = await mountSite({
 			url: 'https://example.com/', title: 'Example',
 			image: new Blob(['img'], { type: 'image/png' }),
 			imageIsThumbnail: true,
@@ -378,8 +391,8 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('updateAttributes(true) sets [pinned] on site node and updates pin button title', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('updateAttributes(true) sets [pinned] on site node and updates pin button title', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		site.updateAttributes(true);
 		expect(site.node.hasAttribute('pinned')).toBe(true);
 		const pinBtn = site.node.querySelector('.ntt-action-btn[data-action="pin"]');
@@ -388,8 +401,8 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('updateAttributes(false) removes [pinned] from site node', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('updateAttributes(false) removes [pinned] from site node', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		site.updateAttributes(true);
 		site.updateAttributes(false);
 		expect(site.node.hasAttribute('pinned')).toBe(false);
@@ -398,8 +411,8 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('_renderActions produces 4 buttons in §3c order (no "open in new tab")', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('_renderActions produces 4 buttons in §3c order (no "open in new tab")', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btns = site.node.querySelectorAll('.ntt-action-btn');
 		expect(btns.length).toBe(4);
 		const actions = Array.from(btns).map((b: any) => b.getAttribute('data-action'));
@@ -407,8 +420,8 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('action button SVG icons are 16px (medium size)', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('action button SVG icons are 16px (medium size)', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const svg = site.node.querySelector('.ntt-action-btn svg');
 		expect(svg).toBeTruthy();
 		expect(svg.getAttribute('width')).toBe('16');
@@ -416,12 +429,12 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 		cleanup();
 	});
 
-	it('_renderLogoFallback rejects malicious backgroundColor — falls back to a safe domain-hash color', () => {
+	it('_renderLogoFallback rejects malicious backgroundColor — falls back to a safe domain-hash color', async () => {
 		// Phase 4-5 + follow-up: instead of the fixed `#666` grey, an invalid
 		// `link.backgroundColor` falls through to the domain-hash colour,
 		// which now emits OKLCH (was HSL). The security intent (CSS
 		// injection rejected) is unchanged — only the colour-space changed.
-		const { site, cleanup } = mountSite({
+		const { site, cleanup } = await mountSite({
 			url: 'https://evil.com/', title: 'Evil',
 			backgroundColor: '#ff0000); url(http://attacker.example/x',
 		});
@@ -439,20 +452,19 @@ describe('Tile redesign — behavioral (§4.2)', () => {
 
 describe('Tile redesign — never-capture action button (slice 4)', () => {
 	beforeEach(() => {
-		// Reset NeverCapture to default (not listed) before each test.
-		(globalThis as any).NeverCapture = {
-			matches: vi.fn(() => false),
-			matchingEntry: vi.fn(() => undefined),
-			add: vi.fn().mockResolvedValue(undefined),
-			remove: vi.fn().mockResolvedValue(undefined),
-			getList: vi.fn(() => []),
-		};
+		// Reset the real NeverCapture singleton's methods to default (not
+		// listed) before each test.
+		NeverCapture.matches = vi.fn(() => false);
+		NeverCapture.matchingEntry = vi.fn(() => undefined);
+		NeverCapture.add = vi.fn().mockResolvedValue(undefined);
+		NeverCapture.remove = vi.fn().mockResolvedValue(undefined);
+		NeverCapture.getList = vi.fn(() => []);
 		// Reset sendMessage spy.
 		(globalThis as any).chrome.runtime.sendMessage = vi.fn();
 	});
 
-	it('never-capture button has data-action="never-capture", data-icon="camera-off", correct title, and no never-capture attribute when not listed', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('never-capture button has data-action="never-capture", data-icon="camera-off", correct title, and no never-capture attribute when not listed', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
 		expect(btn).toBeTruthy();
 		expect(btn.getAttribute('data-icon')).toBe('camera-off');
@@ -461,9 +473,9 @@ describe('Tile redesign — never-capture action button (slice 4)', () => {
 		cleanup();
 	});
 
-	it('never-capture button shows camera icon and allow title when site is listed', () => {
-		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('never-capture button shows camera icon and allow title when site is listed', async () => {
+		NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
 		expect(btn).toBeTruthy();
 		expect(btn.getAttribute('data-icon')).toBe('camera');
@@ -472,11 +484,11 @@ describe('Tile redesign — never-capture action button (slice 4)', () => {
 		cleanup();
 	});
 
-	it('click when unlisted calls NeverCapture.add with host and sends purgeHost message', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('click when unlisted calls NeverCapture.add with host and sends purgeHost message', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
 		btn.click();
-		expect((globalThis as any).NeverCapture.add).toHaveBeenCalledWith('example.com');
+		expect(NeverCapture.add).toHaveBeenCalledWith('example.com');
 		expect((globalThis as any).chrome.runtime.sendMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ name: 'Thumbnails.purgeHost', host: 'example.com' }),
 			expect.any(Function),
@@ -484,8 +496,8 @@ describe('Tile redesign — never-capture action button (slice 4)', () => {
 		cleanup();
 	});
 
-	it('click when unlisted flips button to camera icon and sets never-capture attribute', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('click when unlisted flips button to camera icon and sets never-capture attribute', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
 		btn.click();
 		// After click the site is now listed; button should reflect listed state.
@@ -495,12 +507,12 @@ describe('Tile redesign — never-capture action button (slice 4)', () => {
 		cleanup();
 	});
 
-	it('click when listed calls NeverCapture.remove and does NOT send purgeHost message', () => {
-		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('click when listed calls NeverCapture.remove and does NOT send purgeHost message', async () => {
+		NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
 		btn.click();
-		expect((globalThis as any).NeverCapture.remove).toHaveBeenCalledWith('example.com');
+		expect(NeverCapture.remove).toHaveBeenCalledWith('example.com');
 		expect((globalThis as any).chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
 			expect.objectContaining({ name: 'Thumbnails.purgeHost' }),
 			expect.anything(),
@@ -508,9 +520,9 @@ describe('Tile redesign — never-capture action button (slice 4)', () => {
 		cleanup();
 	});
 
-	it('click when listed flips button back to camera-off icon and removes never-capture attribute', () => {
-		(globalThis as any).NeverCapture.matches = vi.fn(() => true);
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('click when listed flips button back to camera-off icon and removes never-capture attribute', async () => {
+		NeverCapture.matches = vi.fn(() => true);
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement;
 		btn.click();
 		expect(btn.getAttribute('data-icon')).toBe('camera-off');

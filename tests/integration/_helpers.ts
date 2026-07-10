@@ -5,7 +5,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'vm';
 import { vi } from 'vitest';
 
 // page-modules P2 (PAGE_MODULES.md): icons.js gained a real `export`, which
@@ -21,16 +20,22 @@ import '../../webextension/icons.js';
 // page-modules P4 (PAGE_MODULES.md): this file used to also export a
 // `loadModule(relativePath, sandbox)` helper — a `vm.createContext` +
 // `vm.runInContext` sandbox loader for script-mode files, with its own
-// chrome/browser mock defaults. `tests/integration/awesomebar.test.ts` was
-// its last consumer (P2/P3 already migrated every other vm-loading suite);
-// once awesomebar.js gained a real `export` this slice, that test moved to a
-// native `import` too (the same reason icons.js's vm load was dropped above),
-// leaving `loadModule` with zero callers. Deleted here rather than waiting
-// for P5's harness retirement, per PAGE_MODULES.md's P4 checklist. `mountSite`
-// below still needs `vm.runInThisContext` for fx-newTab.js (a classic script
-// until P5), so the `vm`/`vi` imports stay.
+// chrome/browser mock defaults. Deleted once its last consumer migrated to a
+// native import (P4). P5 (PAGE_MODULES.md): `mountSite`'s own `vm` use is
+// gone too — fx-newTab.js gained real `import`/`export` this slice, which
+// `vm.runInThisContext` can no longer parse, so `importPageModules()` below
+// natively `import()`s it instead (a computed-path specifier, so `tsc`
+// doesn't follow the monolith into the typed program — PAGE_MODULES.md's P1
+// precedent, page-module-scope.test.ts). The `vm`/`fs` imports for
+// `mountSite` therefore drop; `fs` stays for `readNewTabHtml`.
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const WEBEXT_DIR = path.resolve(__dirname, '../../webextension');
+
+/** Resolves `relPath` (e.g. `'fx-newTab.js'`) to its absolute path under `webextension/`. */
+export function webextPath(relPath: string): string {
+	return path.join(WEBEXT_DIR, relPath);
+}
 
 const NEWTAB_HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
 let _newTabHtmlCache: string | undefined;
@@ -62,69 +67,53 @@ export function parseNewTabDocument(): Document {
 	return new DOMParser().parseFromString(readNewTabHtml(), 'text/html');
 }
 
-let _siteEnvLoaded = false;
+let _siteEnvPromise: Promise<any> | null = null;
 
-export function mountSite(
-	linkData: Record<string, unknown>,
-): { site: any; node: HTMLElement; cleanup: () => void } {
-	if (!document.getElementById('newtab-site')) {
-		const template = document.createElement('template');
-		template.id = 'newtab-site';
-		template.innerHTML = `
-			<div class="newtab-site" draggable="true">
-				<a class="newtab-link">
-					<span class="newtab-thumbnail"></span>
-				</a>
-				<span class="ntt-pin-stripe"></span>
-				<span class="ntt-stat-chip"></span>
-				<span class="ntt-actions-kebab"></span>
-				<span class="ntt-actions"></span>
-				<span class="ntt-drag-handle"></span>
-				<span class="ntt-add-tile"></span>
-				<span class="ntt-overlay">
-					<span class="ntt-favicon"></span>
-					<span class="newtab-title"></span>
-				</span>
-			</div>
-		`;
-		document.body.appendChild(template);
-	}
-
-	if (!_siteEnvLoaded) {
-		const fxPath = path.resolve(__dirname, '../../webextension/fx-newTab.js');
-
-		// icons.js is natively imported at module top (above) rather than
-		// vm-loaded here — see that import's comment.
-
-		(globalThis as any).Prefs = (globalThis as any).Prefs || { statType: 'none' };
-		(globalThis as any).Tiles = (globalThis as any).Tiles || { isPinned: vi.fn(() => false) };
-		(globalThis as any).Blocked = (globalThis as any).Blocked || { _list: [] };
-		(globalThis as any).NeverCapture = (globalThis as any).NeverCapture || {
-			matches: () => false,
-			matchingEntry: () => undefined,
-			add: vi.fn().mockResolvedValue(undefined),
-			remove: vi.fn().mockResolvedValue(undefined),
-			getList: () => [],
-		};
-		(globalThis as any).newTabTools = (globalThis as any).newTabTools || {
-			getString: (name: string) => name,
-			isValidURL: (url: string) => {
-				try { return ['http:', 'https:', 'ftp:'].includes(new URL(url).protocol); }
-				catch { return false; }
-			},
-		};
-		(globalThis as any).TileStats = (globalThis as any).TileStats || {
-			compute: vi.fn().mockResolvedValue(null),
-		};
-		(globalThis as any).chrome = {
-			...(globalThis as any).chrome,
-			runtime: { sendMessage: vi.fn() },
-			tabs: { create: vi.fn() },
-			i18n: { getMessage: vi.fn(() => '') },
-		};
-		(globalThis as any).UndoDialog = (globalThis as any).UndoDialog || { init: vi.fn() };
-		(globalThis as any).Updater = (globalThis as any).Updater || { updateGrid: vi.fn() };
-		(globalThis as any).Grid = (globalThis as any).Grid || { sites: [] };
+/**
+ * Loads the real page-module cycle (fx-newTab.js <-> newTab.js,
+ * PAGE_MODULES.md P5) exactly once per test file (memoized): mounts the
+ * shipped `newTab.html` body FIRST — newTab.js's top-level DOM-wiring IIFE
+ * looks up real element ids (options-toggle, wallpaper-close, …) and throws
+ * on a null element, the same reason page-module-scope.test.ts mounts it
+ * before importing (its own comment has the details) — then natively
+ * `import()`s fx-newTab.js by computed path (`@vite-ignore`, so `tsc`
+ * doesn't follow the monolith into the typed program). Importing
+ * fx-newTab.js transitively imports and evaluates newTab.js too (the legal
+ * cycle, Decision 3): both files' `Prefs`/`Tiles`/`Blocked`/`NeverCapture`/
+ * `TileStats`/`newTabTools` references are the same real singleton objects
+ * this helper (and any caller) also reaches via a matching `import()`.
+ *
+ * `Prefs.init()` is deliberately NOT called here (that's real boot — out of
+ * scope per Decision 3, "booting in jsdom is out of scope"). Before `init()`
+ * runs, `Prefs`'s pref-name properties (`statType`, …) are plain, getter-less
+ * own-data properties (`init()` is what installs the `__defineGetter__`/
+ * `__defineSetter__` accessor pair) — so a caller can set one directly, same
+ * as `awesomebar-dom.test.ts`'s established `Prefs.titleBarSearch = true`
+ * precedent, and read it back synchronously with no storage round-trip.
+ * `Prefs.statType` is seeded to `'none'` below, matching the one property the
+ * old stand-in `Prefs` object used to hardcode (a stand-in object assigned
+ * over `globalThis.Prefs` is invisible to code that now imports the real
+ * singleton — the P3/P4 "second-order fallout" precedent — so this seeds the
+ * REAL singleton's state instead of replacing the binding). Every other
+ * `Prefs.*`/`Blocked.*`/`Tiles.*`/`NeverCapture.*`/`TileStats.*` read a
+ * mountSite() consumer exercises was equally undefined/default-empty under
+ * the old full-replacement stand-ins, so no other default is seeded here;
+ * callers that need one mutate the (real, imported) singleton directly, in
+ * place, per test — see tile-redesign.test.ts for the pattern.
+ *
+ * Returns fx-newTab.js's module namespace (`Page`/`Grid`/`Updater`/
+ * `UndoDialog`/`Site`/`Drag`/`Drop`/`Transformation`).
+ *
+ * Exported (not just used internally by `mountSite`) so a caller that needs
+ * to override one of the seeded defaults (e.g. tile-redesign.test.ts sets
+ * `Prefs.statType = 'visits'` before mounting a site) can await this FIRST —
+ * otherwise, if that override happens to be the first `mountSite()` call in
+ * the test file, this function's one-time `Prefs.statType = 'none'` seed
+ * would run afterward (inside `mountSite`) and clobber the override.
+ */
+export async function ensureSiteEnv(): Promise<any> {
+	if (!_siteEnvPromise) {
+		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
 		if (!URL.createObjectURL) {
 			URL.createObjectURL = vi.fn(() => 'blob:mock');
@@ -133,21 +122,27 @@ export function mountSite(
 			URL.revokeObjectURL = vi.fn();
 		}
 
-		// page-modules P1 (PAGE_MODULES.md): fx-newTab.js's top level is now
-		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
-		// trailer this used to strip out was hoisted to page-main.js, so there is
-		// nothing left here to neutralize before vm-loading the file standalone.
-		let fxSource = fs.readFileSync(fxPath, 'utf8');
-		vm.runInThisContext(fxSource, { filename: 'fx-newTab.js' });
-
-		_siteEnvLoaded = true;
+		_siteEnvPromise = import(/* @vite-ignore */ webextPath('fx-newTab.js')).then(async fx => {
+			const { Prefs } = await import(/* @vite-ignore */ webextPath('prefs.js'));
+			(Prefs as any).statType = 'none';
+			return fx;
+		});
 	}
+	return _siteEnvPromise;
+}
 
-	const Site = (globalThis as any).Site;
+export async function mountSite(
+	linkData: Record<string, unknown>,
+): Promise<{ site: any; node: HTMLElement; cleanup: () => void }> {
+	const fx = await ensureSiteEnv();
+
+	// The real newTab.html already ships this exact template (id="newtab-site")
+	// — mounting the shipped body above provides it, so there is nothing left
+	// for this helper to hand-roll.
 	const template = document.getElementById('newtab-site') as HTMLTemplateElement;
 	const node = template.content.firstElementChild!.cloneNode(true) as HTMLElement;
 	document.body.appendChild(node);
-	const site = new Site(node, linkData);
+	const site = new fx.Site(node, linkData);
 
 	return {
 		site,

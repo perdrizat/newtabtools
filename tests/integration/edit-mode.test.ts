@@ -130,16 +130,16 @@ describe('edit mode — markup + defaults (§2)', () => {
 });
 
 describe('edit mode — per-tile rendering (§2)', () => {
-	it('renders a centred drag handle (with grip icon) on each tile', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('renders a centred drag handle (with grip icon) on each tile', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const handle = site.node.querySelector('.ntt-drag-handle');
 		expect(handle).toBeTruthy();
 		expect(handle.querySelector('svg')).toBeTruthy();
 		cleanup();
 	});
 
-	it('renders a "+ Pin tile" chip on each tile', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('renders a "+ Pin tile" chip on each tile', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const add = site.node.querySelector('.ntt-add-tile');
 		expect(add).toBeTruthy();
 		const chip = add.querySelector('.ntt-add-tile-chip');

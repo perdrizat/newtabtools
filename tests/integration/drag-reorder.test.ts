@@ -6,8 +6,8 @@
  * Integration test: drag-reorder tile logic in fx-newTab.js.
  * Phase 1 slot 9 of the migration plan (MIGRATION.md).
  *
- * Loads the real Drag, Drop, and Site.handleEvent from `fx-newTab.js` via
- * `vm.runInThisContext` with mocked DOM and Grid. Characterizes:
+ * Loads the real Drag, Drop, and Site.handleEvent from `fx-newTab.js` with
+ * mocked DOM and Grid. Characterizes:
  *   - Lock guard: Prefs.locked blocks dragstart
  *   - Drag.start: sets draggedSite, marks nodes as dragged, sets dataTransfer
  *   - Drag.end: clears draggedSite, removes dragged attrs
@@ -17,16 +17,26 @@
  *
  * E2E note: drag-reorder is best characterized at Integration tier first
  * due to the complexity of simulating drag events in Puppeteer.
+ *
+ * page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
+ * `import`/`export` syntax this slice, which `vm.runInThisContext`
+ * (script-mode) can no longer parse — natively `import()`ing it instead (a
+ * computed-path specifier, so `tsc` doesn't follow the monolith into the
+ * typed program). Importing it transitively imports and evaluates newTab.js
+ * too (the legal cycle, Decision 3), so `document.body` needs the real
+ * markup mounted first (newTab.js's top-level DOM-wiring IIFE needs real
+ * element ids — the page-module-scope.test.ts precedent). `Prefs`/`Tiles`/
+ * `newTabTools` are now real singletons `fx-newTab.js` imports for real, so
+ * this test drives their REAL state in place (mutating properties/methods)
+ * rather than replacing the `globalThis.X` bindings the old vm harness
+ * pre-seeded — a stand-in object assigned over `globalThis.X` is invisible
+ * to a real `import` binding (the P3/P4 "second-order fallout" precedent).
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+import { webextPath, parseNewTabDocument } from './_helpers';
+import { Prefs } from '../../webextension/prefs.js';
+import { Tiles } from '../../webextension/tiles-shim.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,24 +77,47 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 	let Drag: any;
 	let Drop: any;
 	let Transformation: any;
+	let Grid: any;
+	let Updater: any;
+	let newTabTools: any;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+	beforeAll(async () => {
+		// newTab.js's top-level DOM-wiring IIFE (reached via the cycle below)
+		// needs the real markup's element ids to exist — mount it before
+		// importing (page-module-scope.test.ts's precedent).
+		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
-		// Globals fx-newTab.js expects (it defines its own Grid, Drag, Drop, etc.)
-		globalThis.Prefs = { locked: false, rows: 3, columns: 3 };
-		globalThis.Updater = { updateGrid: vi.fn() };
-		globalThis.Tiles = { getAllTiles: vi.fn().mockResolvedValue([]) };
-		(globalThis as any).newTabTools = {
-			page: { firstElementChild: { offsetLeft: 0, offsetTop: 0 } },
-			startup: vi.fn(),
-			getThumbnails: vi.fn().mockResolvedValue(undefined),
-		};
+		// Real singletons fx-newTab.js/newTab.js import for real. `Prefs`'s
+		// pref-name properties are plain, getter-less own-data properties
+		// before `Prefs.init()` runs (never called here — real boot is out of
+		// scope) — a direct assignment is immediate and synchronous, same as
+		// `awesomebar-dom.test.ts`'s established `Prefs.titleBarSearch = true`
+		// precedent.
+		(Prefs as any).locked = false;
+		(Prefs as any).rows = 3;
+		(Prefs as any).columns = 3;
+		Tiles.getAllTiles = vi.fn().mockResolvedValue([]);
+
+		const fx = await import(/* @vite-ignore */ webextPath('fx-newTab.js'));
+		const nt = await import(/* @vite-ignore */ webextPath('newTab.js'));
+
+		Grid = fx.Grid;
+		Updater = fx.Updater;
+		Updater.updateGrid = vi.fn();
+		newTabTools = nt.newTabTools;
+		newTabTools.page = { firstElementChild: { offsetLeft: 0, offsetTop: 0 } };
+		newTabTools.startup = vi.fn();
+		newTabTools.getThumbnails = vi.fn().mockResolvedValue(undefined);
+
 		// Provide document methods fx-newTab.js needs. `_setDragData` is the only
 		// createElement call reachable from the Drag/Drop/Transformation paths
 		// this file exercises (a 'div' for the drag-image element) — no more
 		// createElementNS namespace split post-H3, so this overrides createElement.
+		// Installed AFTER the imports above (not before): newTab.js's top-level
+		// IIFE needs the REAL `document.getElementById` to find its markup —
+		// overriding it earlier would make every one of those lookups return
+		// this generic stand-in instead, and the IIFE calls
+		// `.querySelectorAll(...)` on some of them, which the stand-in lacks.
 		const origCreateElement = document.createElement.bind(document);
 		document.createElement = vi.fn((tag: string) => {
 			const el = origCreateElement(tag);
@@ -99,11 +132,9 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 			removeAttribute: vi.fn(),
 		})) as any;
 
-		vm.runInThisContext(source, { filename: 'fx-newTab.js' });
-
-		Drag = (globalThis as any).Drag;
-		Drop = (globalThis as any).Drop;
-		Transformation = (globalThis as any).Transformation;
+		Drag = fx.Drag;
+		Drop = fx.Drop;
+		Transformation = fx.Transformation;
 		// DropPreview is defined by fx-newTab.js but not directly tested here.
 	});
 
@@ -113,9 +144,8 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		Drag._offsetX = null;
 		Drag._offsetY = null;
 		Drop._lastDropTarget = null;
-		(globalThis as any).Prefs.locked = false;
-		// Grid is defined by fx-newTab.js — set _node to a mock so Grid.node works
-		const Grid = (globalThis as any).Grid;
+		(Prefs as any).locked = false;
+		// Set _node to a mock so Grid.node works.
 		Grid._node = { querySelectorAll: vi.fn(() => []) };
 		Grid._cells = [];
 	});
@@ -123,7 +153,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 	// ==================== lock guard ====================
 
 	it('dragstart is blocked when Prefs.locked is true', () => {
-		(globalThis as any).Prefs.locked = true;
+		(Prefs as any).locked = true;
 		const event = {
 			type: 'dragstart',
 			preventDefault: vi.fn(),
@@ -134,7 +164,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		// Simulate Site.handleEvent
 		const site = { node: mockNode(), cell: { node: mockNode(), index: 0 } };
 		// Inline the handleEvent logic since Site is a prototype, not easily callable
-		if ((globalThis as any).Prefs.locked) {
+		if ((Prefs as any).locked) {
 			event.preventDefault();
 		} else {
 			Drag.start(site, event);
@@ -241,7 +271,6 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 
 	it('Drag.end removes dragged attributes from grid nodes', () => {
 		const draggedNode = { removeAttribute: vi.fn() };
-		const Grid = (globalThis as any).Grid;
 		Grid._node.querySelectorAll.mockReturnValue([draggedNode]);
 		const site = { node: mockNode(), cell: { node: mockNode(), index: 0 } };
 		Drag._draggedSite = site;
@@ -284,11 +313,10 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 	// ==================== Drop.drop ====================
 
 	it('Drop.drop calls Updater.updateGrid', () => {
-		const RealUpdater = (globalThis as any).Updater;
-		RealUpdater.updateGrid = vi.fn();
+		Updater.updateGrid = vi.fn();
 		const cell = { index: 1, containsPinnedSite: vi.fn(() => false) };
 		Drag._draggedSite = { pin: vi.fn(), cell: { index: 0 } };
 		Drop.drop(cell, {});
-		expect(RealUpdater.updateGrid).toHaveBeenCalled();
+		expect(Updater.updateGrid).toHaveBeenCalled();
 	});
 });

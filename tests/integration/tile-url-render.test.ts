@@ -22,29 +22,29 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const FX_NEWTAB_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+import { webextPath, parseNewTabDocument } from './_helpers';
 
 describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 	let addTitle: any;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Updater, etc.).
 		// page-modules P1 (PAGE_MODULES.md): its top level is now
 		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
-		// trailer this test used to strip out was hoisted to page-main.js, so
-		// there is nothing left here to neutralize before vm-loading the file.
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const code = fs.readFileSync(FX_NEWTAB_PATH, 'utf8');
-		vm.runInThisContext(code, { filename: 'fx-newTab.js' });
+		// trailer this test used to strip out was hoisted to page-main.js.
+		// page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
+		// `import`/`export` syntax this slice, which `vm.runInThisContext`
+		// (script-mode) can no longer parse — natively `import()`ing it instead
+		// (a computed-path specifier, so `tsc` doesn't follow the monolith into
+		// the typed program). Importing it transitively imports and evaluates
+		// newTab.js too (the legal cycle, Decision 3), whose top-level
+		// DOM-wiring IIFE needs the real markup's element ids — mounting the
+		// shipped `newTab.html` body first is the same precedent
+		// page-module-scope.test.ts and `_helpers.ts`'s `mountSite()` use.
+		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
+		const fx = await import(/* @vite-ignore */ webextPath('fx-newTab.js'));
 
-		addTitle = (globalThis as any).Site.prototype.addTitle;
+		addTitle = fx.Site.prototype.addTitle;
 		expect(addTitle).toBeTypeOf('function');
 	});
 

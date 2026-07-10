@@ -18,8 +18,12 @@ import { Prefs } from './prefs.js';
  * PAGE_MODULES.md P4: the first page file with real `import`s — `NttIcons`/
  * `Prefs` above are genuine ES-module bindings now (icons.js/prefs.js gained
  * `export`s in P2/P3). `Grid`/`newTabTools` stay bare globals (see the
- * globals pragma above) because newTab.js/fx-newTab.js can't export until
- * P5 — they're still classic-script/vm-loaded.
+ * globals pragma above) as of P4; newTab.js/fx-newTab.js gained real
+ * `export`s of their own in P5, but converting this file's remaining two
+ * globals to real imports was not part of that slice's scope (newTab.js,
+ * fx-newTab.js, page-main.js) — left as a follow-up, not a blocker (both
+ * references here are call-time only, same as every other cross-file read
+ * in the mesh).
  *
  * @typedef {{url: string, title: string}} SourceItem A tile/bookmark/history
  *   entry as `buildResults` consumes it.

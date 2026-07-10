@@ -109,16 +109,16 @@ describe('tile surface — destructive action colour (§3c/§7)', () => {
 });
 
 describe('tile surface — behavioral (§3c)', () => {
-	it('renders a kebab icon at rest', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('renders a kebab icon at rest', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const kebab = site.node.querySelector('.ntt-actions-kebab');
 		expect(kebab).toBeTruthy();
 		expect(kebab.querySelector('svg')).toBeTruthy();
 		cleanup();
 	});
 
-	it('the hover row has exactly the 4 §3c actions, Remove last', () => {
-		const { site, cleanup } = mountSite({ url: 'https://example.com/', title: 'Example' });
+	it('the hover row has exactly the 4 §3c actions, Remove last', async () => {
+		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const actions = Array.from(site.node.querySelectorAll('.ntt-action-btn'))
 			.map((b: any) => b.getAttribute('data-action'));
 		expect(actions).toEqual(['edit', 'never-capture', 'pin', 'remove']);

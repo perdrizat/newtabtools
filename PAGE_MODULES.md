@@ -23,7 +23,7 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 | P1 — module entry flip (`page-main.js`) + boot orchestration | done | `4de0411` |
 | P2 — leaf modules: icons, stats, tiles-shim | done | `4e2924b` |
 | P3 — dual-scope endgame: common/prefs real exports + prefs change seam | done | `aa8adcf` |
-| P4 — awesomebar module | done | — |
+| P4 — awesomebar module | done | `b4e7a12` |
 | P5 — the monolith pair (newTab.js + fx-newTab.js) + harness retirement | pending | — |
 | P gate — full UAT + audit + minor bump | pending | — |
 
@@ -144,9 +144,14 @@ page-context evaluation (`Tiles`, `Prefs`, `Grid`, `newTabTools`, `NttIcons`,
 SURVIVE their file's export conversion as `TEST-ONLY BRIDGE` -marked
 `globalThis` assignments (the fx-newTab.js `Drag` precedent), even where the
 plan below says the assignment "dies" — only production consumers move to real
-imports. The surviving assignments consolidate into `page-main.js` at P5;
-retiring them for real means moving the E2E/UAT harness off page-globals —
-out of scope, ROADMAP backlog.
+imports. The surviving assignments stay at the BOTTOM OF THEIR DEFINING FILE
+(a page-main.js consolidation was considered and rejected 2026-07-10: the
+fast-tier suites import the defining files directly and would lose the
+globals; the booting entry can't be imported by them). Retiring them for real
+means moving the E2E/UAT harness off page-globals — out of scope, ROADMAP
+backlog. Consequence for the planned module-scope.test.ts negative
+assertions: they can never land while the dual-scope files self-assign —
+dropped from the plan, recorded here.
 
 ### P1 — module entry flip + boot orchestration
 - [x] Convert cross-file page globals to explicit `globalThis.X =` form.
@@ -431,25 +436,103 @@ file with real `import`s, consuming the P2/P3 exports.)*
       awesomebar, titlebar).
 
 ### P5 — the monolith pair + harness retirement (one slice; they are one cycle)
-- [ ] `newTab.js` exports `newTabTools`, `pageMessageHandler`; `fx-newTab.js`
-      exports `Page`/`Grid`/`Updater`/`UndoDialog` (+ whatever P1's grep proved
-      cross-referenced); each imports the other (legal cycle, Decision 3);
-      `page-main.js` shrinks to two imports + boot calls; the last page
-      `globalThis` assignments die.
-- [ ] Test migration (the big one): page suites move from
-      `loadModule`/`mountSite`/`vm.runInThisContext` to native imports with
-      mocked chrome/browser installed pre-import (Stage-M pattern; beware the
-      top-level `runtime.onMessage.addListener` in newTab.js — mocks must
-      absorb it per import, and `vi.resetModules()` between suites).
-      `loadModule`/`mountSite` are deleted when the last consumer migrates.
-- [ ] eslint: the script-mode `webextension/**/*.js` block dies (everything is
-      module-mode); `nttGlobals` in the test configs prunes to whatever E2E
-      page-context evaluation still needs; `/* globals */`+`/* exported */`
-      headers deleted repo-wide under `webextension/`.
-- [ ] tsconfig: page files now enter the program via imports — decide
-      deliberately what gets typed (JSDoc backfill stays type-as-you-touch;
-      use targeted `@ts-expect-error` only per CONTRIBUTING rules).
-- [ ] Gates + UAT spot-run 01/10/23/31.
+*(Revised 2026-07-10 per the P1–P4 precedents and the TEST-ONLY bridge
+policy: the bridge assignments do NOT die — after P5 no page file reads
+globals (everything imports), so every surviving assignment is re-marked
+TEST-ONLY at its defining file's bottom. fx-newTab.js additionally exports
+the internals the fast tier constructs directly (`Site`, and `Drag`/`Drop`/
+`Transformation` for the drag suites) — real exports beat more bridges for
+tests that import the file anyway. The monoliths deliberately stay OUT of
+the typed program: fast tests reach them via the established computed-path
+`@vite-ignore` dynamic-import pattern (P1's page-module-scope precedent), so
+tsc never follows the specifier; full JSDoc backfill of ~4.8k monolith lines
+is type-as-you-touch, a different arc.)*
+- [x] `newTab.js` exports `newTabTools` (`export const`), `pageMessageHandler`
+      (`export function`) + real imports of everything it reads: leaves via
+      P2–P4 exports (`AwesomeBar`, `Background`/`Tiles`, `NttIcons`,
+      `TileStats`, `Blocked`/`Filters`/`NeverCapture`/`Prefs`,
+      `compareVersions`) plus `Grid`/`Page`/`Updater` from `./fx-newTab.js`
+      (legal cycle, Decision 3 — verified every cross-reference is call-time
+      only: fx-newTab.js's own dependency-evaluation order means it finishes
+      its top level, definitions-only, before newTab.js's top level runs, so
+      even the `typeof Grid !== 'undefined'` guards in `pageMessageHandler`
+      are always-true by the time any message can arrive). `fx-newTab.js`
+      exports `Page`/`Grid`/`Updater`/`UndoDialog`/`Site`/`Drag`/`Drop`/
+      `Transformation` + real imports of `newTabTools` from `./newTab.js`
+      (NOT `pageMessageHandler` — grepped, only referenced in a comment, the
+      same "narrower than the plan's draft text" precedent as P4's `Tiles`)
+      plus `Blocked`/`NeverCapture`/`Prefs`/`NttIcons`/`Tiles`/`TileStats`.
+      `/* globals */`/`/* exported */` headers deleted from both.
+- [x] `page-main.js`: boots via named imports — `Prefs` from prefs.js,
+      `newTabTools`/`pageMessageHandler` from newTab.js, `Grid`/`UndoDialog`/
+      `Updater` from fx-newTab.js; its `/* globals */` header is gone. The
+      three now-named-import specifiers (prefs.js/newTab.js/fx-newTab.js)
+      replaced their former side-effect-only line rather than sitting
+      alongside it (a plain `import './prefs.js';` next to
+      `import { Prefs } from './prefs.js';` would be a harmless but
+      redundant duplicate); the other five files stay side-effect-only,
+      preserving the eight-file load-order documentation.
+- [x] All surviving `globalThis` assignments re-marked TEST-ONLY in
+      newTab.js/fx-newTab.js (`newTabTools`, `pageMessageHandler`, `Page`,
+      `Grid`, `Updater`, `UndoDialog`, `Drag`) — no page file reads a global
+      anymore. `tiles-shim.js`'s `Tiles`/`Background` bridge assignments
+      needed the same `any`-cast fix P3 applied to prefs.js/common.js (a real
+      `import` of `Tiles` in a test file pulled tiles-shim.js into the
+      typechecked program for the first time, surfacing the ambient-global-
+      from-assignment collision). `Site`/`Drop`/`Transformation` deliberately
+      do NOT gain a matching `globalThis` assignment — real exports cover the
+      fast tier, which imports the file directly.
+- [x] Test migration: `_helpers.ts`'s `mountSite` is now async
+      (`ensureSiteEnv()`, exported, is the memoized once-per-file loader) —
+      mounts the real `newTab.html` body first, then a computed-path
+      `await import()` of fx-newTab.js (`@vite-ignore`). The old
+      full-replacement `Prefs`/`Tiles`/`Blocked`/`NeverCapture`/`TileStats`/
+      `newTabTools`/`UndoDialog`/`Grid`/`Updater` stand-ins are gone; the real
+      singletons provide their defaults (`Prefs.statType` seeded to `'none'`
+      as a plain pre-`init()` property — `Prefs.init()` itself is NOT called,
+      real boot is out of scope). `tests/setup.js`'s `chrome.i18n.getMessage`
+      mock now echoes its key back (was `Translated<key>`) so `getString`
+      assertions keep their old meaning. Direct vm users: grepped every
+      `vm.runInThisContext`/`vm.runInContext`/`readFileSync` hit against
+      newTab.js/fx-newTab.js (~32 files) and classified by pattern — the
+      large majority extract individual method/function bodies via regex
+      into a synthetic harness object (`extractMethod`-style) and never
+      actually parse the real file, so they're unaffected by the
+      `import`/`export` syntax change; only three did a genuine whole-file
+      load: `tile-url-render.test.ts` and `drag-reorder.test.ts` (migrated to
+      the same computed-path `import()` pattern, driving the real `Prefs`/
+      `Tiles`/`newTabTools` singletons in place instead of pre-seeding
+      `globalThis`) plus `_helpers.ts` itself. `mountSite` survives (still the
+      DOM+Site fixture for `edit-mode.test.ts`/`tile-redesign.test.ts`/
+      `tile-surface.test.ts`, all updated to `await` it); those three also
+      needed their own `globalThis.X = {...}` replacements (Prefs/TileStats/
+      NeverCapture) converted to in-place singleton mutation.
+      `page-module-scope.test.ts` needed one adjustment (not a bridge
+      removal): its load-order regex only matched bare side-effect imports,
+      so it missed page-main.js's three now-named imports — widened to match
+      both forms; the test's assertions are otherwise unchanged and pass.
+      `page-main-boot.test.ts` needed no changes.
+- [x] eslint: the script-mode `webextension/**/*.js` block is retired
+      entirely (not just narrowed) — action.js (no `import`/`export` of its
+      own, but already loaded `type="module"` since P1) joins the one
+      module-mode block instead, which is the smaller diff and the more
+      accurate parse mode for how the browser actually loads it. `nttGlobals`
+      pruned to names grepped as still referenced by E2E `page.evaluate()`
+      callbacks (`Blocked`/`DropTargetShim` dropped — zero remaining
+      references anywhere under `tests/`). `/* globals */`/`/* exported */`
+      headers deleted under `webextension/` (awesomebar.js keeps its
+      narrower `/* globals Grid, newTabTools */` — converting those two to
+      real imports was judged out of this slice's scope, newTab.js/
+      fx-newTab.js/page-main.js only; noted as a follow-up in its own
+      comment).
+- [x] tsconfig: no include change; verified `pnpm typecheck` is clean and the
+      monoliths are not reachable via any static specifier (only computed-path
+      `webextPath(...)` dynamic imports reference them) — confirmed by grep
+      and by the clean typecheck run itself.
+- [x] Gates + FULL E2E + UAT spot-run 01/10/23/31: fast 1296/1296,
+      lint/typecheck/lint:webext clean, E2E 127/127, UAT 4/4 (first attempt
+      aborted by an API session rate limit — not a page defect; clean on
+      retry).
 
 ### P gate
 - [ ] Full `pnpm test`, **full UAT**, `pnpm audit --audit-level=high`, boot-
