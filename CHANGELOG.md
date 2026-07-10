@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - ESLint guard (`no-restricted-globals` on `webextension/lib/**/*.js`, seam `lib/thumbnail-image.js` and vendored `lib/zip/**` excluded) forbidding `document`/`window`/`Image`/`OffscreenCanvas`/`DOMParser`/`XMLSerializer`/`localStorage` in the background scope, plus a regression test asserting the rule via ESLint's own config resolution (CHROME_PREP.md C1).
+- `webextension/dom.js`: page-side `el(tag, className, text)` DOM-builder leaf + `tests/unit/dom.test.ts`; mechanically normalized 26 of the 37 `document.createElement` blocks across `newTab.js`/`fx-newTab.js`/`awesomebar.js` onto it (behavior-identical; CHROME_PREP.md C2).
+
+### Changed
+
+- Four vm-harness tests (`recent-tabs.test.ts`, `objecturl-revoke.test.ts`, `favicons.test.ts`, `favicon-overlay-and-pin.test.ts`) that extract page methods by source instead of importing them now also expose the real `el` on `globalThis`, mirroring the existing `isValidURL` exposure, since the C2 sweep introduced the same bare-identifier dependency inside the extracted method bodies.
 
 ## [2.4.0] — 2026-07-10
 

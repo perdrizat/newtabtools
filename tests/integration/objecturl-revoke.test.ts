@@ -24,6 +24,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { isValidURL } from '../../webextension/common.js';
+import { el } from '../../webextension/dom.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -216,6 +217,10 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		const isValidURLBody = extractMethod(source, 'isValidURL');
 		const _formatAge = extractMethod(source, '_formatAge');
 		(globalThis as any).isValidURL = isValidURL;
+		// chrome-prep C2: `refreshRecent`'s card-building block now calls the
+		// page-side `el()` leaf (webextension/dom.js) as a bare identifier —
+		// same reason as the `isValidURL` exposure above.
+		(globalThis as any).el = el;
 		vm.runInThisContext(
 			`var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURLBody}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
 			{ filename: 'recent-revoke-harness.js' },

@@ -16,6 +16,7 @@ import { TileStats } from './stats.js';
 import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
 import { compareVersions, getString, isValidURL } from './common.js';
 import { Grid, Page, Updater } from './fx-newTab.js';
+import { el } from './dom.js';
 
 export const newTabTools = {
 	// P2-P5 review finding 1 (revised remediation, 2026-07-10): the bodies
@@ -706,13 +707,10 @@ export const newTabTools = {
 		}
 
 		for (let [category, items] of Object.entries(categories)) {
-			let heading = document.createElement('h3');
-			heading.className = 'wallpaper-category';
-			heading.textContent = category.replace(/-/g, ' ');
+			let heading = el('h3', 'wallpaper-category', category.replace(/-/g, ' '));
 			grid.appendChild(heading);
 
-			let row = document.createElement('div');
-			row.className = 'wallpaper-row';
+			let row = el('div', 'wallpaper-row');
 			for (let wp of items) {
 				let thumb;
 				if (wp.imageUrl) {
@@ -1335,8 +1333,7 @@ export const newTabTools = {
 				card.dataset.sessionId = sessionId;
 				card.onclick = card_onclick;
 
-				let fav = document.createElement('span');
-				fav.className = 'ntt-recent-favicon';
+				let fav = el('span', 'ntt-recent-favicon');
 				// Letter fallback from the registrable domain (same logic as the
 				// tiles), not the page title — `H` for heise.de, not the headline.
 				let glyph = (domain.charAt(0) || displayTitle.charAt(0) || '?').toUpperCase();
@@ -1357,22 +1354,18 @@ export const newTabTools = {
 				}
 				card.appendChild(fav);
 
-				let text = document.createElement('span');
-				text.className = 'ntt-recent-text';
-				let nameEl = document.createElement('span');
-				nameEl.className = 'ntt-recent-name';
+				let text = el('span', 'ntt-recent-text');
+				let nameEl = el('span', 'ntt-recent-name');
 				nameEl.appendChild(document.createTextNode(displayTitle));
 				text.appendChild(nameEl);
-				let urlEl = document.createElement('span');
-				urlEl.className = 'ntt-recent-url';
+				let urlEl = el('span', 'ntt-recent-url');
 				urlEl.appendChild(document.createTextNode(domain));
 				text.appendChild(urlEl);
 				card.appendChild(text);
 
 				let age = newTabTools._formatAge(lastModified);
 				if (age) {
-					let ageEl = document.createElement('span');
-					ageEl.className = 'ntt-recent-age';
+					let ageEl = el('span', 'ntt-recent-age');
 					ageEl.appendChild(document.createTextNode(age));
 					card.appendChild(ageEl);
 				}
@@ -1955,9 +1948,7 @@ export const newTabTools = {
 			// remove; those are managed by unpinning on the board.
 			if (k in filters) {
 				row.querySelector('.minus-button').disabled = false;
-				let removeBtn = document.createElement('button');
-				removeBtn.className = 'ntt-filter-remove';
-				removeBtn.textContent = '✕';
+				let removeBtn = el('button', 'ntt-filter-remove', '✕');
 				removeBtn.title = this.getString('filter_remove');
 				row.cells[2].append(removeBtn);
 			}
@@ -1986,8 +1977,7 @@ export const newTabTools = {
 					}
 					return carry;
 				}, []).sort()) {
-					let option = document.createElement('option');
-					option.textContent = s;
+					let option = el('option', undefined, s);
 					this.optionsFilterHostAutocomplete.appendChild(option);
 				}
 			});
@@ -2004,13 +1994,9 @@ export const newTabTools = {
 			container.firstChild.remove();
 		}
 		for (let entry of NeverCapture.getList()) {
-			let row = document.createElement('div');
-			row.className = 'ntt-nevercapture-row';
-			let text = document.createElement('span');
-			text.textContent = entry;  // textContent only — no innerHTML
-			let removeBtn = document.createElement('button');
-			removeBtn.className = 'ntt-nevercapture-remove';
-			removeBtn.textContent = '✕';
+			let row = el('div', 'ntt-nevercapture-row');
+			let text = el('span', undefined, entry);  // textContent only — no innerHTML
+			let removeBtn = el('button', 'ntt-nevercapture-remove', '✕');
 			removeBtn.title = this.getString('nevercapture_remove');
 			removeBtn.dataset.entry = entry;
 			row.appendChild(text);

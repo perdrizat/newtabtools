@@ -31,6 +31,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { el } from '../../webextension/dom.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
@@ -77,6 +78,12 @@ describe('applyFavicon — overlay badge is updated too', () => {
 		const source = fs.readFileSync(FX_PATH, 'utf8');
 		const body = extractMethod(source, 'applyFavicon');
 		const code = `var _applyHarness = { ${body} };`;
+		// chrome-prep C2: `applyFavicon`'s img-swap block now calls the
+		// page-side `el()` leaf (webextension/dom.js) as a bare identifier —
+		// this harness vm.runInThisContext-extracts only the method body, not
+		// the real module's `import` statements, so the dependency has to be
+		// exposed on the shared globalThis instead.
+		(globalThis as any).el = el;
 		vm.runInThisContext(code, { filename: 'apply-favicon-overlay-harness.js' });
 		harness = (globalThis as any)._applyHarness;
 	});

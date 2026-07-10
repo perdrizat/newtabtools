@@ -25,8 +25,8 @@ by maintainer).
 | Arc | Status | Commit(s) |
 |---|---|---|
 | C0 — design decisions of record (menus, theme) | done | `c7ebfcc` |
-| C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | (next commit) |
-| C2 — leaf utilities: `el()` builder + textContent normalization + color helper | pending | — |
+| C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
+| C2 — leaf utilities: `el()` builder + textContent normalization + color helper | fast-green, gates pending | — |
 | C3 — type the monoliths + principled harness + retire ALL bridges | pending | — |
 | C4 — split the monoliths into feature modules | pending | — |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
@@ -121,12 +121,29 @@ per arc.
       the thumbnail seam was already airtight; the guard is pure insurance.
 
 ### C2 — leaf utilities (Phase-1 remainder)
-- [ ] `el(tag, className, text?)` page DOM-builder leaf + normalize the ~37
-      near-identical `createElement` blocks (Stage-H review §8 backlog item).
-      Mechanical, per-file sweep; behavior-identical.
-- [ ] `siteBrandColor` (fx-newTab.js) → color-helper leaf if it has (or gains)
-      a second consumer; otherwise leave and record why.
-- [ ] Restore validators NOT touched (Decision 3).
+- [x] `el(tag, className, text?)` page DOM-builder leaf (`webextension/dom.js`
+      + `tests/unit/dom.test.ts`) + normalize the `createElement` blocks
+      (Stage-H review §8 backlog item). Real count: **37** `createElement`
+      call sites across the three page files (`newTab.js` 18, `fx-newTab.js`
+      12, `awesomebar.js` 7) — **26 normalizable** (create + optional
+      className + optional textContent in immediate sequence) swept onto
+      `el()` (`newTab.js` 12, `fx-newTab.js` 9, `awesomebar.js` 5); **11**
+      left as hand-written `document.createElement` because the block is
+      complex (canvas setup, conditional-branch thumbnails, attribute/event
+      wiring, or a bare create with no immediate className/textContent to
+      dedup) — force-fitting those would obscure rather than clarify.
+      Mechanical, per-file sweep; behavior-identical (fast tier: 1315/1315,
+      zero assertion changes — 4 vm-harness tests needed a one-line `globalThis.el`
+      exposure, same pattern as their existing `isValidURL` exposure, because
+      they extract page methods by source rather than importing them).
+- [x] `siteBrandColor` (fx-newTab.js): confirmed exactly one production
+      consumer (`fx-newTab.js:1090`, inside `_renderLogoFallback`) — left in
+      place per the plan's anticipated outcome; not extracted.
+- [x] Restore validators NOT touched (Decision 3) — `lib/backup.js` untouched
+      by this arc.
+- [x] Gates: fast 1315/1315, lint/typecheck/lint:webext clean; targeted E2E
+      46/46 (smoke trio + tile-redesign, recent-tabs, drawer, awesomebar —
+      every rendering surface the sweep touched).
 
 ### C3 — type the monoliths + principled harness + bridge endgame
 - [ ] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/

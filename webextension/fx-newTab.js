@@ -15,6 +15,7 @@ import { Blocked, NeverCapture, Prefs } from './prefs.js';
 import { NttIcons } from './icons.js';
 import { Tiles } from './tiles-shim.js';
 import { TileStats } from './stats.js';
+import { el } from './dom.js';
 
 if (!('DOMRect' in window)) {
 	window.DOMRect = function(left, top, width, height) {
@@ -434,8 +435,7 @@ export var Grid = {
 	   * Creates the newtab grid as a flat list of cells (CSS Grid handles rows).
 	   */
 	_renderGrid() {
-		let cell = document.createElement('div');
-		cell.classList.add('newtab-cell');
+		let cell = el('div', 'newtab-cell');
 
 		this._node.innerHTML = '';
 		this._node.style.setProperty('--ntt-cols', Prefs.columns);
@@ -499,8 +499,7 @@ export var Grid = {
 
 			let message = newTabTools.getString('database_error_cookies', '$1').split('$1');
 			let item = document.createElement('li');
-			let code = document.createElement('code');
-			code.textContent = chrome.runtime.getURL('');
+			let code = el('code', undefined, chrome.runtime.getURL(''));
 			item.appendChild(document.createTextNode(message[0]));
 			item.appendChild(code);
 			item.appendChild(document.createTextNode(message[1]));
@@ -514,8 +513,7 @@ export var Grid = {
 
 				next = message.shift();
 				if (next) {
-					code = document.createElement('code');
-					code.textContent = next;
+					code = el('code', undefined, next);
 					item.appendChild(code);
 				}
 			}
@@ -1019,9 +1017,7 @@ Site.prototype = {
 		if (addTile && !addTile.querySelector('.ntt-add-tile-chip')) {
 			// The label is an opaque chip so it reads over any thumbnail (the slot
 			// keeps its real thumbnail under a light scrim — no opacity dim).
-			let chip = document.createElement('span');
-			chip.className = 'ntt-add-tile-chip';
-			chip.textContent = newTabTools.getString('tile_add');
+			let chip = el('span', 'ntt-add-tile-chip', newTabTools.getString('tile_add'));
 			addTile.textContent = '';
 			addTile.appendChild(chip);
 		}
@@ -1042,8 +1038,7 @@ Site.prototype = {
 		];
 
 		for (let def of actions) {
-			let btn = document.createElement('button');
-			btn.className = 'ntt-action-btn';
+			let btn = el('button', 'ntt-action-btn');
 			btn.setAttribute('type', 'button');
 			btn.setAttribute('data-action', def.action);
 			btn.setAttribute('data-icon', def.icon);
@@ -1089,13 +1084,10 @@ Site.prototype = {
 		}
 		let brandColor = siteBrandColor(this.link);
 
-		let fallback = document.createElement('div');
-		fallback.className = 'ntt-logo-fallback';
+		let fallback = el('div', 'ntt-logo-fallback');
 		fallback.style.setProperty('--ntt-brand', brandColor);
 
-		let glyphEl = document.createElement('div');
-		glyphEl.className = 'ntt-logo-glyph';
-		glyphEl.textContent = siteGlyph(this.url);
+		let glyphEl = el('div', 'ntt-logo-glyph', siteGlyph(this.url));
 		fallback.appendChild(glyphEl);
 
 		thumbnail.appendChild(fallback);
@@ -1140,8 +1132,7 @@ Site.prototype = {
 		if (fallback) {
 			let glyph = fallback.querySelector('.ntt-logo-glyph');
 			if (glyph) {
-				let img = document.createElement('img');
-				img.className = 'ntt-logo-favicon';
+				let img = el('img', 'ntt-logo-favicon');
 				img.src = src;
 				img.alt = '';
 				fallback.replaceChild(img, glyph);
@@ -1425,8 +1416,7 @@ export var Drag = {
 
 		// Create and use an empty drag element. We don't want to use the default
 		// drag image with its default opacity.
-		let dragElement = document.createElement('div');
-		dragElement.classList.add('newtab-drag');
+		let dragElement = el('div', 'newtab-drag');
 		let scrollbox = document.getElementById('newtab-scrollbox');
 		scrollbox.appendChild(dragElement);
 		dt.setDragImage(dragElement, 0, 0);

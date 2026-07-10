@@ -5,6 +5,7 @@
 import { getString, isValidURL } from './common.js';
 import { NttIcons } from './icons.js';
 import { Prefs } from './prefs.js';
+import { el } from './dom.js';
 
 /**
  * Awesome bar (Phase 4-3). Wires the titlebar search box into a dropdown that
@@ -366,31 +367,24 @@ export const AwesomeBar = {
 		for (let r of results) {
 			if (r.section !== lastSection) {
 				lastSection = r.section;
-				let header = document.createElement('div');
-				header.className = 'ntt-awesomebar-section';
 				let labelKey = /** @type {Record<string, string>} */ (this.SECTION_LABELS)[r.section];
-				header.textContent = labelKey ? getString(labelKey) : r.section;
+				let header = el('div', 'ntt-awesomebar-section', labelKey ? getString(labelKey) : r.section);
 				this.dropdown.appendChild(header);
 			}
 
-			let row = document.createElement('div');
-			row.className = 'ntt-awesomebar-row';
+			let row = el('div', 'ntt-awesomebar-row');
 			row.dataset.index = String(rowIndex++);
 			if (r.section === 'top') {
 				row.classList.add('top');
 			}
 			row.appendChild(this._iconFor(r.type));
 
-			let text = document.createElement('span');
-			text.className = 'ntt-awesomebar-text';
-			let title = document.createElement('span');
-			title.className = 'ntt-awesomebar-title';
-			title.textContent = r.type === 'search' ? getString('search_prompt', r.query) : r.title;
+			let text = el('span', 'ntt-awesomebar-text');
+			let title = el('span', 'ntt-awesomebar-title',
+				r.type === 'search' ? getString('search_prompt', r.query) : r.title);
 			text.appendChild(title);
 			if (r.url) {
-				let url = document.createElement('span');
-				url.className = 'ntt-awesomebar-url';
-				url.textContent = r.url;
+				let url = el('span', 'ntt-awesomebar-url', r.url);
 				text.appendChild(url);
 			}
 			row.appendChild(text);

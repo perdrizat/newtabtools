@@ -16,6 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { isValidURL } from '../../webextension/common.js';
+import { el } from '../../webextension/dom.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -69,6 +70,13 @@ describe('Recently-closed tabs — newTab.js', () => {
 
 		globalThis.Prefs = { recent: true };
 		(globalThis as any).isValidURL = isValidURL;
+		// chrome-prep C2: `refreshRecent`'s card-building block now calls the
+		// page-side `el()` leaf (webextension/dom.js) as a bare identifier —
+		// same reason as the `isValidURL` exposure above: this harness
+		// vm.runInThisContext-extracts only the method body, not the real
+		// module's `import` statements, so the dependency has to be exposed on
+		// the shared globalThis instead.
+		(globalThis as any).el = el;
 
 		chrome.sessions = {
 			getRecentlyClosed: vi.fn(),
