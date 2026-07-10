@@ -630,12 +630,27 @@ the only boot site. FULL E2E per slice; purity review per slice.*
 - [ ] Gates + FULL E2E per slice + UAT spot-runs as marked.
 
 ### C5 — capability-seam completion (Decision 4)
-- [ ] Divergence audit: every `browser.`/`chrome.` site classified
-      portable-as-is vs divergent (the audit artifact lands in `audit/`).
-- [ ] Namespace normalization leaf (`const api = globalThis.browser ?? chrome`);
-      divergent capabilities wrapped: background in `lib/platform.js`, page in
-      a new page capability leaf. Menus/theme wrappers express Decisions 1–2.
-- [ ] Gates + FULL E2E.
+- [x] Divergence audit: `audit/2026-07-11-chrome-api-divergence.md` — **29
+      portable / 6 divergent-wrap / 4 firefox-only** distinct surfaces;
+      confirms Decision 4 (small targeted seam, not blanket indirection).
+      **Design decided (2026-07-11):** a namespace leaf per scope
+      (`const api = globalThis.browser ?? chrome`, in-house — no polyfill dep),
+      six wrappers only (storage.session, capture-availability, search-shape,
+      action/theme-icons, menus presence-gate, getBrowserInfo short-circuit),
+      background home `lib/platform.js`, new page capability leaf for
+      menus/theme/search. **Firefox behavior must not change** — Chrome paths
+      are written-but-dormant (no Chrome manifest until stage 3); full E2E +
+      UAT are the "Firefox unchanged" proof.
+- [ ] **C5a** — namespace normalization: background `api` (platform.js) + page
+      `api` leaf; every raw `chrome.*`/bare `browser.*` site → `api.*`
+      (behavior-identical on Firefox). Align the duplicated topSites-options
+      logic while here.
+- [ ] **C5b** — the six wrappers, homed per the audit; menus/theme express
+      Decisions 1–2 (presence-gated, absent on Chrome). Latent-care items from
+      the audit §traps addressed (storage.session note, permissions.request
+      gesture rule, webRequest no-blocking comment).
+- [ ] Gates + FULL E2E per sub-slice + UAT spot-run (drawer 20–23 for theme,
+      11 for the menu/action-row path).
 
 ### C6 — two-target manifest authoring
 - [ ] `manifest.base.json` + per-browser overlays merged by a
