@@ -170,3 +170,33 @@ No boundary moved. `manifest.json` untouched (not in the diff). `lib/backup.js`'
 only change is `getFilters()` → `import { Filters } from '../prefs.js'`; the
 restore allow-list, `safeProtocols`, and URL/color validation are unchanged. No
 CSP, permissions, or `host_permissions` edits anywhere in the arc.
+
+---
+
+## Adjudication (2026-07-10, same day)
+
+- **The open P5 gate noted in the scope line closed before this adjudication:**
+  full E2E 127/127, UAT spot-run 01/10/23/31 4/4 (first attempt aborted by the
+  same session rate limit that cut the finders short; clean on retry).
+- **1 — executed as prescribed (paper trail corrected; conversion deferred).**
+  The four overreaching "no production consumer" claims (fx-newTab.js,
+  newTab.js, eslint.config.js, CHANGELOG) now name the awesomebar.js
+  exception and mark `Grid`/`newTabTools`'s bridges LOAD-BEARING. The real
+  conversion is blocked on exactly what the review inferred: a static import
+  of the monoliths from awesomebar.js (which is in the typed program) would
+  pull both into `checkJs` — it rides the future monolith-typing arc, now an
+  explicit ROADMAP backlog prerequisite.
+- **2 — executed narrowly.** awesomebar.js's dead `typeof Prefs`/`typeof
+  NttIcons` guards dropped (real imports since P4). Declined for now: the
+  `pageMessageHandler` `typeof Updater/Grid` guards — they double as the
+  early-broadcast queue's triggers; removing them means retiring the whole
+  (now provably dead) queue mechanism plus its M5-era tests, a standalone
+  cleanup recorded in the ROADMAP backlog rather than a drive-by. The six
+  additional dead-true `typeof` guards in newTab.js (1216–1824, not listed by
+  the finding) are likewise left for that sweep — deliberately-untouched
+  monolith style.
+- **Also-noted items:** stale `globals.d.ts` ambient declarations pruned
+  (`Site`/`Drop`/`Cell`/`DropTargetShim`/`zip`); the singleton
+  cross-contamination spot-check is accepted as covered by the per-file module
+  registry isolation + the repeated 1296-green fast runs; the `any`-cast
+  bridge pattern stands as reviewed.

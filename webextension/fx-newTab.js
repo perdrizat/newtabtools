@@ -2335,12 +2335,15 @@ export var UndoDialog = {
 // from newTab.js). fx-newTab.js's top level is now definition-only.
 
 // page-modules P5 (PAGE_MODULES.md): all four names above are real exports
-// now (production consumers — newTab.js, page-main.js — use named imports).
-// TEST-ONLY BRIDGE: these assignments survive solely for E2E/UAT
-// page-context evaluation and any fast-tier suite still reading them as bare
-// identifiers off a computed-path dynamic import. Retiring them for real
-// means moving that harness off page-globals — out of scope, ROADMAP
-// backlog (see PAGE_MODULES.md's TEST-ONLY bridge policy).
+// now (newTab.js, page-main.js use named imports). These assignments survive
+// for E2E/UAT page-context evaluation and fast-tier suites reading bare
+// identifiers off a computed-path dynamic import — AND one production
+// consumer (P2-P5 review finding 1): awesomebar.js still reads `Grid` as a
+// bare global (importing the monoliths from it would drag them into the
+// typed program, which P5 deliberately avoided). So `Grid`'s bridge is
+// LOAD-BEARING for titlebar search until awesomebar converts; the other
+// three are test-only. Retiring them = the awesomebar conversion + moving
+// the test harness off page-globals — ROADMAP backlog.
 globalThis.Page = Page;
 globalThis.Grid = Grid;
 globalThis.Updater = Updater;

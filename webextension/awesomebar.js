@@ -207,7 +207,9 @@ export const AwesomeBar = {
 		if (active === this.input || tag === 'input' || tag === 'textarea' || (active && active.isContentEditable)) {
 			return;
 		}
-		if (typeof Prefs !== 'undefined' && Prefs && Prefs.titleBarSearch === false) {
+		// P2-P5 review finding 2: `Prefs` is a real import (P4) — the old
+		// `typeof Prefs !== 'undefined'` guard was permanently true, dropped.
+		if (Prefs.titleBarSearch === false) {
 			return;
 		}
 		event.preventDefault();
@@ -318,11 +320,12 @@ export const AwesomeBar = {
 	 */
 	_iconFor(type) {
 		let name = /** @type {Record<string, string>} */ ({ tile: 'grid', bookmark: 'bookmark', history: 'history', search: 'search' })[type] || 'search';
-		if (typeof NttIcons !== 'undefined' && NttIcons.create) {
-			let icon = NttIcons.create(name, 15);
-			if (icon) {
-				return icon;
-			}
+		// P2-P5 review finding 2: `NttIcons` is a real import (P4) — the old
+		// `typeof NttIcons !== 'undefined'` guard was permanently true,
+		// dropped. The null fallback stays (create() is typed nullable).
+		let icon = NttIcons.create(name, 15);
+		if (icon) {
+			return icon;
 		}
 		let span = document.createElement('span');
 		return span;

@@ -93,12 +93,19 @@ Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 - `lib/background-main.js` is excluded from `checkJs` (documented tsconfig gotcha:
   excluding the entry keeps tsc from pulling untyped dual-scope imports into the
   program) — spot-check it manually on change, or find a lint-grade alternative.
-- Move the E2E/UAT harness off page-global access (`window.Tiles`/`Prefs`/
-  `Grid`/… reached via page-context evaluation) — the reason the page-modules
-  arc keeps TEST-ONLY `globalThis` bridges alive past each file's export
-  conversion (see `PAGE_MODULES.md`, E2E tiering / TEST-ONLY bridge policy).
-  Retiring those bridges for real means driving test setup through messages/UI
-  instead.
+- Retire the surviving page `globalThis` bridges — three prerequisites, in
+  order (see `PAGE_MODULES.md` TEST-ONLY bridge policy + the 2026-07-10 P2–P5
+  review findings 1–2): (a) convert awesomebar.js's `Grid`/`newTabTools`
+  bare-global reads to real imports — blocked on typing the monoliths (a
+  static import would pull newTab.js/fx-newTab.js into the checked program),
+  so it rides the future monolith-typing/splitting arc; (b) retire
+  `pageMessageHandler`'s now-dead early-broadcast queue (`flushQueued`, the
+  `typeof Updater/Grid` triggers, the M5-era queue tests — provably
+  unreachable since P5's import cycle guarantees evaluation order); (c) move
+  the E2E/UAT harness off page-global access (`window.Tiles`/`Prefs`/`Grid`/…
+  reached via page-context evaluation) — drive test setup through messages/UI
+  instead. Also sweep the remaining dead-true `typeof Prefs/Grid` guards in
+  newTab.js when (b) lands.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The 11-scenario suite covers env/smoke (`00`, `01`), tiles (`10`, `11`), drawer

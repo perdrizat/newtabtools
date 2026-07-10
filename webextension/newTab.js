@@ -2443,12 +2443,15 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 })();
 
 // page-modules P5 (PAGE_MODULES.md): both names above are real exports now
-// (real production consumers — fx-newTab.js, page-main.js — use the named
-// import). TEST-ONLY BRIDGE: these assignments survive solely for the
-// fast-tier harness (computed-path dynamic imports of this file still read
-// them as bare identifiers in some suites) and E2E/UAT page-context
-// evaluation. Retiring them for real means moving that harness off
-// page-globals — out of scope, ROADMAP backlog (see PAGE_MODULES.md's
-// TEST-ONLY bridge policy).
+// (fx-newTab.js, page-main.js use the named import). These assignments
+// survive for the fast-tier harness (computed-path dynamic imports of this
+// file still read them as bare identifiers in some suites), E2E/UAT
+// page-context evaluation — AND one production consumer (P2-P5 review
+// finding 1): awesomebar.js still reads `newTabTools` as a bare global
+// (importing the monoliths from it would drag them into the typed program,
+// which P5 deliberately avoided). So `newTabTools`'s bridge is LOAD-BEARING
+// for titlebar search until awesomebar converts; `pageMessageHandler`'s is
+// test-only. Retiring them = the awesomebar conversion + moving the test
+// harness off page-globals — ROADMAP backlog.
 globalThis.newTabTools = newTabTools;
 globalThis.pageMessageHandler = pageMessageHandler;
