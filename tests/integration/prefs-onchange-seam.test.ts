@@ -128,13 +128,21 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 	beforeAll(async () => {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
-		// Leaf-import the eight page files first, in page-main.js's order —
-		// this puts the real newTabTools/Grid/Updater/Prefs objects on
-		// globalThis so the spies below wrap the actual production objects
-		// (crib: page-main-boot.test.ts).
+		// Leaf-import the eight page files first, in page-main.js's order, via
+		// real `import`s (chrome-prep C3d retired the `globalThis` bridge
+		// these used to also land on) — capture the bindings this file needs
+		// so the spies below wrap the actual production objects (crib:
+		// page-main-boot.test.ts).
+		let prefsModule: any;
+		let newTabModule: any;
+		let fxNewTabModule: any;
 		for (const file of PAGE_FILES_IN_LOAD_ORDER) {
-			await import(/* @vite-ignore */ webext(file));
+			const mod = await import(/* @vite-ignore */ webext(file));
+			if (file === 'prefs.js') { prefsModule = mod; }
+			if (file === 'newTab.js') { newTabModule = mod; }
+			if (file === 'fx-newTab.js') { fxNewTabModule = mod; }
 		}
+		Prefs = prefsModule.Prefs;
 
 		// Stub the two boot entry points inert — actually running
 		// startup()/init() end-to-end in jsdom is out of scope here; only
@@ -142,22 +150,20 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 		// (crib: page-main-boot.test.ts). (A third boot-trailer step,
 		// pageMessageHandler.flushQueued(), was retired in chrome-prep C3a —
 		// CHROME_PREP.md — so there is nothing left to stub for it.)
-		vi.spyOn((globalThis as any).UndoDialog, 'init').mockImplementation(() => {});
-		vi.spyOn((globalThis as any).newTabTools, 'startup').mockImplementation(() => {});
+		vi.spyOn(fxNewTabModule.UndoDialog, 'init').mockImplementation(() => {});
+		vi.spyOn(newTabModule.newTabTools, 'startup').mockImplementation(() => {});
 
-		updateUISpy = vi.spyOn((globalThis as any).newTabTools, 'updateUI').mockImplementation(() => {});
-		markAutoSavedSpy = vi.spyOn((globalThis as any).newTabTools, '_markAutoSaved').mockImplementation(() => {});
-		resizeSpy = vi.spyOn((globalThis as any).newTabTools, 'resizeOptionsThumbnail').mockImplementation(() => {});
-		refreshSpy = vi.spyOn((globalThis as any).Grid, 'refresh').mockResolvedValue(undefined);
-		updateGridSpy = vi.spyOn((globalThis as any).Updater, 'updateGrid').mockImplementation(() => {});
+		updateUISpy = vi.spyOn(newTabModule.newTabTools, 'updateUI').mockImplementation(() => {});
+		markAutoSavedSpy = vi.spyOn(newTabModule.newTabTools, '_markAutoSaved').mockImplementation(() => {});
+		resizeSpy = vi.spyOn(newTabModule.newTabTools, 'resizeOptionsThumbnail').mockImplementation(() => {});
+		refreshSpy = vi.spyOn(fxNewTabModule.Grid, 'refresh').mockResolvedValue(undefined);
+		updateGridSpy = vi.spyOn(fxNewTabModule.Updater, 'updateGrid').mockImplementation(() => {});
 
 		// Import the real entry point — its eight `import './X.js'` lines hit
 		// the module cache already populated above, so no code re-runs; only
 		// page-main.js's own top-level trailer (boot calls + the
 		// `Prefs.onChange(...)` registration) executes.
 		await import(/* @vite-ignore */ webext('page-main.js'));
-
-		Prefs = (globalThis as any).Prefs;
 	});
 
 	beforeEach(() => {

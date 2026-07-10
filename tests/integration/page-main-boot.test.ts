@@ -29,22 +29,24 @@
  *      this suite pins shrank from three steps to two accordingly.)
  *
  * Design: leaf-import the eight page files first (same mechanism as
- * page-module-scope.test.ts), which puts the real UndoDialog/newTabTools/
- * pageMessageHandler objects on globalThis. Then spy on their three boot
- * entry points and stub them inert — actually running startup() end-to-end
- * in jsdom (real grid render, Prefs.init() network/storage chain, etc.) is
- * out of scope for this tier; the real boot is covered by E2E/UAT (see
- * boot-timing.test.ts for the timing side of that gate). Only then natively
- * `import()` page-main.js: its own eight imports hit the module cache this
- * test file already populated (imports are per-file-registry, not
+ * page-module-scope.test.ts) via real `import`s (chrome-prep C3d retired the
+ * `globalThis` bridge these used to also land on), which gives this file the
+ * real UndoDialog/newTabTools/pageMessageHandler bindings. Then spy on their
+ * three boot entry points and stub them inert — actually running startup()
+ * end-to-end in jsdom (real grid render, Prefs.init() network/storage chain,
+ * etc.) is out of scope for this tier; the real boot is covered by E2E/UAT
+ * (see boot-timing.test.ts for the timing side of that gate). Only then
+ * natively `import()` page-main.js: its own eight imports hit the module
+ * cache this test file already populated (imports are per-file-registry, not
  * per-describe-block, and this suite runs in one test file), so its boot
- * calls land on the very objects this file just spied on.
+ * calls land on the very SAME objects (same binding identity) this file just
+ * spied on.
  *
  * Import completeness through the entry itself: with the leaf-imports-first
- * design above, by the time page-main.js is imported every bridge global is
- * already on globalThis, so re-asserting a couple of them post-import would
- * be pre-satisfied by construction, not a real check of page-main.js's own
- * import list. The real net for "does page-main.js's import list actually
+ * design above, by the time page-main.js is imported every one of these
+ * modules is already loaded, so re-asserting a couple of them post-import
+ * would be pre-satisfied by construction, not a real check of page-main.js's
+ * own import list. The real net for "does page-main.js's import list actually
  * name all eight files, in order" is page-module-scope.test.ts's derived
  * PAGE_FILES_IN_LOAD_ORDER (parsed from this same page-main.js source, code
  * review finding 8) plus its per-file import assertions; what THIS file adds
@@ -66,6 +68,11 @@ function webext(relPath: string): string {
 }
 
 // page-main.js's exact side-effect-import order (crib: page-module-scope.test.ts).
+// Kept as dynamic imports (not static top-of-file ones) deliberately: newTab.js's
+// top-level IIFE wires up real DOM element refs by id, so it must run AFTER
+// `document.body.innerHTML` is set in beforeAll below, not at test-file-parse
+// time (same DOM-mount-before-evaluation ordering `_helpers.ts`'s
+// `ensureSiteEnv` documents for fx-newTab.js).
 const PAGE_FILES_IN_LOAD_ORDER = [
 	'common.js',
 	'icons.js',
@@ -81,6 +88,7 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 	let importError: unknown = null;
 	let initSpy: ReturnType<typeof vi.spyOn>;
 	let startupSpy: ReturnType<typeof vi.spyOn>;
+	let pageMessageHandler: any;
 
 	beforeAll(async () => {
 		// --- DOM -----------------------------------------------------------
@@ -91,17 +99,25 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 		// browser, including the shared browser.menus mock newTab.js's
 		// top-level IIFE needs (code review finding 7).
 
-		// --- leaf-import the eight page files first, in order ---------------
-		// This puts the real UndoDialog/newTabTools/pageMessageHandler objects
-		// on globalThis so the spies below wrap the actual production objects,
-		// not stand-ins.
+		// --- leaf-import the eight page files first, in order, via real
+		// `import`s (chrome-prep C3d retired the `globalThis` bridge these
+		// used to also land on) — capture the two bindings this file needs
+		// from newTab.js/fx-newTab.js's own module exports.
+		let newTabToolsModule: any;
+		let fxNewTabModule: any;
 		for (const file of PAGE_FILES_IN_LOAD_ORDER) {
-			await import(/* @vite-ignore */ webext(file));
+			const mod = await import(/* @vite-ignore */ webext(file));
+			if (file === 'newTab.js') { newTabToolsModule = mod; }
+			if (file === 'fx-newTab.js') { fxNewTabModule = mod; }
 		}
+		pageMessageHandler = newTabToolsModule.pageMessageHandler;
 
 		// --- stub the two boot entry points inert -----------------------------
-		initSpy = vi.spyOn((globalThis as any).UndoDialog, 'init').mockImplementation(() => {});
-		startupSpy = vi.spyOn((globalThis as any).newTabTools, 'startup').mockImplementation(() => {});
+		// Spying on the real, just-imported singletons wraps the actual
+		// production objects — ESM's module cache means page-main.js's own
+		// imports (below) resolve to these same bindings.
+		initSpy = vi.spyOn(fxNewTabModule.UndoDialog, 'init').mockImplementation(() => {});
+		startupSpy = vi.spyOn(newTabToolsModule.newTabTools, 'startup').mockImplementation(() => {});
 
 		// --- import the real entry point --------------------------------------
 		// Its eight `import './X.js'` lines hit the module cache this same test
@@ -133,6 +149,6 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 	});
 
 	it('pageMessageHandler exposes no flushQueued (chrome-prep C3a retired the replay step)', () => {
-		expect((globalThis as any).pageMessageHandler.flushQueued).toBeUndefined();
+		expect(pageMessageHandler.flushQueued).toBeUndefined();
 	});
 });

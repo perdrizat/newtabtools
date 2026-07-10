@@ -47,6 +47,7 @@ import {
 	waitForGridReady,
 	resetTestState,
 	navigateAndConfirm,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 const HEISE = 'https://www.heise.de/';
@@ -162,14 +163,14 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 				page,
 				(...args: unknown[]) => {
 					const urls = args[0] as string[];
-					const g = (window as any).Grid;
-					if (!g || !g.sites) { return null; }
+					const sites = document.querySelectorAll('#newtab-grid .newtab-site');
 					const seen: Record<string, boolean> = {};
-					for (const s of g.sites) {
-						if (!s || !s.link || !urls.includes(s.link.url)) { continue; }
-						const badge = s._querySelector ? s._querySelector('.ntt-favicon') : null;
+					for (const s of Array.from(sites)) {
+						const href = (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href;
+						if (!href || !urls.includes(href)) { continue; }
+						const badge = s.querySelector('.ntt-favicon');
 						if (badge && badge.querySelector('img')) {
-							seen[s.link.url] = true;
+							seen[href] = true;
 						}
 					}
 					return urls.every((u: string) => seen[u]) ? seen : null;
@@ -189,9 +190,9 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 				const cleanup = await openNewTab(browser);
 				await waitForGridReady(cleanup);
 				for (const url of [HEISE, TECHCRUNCH]) {
-					await cleanup.evaluate(async (u) => new Promise(resolve => {
-						chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
-					}), url);
+					// `Tiles.unpinTile` is not a real wire name — see
+					// removeTileByUrl's JSDoc in _helpers.ts.
+					await removeTileByUrl(cleanup, url);
 				}
 				await cleanup.close();
 			} catch { /* best-effort */ }

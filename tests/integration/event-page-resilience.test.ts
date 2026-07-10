@@ -36,6 +36,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createMenuTolerant } from '../../webextension/lib/platform.js';
+import { Prefs } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -170,8 +171,11 @@ describe('lib/background-main.js — event-page respawn resilience (Slice B)', (
 		// --- Native import() of the real background entry point ---
 		await import(/* @vite-ignore */ webext('lib/background-main.js'));
 
-		// Flush the top-level Prefs.init() chain.
-		await vi.waitFor(() => expect((globalThis as any).Prefs).toBeDefined());
+		// Flush the top-level Prefs.init() chain. `Prefs` is a real,
+		// statically-imported binding now (chrome-prep C3d retired the
+		// `globalThis` bridge) — same module instance
+		// lib/background-main.js's own import resolves to.
+		await vi.waitFor(() => expect(typeof Prefs.init).toBe('function'));
 	});
 
 	// ======================== 1. Duplicate-tolerant menus ========================

@@ -157,6 +157,16 @@ backlog. Consequence for the planned module-scope.test.ts negative
 assertions: they can never land while the dual-scope files self-assign —
 dropped from the plan, recorded here.
 
+**Outcome (chrome-prep C3d, 2026-07-10):** this policy is retired. The
+maintainer's chrome-prep directive 1 moved the E2E/UAT harness off page
+globals for real (runtime messages/`browser.storage.local`/DOM observation/
+synthesized DOM events), so every TEST-ONLY bridge assignment this policy
+produced — including the dual-scope survivors in common.js/prefs.js — was
+deleted; the module-scope.test.ts negative assertions this policy's
+consequence note said could never land now do, in both
+`tests/integration/module-scope.test.ts` and `page-module-scope.test.ts`. See
+CHROME_PREP.md C3d for the full account.
+
 ### P1 — module entry flip + boot orchestration
 - [x] Convert cross-file page globals to explicit `globalThis.X =` form.
       Landed set: `NttIcons` (icons.js), `TileStats` (stats.js),

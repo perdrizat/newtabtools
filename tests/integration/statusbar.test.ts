@@ -62,6 +62,10 @@ describe('Statusbar — gapMap defaults (Phase 2-2 §2.2)', () => {
 			},
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
+		// Stand-in for the extracted updateUI body's bare `Grid` reads —
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
+		// optional in this vm harness (C3a guard-removal fallout pattern).
+		(globalThis as any).Grid = { sites: [] };
 
 		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
 		const syncToggle = extractMethod(source, '_syncDrawerToggle');

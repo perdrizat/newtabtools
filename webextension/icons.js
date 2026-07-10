@@ -252,10 +252,3 @@ export const NttIcons = (() => {
 
 	return { create, names };
 })();
-
-// page-modules P2 (PAGE_MODULES.md): NttIcons is a real export now, but the
-// globalThis bridge SURVIVES — awesomebar.js/newTab.js/fx-newTab.js still
-// read it as a bare identifier (they stay vm-loaded classic scripts until
-// P4/P5) and E2E/UAT page-context evaluation reads it off globalThis too
-// (TEST-ONLY thereafter, once the last production consumer migrates).
-globalThis.NttIcons = NttIcons;

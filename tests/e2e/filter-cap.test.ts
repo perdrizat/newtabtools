@@ -5,7 +5,13 @@ import {
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
+	waitForCondition,
 	resetTestState,
+	setPrefs,
+	openDrawerUI,
+	switchDrawerTabUI,
+	getFilters,
+	setFilter,
 } from './_helpers.ts';
 
 describe('E2E: Per-domain filter cap (slot 23)', () => {
@@ -34,14 +40,23 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			// Ensure history is enabled (filter button is only active when history is on).
 			// Ensure history is enabled (the historytiles-filter button is
 			// disabled when history is off).
-			await page.evaluate(() => { (window as any).Prefs.history = true; });
-			await new Promise(r => setTimeout(r, 300));
+			await setPrefs(page, { history: true });
+			// Poll rather than fixed-sleep: updateUI's history branch enables
+			// #historytiles-filter (`disabled = !history`), and the click
+			// below silently no-ops on a still-disabled button.
+			await waitForCondition(
+				page,
+				() => {
+					const btn = document.getElementById('historytiles-filter') as HTMLButtonElement | null;
+					return !!btn && !btn.disabled;
+				},
+				[],
+				{ timeout: 10_000, message: '#historytiles-filter never became enabled after history=true' }
+			);
 
 			// Open the drawer's Advanced tab where the filter UI lives.
-			await page.evaluate(() => {
-				(window as any).newTabTools.openDrawer();
-				(window as any).newTabTools.switchDrawerTab('advanced');
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 300));
 
 			// Populate the filter table.
@@ -94,16 +109,13 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			expect(filterRow!.domain).toBe('test.example.com');
 			expect(filterRow!.count).toBe('2');
 
-			// Verify the filter is persisted via Filters.getList().
-			const stored = await page.evaluate(() => {
-				return Filters.getList();
-			});
+			// Verify the filter is persisted via the `filters` storage key
+			// (Filters.getList()'s equivalent).
+			const stored = await getFilters(page);
 			expect(stored['test.example.com']).toBe(2);
 
 			// Clean up: remove the filter by setting it to -1 (unlimited).
-			await page.evaluate(() => {
-				Filters.setFilter('test.example.com', -1);
-			});
+			await setFilter(page, 'test.example.com', -1);
 		} catch (e) {
 			await captureFailure(page, 'filter-cap-add');
 			throw e;
@@ -118,17 +130,26 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 
 		try {
 			// Pre-set a filter.
-			await page.evaluate(() => {
-				Filters.setFilter('adjust.example.com', 3);
-			});
+			await setFilter(page, 'adjust.example.com', 3);
 
 			// Open settings → filter panel.
 			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 			// History is a copper toggle now (no native checkbox) — enable it via
 			// the pref, which updateUI mirrors onto the toggle + enables the filter.
-			await page.evaluate(() => { (window as any).Prefs.history = true; });
-			await new Promise(r => setTimeout(r, 300));
+			await setPrefs(page, { history: true });
+			// Poll rather than fixed-sleep: updateUI's history branch enables
+			// #historytiles-filter (`disabled = !history`), and the click
+			// below silently no-ops on a still-disabled button.
+			await waitForCondition(
+				page,
+				() => {
+					const btn = document.getElementById('historytiles-filter') as HTMLButtonElement | null;
+					return !!btn && !btn.disabled;
+				},
+				[],
+				{ timeout: 10_000, message: '#historytiles-filter never became enabled after history=true' }
+			);
 			await page.evaluate(() => {
 				document.getElementById('historytiles-filter')!.click();
 			});
@@ -193,9 +214,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			expect(countAfterMinus).toBe('3');
 
 			// Clean up.
-			await page.evaluate(() => {
-				Filters.setFilter('adjust.example.com', -1);
-			});
+			await setFilter(page, 'adjust.example.com', -1);
 		} catch (e) {
 			await captureFailure(page, 'filter-cap-buttons');
 			throw e;
@@ -211,11 +230,9 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 		try {
 			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
-			await page.evaluate(() => { (window as any).Prefs.history = true; });
-			await page.evaluate(() => {
-				(window as any).newTabTools.openDrawer();
-				(window as any).newTabTools.switchDrawerTab('advanced');
-			});
+			await setPrefs(page, { history: true });
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 300));
 
 			// Panel starts hidden (it's a toggle now, not always-visible).
@@ -255,14 +272,12 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => { Filters.setFilter('remove.example.com', 2); });
+			await setFilter(page, 'remove.example.com', 2);
 			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
-			await page.evaluate(() => { (window as any).Prefs.history = true; });
-			await page.evaluate(() => {
-				(window as any).newTabTools.openDrawer();
-				(window as any).newTabTools.switchDrawerTab('advanced');
-			});
+			await setPrefs(page, { history: true });
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 300));
 			await page.evaluate(() => document.getElementById('historytiles-filter')!.click());
 			await new Promise(r => setTimeout(r, 500));
@@ -291,7 +306,7 @@ describe('E2E: Per-domain filter cap (slot 23)', () => {
 			});
 			await new Promise(r => setTimeout(r, 400));
 
-			const stored = await page.evaluate(() => Filters.getList());
+			const stored = await getFilters(page);
 			expect(stored['remove.example.com']).toBeUndefined();
 
 			const rowGone = await page.evaluate(() => {

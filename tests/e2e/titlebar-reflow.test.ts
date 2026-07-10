@@ -7,6 +7,9 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	nudgeRecentRefresh,
+	openDrawerUI,
+	closeDrawerUI,
 } from './_helpers.ts';
 
 /**
@@ -98,7 +101,7 @@ describe('E2E: titlebar recent-card reflow on drawer open/close', () => {
 				[],
 				{ timeout: 10_000, message: 'Titlebar never gained a non-zero layout width' }
 			);
-			await page.evaluate(() => (window as any).newTabTools.refreshRecent());
+			await nudgeRecentRefresh(page);
 
 			// Poll until the rendered count converges to the value computed
 			// from the live width — layout in the headless window can take a
@@ -126,7 +129,7 @@ describe('E2E: titlebar recent-card reflow on drawer open/close', () => {
 			//    throws if it stays frozen, which is exactly the reported bug
 			//    ("opening the drawer removes all but one card", the row stuck
 			//    against a transient narrow width). It must not collapse to one.
-			await page.evaluate(() => (window as any).newTabTools.openDrawer());
+			await openDrawerUI(page);
 			const open = await settle('drawer-open');
 			expect(open.rendered).toBeGreaterThan(1);
 
@@ -134,7 +137,7 @@ describe('E2E: titlebar recent-card reflow on drawer open/close', () => {
 			//    and recover every card (the reported bug left it collapsed,
 			//    needing a reload to recover). `settle` proves rendered === calc;
 			//    the count returns to the original closed value.
-			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await closeDrawerUI(page);
 			const restored = await settle('drawer-closed');
 			expect(restored.rendered).toBe(closed.rendered);
 		} catch (e) {

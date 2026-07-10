@@ -19,9 +19,10 @@
  * background's read path (lib/background-main.js and every other lib
  * consumer) now does a real `import { Prefs, Blocked, Filters, NeverCapture }
  * from '../prefs.js'` / `import { compareVersions } from '../common.js'`
- * instead — those two files' `export`s are real now, only their
- * `globalThis.X = …` bridge assignments survive (permanently — the page
- * still needs them; see prefs.js/common.js's own doc comments).
+ * instead — those two files' `export`s are real now, and their
+ * `globalThis.X = …` bridge assignments are gone too as of chrome-prep C3d
+ * (see prefs.js/common.js's own doc comments): the page imports both files
+ * for real, so nothing reads either off `globalThis` anymore.
  */
 
 // ---------------------------------------------------------------------------

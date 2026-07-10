@@ -1,6 +1,28 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, waitForCondition, resetTestState, captureFailure, getNewTabURL } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, waitForCondition, resetTestState, captureFailure, getNewTabURL, removeTileByUrl } from './_helpers.ts';
+
+/**
+ * Set one or more prefs via `browser.storage.local` and wait for the
+ * read-back fence (chrome.storage serialises operations, so the get
+ * callback fires only once the set has fully applied) — the principled
+ * (non-page-global) way to seed/restore pref state from page context
+ * (chrome-prep C3d, CHROME_PREP.md maintainer directive 1).
+ */
+async function setPrefs(page: Page, prefs: Record<string, unknown>): Promise<void> {
+	await page.evaluate(p => new Promise<void>(resolve => {
+		chrome.storage.local.set(p, () => {
+			chrome.storage.local.get(() => resolve());
+		});
+	}), prefs);
+}
+
+/** Read one pref's current stored value via `browser.storage.local`. */
+async function getPref(page: Page, name: string): Promise<unknown> {
+	return page.evaluate(n => new Promise(resolve => {
+		chrome.storage.local.get([n], (result: Record<string, unknown>) => resolve(result[n]));
+	}), name);
+}
 
 describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Phase 3-1)', () => {
 	let browser: Browser;
@@ -72,7 +94,7 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			});
 			await new Promise(r => setTimeout(r, 400));
 
-			const cols = await page.evaluate(() => (window as any).Prefs.columns);
+			const cols = await getPref(page, 'columns');
 			expect(cols).toBe(5);
 
 			// Active state should be reflected on the button via aria-checked.
@@ -122,6 +144,9 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 	});
 
 	it('Esc closes the drawer', async () => {
+		// The window-level keydown handler (newTab.js) closes the drawer on
+		// Escape regardless of what's focused, as long as the wallpaper
+		// picker and pinURL autocomplete are both closed.
 		await page.keyboard.press('Escape');
 		await new Promise(r => setTimeout(r, 400));
 
@@ -137,7 +162,7 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		expect(drawerWidth).toBeLessThan(50);
 
 		// Reset columns to default so the next test file is hermetic.
-		await page.evaluate(() => { (window as any).Prefs.columns = 3; });
+		await setPrefs(page, { columns: 3 });
 	}, 30_000);
 
 	// --- Regressions caught manually during Phase 3-1 review.
@@ -151,8 +176,9 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		// in the real extension.
 		// Also: `<input type="range">` fires `change` only on release; the
 		// drawer must listen for `input` for realtime drag feedback.
+		// Drawer is closed from the previous test — the cogwheel toggles it.
 		await page.evaluate(() => {
-			(window as any).newTabTools.openDrawer();
+			(document.getElementById('options-toggle') as HTMLElement).click();
 		});
 		await new Promise(r => setTimeout(r, 200));
 
@@ -181,10 +207,9 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		}
 
 		// Restore default + close drawer.
-		await page.evaluate(() => {
-			(window as any).Prefs.spacing = 'small';
-			(window as any).newTabTools.closeDrawer();
-		});
+		await setPrefs(page, { spacing: 'small' });
+		await page.keyboard.press('Escape');
+		await new Promise(r => setTimeout(r, 300));
 	}, 60_000);
 
 	it('Board A: no wordmark/masthead — a single visible Edit button is the titlebar action', async () => {
@@ -208,20 +233,21 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 	it('regression: clicking the toggle row label flips the pref (delegation, not direct button click)', async () => {
 		// Users naturally click on the row label, not the small toggle
 		// button. The handler must walk up to `.ntt-toggle-row[data-pref]`.
+		// Drawer is closed from the previous escape — the cogwheel opens it.
 		await page.evaluate(() => {
-			(window as any).newTabTools.openDrawer();
+			(document.getElementById('options-toggle') as HTMLElement).click();
 		});
 		await new Promise(r => setTimeout(r, 200));
 
 		try {
-			const before = await page.evaluate(() => (window as any).Prefs.titleBarSearch);
+			const before = await getPref(page, 'titleBarSearch');
 			await page.evaluate(() => {
 				const label = document.querySelector('.ntt-toggle-row[data-pref="titleBarSearch"] .ntt-toggle-label') as HTMLElement;
 				label.click();
 			});
 			await new Promise(r => setTimeout(r, 400));
 
-			const after = await page.evaluate(() => (window as any).Prefs.titleBarSearch);
+			const after = await getPref(page, 'titleBarSearch');
 			expect(after).toBe(!before);
 
 			// And #ntt-search should actually be hidden / shown to match.
@@ -231,17 +257,20 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			});
 			expect(searchHidden).toBe(!after);
 		} finally {
-			await page.evaluate(() => {
-				(window as any).Prefs.titleBarSearch = true;
-				(window as any).newTabTools.closeDrawer();
-			});
+			await setPrefs(page, { titleBarSearch: true });
+			await page.keyboard.press('Escape');
+			await new Promise(r => setTimeout(r, 300));
 		}
 	}, 30_000);
 
 	it('Phase 3-2: clicking a theme card flips <html theme="..."> and the active card is aria-checked', async () => {
 		await page.evaluate(() => {
-			(window as any).newTabTools.openDrawer();
-			(window as any).newTabTools.switchDrawerTab('page');
+			(document.getElementById('options-toggle') as HTMLElement).click();
+		});
+		await new Promise(r => setTimeout(r, 200));
+		await page.evaluate(() => {
+			const tab = document.querySelector('[data-drawer-tab="page"]') as HTMLElement;
+			tab.click();
 		});
 		await new Promise(r => setTimeout(r, 200));
 
@@ -261,22 +290,70 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			});
 			expect(checkedCard).toEqual(['contrast']);
 		} finally {
-			await page.evaluate(() => {
-				(window as any).Prefs.theme = 'system';
-				(window as any).newTabTools.closeDrawer();
-			});
+			await setPrefs(page, { theme: 'system' });
+			await page.keyboard.press('Escape');
+			await new Promise(r => setTimeout(r, 300));
 		}
 	}, 30_000);
 
 	it('Phase 3-2: Tile tab shows empty state when nothing is selected', async () => {
+		// selectedSiteIndex is transient page-only state with no wire/storage
+		// surface, so it can't be forced to null directly. Its setter (the
+		// code that actually toggles the empty-state/edit-area DOM — the
+		// static markup itself defaults BOTH to visible) only runs when
+		// something explicitly assigns it; merely having an empty grid never
+		// triggers it (newTab.js's `_autoSelectFirstTileIfNeeded` is a no-op
+		// when there's no candidate to select). The one real, DOM-driven path
+		// that reaches `selectedSiteIndex = null` is the Tile tab's "Remove"
+		// button (`#options-url-remove` — newTab.js's `options-url-remove`
+		// case): select a real tile first, then click Remove.
+		const TEST_URL = 'https://drawer-empty-state.example/';
+		await page.evaluate(u => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Empty state test' }, () => resolve());
+		}), TEST_URL);
+		const url = await getNewTabURL();
+		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await waitForGridReady(page);
+		await waitForCondition(
+			page,
+			u => Array.from(document.querySelectorAll('#newtab-grid a.newtab-link'))
+				.some(a => (a as HTMLAnchorElement).href === u),
+			[TEST_URL],
+			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
+		);
+
 		await page.evaluate(() => {
-			(window as any).newTabTools.openDrawer();
-			(window as any).newTabTools.switchDrawerTab('tile');
-			(window as any).newTabTools.selectedSiteIndex = null;
+			(document.getElementById('options-toggle') as HTMLElement).click();
+		});
+		await new Promise(r => setTimeout(r, 200));
+		await page.evaluate(() => {
+			const tab = document.querySelector('[data-drawer-tab="tile"]') as HTMLElement;
+			tab.click();
 		});
 		await new Promise(r => setTimeout(r, 300));
 
 		try {
+			// Select the tile (auto-select may have already done this, since
+			// it's the only tile — click it explicitly anyway, to not depend
+			// on that).
+			await page.evaluate(u => {
+				const tiles = Array.from(document.querySelectorAll('#newtab-grid .newtab-site')) as HTMLElement[];
+				const target = tiles.find(t => (t.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u) || tiles[0];
+				target.click();
+			}, TEST_URL);
+			await new Promise(r => setTimeout(r, 300));
+
+			const selected = await page.evaluate(() => (document.getElementById('options-tile') as HTMLElement).hidden);
+			expect(selected).toBe(false);
+
+			// Click Remove — this both unpins/blocks the tile AND runs
+			// `this.selectedSiteIndex = null`, which is what actually flips
+			// the empty-state/edit-area visibility.
+			await page.evaluate(() => {
+				(document.getElementById('options-url-remove') as HTMLElement).click();
+			});
+			await new Promise(r => setTimeout(r, 300));
+
 			const state = await page.evaluate(() => ({
 				emptyHidden: (document.querySelector('[data-tile-empty]') as HTMLElement).hidden,
 				editHidden: (document.getElementById('options-tile') as HTMLElement).hidden,
@@ -284,10 +361,13 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			expect(state.emptyHidden).toBe(false);
 			expect(state.editHidden).toBe(true);
 		} finally {
-			await page.evaluate(() => {
-				(window as any).newTabTools.selectedSiteIndex = 0;
-				(window as any).newTabTools.closeDrawer();
-			});
+			// Belt-and-braces cleanup: options-url-remove already
+			// unpinned/blocked the tile, but remove it from the tiles store
+			// too in case that path didn't run (e.g. an earlier assertion
+			// threw before the Remove click).
+			await removeTileByUrl(page, TEST_URL);
+			await page.keyboard.press('Escape');
+			await new Promise(r => setTimeout(r, 300));
 		}
 	}, 30_000);
 
@@ -304,22 +384,26 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		await waitForGridReady(page);
 		await waitForCondition(
 			page,
-			u => {
-				const g = (window as any).Grid;
-				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-			},
+			u => Array.from(document.querySelectorAll('#newtab-grid a.newtab-link'))
+				.some(a => (a as HTMLAnchorElement).href === u),
 			[TEST_URL],
 			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
 		);
 
 		await page.evaluate(() => {
-			(window as any).newTabTools.openDrawer();
-			(window as any).newTabTools.switchDrawerTab('tile');
-			(window as any).newTabTools.selectedSiteIndex = null;
+			(document.getElementById('options-toggle') as HTMLElement).click();
+		});
+		await new Promise(r => setTimeout(r, 200));
+		await page.evaluate(() => {
+			const tab = document.querySelector('[data-drawer-tab="tile"]') as HTMLElement;
+			tab.click();
 		});
 		await new Promise(r => setTimeout(r, 300));
 
 		try {
+			// Click the tile body (not an action button) while the drawer's
+			// Tile tab is open — fx-newTab.js's Site._onClick treats this as
+			// "select for editing" whenever `drawer-open` is set.
 			await page.evaluate(u => {
 				const tiles = Array.from(document.querySelectorAll('#newtab-grid .newtab-site')) as HTMLElement[];
 				const target = tiles.find(t => (t.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u) || tiles[0];
@@ -338,10 +422,9 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			expect(result.hasSelected).toBe(true);
 			expect(result.emptyHidden).toBe(true);
 		} finally {
-			await page.evaluate(u => new Promise<void>(resolve => {
-				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
-			}), TEST_URL);
-			await page.evaluate(() => { (window as any).newTabTools.closeDrawer(); });
+			await removeTileByUrl(page, TEST_URL);
+			await page.keyboard.press('Escape');
+			await new Promise(r => setTimeout(r, 300));
 		}
 	}, 90_000);
 
@@ -359,17 +442,26 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 		await waitForGridReady(page);
 		await waitForCondition(
 			page,
-			u => {
-				const g = (window as any).Grid;
-				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-			},
+			u => Array.from(document.querySelectorAll('#newtab-grid a.newtab-link'))
+				.some(a => (a as HTMLAnchorElement).href === u),
 			[TEST_URL],
 			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
 		);
 
 		try {
-			await page.evaluate(() => { (window as any).Prefs.statType = 'rank'; });
-			await new Promise(r => setTimeout(r, 600));
+			await setPrefs(page, { statType: 'rank' });
+			// Poll for the first rendered chip instead of a fixed sleep: the
+			// setPrefs write only STARTS the async chain (storage.onChanged →
+			// prefsChanged → updateUI → TileStats.compute → chip render),
+			// which under full-suite load can take longer than any fixed
+			// budget picked in a targeted run.
+			await waitForCondition(
+				page,
+				() => Array.from(document.querySelectorAll('#newtab-grid .ntt-stat-chip'))
+					.some(c => (c.textContent || '').length > 0),
+				[],
+				{ timeout: 10_000, message: 'no non-empty stat chip rendered after statType=rank' }
+			);
 
 			const chipTexts = await page.evaluate(() => {
 				const chips = Array.from(document.querySelectorAll('#newtab-grid .ntt-stat-chip')) as HTMLElement[];
@@ -379,10 +471,8 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			expect(chipTexts.length).toBeGreaterThan(0);
 			expect(chipTexts.every(t => /^#\d+$/.test(t!))).toBe(true);
 		} finally {
-			await page.evaluate(() => { (window as any).Prefs.statType = 'none'; });
-			await page.evaluate(u => new Promise<void>(resolve => {
-				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
-			}), TEST_URL);
+			await setPrefs(page, { statType: 'none' });
+			await removeTileByUrl(page, TEST_URL);
 		}
 	}, 60_000);
 });

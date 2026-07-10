@@ -22,9 +22,9 @@
  *
  * `NeverCapture` is a dual-scope bridge global (prefs.js, MODERNIZATION.md
  * Decision 2, PAGE_MODULES.md Decision 6) — a real `export` now, imported
- * directly below; only its `globalThis.NeverCapture = …` assignment stays
- * bridge-mode, permanently, since the page still needs it as a classic-
- * `<script>` global.
+ * directly below. Its `globalThis.NeverCapture = …` bridge assignment is
+ * retired as of chrome-prep C3d: the page imports it for real too, so
+ * nothing reads it off `globalThis` anymore.
  *
  * M5 also moves the browser-capability checks (the `<all_urls>` permission
  * probe in `startCaptureSession`, the capture-API presence probe in

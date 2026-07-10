@@ -10,9 +10,10 @@
  *
  * `Prefs`/`Blocked`/`Filters` (prefs.js) and `compareVersions` (common.js)
  * are dual-scope bridge files (MODERNIZATION.md Decision 2, PAGE_MODULES.md
- * Decision 6) — real `export`s now, imported directly below. Only their
- * `globalThis.X = …` assignments stay bridge-mode, permanently, since the
- * page still needs them as classic-`<script>` globals.
+ * Decision 6) — real `export`s now, imported directly below. Their
+ * `globalThis.X = …` bridge assignments are gone as of chrome-prep C3d: the
+ * page imports both files for real too, so nothing reads either off
+ * `globalThis` anymore.
  */
 
 import { withObjectStore } from './db.js';

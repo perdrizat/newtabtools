@@ -61,6 +61,10 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 		globalThis.Prefs = { theme: 'system', locked: false, rows: 3, columns: 3, opacity: 80, margin: ['small','small','small','small'], spacing: 'small', titleSize: 'small', history: true, recent: true };
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
+		// Stand-in for the extracted updateUI body's bare `Grid` reads --
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
+		// optional in this vm harness (C3a guard-removal fallout pattern).
+		(globalThis as any).Grid = { sites: [] };
 
 		// Mock browser.theme
 		(globalThis as any).browser = {

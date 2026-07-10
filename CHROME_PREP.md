@@ -296,16 +296,151 @@ same staged-scaffold logic as P1's bridge):*
       `recent-tabs.test.ts`) gained `Prefs`/`Grid` stand-ins the removed
       guards used to make optional. Gates: fast 1309/1309, lint/typecheck/
       lint:webext clean.
-- [ ] Harness migration (maintainer directive 1): E2E/UAT stop reading page
-      globals — state seeding via runtime messages (most already are), UI
-      assertions via DOM, drag via synthesized gestures (flakiness accepted
-      for now; quarantine/retry policy documented in the test file). UAT
-      daemon's `window.Prefs`/`window.Grid` uses move to UI driving.
-- [ ] Delete EVERY `globalThis` bridge assignment (page files AND the
-      dual-scope survivors in common.js/prefs.js); `page-module-scope.test.ts`
-      flips its inventory to negative assertions; `globals.d.ts` shrinks to
-      jest-webextension-mock's surface; `nttGlobals` dies from eslint config.
-- [ ] Gates + FULL E2E + UAT spot-run (01/10/23/31 + 20–23).
+- [x] Harness migration (maintainer directive 1): E2E/UAT stop reading page
+      globals. `tests/e2e/_helpers.ts`: `waitForGridReady` polls DOM
+      (`#newtab-grid` gaining `.newtab-cell` children — the same readiness
+      point `Grid.ready`/`!!Grid._node` captured, verified against
+      `Grid.init`/`_render`/`_renderGrid`'s synchronous-cells-before-async-
+      sites ordering); `clearPinnedTiles` moves to the `Tiles.clear` wire
+      message; `resetPrefs` moves to `browser.storage.local.set` + read-back
+      fence (both now share a `waitForExtensionRuntime` helper with
+      `resetTestState`, which was already message-driven). New shared
+      helpers: `setPrefs`/`getPref` (storage read/write with fence),
+      `getFilters`/`setFilter` (the `filters` storage key — `Filters` is a
+      real storage-backed dual-scope singleton, so writing the key IS the
+      principled equivalent of the old `Filters.setFilter()` call),
+      `openDrawerUI`/`closeDrawerUI` (click `#options-toggle`, only when it
+      would actually change state), `switchDrawerTabUI` (click
+      `[data-drawer-tab]`), `siteLinkExists` (DOM poll predicate replacing
+      `Grid.sites.some(s => s.url === u)`), `nudgeRecentRefresh` (forces
+      `newTab.js`'s `refreshRecent` — which has no wire/storage trigger of
+      its own — by toggling the drawer, since `openDrawer`/`closeDrawer`'s
+      own `_refreshGridPositionsAfterDrawerTransition` calls it ~240ms after
+      either transition; a real DOM-driven substitute for calling the page
+      method directly). All 27 E2E files with page-global reads migrated:
+      drawer, drag-layout, drag-reorder, tile-custom, tile-redesign,
+      filter-cap, css-grid-layout, lock-grid, wallpaper-picker,
+      configurable-grid, tile-bgcolor, backup-restore, never-capture,
+      recent-tabs, titlebar-reflow, layout-tuning, tile-aspect, theme,
+      large-tiles, auto-thumbnail, pin-persists, favicon-real-sites (+5 more
+      with a single occurrence each). The "select a tile for editing"
+      pattern (`newTabTools.openDrawer(); switchDrawerTab('tile');
+      selectedSiteIndex = idx;`) collapses to one real click on the tile's
+      own `.ntt-action-btn[data-action="edit"]` action button (fx-newTab.js's
+      `Site._onClick` 'edit' case already does all three steps) — simpler
+      than the original page-global sequence, not just an equivalent.
+      `isPinned`/`neverCapture` reads move to the `pinned`/`never-capture`
+      DOM attributes fx-newTab.js already reflects onto the site node.
+      **Drag tests** (`drag-layout.test.ts`, `drag-reorder.test.ts`): real
+      `dragstart`/`drag`/`dragend`/`drop` `DragEvent`s (with a genuine
+      `new DataTransfer()` — Firefox's page context allows constructing one;
+      no shim object needed) dispatched on the actual `.newtab-site`/
+      `.newtab-cell` nodes, replacing direct `Drag.start(site, mockEvent)`
+      calls; `drag-layout.test.ts`'s cache-staleness regression reframed as
+      DOM proof (live `getBoundingClientRect()` narrowing after the drawer
+      opens) plus a real dragstart proving the frozen tile's width tracks
+      the CURRENT cell geometry (`Drag.start` measures `cellNode.offsetWidth`
+      live, so this is the true end-to-end proof, not a mocked-event
+      internals check); both files carry a header NOTE marking the
+      known-flaky class + quarantine policy (investigate on 3 consecutive CI
+      failures, never revert to page-global driving) per directive 1.
+      3 first-run-stable local runs each (drag-layout.test.ts 4/4 ×2,
+      drag-reorder.test.ts 2/2 ×2). Two E2E tests whose assertions were
+      fundamentally about internal, non-DOM-observable state (`NttIcons`
+      catalog completeness in `css-grid-layout.test.ts`) were reframed as DOM
+      proof that the icons pipeline is wired into the real page (rendered
+      inline SVGs on real action buttons) — the exhaustive catalog check
+      already lives at the fast tier (`tests/integration/icons.test.ts`, a
+      real module import, not a page-global read). UAT: `browser-daemon.mjs`
+      was already message-driven (verified, no changes needed); scenarios
+      `23-edit-mode-design.md` (`window.Grid` read → DOM query by tile URL)
+      and `31-titlebar.md` (`window.Prefs.titleBarSearch` write → 
+      `chrome.storage.local.set`) migrated. Bonus fix (adjacent regression,
+      same root cause): `scripts/amo-screenshots.mjs`'s `newTabTools.*`
+      eval-string reads (a manual release tool, not a gated test tier) moved
+      to DOM `input`-event dispatch.
+- [x] Delete EVERY `globalThis` bridge assignment (page files AND the
+      dual-scope survivors in common.js/prefs.js) — 17 assignments across 8
+      files (`prefs.js` ×4, `tiles-shim.js` ×2, `common.js`, `icons.js`,
+      `stats.js`, `awesomebar.js`, `newTab.js` ×2, `fx-newTab.js` ×5). Repo-
+      wide grep for `globalThis\.\w+\s*=` under `webextension/` now returns
+      zero matches. `tests/integration/page-module-scope.test.ts` and
+      `module-scope.test.ts` flip their inventories to negative assertions
+      (`toBeUndefined()`); `module-scope.test.ts`'s four Decision-2
+      "permanent" bridge checks become real `import`s of
+      `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions` plus a
+      negative `globalThis` assertion for each. `globals.d.ts` shrinks to
+      the vm-harness plumbing that still does a plain (non-cast)
+      `globalThis.X = {...}` write for a `vm`-extracted method-body fixture
+      (`Prefs`/`Filters`/`Tiles`/`Background`/`Updater`/`Grid`/`chrome` —
+      `Blocked`/`NeverCapture`/`compareVersions`/`Drag`/`newTabTools`
+      dropped, zero remaining bare-identifier references). `nttGlobals`
+      dies from eslint config for the E2E/UAT/scripts `.js`/`.mjs` glob (zero
+      bare-identifier reads remain there); a new, minimal
+      `nttVmHarnessGlobals` (`Filters`/`Prefs`/`Tiles`/`Updater` — the four
+      names grepped as still read bare) replaces it for the fast-tier `.ts`
+      glob's vm-harness plumbing only. Fast-tier fallout fixed: 8 test files
+      that read a bridge global expecting production to have set it
+      (`page-main-boot.test.ts`, `prefs-onchange-seam.test.ts`,
+      `db-wake-race.test.ts`, `event-page-resilience.test.ts`,
+      `auto-thumbnail.test.ts`, plus the two module-scope suites) migrated to
+      real imports/captured module-namespace bindings from their existing
+      dynamic `import()`s; suites that only SET a `globalThis.X` stand-in for
+      vm-extracted method bodies were left untouched (test-internal
+      plumbing, not a production-bridge dependency). Doc-comment sweep: every
+      "stays bridge-mode, permanently" claim in `lib/messages.js`,
+      `lib/backup.js`, `lib/platform.js`, `lib/capture.js`,
+      `lib/tiles-store.js`, `page-main.js`, `prefs.js`, `common.js`,
+      `eslint.config.js` corrected to record the C3d retirement. Gates: fast
+      1311/1311, lint/typecheck/lint:webext clean, tripwire green
+      (`ReferenceError: window is not defined` — missing-browser-API class,
+      not TDZ/SyntaxError).
+- [x] Full-E2E fallout round (coordinator review of the first C3d cut). One
+      real PRODUCTION defect: six `'Grid' in window` sniffs in newTab.js
+      (statType chip re-render — the failing rank test — cacheCellPositions
+      rAF, never-capture button refresh, data-selected ring sweep,
+      history-permission chip re-render, applyTileAspect) were satisfied only
+      by the deleted `globalThis.Grid` bridge, so C3d flipped them from
+      always-true to always-false, silently disabling the branches. Sniffs
+      dropped — `Grid` is a real static import, and each block keeps its real
+      null-guard (`Grid.node`, `Grid.sites`) — behavior-identical to the
+      bridge era. Six vm-harness suites (layout, theme, drawer-appearance,
+      drawer-layout, recent-toggle, statusbar, restore-wallpaper-live) gained
+      a `Grid: { sites: [] }` stand-in the dropped sniffs used to make
+      optional (C3a fallout pattern). WIRE-PAYLOAD AUDIT (every
+      `sendMessage({name})` in tests/e2e + tests/uat/_tools cross-checked
+      against lib/messages.js's `message.*` reads): two silent-no-op defect
+      classes found and fixed via a new `removeTileByUrl(page, url)` helper
+      (`Tiles.getTile` → `Tiles.removeTile {tile}`; wire-shape gotcha
+      documented, boot-timing.test.ts's comment referenced) — (1) seven
+      `Tiles.removeTile {url}` sends (dispatch reads `message.tile`), (2)
+      twelve `Tiles.unpinTile` sends (not a wire name at all — not among the
+      19 frozen names). All other payloads verified correct: `Tiles.pinTile`
+      {title,url} ×26, `Tiles.clear` ×6, `Tiles.getTile` {url} ×2,
+      `Tiles.getAllTiles`, `Thumbnails.save` {url,image} ×2, `Thumbnails.get`
+      {urls} ×3, `Thumbnails.getFavicons` {urls},
+      `Background.setBackground` {file}. Timing hardening: fixed-sleep-after-
+      `setPrefs` one-shot assertions (racy against the async
+      storage.onChanged→updateUI chain under full-suite load) converted to
+      bounded `waitForCondition` DOM polls in drawer (rank chips),
+      tile-aspect, layout-tuning, filter-cap (button enablement),
+      drag-reorder (locked attr), recent-tabs (favicon img). Gates re-run:
+      fast 1311/1311, lint/typecheck clean, targeted E2E
+      drawer+tile-redesign+drag-layout+never-capture 42/42 and
+      tile-custom+drag-reorder+tile-aspect+layout-tuning+filter-cap+
+      recent-tabs+tile-bgcolor+auto-thumbnail 25/25.
+- [x] Gates + FULL E2E + UAT spot-run: full E2E 127/127 (after the fix
+      round), UAT 7/7 (01/10/20-23/31) + 3/3 re-spot post-fix. Incident
+      record: the FIRST full run caught a production defect the targeted
+      runs could not — six `'Grid' in window` sniffs flipped always-false by
+      the bridge deletion (silently disabling stat chips, cacheCellPositions,
+      never-capture refresh, selected sweep, permission re-render,
+      applyTileAspect; the sniffs predated the deletion in the agent's work
+      order) — plus, via the payload audit, two wire-defect classes
+      (`Tiles.removeTile` `{url}` vs `message.tile`, 7 sites incl. 2
+      pre-existing; `Tiles.unpinTile`, a nonexistent wire name, 12 sites) —
+      all silent cleanup no-ops, fixed via the shared `removeTileByUrl`
+      helper.
 
 ### C4 — split the monoliths
 - [ ] fx-newTab.js → grid, site, cell, drag-drop, transformation, updater,

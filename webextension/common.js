@@ -3,14 +3,13 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6 — permanent, revised
- * 2026-07-10): `compareVersions` is a real `export` now, consumed by real
- * `import`s from `lib/tiles-store.js` (the background read path). The
- * `globalThis.compareVersions = …` assignment below SURVIVES this slice —
- * newTab.js/fx-newTab.js/awesomebar.js still read it as a bare identifier
- * (they stay vm-loaded classic scripts until P4/P5), and E2E/UAT
- * page-context evaluation reads it off `globalThis` too (TEST-ONLY
- * thereafter, once the last production consumer migrates).
+ * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6): `compareVersions` is
+ * a real `export`, consumed by real `import`s from `lib/tiles-store.js` (the
+ * background read path) and `fx-newTab.js` (the page read path). The
+ * `globalThis.compareVersions = …` bridge assignment that survived through
+ * PAGE_MODULES.md is retired as of chrome-prep C3d: every production and
+ * test consumer now reaches this via a real `import`, so the bridge is gone
+ * — see `tests/integration/module-scope.test.ts`'s negative assertion.
  * @param {string|number} a
  * @param {string|number} b
  * @returns {number}
@@ -82,11 +81,6 @@ export function compareVersions(a, b) {
 	}
 	return 0;
 }
-
-// Cast through `any`: see prefs.js's matching bridge-assignment comment for
-// why (checked-JS's ambient-global-from-assignment inference otherwise
-// overrides tests/integration/globals.d.ts's deliberately loose `any`).
-globalThis.compareVersions = /** @type {any} */ (compareVersions);
 
 /**
  * Look up a localized string from `_locales/<lang>/messages.json`, with

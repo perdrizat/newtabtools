@@ -10,6 +10,9 @@ import {
 	waitForCondition,
 	captureFailure,
 	resetTestState,
+	siteLinkExists,
+	openDrawerUI,
+	switchDrawerTabUI,
 } from './_helpers.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -210,26 +213,23 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 			//    then calls Updater.updateGrid on any open new tab views.
 			await waitForCondition(
 				page,
-				(expectedUrl) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {
-						return false;
-					}
-					return g.sites.some((s: any) => s && s.url === expectedUrl);
-				},
+				siteLinkExists,
 				[RESTORE_TILES[0].url],
 				{ timeout: 15_000, message: 'restored tile did not appear in the grid' },
 			);
 
 			// 7. Verify both tiles are in the grid
 			const gridState = await page.evaluate((urls) => {
-				const g = window.Grid;
-				if (!g || !g.sites) {
+				const grid = document.getElementById('newtab-grid');
+				if (!grid) {
 					return { hasGrid: false };
 				}
+				const sites = Array.from(grid.querySelectorAll('.newtab-site'));
 				const found = urls.map(url => {
-					const site = g.sites.find((s: any) => s && s.url === url);
-					return site ? { url: site.url, title: site.title || '' } : null;
+					const site = sites.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === url);
+					if (!site) { return null; }
+					const title = site.querySelector('.newtab-title');
+					return { url, title: title ? (title.textContent || '') : '' };
 				});
 				return { hasGrid: true, found };
 			}, RESTORE_TILES.map(t => t.url));
@@ -257,25 +257,20 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 		try {
 			await waitForCondition(
 				page,
-				(expectedUrl) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {
-						return false;
-					}
-					return g.sites.some((s: any) => s && s.url === expectedUrl);
-				},
+				siteLinkExists,
 				[RESTORE_TILES[0].url],
 				{ timeout: 15_000, message: 'restored tile did not persist after reload' },
 			);
 
 			const gridState = await page.evaluate((urls) => {
-				const g = window.Grid;
-				if (!g || !g.sites) {
+				const grid = document.getElementById('newtab-grid');
+				if (!grid) {
 					return { hasGrid: false };
 				}
+				const sites = Array.from(grid.querySelectorAll('.newtab-site'));
 				const found = urls.map(url => {
-					const site = g.sites.find((s: any) => s && s.url === url);
-					return site ? { url: site.url } : null;
+					const site = sites.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === url);
+					return site ? { url } : null;
 				});
 				return { hasGrid: true, found };
 			}, RESTORE_TILES.map(t => t.url));
@@ -327,11 +322,8 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 		await waitForGridReady(page);
 
 		try {
-			await page.evaluate(() => {
-				const w = window as any;
-				w.newTabTools.openDrawer();
-				w.newTabTools.switchDrawerTab('advanced');
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 400));
 
 			// The native input is visually hidden; the styled <label> drives it.

@@ -88,22 +88,25 @@ describe('E2E: Wallpaper picker', () => {
 			await page.evaluate(() => document.getElementById('options-toggle')!.click());
 			await new Promise(r => setTimeout(r, 500));
 			await page.evaluate(() => document.getElementById('options-wallpaper-btn')!.click());
-			await new Promise(r => setTimeout(r, 500));
 
-			// Inject synthetic wallpapers via renderWallpaperGrid to avoid
-			// network dependency. This tests the selection + apply flow.
-			const testUrl = 'https://example.com/test-wallpaper.jpg';
-			await page.evaluate((url: string) => {
-				(window as any).newTabTools.renderWallpaperGrid([
-					{ title: 'Test 1', category: 'test-cat', imageUrl: url },
-					{ title: 'Test 2', category: 'test-cat', imageUrl: 'https://example.com/other.jpg' },
-				]);
-			}, testUrl);
+			// Wait for the real Firefox curated wallpapers to load (same
+			// network fetch test 1 already depends on -- no page-global
+			// shortcut to synthesize fake entries anymore).
+			await waitForCondition(
+				page,
+				() => document.querySelectorAll('.wallpaper-thumb').length > 0,
+				[],
+				{ timeout: 15_000, message: 'No wallpaper thumbnails loaded from Mozilla API' }
+			);
 
-			// Click the first wallpaper thumbnail.
-			await page.evaluate(() => {
-				(document.querySelector('.wallpaper-thumb') as HTMLElement).click();
+			// Click the first wallpaper thumbnail (its data-url identifies the
+			// image renderWallpaperGrid sets as its background).
+			const testUrl = await page.evaluate(() => {
+				const thumb = document.querySelector('.wallpaper-thumb') as HTMLElement;
+				thumb.click();
+				return thumb.dataset.url || '';
 			});
+			expect(testUrl).not.toBe('');
 
 			// Wait for background to be applied.
 			const bgImage = await waitForCondition(
@@ -126,7 +129,7 @@ describe('E2E: Wallpaper picker', () => {
 			await captureFailure(page, 'wallpaper-picker-select');
 			throw e;
 		} finally {
-			await page.evaluate(() => (window as any).newTabTools.resetWallpaper()).catch(() => {});
+			await page.evaluate(() => (document.getElementById('wallpaper-reset') as HTMLElement | null)?.click()).catch(() => {});
 			await page.close();
 		}
 	}, 90_000);
@@ -161,7 +164,7 @@ describe('E2E: Wallpaper picker', () => {
 			await captureFailure(page, 'wallpaper-picker-upload');
 			throw e;
 		} finally {
-			await page.evaluate(() => (window as any).newTabTools.resetWallpaper()).catch(() => {});
+			await page.evaluate(() => (document.getElementById('wallpaper-reset') as HTMLElement | null)?.click()).catch(() => {});
 			await page.close();
 		}
 	}, 90_000);

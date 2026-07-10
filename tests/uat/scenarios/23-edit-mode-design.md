@@ -120,12 +120,12 @@ the flow:
     ```js
     return (() => {
       const url = arguments_url; // substitute the URL captured above
-      const g = window.Grid;
-      const site = g && g.sites ? g.sites.find(s => s && s.url === url) : null;
+      const site = [...document.querySelectorAll('#newtab-grid .newtab-site')]
+        .find(s => ((s.querySelector('a.newtab-link') || {}).href) === url);
       return {
-        pinned: !!(site && site.isPinned),
+        pinned: !!(site && site.hasAttribute('pinned')),
         tileTab: document.documentElement.getAttribute('drawer-tab') === 'tile',
-        selected: !!(site && site.node && site.node.getAttribute('data-selected') === 'true'),
+        selected: !!(site && site.getAttribute('data-selected') === 'true'),
       };
     })()
     ```

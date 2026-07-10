@@ -109,15 +109,3 @@ export const Background = {
 	},
 };
 
-// page-modules P5 (PAGE_MODULES.md): Tiles/Background are real exports,
-// consumed by real imports (newTab.js, fx-newTab.js). TEST-ONLY BRIDGE: these
-// assignments survive solely for E2E/UAT page-context evaluation and any
-// fast-tier suite still reading a bare identifier off a computed-path dynamic
-// import. Cast through `any` on the way out — same reason as prefs.js's
-// bridge assignments (PAGE_MODULES.md P3): without it, TypeScript's
-// checked-JS infers the full internal shape as the ambient global from this
-// assignment, overriding tests/integration/globals.d.ts's deliberately loose
-// `declare global { var Tiles: any; var Background: any; }` and breaking
-// every test-only partial mock of Tiles/Background across the suite.
-globalThis.Tiles = /** @type {any} */ (Tiles);
-globalThis.Background = /** @type {any} */ (Background);

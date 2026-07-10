@@ -9,6 +9,7 @@ import {
 	waitForGridReady,
 	resetTestState,
 	navigateAndConfirm,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 // Use example.com — a simple, static page where drawWindow reliably works.
@@ -71,13 +72,13 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			const hasThumbnail = await waitForCondition(
 				page,
 				(testUrl) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === testUrl);
 					if (!site) {return false;}
-					const bg = site.thumbnail.style.backgroundImage;
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					const bg = thumb && thumb.style.backgroundImage;
 					// Must be a blob: URL set by getThumbnails
-					return bg && bg.startsWith('url(');
+					return !!(bg && bg.startsWith('url('));
 				},
 				[TEST_URL],
 				{ timeout: 15_000, message: 'Thumbnail backgroundImage not set on tile after navigation' }
@@ -87,10 +88,10 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 
 			// Visual sanity: the logo fallback must not be covering the thumbnail.
 			const fallbackCovers = await page.evaluate((testUrl) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === testUrl);
 				if (!site) {return { error: 'site not found' };}
-				const thumb = site.thumbnail;
+				const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement;
 				const fallback = thumb.querySelector('.ntt-logo-fallback');
 				if (!fallback) {return { occluded: false };}
 				const fRect = fallback.getBoundingClientRect();
@@ -121,12 +122,12 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			const hasThumbnail = await waitForCondition(
 				page,
 				(testUrl) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === testUrl);
 					if (!site) {return false;}
-					const bg = site.thumbnail.style.backgroundImage;
-					return bg && bg.startsWith('url(');
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					const bg = thumb && thumb.style.backgroundImage;
+					return !!(bg && bg.startsWith('url('));
 				},
 				[TEST_URL],
 				{ timeout: 15_000, message: 'Thumbnail not found after reload — persistence failed' }
@@ -136,10 +137,10 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 
 			// Visual sanity: fallback must not occlude the loaded thumbnail.
 			const fallbackCovers = await page.evaluate((testUrl) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.link && s.link.url === testUrl);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === testUrl);
 				if (!site) {return { error: 'site not found' };}
-				const thumb = site.thumbnail;
+				const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement;
 				const fallback = thumb.querySelector('.ntt-logo-fallback');
 				if (!fallback) {return { occluded: false };}
 				const fRect = fallback.getBoundingClientRect();
@@ -156,18 +157,14 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			await captureFailure(page, 'auto-thumbnail-persist');
 			throw e;
 		} finally {
-			// Clean up: unpin the tile so other tests start clean.
+			// Clean up: remove the tile so other tests start clean.
+			// (`Tiles.unpinTile` — the wire name this used to send — does not
+			// exist in lib/messages.js's 19-name dispatch, so it silently
+			// no-op'd; removeTileByUrl uses the real getTile→removeTile wire.)
 			const cleanPage = await openNewTab(browser);
 			await waitForGridReady(cleanPage);
 			try {
-				await cleanPage.evaluate(async (u) => {
-					return new Promise(resolve => {
-						chrome.runtime.sendMessage({
-							name: 'Tiles.unpinTile',
-							url: u,
-						}, resolve);
-					});
-				}, TEST_URL);
+				await removeTileByUrl(cleanPage, TEST_URL);
 			} catch { /* best-effort cleanup */ }
 			await cleanPage.close();
 			await page.close();

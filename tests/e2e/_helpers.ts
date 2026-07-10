@@ -254,26 +254,185 @@ export async function openNewTab(browser: Browser, opts: OpenNewTabOpts = {}): P
 }
 
 /**
- * Clear all pinned tiles AND reset prefs to defaults in a single page
- * open/close cycle. This avoids the rapid open/close/open pattern that
- * destabilises the BiDi connection. Call in `beforeAll` after
- * `connectToFirefox()`.
+ * Wait until the extension runtime is available in `page` (scripts loaded),
+ * without waiting for the full Grid DOM to render. Shared by the state-reset
+ * helpers below, which only need `chrome.runtime`/`chrome.storage`.
+ */
+async function waitForExtensionRuntime(page: Page): Promise<void> {
+	await waitForCondition(
+		page,
+		() => typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.sendMessage === 'function',
+		[],
+		{ timeout: 15_000, message: 'Extension runtime not available' }
+	);
+}
+
+/**
+ * Set one or more prefs via `browser.storage.local` from page context, with a
+ * read-back fence (chrome.storage serialises operations, so the `get`
+ * callback fires only once the `set` has fully applied). The principled way
+ * to seed/mutate pref state from E2E test code (chrome-prep C3d,
+ * CHROME_PREP.md maintainer directive 1) — never write a page global. Storage
+ * keys match the `Prefs` accessor names 1:1 (verified against prefs.js's
+ * `parsePrefs`), so this is a drop-in replacement for the old
+ * `(window as any).Prefs.<name> = value` pattern.
+ */
+export async function setPrefs(page: Page, prefs: Record<string, unknown>): Promise<void> {
+	await page.evaluate(p => new Promise<void>(resolve => {
+		chrome.storage.local.set(p, () => {
+			chrome.storage.local.get(() => resolve());
+		});
+	}), prefs);
+}
+
+/** Read one pref's current stored value via `browser.storage.local`. */
+export async function getPref(page: Page, name: string): Promise<unknown> {
+	return page.evaluate(n => new Promise(resolve => {
+		chrome.storage.local.get([n], (result: Record<string, unknown>) => resolve(result[n]));
+	}), name);
+}
+
+/**
+ * Read the per-domain filter map (`Filters.getList()`'s equivalent) directly
+ * from the `filters` storage key — `Filters` (prefs.js) is a real, storage-
+ * backed dual-scope singleton (`_saveList` writes this same key; `parsePrefs`
+ * re-syncs `_list` from it on every storage change), so reading/writing the
+ * key IS the principled equivalent of calling the page-global accessor.
+ */
+export async function getFilters(page: Page): Promise<Record<string, number>> {
+	return page.evaluate(() => new Promise<Record<string, number>>(resolve => {
+		chrome.storage.local.get(['filters'], (result: Record<string, unknown>) => resolve((result.filters as Record<string, number>) || {}));
+	}));
+}
+
+/**
+ * Set (or, with `limit === -1`, clear) one host's filter count — the storage
+ * equivalent of `Filters.setFilter(host, limit)` (prefs.js: `-1` deletes the
+ * key, otherwise it's assigned) — with a read-back fence.
+ */
+export async function setFilter(page: Page, host: string, limit: number): Promise<void> {
+	await page.evaluate(({ host, limit }) => new Promise<void>(resolve => {
+		chrome.storage.local.get(['filters'], (result: Record<string, unknown>) => {
+			const filters: Record<string, number> = { ...((result.filters as Record<string, number>) || {}) };
+			if (limit === -1) {
+				delete filters[host];
+			} else {
+				filters[host] = limit;
+			}
+			chrome.storage.local.set({ filters }, () => {
+				chrome.storage.local.get(() => resolve());
+			});
+		});
+	}), { host, limit });
+}
+
+/**
+ * Open the drawer via the real cogwheel/Edit button (`#options-toggle`),
+ * clicking only if it's currently closed — `toggleDrawer` (newTab.js) would
+ * otherwise close an already-open drawer.
+ */
+export async function openDrawerUI(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		if (!document.documentElement.hasAttribute('drawer-open')) {
+			(document.getElementById('options-toggle') as HTMLElement).click();
+		}
+	});
+}
+
+/** Close the drawer via the same toggle button, clicking only if it's open. */
+export async function closeDrawerUI(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		if (document.documentElement.hasAttribute('drawer-open')) {
+			(document.getElementById('options-toggle') as HTMLElement).click();
+		}
+	});
+}
+
+/** Click the drawer tab button for `name` (`[data-drawer-tab="name"]`). */
+export async function switchDrawerTabUI(page: Page, name: string): Promise<void> {
+	await page.evaluate(n => {
+		const tab = document.querySelector(`[data-drawer-tab="${n}"]`) as HTMLElement | null;
+		if (tab) { tab.click(); }
+	}, name);
+}
+
+/**
+ * Predicate for `waitForCondition`: true once a `.newtab-site` whose
+ * `a.newtab-link` href equals `url` exists under `#newtab-grid` — the
+ * DOM-observable proof that a pinned tile has rendered, replacing the old
+ * `Grid.sites.some(s => s.url === url)` page-global read. Self-contained (no
+ * closures over outer scope) since Puppeteer serializes it into the page.
+ */
+export function siteLinkExists(url: unknown): boolean {
+	return Array.from(document.querySelectorAll('#newtab-grid a.newtab-link'))
+		.some(a => (a as HTMLAnchorElement).href === url);
+}
+
+/**
+ * Force newTab.js's `refreshRecent` (the recently-closed-tabs titlebar row)
+ * to run without ever calling the page method directly. `refreshRecent` has
+ * no wire/storage trigger of its own — production reaches it via a
+ * `ResizeObserver` on `#ntt-titlebar-recent`, `Prefs.onChange` for a handful
+ * of keys, a `document.fonts.ready` settle, and — reliably, on every call —
+ * `openDrawer`/`closeDrawer`'s own `_refreshGridPositionsAfterDrawerTransition`
+ * (fires ~240ms after either transition, per newTab.js). Toggling the drawer
+ * open then closed via the real cogwheel button is therefore a fully
+ * DOM-driven way to force a refresh.
+ */
+export async function nudgeRecentRefresh(page: Page): Promise<void> {
+	await openDrawerUI(page);
+	await new Promise(r => setTimeout(r, 400));
+	await closeDrawerUI(page);
+	await new Promise(r => setTimeout(r, 400));
+}
+
+/**
+ * Clear all pinned tiles via the `Tiles.clear` runtime message (single IDB
+ * `objectStore.clear()` — same wire call `resetTestState` uses). Call in
+ * `beforeAll` after `connectToFirefox()`.
+ *
+ * Prefer `resetTestState(browser)` instead — it combines this with a pref
+ * reset in a single page open/close cycle.
  */
 export async function clearPinnedTiles(browser: Browser): Promise<void> {
 	const page = await openNewTab(browser);
-	await waitForGridReady(page);
+	await waitForExtensionRuntime(page);
 	try {
-		await page.evaluate(async () => {
-			const tiles = await (window as any).Tiles.getAllTiles();
-			for (const tile of tiles) {
-				if (tile && tile.url) {
-					await (window as any).Tiles.removeTile(tile);
-				}
-			}
-		});
+		await page.evaluate(() => new Promise<void>(resolve => {
+			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
+		}));
 	} finally {
 		await page.close();
 	}
+}
+
+/**
+ * Remove one tile, identified by URL, via the wire.
+ *
+ * WIRE-SHAPE GOTCHA (the reason this helper exists): `Tiles.removeTile` on
+ * the wire takes a tile OBJECT (`{ name: 'Tiles.removeTile', tile }` —
+ * lib/messages.js dispatches `Tiles.removeTile(message.tile)`, and the store
+ * deletes by `tile.id`), NOT a url. A `{ name: 'Tiles.removeTile', url }`
+ * payload silently no-ops. boot-timing.test.ts's afterAll comment documents
+ * the same gotcha ("`Tiles.removeTile` on the wire takes a tile *object*,
+ * not a url").
+ *
+ * So: fetch the stored record first via the frozen `Tiles.getTile` wire name
+ * (reads `message.url`, responds with the full id-bearing tile or null),
+ * then send `Tiles.removeTile` with that object. Skips silently when the
+ * tile doesn't exist — this helper runs in cleanup context, where "already
+ * gone" is success.
+ */
+export async function removeTileByUrl(page: Page, url: string): Promise<void> {
+	await page.evaluate(u => new Promise<void>(resolve => {
+		chrome.runtime.sendMessage({ name: 'Tiles.getTile', url: u }, (tile: unknown) => {
+			if (!tile) {
+				resolve();
+				return;
+			}
+			chrome.runtime.sendMessage({ name: 'Tiles.removeTile', tile }, () => resolve());
+		});
+	}), url);
 }
 
 /**
@@ -285,22 +444,25 @@ export async function clearPinnedTiles(browser: Browser): Promise<void> {
  */
 export async function resetPrefs(browser: Browser): Promise<void> {
 	const page = await openNewTab(browser);
-	await waitForGridReady(page);
+	await waitForExtensionRuntime(page);
 	try {
-		await page.evaluate(() => {
-			const P = (window as any).Prefs;
-			P.rows = 3;
-			P.columns = 3;
-			P.locked = false;
-			P.theme = 'system';
-			P.opacity = 80;
-			P.titleSize = 'small';
-			P.tileAspect = 'fill';
-			P.spacing = 'small';
-			P.margin = ['small', 'small', 'small', 'small'];
-			P.history = true;
-			P.recent = true;
-		});
+		// Storage keys match the Prefs accessor names 1:1 for this subset
+		// (verified against prefs.js's parsePrefs) — a plain storage.local.set
+		// reproduces the old per-property assignment dance. Read-back fence
+		// (get after set) matches resetTestState's pattern: chrome.storage
+		// serialises operations, so the get callback fires only after the set
+		// has fully applied.
+		await page.evaluate(() => new Promise<void>(resolve => {
+			chrome.storage.local.set({
+				rows: 3, columns: 3, locked: false,
+				theme: 'system', opacity: 80,
+				titleSize: 'small', tileAspect: 'fill', spacing: 'small',
+				margin: ['small', 'small', 'small', 'small'],
+				history: true, recent: true,
+			}, () => {
+				chrome.storage.local.get(() => resolve());
+			});
+		}));
 	} finally {
 		await page.close();
 	}
@@ -322,12 +484,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
 	await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 3_000 }).catch(() => {});
 
 	// Wait for extension runtime (scripts loaded), not full Grid init.
-	await waitForCondition(
-		page,
-		() => typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.sendMessage === 'function',
-		[],
-		{ timeout: 15_000, message: 'Extension runtime not available' }
-	);
+	await waitForExtensionRuntime(page);
 
 	try {
 		// Clear all tiles via single IDB objectStore.clear().
@@ -360,19 +517,31 @@ export async function resetTestState(browser: Browser): Promise<void> {
 /**
  * Wait for the grid UI to be ready (Grid.init() has run).
  *
- * Polls `Grid.ready` (which checks `!!Grid._node`) instead of looking for
- * `#newtab-scrollbox`, which is in the static markup and exists before any
- * JavaScript executes. Uses `waitForCondition` because the extension's CSP
- * blocks `page.waitForFunction` (it relies on `Function()` constructor).
+ * DOM-readiness check (chrome-prep C3d — no page-global reads): polls for
+ * `#newtab-grid` having at least one `.newtab-cell` child. `Grid.init()`
+ * synchronously sets `#newtab-grid`'s node reference and then calls
+ * `_render()`, which — when the cell count doesn't already match
+ * `rows*columns` — calls `_renderGrid()` FIRST (appending all `.newtab-cell`
+ * nodes synchronously) before the async `_renderSites()` populates tiles
+ * (verified against fx-newTab.js's `Grid.init`/`_render`/`_renderGrid`). This
+ * is the same readiness point the old `Grid.ready` (`!!Grid._node`) getter
+ * captured — neither guarantees tiles have finished loading, only that the
+ * grid DOM exists. `#newtab-scrollbox` isn't used instead because it's in the
+ * static markup and exists before any JavaScript executes. Uses
+ * `waitForCondition` because the extension's CSP blocks `page.waitForFunction`
+ * (it relies on the `Function()` constructor).
  */
 export async function waitForGridReady(page: Page, timeout = 15_000): Promise<void> {
-	verbose('[Navigation] Waiting for Grid.ready...');
+	verbose('[Navigation] Waiting for grid DOM readiness...');
 	try {
 		await waitForCondition(
 			page,
-			() => typeof Grid !== 'undefined' && (Grid as any).ready,
+			() => {
+				const grid = document.getElementById('newtab-grid');
+				return !!grid && grid.querySelectorAll('.newtab-cell').length > 0;
+			},
 			[],
-			{ timeout, message: 'Grid not ready (Grid.init has not run)' }
+			{ timeout, message: 'Grid not ready (#newtab-grid has no .newtab-cell children)' }
 		);
 		verbose('[Navigation] Grid ready!');
 	} catch (e) {

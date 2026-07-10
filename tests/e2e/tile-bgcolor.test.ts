@@ -8,6 +8,8 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	siteLinkExists,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://bgcolor-test.example.com/';
@@ -48,24 +50,17 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 			await waitForGridReady(page);
 
 			// Wait for the tile to appear in grid.
-			await waitForCondition(
-				page,
-				(u) => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-				},
-				[TEST_URL],
-				{ timeout: 10_000, message: 'Pinned tile not in grid' }
-			);
+			await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 10_000, message: 'Pinned tile not in grid' });
 
-			// Open settings and select the pinned tile.
+			// Select the pinned tile for editing via its in-tile "edit" action
+			// button (fx-newTab.js's Site._onClick 'edit' case: opens the
+			// drawer, switches to the Tile tab, and sets selectedSiteIndex —
+			// all in one real click, no page-global writes).
 			await page.evaluate((u) => {
-				document.getElementById('options-toggle')!.click();
-				// Find the index of our tile and select it.
-				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
-				if (idx >= 0) {
-					newTabTools.selectedSiteIndex = idx;
-				}
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+				const editBtn = site!.querySelector('.ntt-action-btn[data-action="edit"]') as HTMLElement;
+				editBtn.click();
 			}, TEST_URL);
 			await new Promise(r => setTimeout(r, 500));
 
@@ -86,9 +81,11 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 
 			// Verify the tile's thumbnail has the background color.
 			const bgColor = await page.evaluate((u) => {
-				const site = window.Grid.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) {return null;}
-				return site.thumbnail.style.backgroundColor;
+				const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+				return thumb && thumb.style.backgroundColor;
 			}, TEST_URL);
 			expect(bgColor).toBe('rgb(255, 0, 0)');
 
@@ -99,22 +96,18 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 			await new Promise(r => setTimeout(r, 300));
 
 			const bgColorAfterReset = await page.evaluate((u) => {
-				const site = window.Grid.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) {return 'still-set';}
-				return site.thumbnail.style.backgroundColor;
+				const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+				return thumb && thumb.style.backgroundColor;
 			}, TEST_URL);
 			// After reset, backgroundColor should be empty or null.
 			expect(bgColorAfterReset === '' || bgColorAfterReset === null).toBe(true);
 
-			// Cleanup: unpin.
-			await page.evaluate(async (u) => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({
-						name: 'Tiles.unpinTile',
-						url: u,
-					}, resolve);
-				});
-			}, TEST_URL);
+			// Cleanup: remove. (`Tiles.unpinTile` is not a real wire name —
+			// see removeTileByUrl's JSDoc in _helpers.ts.)
+			await removeTileByUrl(page, TEST_URL);
 		} catch (e) {
 			await captureFailure(page, 'tile-bgcolor');
 			throw e;

@@ -17,9 +17,10 @@
  * either.
  *
  * `Filters` (prefs.js, a dual-scope bridge file per Decision 2, PAGE_MODULES.md
- * Decision 6) is a real `export` now, imported directly below; only its
- * `globalThis.Filters = …` assignment stays bridge-mode, permanently, since
- * the page still needs it as a classic-`<script>` global.
+ * Decision 6) is a real `export` now, imported directly below. Its
+ * `globalThis.Filters = …` bridge assignment is retired as of chrome-prep
+ * C3d: the page imports it for real too, so nothing reads it off
+ * `globalThis` anymore.
  *
  * `notifyRestoreComplete()` (the one-off `Page.restoreComplete` broadcast)
  * is gone too — M5's lib/platform.js `broadcastToPages()` absorbs it; every

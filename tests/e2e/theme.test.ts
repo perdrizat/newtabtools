@@ -6,6 +6,10 @@ import {
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
+	setPrefs,
+	openDrawerUI,
+	closeDrawerUI,
+	switchDrawerTabUI,
 } from './_helpers.ts';
 
 describe('E2E: Light / dark / auto theme (slot 26)', () => {
@@ -29,10 +33,8 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 		try {
 			// Open the drawer and switch to the Appearance tab where the
 			// theme cards live (Phase 3-2).
-			await page.evaluate(() => {
-				(window as any).newTabTools.openDrawer();
-				(window as any).newTabTools.switchDrawerTab('page');
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'page');
 			await new Promise(r => setTimeout(r, 400));
 
 			const systemChecked = await page.evaluate(() => {
@@ -72,10 +74,8 @@ describe('E2E: Light / dark / auto theme (slot 26)', () => {
 			throw e;
 		} finally {
 			// Restore default theme and close drawer.
-			await page.evaluate(() => {
-				(window as any).Prefs.theme = 'system';
-				(window as any).newTabTools.closeDrawer();
-			});
+			await setPrefs(page, { theme: 'system' });
+			await closeDrawerUI(page);
 			await page.close();
 		}
 	}, 90_000);

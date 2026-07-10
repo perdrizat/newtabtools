@@ -58,6 +58,10 @@ describe('Theme pref accepts the "contrast" enum value (Phase 3-2)', () => {
 		// Stub Blocked / Filters that parsePrefs references.
 		(globalThis as any).Blocked = { _list: [] };
 		(globalThis as any).Filters = { _list: {} };
+		// Stand-in for the extracted updateUI body's bare `Grid` reads --
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
+		// optional in this vm harness (C3a guard-removal fallout pattern).
+		(globalThis as any).Grid = { sites: [] };
 		vm.runInThisContext(code, { filename: 'prefs-theme-harness.js' });
 		parsePrefs = (globalThis as any)._prefsHarness;
 	});

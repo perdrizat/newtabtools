@@ -6,6 +6,7 @@ import {
 	captureFailure,
 	waitForGridReady,
 	resetTestState,
+	getPref,
 } from './_helpers.ts';
 
 describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () => {
@@ -87,23 +88,17 @@ describe('E2E: Arbitrarily large tiles — flex layout scaling (slot 18)', () =>
 		await waitForGridReady(page);
 
 		try {
-			const gridShape = await page.evaluate(() => {
+			const totalCells = await page.evaluate(() => {
 				const grid = document.getElementById('newtab-grid');
-				if (!grid) {return null;}
-
-				const P = (window as any).Prefs;
-				return {
-					rows: P.rows,
-					columns: P.columns,
-					totalCells: grid.querySelectorAll('.newtab-cell').length,
-				};
+				return grid ? grid.querySelectorAll('.newtab-cell').length : null;
 			});
+			const rows = await getPref(page, 'rows') as number;
+			const columns = await getPref(page, 'columns') as number;
 
-			expect(gridShape).not.toBeNull();
-			const gs = gridShape!;
-			expect(gs.rows).toBeGreaterThan(0);
-			expect(gs.columns).toBeGreaterThan(0);
-			expect(gs.totalCells).toBe(gs.rows * gs.columns);
+			expect(totalCells).not.toBeNull();
+			expect(rows).toBeGreaterThan(0);
+			expect(columns).toBeGreaterThan(0);
+			expect(totalCells).toBe(rows * columns);
 		} catch (e) {
 			await captureFailure(page, 'large-tiles-grid-shape');
 			throw e;

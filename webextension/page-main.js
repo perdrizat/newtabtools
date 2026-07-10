@@ -30,12 +30,13 @@
  * each other (P5) form a legal ESM cycle for the same reason — every
  * cross-reference between them is call-time only, never a top-level read.
  *
- * The remaining `globalThis.X = X;` bridge assignments at the bottom of each
- * page file (see the comment at each file's end) are TEST-ONLY as of P5 —
- * every production cross-reference now goes through a real import; the
- * assignments survive solely for E2E/UAT page-context evaluation and any
- * fast-tier suite still reading a bare identifier off a computed-path
- * dynamic import (PAGE_MODULES.md's TEST-ONLY bridge policy).
+ * The `globalThis.X = X;` bridge assignments that survived P5 as TEST-ONLY
+ * (for E2E/UAT page-context evaluation) are retired as of chrome-prep C3d
+ * (CHROME_PREP.md maintainer directive 1): the E2E/UAT harness now drives the
+ * real page via runtime messages, `browser.storage.local`, DOM observation,
+ * and synthesized DOM events instead of reading page globals, so every page
+ * file's bottom-of-file bridge block is gone. Every cross-reference — page,
+ * background, and test — now goes through a real `import`.
  *
  * PAGE_MODULES.md P3 (the dual-scope endgame): prefs.js's `prefsChanged` no
  * longer reaches into the page directly (the old `'newTabTools' in window`

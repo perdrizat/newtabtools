@@ -465,9 +465,3 @@ export const AwesomeBar = {
 		}
 	},
 };
-
-// page-modules P4 (PAGE_MODULES.md): AwesomeBar gained a real `export` this
-// slice, but the bridge assignment SURVIVES — its production consumer,
-// newTab.js, can't `import` it until P5 (still classic-script/vm-loaded), and
-// E2E/UAT page-context evaluation reads it off globalThis too.
-globalThis.AwesomeBar = AwesomeBar;

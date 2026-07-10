@@ -11,7 +11,31 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	siteLinkExists,
+	removeTileByUrl,
 } from './_helpers.ts';
+
+/**
+ * Select a pinned tile for editing via its own in-tile "edit" action button
+ * (fx-newTab.js's `Site._onClick` 'edit' case: opens the drawer, switches to
+ * the Tile tab, AND sets `selectedSiteIndex` — all from one real click, no
+ * page-global writes).
+ */
+async function selectTileForEdit(page: import('puppeteer-core').Page, url: string): Promise<void> {
+	await page.evaluate((u) => {
+		const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+			.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+		const editBtn = site!.querySelector('.ntt-action-btn[data-action="edit"]') as HTMLElement;
+		editBtn.click();
+	}, url);
+}
+
+/** Fetch the persisted tile record via the frozen `Tiles.getTile` wire message. */
+async function getStoredTile(page: import('puppeteer-core').Page, url: string): Promise<any> {
+	return page.evaluate((u) => new Promise(resolve => {
+		chrome.runtime.sendMessage({ name: 'Tiles.getTile', url: u }, resolve);
+	}), url);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_URL_TITLE = 'https://title-test.example.com/';
@@ -64,22 +88,10 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await waitForGridReady(page);
 
 			// Wait for tile in grid.
-			await waitForCondition(
-				page,
-				(u) => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-				},
-				[TEST_URL_TITLE],
-				{ timeout: 10_000, message: 'Tile not in grid' }
-			);
+			await waitForCondition(page, siteLinkExists, [TEST_URL_TITLE], { timeout: 10_000, message: 'Tile not in grid' });
 
-			// Open settings and select our tile.
-			await page.evaluate((u) => {
-				document.getElementById('options-toggle')!.click();
-				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
-				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
-			}, TEST_URL_TITLE);
+			// Select our tile for editing.
+			await selectTileForEdit(page, TEST_URL_TITLE);
 			await new Promise(r => setTimeout(r, 500));
 
 			// Set a custom title.
@@ -91,9 +103,9 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 
 			// Verify the title renders on the tile.
 			const tileTitle = await page.evaluate((u) => {
-				const site = window.Grid.sites.find((s: any) => s && s.url === u);
-				if (!site) {return null;}
-				const titleSpan = site.node.querySelector('.newtab-title');
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+				const titleSpan = site ? site.querySelector('.newtab-title') : null;
 				return titleSpan ? titleSpan.textContent : null;
 			}, TEST_URL_TITLE);
 			expect(tileTitle).toBe('My Custom Title');
@@ -105,11 +117,9 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			const titleAfterReload = await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const site = g.sites.find((s: any) => s && s.url === u);
-					if (!site) {return false;}
-					const titleSpan = site.node.querySelector('.newtab-title');
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+					const titleSpan = site ? site.querySelector('.newtab-title') : null;
 					return titleSpan && titleSpan.textContent === 'My Custom Title' ? titleSpan.textContent : false;
 				},
 				[TEST_URL_TITLE],
@@ -117,12 +127,9 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			);
 			expect(titleAfterReload).toBe('My Custom Title');
 
-			// Cleanup.
-			await page.evaluate(async (u) => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
-				});
-			}, TEST_URL_TITLE);
+			// Cleanup. (`Tiles.unpinTile` is not a real wire name — see
+			// removeTileByUrl's JSDoc in _helpers.ts.)
+			await removeTileByUrl(page, TEST_URL_TITLE);
 		} catch (e) {
 			await captureFailure(page, 'tile-custom-title');
 			throw e;
@@ -151,22 +158,10 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
-			await waitForCondition(
-				page,
-				(u) => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-				},
-				[TEST_URL_THUMB],
-				{ timeout: 10_000, message: 'Tile not in grid' }
-			);
+			await waitForCondition(page, siteLinkExists, [TEST_URL_THUMB], { timeout: 10_000, message: 'Tile not in grid' });
 
-			// Open settings and select our tile.
-			await page.evaluate((u) => {
-				document.getElementById('options-toggle')!.click();
-				const idx = window.Grid.sites.findIndex((s: any) => s && s.url === u);
-				if (idx >= 0) {newTabTools.selectedSiteIndex = idx;}
-			}, TEST_URL_THUMB);
+			// Select our tile for editing.
+			await selectTileForEdit(page, TEST_URL_THUMB);
 			await new Promise(r => setTimeout(r, 500));
 
 			// Upload a custom thumbnail.
@@ -184,12 +179,12 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			const hasThumbnail = await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const site = g.sites.find((s: any) => s && s.url === u);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					if (!site) {return false;}
-					const bg = site.thumbnail.style.backgroundImage;
-					return bg && bg.startsWith('url(');
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					const bg = thumb && thumb.style.backgroundImage;
+					return !!(bg && bg.startsWith('url('));
 				},
 				[TEST_URL_THUMB],
 				{ timeout: 10_000, message: 'Custom thumbnail not applied to tile' }
@@ -202,12 +197,9 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			});
 			await new Promise(r => setTimeout(r, 500));
 
-			// Cleanup.
-			await page.evaluate(async (u) => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
-				});
-			}, TEST_URL_THUMB);
+			// Cleanup. (`Tiles.unpinTile` is not a real wire name — see
+			// removeTileByUrl's JSDoc in _helpers.ts.)
+			await removeTileByUrl(page, TEST_URL_THUMB);
 		} catch (e) {
 			await captureFailure(page, 'tile-custom-thumb');
 			throw e;
@@ -228,43 +220,31 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			}), TILE);
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
-			await waitForCondition(
-				page,
-				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.some((s: any) => s && s.url === u)); },
-				[TILE], { timeout: 10_000, message: 'tile not in grid' }
-			);
+			await waitForCondition(page, siteLinkExists, [TILE], { timeout: 10_000, message: 'tile not in grid' });
 
 			// Select the tile + set a custom title.
-			await page.evaluate((u) => {
-				document.getElementById('options-toggle')!.click();
-				const i = window.Grid.sites.findIndex((s: any) => s && s.url === u);
-				if (i >= 0) { newTabTools.selectedSiteIndex = i; }
-			}, TILE);
+			await selectTileForEdit(page, TILE);
 			await new Promise(r => setTimeout(r, 400));
 			await page.evaluate(() => {
 				(document.getElementById('options-title-input') as HTMLInputElement).value = 'Custom Revert Title';
 				document.getElementById('options-title-set')!.click();
 			});
 			await new Promise(r => setTimeout(r, 400));
-			const before = await page.evaluate((u) => {
-				const s = window.Grid.sites.find((x: any) => x && x.url === u);
-				return s && s.link.titleIsUserSet ? s.link.title : null;
-			}, TILE);
-			expect(before).toBe('Custom Revert Title');
+			// Read the persisted tile record via the frozen `Tiles.getTile` wire
+			// message — the authoritative source for `titleIsUserSet`/`title`,
+			// which have no DOM reflection of their own (only the rendered
+			// `.newtab-title` text does, which the earlier assertion covers).
+			const before = await getStoredTile(page, TILE);
+			expect(before && before.titleIsUserSet ? before.title : null).toBe('Custom Revert Title');
 
 			// Remove → revert to auto (no history for this URL → no custom title).
 			await page.evaluate(() => document.getElementById('options-title-remove')!.click());
 			await new Promise(r => setTimeout(r, 600));
-			const after = await page.evaluate((u) => {
-				const s = window.Grid.sites.find((x: any) => x && x.url === u);
-				return { userSet: !!(s && s.link.titleIsUserSet), title: s ? s.link.title : null };
-			}, TILE);
-			expect(after.userSet).toBe(false);
-			expect(after.title).not.toBe('Custom Revert Title');
+			const after = await getStoredTile(page, TILE);
+			expect(!!(after && after.titleIsUserSet)).toBe(false);
+			expect(after ? after.title : null).not.toBe('Custom Revert Title');
 
-			await page.evaluate((u) => new Promise(resolve => {
-				chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
-			}), TILE);
+			await removeTileByUrl(page, TILE);
 		} catch (e) {
 			await captureFailure(page, 'tile-title-remove');
 			throw e;
@@ -287,23 +267,21 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await waitForGridReady(page);
 			await waitForCondition(
 				page,
-				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.some((s: any) => s && s.url === u && s.isPinned)); },
+				(u) => Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.some(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u && s.hasAttribute('pinned')),
 				[TILE], { timeout: 10_000, message: 'tile not pinned' }
 			);
 
 			// Select the tile, then click the URL row's Remove.
-			await page.evaluate((u) => {
-				document.getElementById('options-toggle')!.click();
-				const i = window.Grid.sites.findIndex((s: any) => s && s.url === u);
-				if (i >= 0) { newTabTools.selectedSiteIndex = i; }
-			}, TILE);
+			await selectTileForEdit(page, TILE);
 			await new Promise(r => setTimeout(r, 400));
 			await page.evaluate(() => document.getElementById('options-url-remove')!.click());
 
 			// The tile is removed/unpinned from the grid.
 			const gone = await waitForCondition(
 				page,
-				(u) => { const g = window.Grid; if (!g || !g.sites) { return false; } return !g.sites.some((s: any) => s && s.url === u && s.isPinned); },
+				(u) => !Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.some(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u && s.hasAttribute('pinned')),
 				[TILE], { timeout: 10_000, message: 'tile still pinned after url-remove' }
 			);
 			expect(gone).toBe(true);

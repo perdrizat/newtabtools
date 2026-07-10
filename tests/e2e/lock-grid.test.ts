@@ -7,6 +7,10 @@ import {
 	waitForGridReady,
 	waitForCondition,
 	resetTestState,
+	getPref,
+	openDrawerUI,
+	closeDrawerUI,
+	switchDrawerTabUI,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://edit-cue.example.com/';
@@ -37,28 +41,28 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 
 		try {
 			// Open the drawer = enter edit mode.
-			await page.evaluate(() => (window as any).newTabTools.openDrawer());
+			await openDrawerUI(page);
 			await new Promise(r => setTimeout(r, 300));
-			const editing = await page.evaluate(() => ({
+			const editingDom = await page.evaluate(() => ({
 				drawerOpen: document.documentElement.hasAttribute('drawer-open'),
 				locked: document.documentElement.hasAttribute('locked'),
-				prefLocked: (window as any).Prefs.locked,
 				btn: (document.getElementById('options-toggle')!.textContent || '').trim(),
 			}));
+			const editing = { ...editingDom, prefLocked: await getPref(page, 'locked') };
 			expect(editing.drawerOpen).toBe(true);
 			expect(editing.locked).toBe(false);
 			expect(editing.prefLocked).toBe(false);
 			expect(editing.btn).toBe('Done');
 
 			// Close = exit edit mode, re-lock.
-			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await closeDrawerUI(page);
 			await new Promise(r => setTimeout(r, 300));
-			const done = await page.evaluate(() => ({
+			const doneDom = await page.evaluate(() => ({
 				drawerOpen: document.documentElement.hasAttribute('drawer-open'),
 				locked: document.documentElement.hasAttribute('locked'),
-				prefLocked: (window as any).Prefs.locked,
 				btn: (document.getElementById('options-toggle')!.textContent || '').trim(),
 			}));
+			const done = { ...doneDom, prefLocked: await getPref(page, 'locked') };
 			expect(done.drawerOpen).toBe(false);
 			expect(done.locked).toBe(true);
 			expect(done.prefLocked).toBe(true);
@@ -101,16 +105,20 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 			}), TEST_URL);
 			await waitForCondition(
 				page,
-				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.find((s: any) => s && s.url === u && s.isPinned)); },
+				(u) => Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.some(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u && s.hasAttribute('pinned')),
 				[TEST_URL],
 				{ timeout: 15_000, message: 'tile not pinned' }
 			);
+			// Select the tile via its own in-tile "edit" action button —
+			// fx-newTab.js's Site._onClick 'edit' case opens the drawer,
+			// switches to the Tile tab, AND sets selectedSiteIndex, all from
+			// one real click.
 			await page.evaluate((u) => {
-				const w = window as any;
-				w.newTabTools.openDrawer();
-				w.newTabTools.switchDrawerTab('tile');
-				const site = w.Grid.sites.find((s: any) => s && s.url === u);
-				if (site && site.cell) { w.newTabTools.selectedSiteIndex = site.cell.index; }
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+				const editBtn = site!.querySelector('.ntt-action-btn[data-action="edit"]') as HTMLElement;
+				editBtn.click();
 			}, TEST_URL);
 			await new Promise(r => setTimeout(r, 300));
 			// Hover the selected tile — the elevation shadow (.newtab-site:hover) is
@@ -120,9 +128,8 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 			await new Promise(r => setTimeout(r, 150));
 
 			const cues = await page.evaluate((u) => {
-				const w = window as any;
-				const site = w.Grid.sites.find((s: any) => s && s.url === u);
-				const node = site.node;
+				const node = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u) as HTMLElement;
 				const cs = getComputedStyle(node);
 				const handle = node.querySelector('.ntt-drag-handle');
 				const actions = node.querySelector('.ntt-actions');
@@ -169,32 +176,30 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 			}), TEST_URL);
 			await waitForCondition(
 				page,
-				(u) => { const g = window.Grid; return !!(g && g.sites && g.sites.find((s: any) => s && s.url === u && s.isPinned)); },
+				(u) => Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.some(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u && s.hasAttribute('pinned')),
 				[TEST_URL],
 				{ timeout: 15_000, message: 'tile not pinned' }
 			);
 			// Open the drawer to the ADVANCED tab — proves the tile click switches to
 			// the Tile tab rather than relying on it already being active.
-			await page.evaluate(() => {
-				const w = window as any;
-				w.newTabTools.openDrawer();
-				w.newTabTools.switchDrawerTab('advanced');
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 300));
 			// Click the tile body (the link) — not an action button.
 			await page.evaluate((u) => {
-				const w = window as any;
-				const site = w.Grid.sites.find((s: any) => s && s.url === u);
-				(site.node.querySelector('.newtab-link') || site.node).click();
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u)!;
+				(site.querySelector('.newtab-link') as HTMLElement || site).click();
 			}, TEST_URL);
 			await new Promise(r => setTimeout(r, 300));
 
 			const state = await page.evaluate((u) => {
-				const w = window as any;
-				const site = w.Grid.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u)!;
 				return {
 					tab: document.documentElement.getAttribute('drawer-tab'),
-					selected: site.node.getAttribute('data-selected'),
+					selected: site.getAttribute('data-selected'),
 					editorVisible: !(document.getElementById('options-tile') as HTMLElement).hidden,
 				};
 			}, TEST_URL);
@@ -220,7 +225,7 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 
 		try {
 			// Ensure normal/locked mode (drawer closed).
-			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await closeDrawerUI(page);
 			await new Promise(r => setTimeout(r, 300));
 			// The action row is opacity:0 at rest but NOT display:none — it is
 			// reachable on hover even while the board is locked.

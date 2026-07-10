@@ -8,6 +8,8 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	siteLinkExists,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://tile-redesign-test.example.com/';
@@ -34,15 +36,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 		const url = await getNewTabURL();
 		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 		await waitForGridReady(page);
-		await waitForCondition(
-			page,
-			(u) => {
-				const g = window.Grid;
-				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-			},
-			[TEST_URL],
-			{ timeout: 15_000, message: 'Setup: pinned tile not in grid' }
-		);
+		await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 15_000, message: 'Setup: pinned tile not in grid' });
 		await page.close();
 	}, 60_000);
 
@@ -51,14 +45,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			// Clean up pinned tile
 			const page = await openNewTab(browser);
 			await waitForGridReady(page);
-			await page.evaluate((u) => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({
-						name: 'Tiles.removeTile',
-						url: u,
-					}, resolve);
-				});
-			}, TEST_URL);
+			await removeTileByUrl(page, TEST_URL);
 			await page.close();
 			await browser.disconnect();
 		}
@@ -430,22 +417,14 @@ describe('E2E: Tile redesign — new tile structure', () => {
 
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
-			await waitForCondition(
-				page,
-				(u) => {
-					const g = window.Grid;
-					return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-				},
-				[removeUrl],
-				{ timeout: 10_000, message: 'Remove test tile not in grid' }
-			);
+			await waitForCondition(page, siteLinkExists, [removeUrl], { timeout: 10_000, message: 'Remove test tile not in grid' });
 
 			// Find and click the remove button on the new tile
 			const removed = await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) {return false;}
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="remove"]');
+				const btn = site.querySelector('.ntt-action-btn[data-action="remove"]');
 				if (!btn) {return false;}
 				(btn as HTMLElement).click();
 				return true;
@@ -455,10 +434,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			await new Promise(r => setTimeout(r, 1000));
 
 			// Tile should be gone
-			const stillExists = await page.evaluate((u) => {
-				const g = window.Grid;
-				return g.sites.some((s: any) => s && s.url === u);
-			}, removeUrl);
+			const stillExists = await page.evaluate(siteLinkExists, removeUrl);
 			expect(stillExists).toBe(false);
 
 			// Undo container should be visible
@@ -517,11 +493,11 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) { return false; }
-					const site = g.sites.find((s: any) => s && s.url === u);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					if (!site) { return false; }
-					const bg = site.thumbnail.style.backgroundImage;
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					const bg = thumb && thumb.style.backgroundImage;
 					return bg && bg.startsWith('url(') ? bg : false;
 				},
 				[CAPTURE_URL],
@@ -530,10 +506,10 @@ describe('E2E: Tile redesign — new tile structure', () => {
 
 			// Click the never-capture button.
 			await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) { return; }
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
+				const btn = site.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
 				if (btn) { btn.click(); }
 			}, CAPTURE_URL);
 
@@ -561,13 +537,12 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) { return false; }
-					const site = g.sites.find((s: any) => s && s.url === u);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					if (!site) { return false; }
-					const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+					const btn = site.querySelector('.ntt-action-btn[data-action="never-capture"]');
 					return !!btn && btn.getAttribute('data-icon') === 'camera'
-						&& site.node.hasAttribute('never-capture');
+						&& site.hasAttribute('never-capture');
 				},
 				[CAPTURE_URL],
 				{ timeout: 10_000, message: 'never-capture button did not flip to listed state after click' }
@@ -577,11 +552,11 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) { return false; }
-					const site = g.sites.find((s: any) => s && s.url === u);
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					if (!site) { return false; }
-					const bg = site.thumbnail.style.backgroundImage;
+					const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+					const bg = thumb && thumb.style.backgroundImage;
 					// After purge + grid.refresh() the tile should show no blob URL.
 					return (!bg || !bg.startsWith('url(blob:')) ? true : false;
 				},
@@ -591,10 +566,10 @@ describe('E2E: Tile redesign — new tile structure', () => {
 
 			// Click again to remove host from list.
 			await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) { return; }
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
+				const btn = site.querySelector('.ntt-action-btn[data-action="never-capture"]') as HTMLElement | null;
 				if (btn) { btn.click(); }
 			}, CAPTURE_URL);
 
@@ -615,20 +590,20 @@ describe('E2E: Tile redesign — new tile structure', () => {
 
 			// Icon should revert to camera-off.
 			const iconAfterRemove = await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) { return null; }
-				const btn = site.node.querySelector('.ntt-action-btn[data-action="never-capture"]');
+				const btn = site.querySelector('.ntt-action-btn[data-action="never-capture"]');
 				return btn ? btn.getAttribute('data-icon') : null;
 			}, CAPTURE_URL);
 			expect(iconAfterRemove).toBe('camera-off');
 
 			// Thumbnail should NOT be resurrected (no recapture on toggle-off).
 			const bgAfterRemove = await page.evaluate((u) => {
-				const g = window.Grid;
-				const site = g.sites.find((s: any) => s && s.url === u);
-				if (!site) { return ''; }
-				return site.thumbnail.style.backgroundImage;
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+				const thumb = site ? site.querySelector('.newtab-thumbnail') as HTMLElement | null : null;
+				return thumb ? thumb.style.backgroundImage : '';
 			}, CAPTURE_URL);
 			expect(bgAfterRemove).not.toMatch(/^url\(blob:/);
 		} catch (e) {
@@ -636,13 +611,10 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			throw e;
 		} finally {
 			// Clean up: unpin and clear neverCaptureHosts.
-			await page.evaluate((u) => {
-				return new Promise<void>(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => {
-						chrome.storage.local.remove('neverCaptureHosts', () => resolve());
-					});
-				});
-			}, CAPTURE_URL);
+			await removeTileByUrl(page, CAPTURE_URL);
+			await page.evaluate(() => new Promise<void>(resolve => {
+				chrome.storage.local.remove('neverCaptureHosts', () => resolve());
+			}));
 			await page.close();
 		}
 	}, 90_000);

@@ -12,9 +12,11 @@
  * bridge reads to real `import`s of the lib modules that now own each piece
  * (Tiles/Background, withStore, the capture pipeline). The dual-scope
  * `NeverCapture` global (prefs.js, Decision 2, PAGE_MODULES.md Decision 6) is
- * a real `export` now, imported directly below; only its
- * `globalThis.NeverCapture = …` assignment stays bridge-mode, permanently,
- * since the page still needs it as a classic-`<script>` global.
+ * a real `export` now, imported directly below. Its `globalThis.NeverCapture
+ * = …` bridge assignment — once thought permanent, since the page read it as
+ * a classic-`<script>` global — is retired as of chrome-prep C3d: newTab.js/
+ * fx-newTab.js now import it for real too, so nothing reads it off
+ * `globalThis` anymore.
  *
  * `makeZip`/`readZip` (lib/backup.js) are deliberately NOT a static import
  * here (audit finding, 2026-07-09 review, adjudicated): lib/backup.js's own

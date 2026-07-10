@@ -9,6 +9,9 @@ import {
 	waitForGridReady,
 	resetTestState,
 	navigateAndConfirm,
+	openDrawerUI,
+	switchDrawerTabUI,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 // Reuse example.com — the same stable target auto-thumbnail.test.ts navigates to.
@@ -56,13 +59,8 @@ describe('E2E: Never-capture feature', () => {
 
 		try {
 			// Open the drawer and switch to the advanced tab.
-			await page.evaluate(() => {
-				const w = window as any;
-				if (w.newTabTools && typeof w.newTabTools.openDrawer === 'function') {
-					w.newTabTools.openDrawer();
-					w.newTabTools.switchDrawerTab('advanced');
-				}
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 500));
 
 			// Verify the never-capture group is visible.
@@ -175,11 +173,11 @@ describe('E2E: Never-capture feature', () => {
 
 			// The tile should show the logo fallback (no backgroundImage blob).
 			const noThumb = await page.evaluate((u) => {
-				const g = window.Grid;
-				if (!g || !g.sites) { return false; }
-				const site = g.sites.find((s: any) => s && s.url === u);
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				if (!site) { return false; }
-				const bg = site.thumbnail.style.backgroundImage;
+				const thumb = site.querySelector('.newtab-thumbnail') as HTMLElement | null;
+				const bg = thumb && thumb.style.backgroundImage;
 				return !bg || !bg.startsWith('url(blob:');
 			}, PIPELINE_URL);
 			expect(noThumb).toBe(true);
@@ -188,9 +186,7 @@ describe('E2E: Never-capture feature', () => {
 			throw e;
 		} finally {
 			// Clean up: unpin the tile.
-			await page.evaluate((u) => new Promise<void>(resolve => {
-				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
-			}), PIPELINE_URL);
+			await removeTileByUrl(page, PIPELINE_URL);
 			await page.close();
 		}
 	}, 90_000);
@@ -254,13 +250,8 @@ describe('E2E: Never-capture feature', () => {
 			}));
 
 			// Open the advanced tab.
-			await page.evaluate(() => {
-				const w = window as any;
-				if (w.newTabTools && typeof w.newTabTools.openDrawer === 'function') {
-					w.newTabTools.openDrawer();
-					w.newTabTools.switchDrawerTab('advanced');
-				}
-			});
+			await openDrawerUI(page);
+			await switchDrawerTabUI(page, 'advanced');
 			await new Promise(r => setTimeout(r, 500));
 
 			// Trigger a UI refresh so the panel reflects the seeded storage.

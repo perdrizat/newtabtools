@@ -1499,7 +1499,13 @@ const NewTabToolsObject = {
 			this.refreshRecent();
 		}
 
-		if (keys && keys.includes('statType') && 'Grid' in window) {
+		// chrome-prep C3d: the `'Grid' in window` sniff that used to guard this
+		// (and the five blocks below) was satisfied only by the deleted
+		// `globalThis.Grid` bridge — with the bridge gone it silently disabled
+		// the branch. `Grid` is a real static import now, always initialized
+		// by the time these event-time paths run (Page.init() precedes the
+		// first keyed updateUI call), so the sniff is dropped, not replaced.
+		if (keys && keys.includes('statType')) {
 			for (let site of Grid.sites) {
 				if (site) {
 					site._renderStatChip();
@@ -1507,7 +1513,7 @@ const NewTabToolsObject = {
 			}
 		}
 
-		if ('Grid' in window && 'cacheCellPositions' in Grid) {
+		if ('cacheCellPositions' in Grid) {
 			requestAnimationFrame(Grid.cacheCellPositions);
 		}
 
@@ -1523,7 +1529,7 @@ const NewTabToolsObject = {
 				this.fillNeverCaptureUI();
 			}
 			// Refresh each rendered tile's never-capture button state.
-			if ('Grid' in window && Grid.sites) {
+			if (Grid.sites) {
 				Grid.sites.forEach(site => {
 					if (site && site.updateNeverCaptureButton) {
 						site.updateNeverCaptureButton(NeverCapture.matches(site.url));
@@ -1945,7 +1951,7 @@ const NewTabToolsObject = {
 
 		// Move `[data-selected]` from any prior selection to the new one
 		// so CSS can draw the copper ring on the active tile.
-		if ('Grid' in window && Grid.sites) {
+		if (Grid.sites) {
 			for (let s of Grid.sites) {
 				if (s && s.node) { s.node.removeAttribute('data-selected'); }
 			}
@@ -2170,11 +2176,9 @@ const NewTabToolsObject = {
 				return;
 			}
 			TileStats._hasHistoryPermission = true;
-			if ('Grid' in window) {
-				for (let site of Grid.sites) {
-					if (site && typeof site._renderStatChip === 'function') {
-						site._renderStatChip();
-					}
+			for (let site of Grid.sites) {
+				if (site && typeof site._renderStatChip === 'function') {
+					site._renderStatChip();
 				}
 			}
 		});
@@ -2356,7 +2360,7 @@ const NewTabToolsObject = {
 		return { cellWidth: cellWFromHeight, cellHeight: cellHFromHeight };
 	},
 	applyTileAspect() {
-		if (!('Grid' in window) || !Grid.node) {
+		if (!Grid.node) {
 			return;
 		}
 		let grid = Grid.node;
@@ -2879,15 +2883,3 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 	});
 })();
 
-// page-modules P5 (PAGE_MODULES.md): both names above are real exports now
-// (fx-newTab.js, page-main.js use the named import). These assignments
-// survive for the fast-tier harness (computed-path dynamic imports of this
-// file still read them as bare identifiers in some suites) and E2E/UAT
-// page-context evaluation — TEST-ONLY, genuinely, as of the P2-P5 review
-// finding 1 dependency-inversion remediation (2026-07-10): awesomebar.js no
-// longer reads `newTabTools` (its `getString`/`isValidURL` uses moved to
-// common.js imports); no production consumer reads either name off
-// `globalThis` anymore. Retiring them = moving the test harness off
-// page-globals — ROADMAP backlog.
-globalThis.newTabTools = newTabTools;
-globalThis.pageMessageHandler = pageMessageHandler;

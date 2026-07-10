@@ -66,14 +66,15 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
-			// Target the specific tile by finding its site node via Grid.sites.
+			// Target the specific tile by finding its `.newtab-site` node via DOM
+			// (its href identifies which URL it renders; `pinned` is a real
+			// reflected attribute — see fx-newTab.js's Site#pin/unpin).
 			await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const site = g.sites.find((s: any) => s && s.url === u);
-					return site && site.isPinned;
+					const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+					return !!site && site.hasAttribute('pinned');
 				},
 				[TEST_URL],
 				{ timeout: 20_000, message: 'Tile not pinned after first reload' }
@@ -87,14 +88,13 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			const state = await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const match = g.sites.find((s: any) => s && s.url === u);
+					const match = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					if (!match) {return false;}
 					return {
 						hasGrid: true,
 						found: true,
-						isPinned: !!match.isPinned,
+						isPinned: match.hasAttribute('pinned'),
 					};
 				},
 				[TEST_URL],
@@ -120,31 +120,28 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			// Confirm precondition: our specific tile is pinned.
 			await waitForCondition(
 				page,
-				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					return g.sites.some((s: any) => s && s.url === u && s.isPinned);
-				},
+				(u) => Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.some(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u && s.hasAttribute('pinned')),
 				[TEST_URL],
 				{ timeout: 15_000, message: 'Precondition failed: TEST_URL not pinned' }
 			);
 
 			// Click the pin action button for our specific tile.
 			await page.evaluate((u) => {
-				const site = window.Grid.sites.find((s: any) => s && s.url === u);
-				const pinBtn = site.node.querySelector('.ntt-action-btn[data-action="pin"]');
+				const site = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
+				const pinBtn = site!.querySelector('.ntt-action-btn[data-action="pin"]');
 				pinBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 			}, TEST_URL);
 
-			// The site object's pinned state should flip in-memory.
+			// The tile's pinned attribute should flip in-memory.
 			await waitForCondition(
 				page,
 				(u) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const match = g.sites.find((s: any) => s && s.url === u);
+					const match = Array.from(document.querySelectorAll('#newtab-grid .newtab-site'))
+						.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 					// Either the site is no longer in the grid, or it's no longer pinned.
-					return !match || !match.isPinned;
+					return !match || !match.hasAttribute('pinned');
 				},
 				[TEST_URL],
 				{ timeout: 10_000, message: 'tile did not unpin after UI click' }
@@ -155,15 +152,16 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			await waitForGridReady(page);
 
 			const stateAfterReload = await page.evaluate((u) => {
-				const g = window.Grid;
-				if (!g || !g.sites) {
+				const grid = document.getElementById('newtab-grid');
+				if (!grid) {
 					return { hasGrid: false };
 				}
-				const match = g.sites.find((s: any) => s && s.url === u);
+				const match = Array.from(grid.querySelectorAll('.newtab-site'))
+					.find(s => (s.querySelector('a.newtab-link') as HTMLAnchorElement | null)?.href === u);
 				return {
 					hasGrid: true,
 					found: !!match,
-					isPinned: match ? !!match.isPinned : false,
+					isPinned: match ? match.hasAttribute('pinned') : false,
 				};
 			}, TEST_URL);
 

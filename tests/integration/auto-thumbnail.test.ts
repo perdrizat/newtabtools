@@ -55,10 +55,13 @@
  * lib/tiles-store.js singletons (mutated via `Object.assign`, the same
  * pattern established in background-messages.test.ts) rather than a
  * `globalThis` bridge — there isn't one anymore. `Prefs`/`Blocked`/`Filters`/
- * `NeverCapture` are the REAL prefs.js objects too (created by
- * lib/background-main.js's own `import '../prefs.js'`): `NeverCapture._list`
- * is mutated directly in tests exactly as before, since the real object has
- * the identical shape the old hand-rolled mock had.
+ * `NeverCapture` are the REAL prefs.js objects too, imported directly here
+ * (chrome-prep C3d retired their `globalThis` bridge assignments — this file
+ * used to read `NeverCapture` off `globalThis` after
+ * lib/background-main.js's own `import '../prefs.js'` put it there, now it
+ * imports the same module directly): `NeverCapture._list` is mutated
+ * directly in tests exactly as before, since the real object has the
+ * identical shape the old hand-rolled mock had.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
@@ -76,6 +79,7 @@ import {
 } from '../../webextension/lib/capture.js';
 import { Tiles, Background } from '../../webextension/lib/tiles-store.js';
 import { handleMessage } from '../../webextension/lib/messages.js';
+import { NeverCapture } from '../../webextension/prefs.js';
 import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -893,12 +897,12 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 			sessionStore = {};
 			getNetworkIdleWatchers().clear();
 			// Reset NeverCapture to empty before each test
-			(globalThis as any).NeverCapture._list = [];
+			NeverCapture._list = [];
 		});
 
 		it('Thumbnails.capture message for a listed host — startCaptureSession bails, captureVisibleTab never called', async () => {
 			// List the example.com host
-			(globalThis as any).NeverCapture._list = ['example.com'];
+			NeverCapture._list = ['example.com'];
 			const sender = {
 				id: EXTENSION_ID,
 				tab: { id: 42, windowId: 1, url: 'https://example.com' },
@@ -911,7 +915,7 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		});
 
 		it('Thumbnails.capture for an unlisted host still starts a session', async () => {
-			(globalThis as any).NeverCapture._list = ['other.com'];
+			NeverCapture._list = ['other.com'];
 			const sender = {
 				id: EXTENSION_ID,
 				tab: { id: 42, windowId: 1, url: 'https://example.com' },
@@ -922,7 +926,7 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		});
 
 		it('webNavigation.onCompleted for a listed cached URL — no capture session, no pendingCaptures entry (active tab)', async () => {
-			(globalThis as any).NeverCapture._list = ['example.com'];
+			NeverCapture._list = ['example.com'];
 			// example.com is in the Tiles cache (see beforeAll setup)
 			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 			await vi.advanceTimersByTimeAsync(0);
@@ -932,7 +936,7 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		});
 
 		it('webNavigation.onCompleted for a listed cached URL — no pendingCaptures entry (inactive tab)', async () => {
-			(globalThis as any).NeverCapture._list = ['example.com'];
+			NeverCapture._list = ['example.com'];
 			(globalThis as any).chrome.tabs.get.mockImplementationOnce(
 				() => Promise.resolve({ active: false, windowId: 1, incognito: false })
 			);

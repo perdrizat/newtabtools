@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition, getNewTabURL } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition, getNewTabURL, getPref, setPrefs } from './_helpers.ts';
 
 describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	let browser: Browser;
@@ -54,23 +54,22 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	});
 
 	it('grid has the expected number of cells (rows × columns)', async () => {
-		const result = await page.evaluate(() => {
-			const P = (window as any).Prefs;
+		const cells = await page.evaluate(() => {
 			const grid = document.getElementById('newtab-grid');
-			const cells = grid ? grid.querySelectorAll('.newtab-cell').length : 0;
-			return { expected: P.rows * P.columns, actual: cells };
+			return grid ? grid.querySelectorAll('.newtab-cell').length : 0;
 		});
-		expect(result.actual).toBe(result.expected);
+		const rows = await getPref(page, 'rows') as number;
+		const columns = await getPref(page, 'columns') as number;
+		expect(cells).toBe(rows * columns);
 	});
 
-	it('grid uses --ntt-cols CSS variable matching Prefs.columns', async () => {
-		const result = await page.evaluate(() => {
+	it('grid uses --ntt-cols CSS variable matching the columns pref', async () => {
+		const cssVar = await page.evaluate(() => {
 			const grid = document.getElementById('newtab-grid');
-			const cols = grid ? getComputedStyle(grid).getPropertyValue('--ntt-cols').trim() : '';
-			const prefCols = (window as any).Prefs.columns;
-			return { cssVar: cols, pref: String(prefCols) };
+			return grid ? getComputedStyle(grid).getPropertyValue('--ntt-cols').trim() : '';
 		});
-		expect(result.cssVar).toBe(result.pref);
+		const columns = await getPref(page, 'columns') as number;
+		expect(cssVar).toBe(String(columns));
 	});
 
 	it('grid gap uses --ntt-gap token', async () => {
@@ -94,9 +93,7 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	});
 
 	it('changing columns pref updates grid-template-columns', async () => {
-		await page.evaluate(() => {
-			(window as any).Prefs.columns = 5;
-		});
+		await setPrefs(page, { columns: 5 });
 		await waitForCondition(page, () => {
 			const grid = document.getElementById('newtab-grid');
 			return grid && getComputedStyle(grid).getPropertyValue('--ntt-cols').trim() === '5';
@@ -109,9 +106,7 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 		expect(cols).toBe('5');
 
 		// Reset
-		await page.evaluate(() => {
-			(window as any).Prefs.columns = 3;
-		});
+		await setPrefs(page, { columns: 3 });
 	});
 
 	// ── Design tokens ──
@@ -152,22 +147,38 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	});
 
 	// ── Icons module ──
+	//
+	// icons.js's full catalog (NttIcons.names/.create) is exhaustively covered
+	// at the fast/integration tier (tests/integration/icons.test.ts, a real
+	// module import — legitimate there, unlike a page-context global read).
+	// These E2E tests instead prove the icons pipeline is actually wired into
+	// the real page: every pinned tile's action row renders each action's
+	// icon as a real inline SVG (fx-newTab.js's Site#_renderActionButtons).
 
-	it('NttIcons is available on window', async () => {
-		const available = await page.evaluate(() => {
-			return typeof (window as any).NttIcons !== 'undefined' &&
-				typeof (window as any).NttIcons.create === 'function';
+	it('the tile action row renders inline SVG icons (edit/never-capture/pin/remove)', async () => {
+		const icons = await page.evaluate(() => {
+			const site = document.querySelector('.newtab-site');
+			if (!site) {return null;}
+			const btns = Array.from(site.querySelectorAll('.ntt-action-btn'));
+			return btns.map(b => ({
+				action: b.getAttribute('data-action'),
+				hasSvg: !!b.querySelector('svg'),
+			}));
 		});
-		expect(available).toBe(true);
+		expect(icons).not.toBeNull();
+		const actions = icons!.map(i => i.action);
+		expect(actions).toEqual(expect.arrayContaining(['edit', 'never-capture', 'pin', 'remove']));
+		expect(icons!.every(i => i.hasSvg)).toBe(true);
 	});
 
-	it('NttIcons.create returns an SVG element in the page', async () => {
+	it('a rendered action-button icon is a valid 24x24 SVG', async () => {
 		const result = await page.evaluate(() => {
-			const icon = (window as any).NttIcons.create('close');
-			return icon ? {
-				tagName: icon.tagName.toLowerCase(),
-				viewBox: icon.getAttribute('viewBox'),
-				childCount: icon.children.length,
+			const btn = document.querySelector('.newtab-site .ntt-action-btn[data-action="remove"]');
+			const svg = btn ? btn.querySelector('svg') : null;
+			return svg ? {
+				tagName: svg.tagName.toLowerCase(),
+				viewBox: svg.getAttribute('viewBox'),
+				childCount: svg.children.length,
 			} : null;
 		});
 		expect(result).not.toBeNull();
@@ -176,16 +187,15 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 		expect(result!.childCount).toBeGreaterThanOrEqual(1);
 	});
 
-	it('NttIcons.names lists all expected icons', async () => {
-		const names: string[] = await page.evaluate(() => {
-			return (window as any).NttIcons.names;
+	it('the drag handle and actions-kebab also render distinct icons', async () => {
+		const result = await page.evaluate(() => {
+			const site = document.querySelector('.newtab-site');
+			const handle = site ? site.querySelector('.ntt-drag-handle svg') : null;
+			const kebab = site ? site.querySelector('.ntt-actions-kebab svg') : null;
+			return { hasHandleIcon: !!handle, hasKebabIcon: !!kebab };
 		});
-		expect(names).toContain('search');
-		expect(names).toContain('settings');
-		expect(names).toContain('close');
-		expect(names).toContain('pin');
-		expect(names).toContain('kebab');
-		expect(names.length).toBeGreaterThanOrEqual(25);
+		expect(result.hasHandleIcon).toBe(true);
+		expect(result.hasKebabIcon).toBe(true);
 	});
 
 	// ── Drag & drop still works ──

@@ -10,15 +10,20 @@
  * (common.js, icons.js, stats.js, tiles-shim.js, prefs.js, awesomebar.js,
  * newTab.js, fx-newTab.js) sharing one implicit global scope to a single
  * `<script type="module" src="page-main.js">` that side-effect-imports the
- * same eight files in the same order. In module scope, a top-level
- * `var X = …` / `function X() {}` no longer attaches to `globalThis` the way
- * it did as a classic script — a file that still relied on that for a
- * cross-file symbol would load fine here (native `import()` doesn't care)
- * while silently breaking every OTHER file's bare-identifier reads of `X` in
- * production. Each of the eight files therefore ends with an explicit
- * `globalThis.X = X;` bridge assignment (common.js/prefs.js already had this
- * permanently, as the pre-existing dual-scope bridge; the other six gained
- * it in P1).
+ * same eight files in the same order. Through P1–P5, each of the eight files
+ * carried a `globalThis.X = X;` bridge assignment (common.js/prefs.js had it
+ * permanently, as the pre-existing dual-scope bridge; the other six gained it
+ * in P1) so no in-page bare-identifier read broke while every file converted
+ * to real `import`/`export` one slice at a time.
+ *
+ * chrome-prep C3d (CHROME_PREP.md maintainer directive 1) retires every one
+ * of those bridge assignments: every production cross-reference now goes
+ * through a real `import`, and the E2E/UAT harness that used to read the
+ * TEST-ONLY survivors off page-context `globalThis` now drives the real page
+ * via runtime messages/`browser.storage.local`/DOM observation/synthesized
+ * DOM events instead. This test's inventory therefore flips from "every
+ * bridge assignment lands on globalThis" to its negation — the repo ends
+ * this arc with ZERO bridge assignments, and this is the static proof.
  *
  * This also proves PAGE_MODULES.md's Decision 3 (no page module executes
  * another module's code at its own top level): before P1, fx-newTab.js's own
@@ -123,74 +128,75 @@ describe('module-scope bridge — page files\' globalThis surface after PAGE_MOD
 	});
 
 	// ------------------------------------------------------------------
-	// Every P1 bridge assignment lands on globalThis.
+	// chrome-prep C3d: every former bridge assignment is GONE from
+	// globalThis — negative assertions, the retirement's static proof.
 	// ------------------------------------------------------------------
-	it('common.js defines globalThis.compareVersions', () => {
-		expect(typeof (globalThis as any).compareVersions).toBe('function');
+	it('common.js does not define globalThis.compareVersions', () => {
+		expect(typeof (globalThis as any).compareVersions).toBe('undefined');
 	});
 
-	it('prefs.js defines globalThis.Prefs', () => {
-		expect(typeof (globalThis as any).Prefs).toBe('object');
+	it('prefs.js does not define globalThis.Prefs', () => {
+		expect(typeof (globalThis as any).Prefs).toBe('undefined');
 	});
 
-	it('prefs.js defines globalThis.Blocked', () => {
-		expect(typeof (globalThis as any).Blocked).toBe('object');
+	it('prefs.js does not define globalThis.Blocked', () => {
+		expect(typeof (globalThis as any).Blocked).toBe('undefined');
 	});
 
-	it('prefs.js defines globalThis.Filters', () => {
-		expect(typeof (globalThis as any).Filters).toBe('object');
+	it('prefs.js does not define globalThis.Filters', () => {
+		expect(typeof (globalThis as any).Filters).toBe('undefined');
 	});
 
-	it('prefs.js defines globalThis.NeverCapture', () => {
-		expect(typeof (globalThis as any).NeverCapture).toBe('object');
+	it('prefs.js does not define globalThis.NeverCapture', () => {
+		expect(typeof (globalThis as any).NeverCapture).toBe('undefined');
 	});
 
-	it('icons.js defines globalThis.NttIcons', () => {
-		expect(typeof (globalThis as any).NttIcons).toBe('object');
+	it('icons.js does not define globalThis.NttIcons', () => {
+		expect(typeof (globalThis as any).NttIcons).toBe('undefined');
 	});
 
-	it('stats.js defines globalThis.TileStats', () => {
-		expect(typeof (globalThis as any).TileStats).toBe('object');
+	it('stats.js does not define globalThis.TileStats', () => {
+		expect(typeof (globalThis as any).TileStats).toBe('undefined');
 	});
 
-	it('tiles-shim.js defines globalThis.Tiles', () => {
-		expect(typeof (globalThis as any).Tiles).toBe('object');
+	it('tiles-shim.js does not define globalThis.Tiles', () => {
+		expect(typeof (globalThis as any).Tiles).toBe('undefined');
 	});
 
-	it('tiles-shim.js defines globalThis.Background', () => {
-		expect(typeof (globalThis as any).Background).toBe('object');
+	it('tiles-shim.js does not define globalThis.Background', () => {
+		expect(typeof (globalThis as any).Background).toBe('undefined');
 	});
 
-	it('awesomebar.js defines globalThis.AwesomeBar', () => {
-		expect(typeof (globalThis as any).AwesomeBar).toBe('object');
+	it('awesomebar.js does not define globalThis.AwesomeBar', () => {
+		expect(typeof (globalThis as any).AwesomeBar).toBe('undefined');
 	});
 
-	it('newTab.js defines globalThis.newTabTools', () => {
-		expect(typeof (globalThis as any).newTabTools).toBe('object');
+	it('newTab.js does not define globalThis.newTabTools', () => {
+		expect(typeof (globalThis as any).newTabTools).toBe('undefined');
 	});
 
-	it('newTab.js defines globalThis.pageMessageHandler', () => {
-		expect(typeof (globalThis as any).pageMessageHandler).toBe('function');
+	it('newTab.js does not define globalThis.pageMessageHandler', () => {
+		expect(typeof (globalThis as any).pageMessageHandler).toBe('undefined');
 	});
 
-	it('fx-newTab.js defines globalThis.Page', () => {
-		expect(typeof (globalThis as any).Page).toBe('object');
+	it('fx-newTab.js does not define globalThis.Page', () => {
+		expect(typeof (globalThis as any).Page).toBe('undefined');
 	});
 
-	it('fx-newTab.js defines globalThis.Grid', () => {
-		expect(typeof (globalThis as any).Grid).toBe('object');
+	it('fx-newTab.js does not define globalThis.Grid', () => {
+		expect(typeof (globalThis as any).Grid).toBe('undefined');
 	});
 
-	it('fx-newTab.js defines globalThis.Updater', () => {
-		expect(typeof (globalThis as any).Updater).toBe('object');
+	it('fx-newTab.js does not define globalThis.Updater', () => {
+		expect(typeof (globalThis as any).Updater).toBe('undefined');
 	});
 
-	it('fx-newTab.js defines globalThis.UndoDialog', () => {
-		expect(typeof (globalThis as any).UndoDialog).toBe('object');
+	it('fx-newTab.js does not define globalThis.UndoDialog', () => {
+		expect(typeof (globalThis as any).UndoDialog).toBe('undefined');
 	});
 
-	it('fx-newTab.js defines globalThis.Drag (not cross-referenced in-page, but E2E drag-layout drives it via page-context evaluation)', () => {
-		expect(typeof (globalThis as any).Drag).toBe('object');
+	it('fx-newTab.js does not define globalThis.Drag (the E2E drag-layout bridge is retired — real dragstart/dragend events drive it now)', () => {
+		expect(typeof (globalThis as any).Drag).toBe('undefined');
 	});
 
 	// ------------------------------------------------------------------

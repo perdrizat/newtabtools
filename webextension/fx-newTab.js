@@ -2548,31 +2548,3 @@ export var UndoDialog = {
 // its own top level" (it reached into newTabTools/pageMessageHandler, both
 // from newTab.js). fx-newTab.js's top level is now definition-only.
 
-// page-modules P5 (PAGE_MODULES.md): all four names above are real exports
-// now (newTab.js, page-main.js use named imports). These assignments survive
-// for E2E/UAT page-context evaluation and fast-tier suites reading bare
-// identifiers off a computed-path dynamic import — TEST-ONLY, genuinely, as
-// of the P2-P5 review finding 1 dependency-inversion remediation
-// (2026-07-10): awesomebar.js no longer reads `Grid` (its one dependency —
-// a read-only list of the current tiles' `url`/`title` — is now injected via
-// `AwesomeBar.init({ tilesSource: () => Grid.sites })`, wired by newTab.js);
-// no production consumer reads any of the four names off `globalThis`
-// anymore. Retiring them = moving the test harness off page-globals —
-// ROADMAP backlog. Cast through `any` on the way out — same reason as
-// prefs.js's bridge assignments (chrome-prep C3b): without it, checked-JS's
-// ambient-inference-from-assignment would override
-// tests/integration/globals.d.ts's deliberately loose `any` declarations,
-// breaking every test-only partial mock across the suite.
-globalThis.Page = /** @type {any} */ (Page);
-globalThis.Grid = /** @type {any} */ (Grid);
-globalThis.Updater = /** @type {any} */ (Updater);
-globalThis.UndoDialog = /** @type {any} */ (UndoDialog);
-// TEST-ONLY BRIDGE — not production API (review 2026-07-10 finding 5,
-// adjudicated: keep, marked). No page file reads window.Drag; it exists
-// solely so tests/e2e/drag-layout.test.ts can drive Drag.start via
-// page-context evaluation. Production code must not grow a dependency on
-// it; retires in P5 with the rest of the bridge. `Site`/`Drop`/
-// `Transformation` do NOT gain a matching assignment here — this slice gave
-// them real exports instead (PAGE_MODULES.md's P5 checklist), and the fast
-// tier imports the module directly, so a bridge would be redundant.
-globalThis.Drag = /** @type {any} */ (Drag);

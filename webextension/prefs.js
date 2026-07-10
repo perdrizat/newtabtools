@@ -3,16 +3,17 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6 — permanent, revised
- * 2026-07-10): `Prefs`/`Blocked`/`Filters`/`NeverCapture` are real `export`s
- * now, consumed by real `import`s from `lib/background-main.js` and its
- * background-side consumers (`lib/tiles-store.js`, `lib/capture.js`,
- * `lib/backup.js`, `lib/messages.js`). The four `globalThis.X = …`
- * assignments at the bottom of this file SURVIVE this slice — newTab.js/
- * fx-newTab.js/awesomebar.js still read them as bare identifiers (they stay
- * vm-loaded classic scripts until P4/P5), and E2E/UAT page-context
- * evaluation reads them off `globalThis` too (TEST-ONLY thereafter, once the
- * last production consumer migrates).
+ * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6): `Prefs`/`Blocked`/
+ * `Filters`/`NeverCapture` are real `export`s, consumed by real `import`s
+ * from both scopes — `lib/background-main.js` and its background-side
+ * consumers (`lib/tiles-store.js`, `lib/capture.js`, `lib/backup.js`,
+ * `lib/messages.js`) on one side, `newTab.js`/`fx-newTab.js`/`awesomebar.js`
+ * on the page side. The four `globalThis.X = …` bridge assignments that
+ * survived through PAGE_MODULES.md (TEST-ONLY, for E2E/UAT page-context
+ * evaluation) are retired as of chrome-prep C3d: the E2E/UAT harness now
+ * drives the real page via messages/storage/DOM instead of reading page
+ * globals, so nothing reads these off `globalThis` anymore — see
+ * `tests/integration/module-scope.test.ts`'s negative assertion.
  *
  * The old direct-coupling branch in `prefsChanged` — sniffing
  * `'newTabTools' in window` and calling `newTabTools.updateUI`/
@@ -514,21 +515,3 @@ export const NeverCapture = {
 	},
 };
 
-// page-modules P3 (PAGE_MODULES.md): Prefs/Blocked/Filters/NeverCapture are
-// real exports now, but the globalThis bridges SURVIVE — newTab.js/
-// fx-newTab.js/awesomebar.js still read them as bare identifiers (they stay
-// vm-loaded classic scripts until P4/P5) and E2E/UAT page-context evaluation
-// reads them off globalThis too (TEST-ONLY thereafter, once the last
-// production consumer migrates). Cast through `any` on the way out: checked-JS
-// infers/augments an ambient global's type from a bare `globalThis.X = …`
-// assignment's own expression type, and without this cast that inference
-// would override tests/integration/globals.d.ts's deliberately loose
-// `declare global { var Prefs: any; … }` with the full internal shape,
-// breaking every test-only mock that only stubs the handful of properties it
-// actually exercises. Real lib/ consumers are unaffected — they get the full
-// type from the `import { Prefs } from '../prefs.js'` binding above, not from
-// this bridge.
-globalThis.Prefs = /** @type {any} */ (Prefs);
-globalThis.Blocked = /** @type {any} */ (Blocked);
-globalThis.Filters = /** @type {any} */ (Filters);
-globalThis.NeverCapture = /** @type {any} */ (NeverCapture);

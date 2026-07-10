@@ -5,8 +5,10 @@ import {
 	openNewTab,
 	captureFailure,
 	waitForGridReady,
+	waitForCondition,
 	resetTestState,
 	getNewTabURL,
+	setPrefs,
 } from './_helpers.ts';
 
 /**
@@ -31,11 +33,19 @@ describe('E2E: Tile aspect ratio (issue #505)', () => {
 		}
 	});
 
-	/** Set tileAspect via the Prefs setter (drawer segmented control is the
-	 * dedicated UI as of Phase 3-2; here we drive the pref directly). */
+	/** Set tileAspect via `browser.storage.local` (drawer segmented control is
+	 * the dedicated UI as of Phase 3-2; here we drive the pref directly), then
+	 * poll until the async storage.onChanged → updateUI chain has reflected it
+	 * onto `<html tileaspect>` — a fixed sleep races that chain under
+	 * full-suite load. */
 	async function setAspect(page: any, value: string): Promise<void> {
-		await page.evaluate((v: string) => { (window as any).Prefs.tileAspect = v; }, value);
-		await new Promise(r => setTimeout(r, 300));
+		await setPrefs(page, { tileAspect: value });
+		await waitForCondition(
+			page,
+			v => document.documentElement.getAttribute('tileaspect') === v,
+			[value],
+			{ timeout: 10_000, message: `tileaspect attribute never became ${value}` }
+		);
 	}
 
 	/** Read computed aspect ratio of the first .newtab-cell. */

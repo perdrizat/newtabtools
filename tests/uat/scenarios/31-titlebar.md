@@ -13,10 +13,12 @@ screenshot). `browser_evaluate` runs via `executeScript` — always `return`.
 **Precondition — ensure the search box is shown.** The titlebar search is a user
 pref (`titleBarSearch`, on by default) and an earlier scenario in a full run may
 have toggled it off; the Board A layout being verified here includes it. Enable
-it and wait for it to lay out before the order check:
-`browser_evaluate` → `(window).Prefs.titleBarSearch = true; return true;` then poll
-(`browser_evaluate`) until `return !document.getElementById('ntt-search').hidden`
-is `true` (~5s budget).
+it via `browser.storage.local` (never a page global) and wait for it to lay out
+before the order check:
+`browser_evaluate` → `chrome.storage.local.set({titleBarSearch: true}); return true;`
+then poll (`browser_evaluate`) until `return !document.getElementById('ntt-search').hidden`
+is `true` (~5s budget) — the page's `Prefs.onChange` listener applies the
+change live once the `storage.onChanged` round-trip lands.
 
 ## Verify (structural — `browser_evaluate`)
 

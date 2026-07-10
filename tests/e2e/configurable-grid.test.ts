@@ -8,6 +8,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	setPrefs,
 } from './_helpers.ts';
 
 describe('E2E: Configurable columns and rows (slot 19)', () => {
@@ -30,10 +31,10 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			await page.evaluate(async () => {
-				Prefs.columns = 5;
-				await Grid.refresh();
-			});
+			// Writing the pref triggers the Prefs.onChange listener
+			// (page-main.js), which calls Grid.refresh() automatically for
+			// rows/columns changes — no direct call needed.
+			await setPrefs(page, { columns: 5 });
 
 			const colsAfter = await waitForCondition(
 				page,
@@ -64,9 +65,7 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 			);
 			expect(colsReload).toBe(5);
 
-			await page.evaluate(() => {
-				Prefs.columns = 3;
-			});
+			await setPrefs(page, { columns: 3 });
 		} catch (e) {
 			await captureFailure(page, 'configurable-grid-columns');
 			throw e;
@@ -81,10 +80,7 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			await page.evaluate(async () => {
-				Prefs.rows = 5;
-				await Grid.refresh();
-			});
+			await setPrefs(page, { rows: 5 });
 
 			const cellCount = await waitForCondition(
 				page,
@@ -116,9 +112,7 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 			);
 			expect(cellsReload).toBe(15);
 
-			await page.evaluate(() => {
-				Prefs.rows = 3;
-			});
+			await setPrefs(page, { rows: 3 });
 		} catch (e) {
 			await captureFailure(page, 'configurable-grid-rows');
 			throw e;

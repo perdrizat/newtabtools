@@ -359,6 +359,10 @@ describe('Drawer Layout tab — updateUI reflection (Phase 3-1)', () => {
 			},
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
+		// Stand-in for the extracted updateUI body's bare `Grid` reads —
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
+		// optional in this vm harness (C3a guard-removal fallout pattern).
+		(globalThis as any).Grid = { sites: [] };
 
 		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'drawer-layout-updateUI-harness.js' });

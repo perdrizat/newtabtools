@@ -8,10 +8,35 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	setPrefs,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 const TEST_URL_A = 'https://drag-a.example.com/';
 const TEST_URL_B = 'https://drag-b.example.com/';
+
+/**
+ * A site's position in the grid == its `.newtab-cell`'s index among
+ * `#newtab-grid`'s direct children (verified by css-grid-layout.test.ts's
+ * "cells are direct children" test) — the DOM-observable equivalent of the
+ * old `Grid.sites.findIndex(...)` page-global read.
+ */
+function cellIndexForUrl(url: string): number {
+	const cells = Array.from(document.querySelectorAll('#newtab-grid > .newtab-cell'));
+	return cells.findIndex(cell => {
+		const link = cell.querySelector('.newtab-site a.newtab-link') as HTMLAnchorElement | null;
+		return link != null && link.href === url;
+	});
+}
+
+/** True once both URLs have a matching `.newtab-cell` in the grid. */
+function bothCellsExist(a: unknown, b: unknown): boolean {
+	const cells = Array.from(document.querySelectorAll('#newtab-grid > .newtab-cell'));
+	const hrefs = cells
+		.map(cell => (cell.querySelector('.newtab-site a.newtab-link') as HTMLAnchorElement | null)?.href)
+		.filter((h): h is string => !!h);
+	return hrefs.includes(a as string) && hrefs.includes(b as string);
+}
 
 describe('E2E: Drag-reorder tiles (slot 27)', () => {
 	let browser: Browser;
@@ -33,15 +58,11 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 		const url = await getNewTabURL();
 
 		try {
-			// Clean slate: unpin any leftover tiles at our test URLs.
-			await page.evaluate(async (a, b) => {
-				await new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: a }, resolve);
-				});
-				await new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: b }, resolve);
-				});
-			}, TEST_URL_A, TEST_URL_B);
+			// Clean slate: remove any leftover tiles at our test URLs.
+			// (`Tiles.unpinTile` is not a real wire name — see removeTileByUrl's
+			// JSDoc in _helpers.ts; it skips silently when the tile is absent.)
+			await removeTileByUrl(page, TEST_URL_A);
+			await removeTileByUrl(page, TEST_URL_B);
 
 			// Reload to clear grid.
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
@@ -62,34 +83,36 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			await waitForGridReady(page);
 
 			// Wait for both tiles.
-			await waitForCondition(
-				page,
-				(a, b) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const urls = g.sites.filter((s: any) => s).map((s: any) => s.url);
-					return urls.includes(a) && urls.includes(b);
-				},
-				[TEST_URL_A, TEST_URL_B],
-				{ timeout: 10_000, message: 'Both tiles not found in grid' }
-			);
+			await waitForCondition(page, bothCellsExist, [TEST_URL_A, TEST_URL_B], { timeout: 10_000, message: 'Both tiles not found in grid' });
 
-			// Record initial positions.
-			const initialPositions = await page.evaluate((a, b) => {
-				const g = window.Grid;
-				const posA = g.sites.findIndex((s: any) => s && s.url === a);
-				const posB = g.sites.findIndex((s: any) => s && s.url === b);
-				return { posA, posB };
-			}, TEST_URL_A, TEST_URL_B);
+			// Record initial positions. `cellIndexForUrl` is passed as a
+			// SEPARATE, self-contained `page.evaluate` argument function (not
+			// called from inside another closure) — Puppeteer serializes an
+			// evaluated function via its own source text only, so a wrapper
+			// arrow function that references an outer-scope helper by name
+			// would throw `ReferenceError` in the page (that helper doesn't
+			// exist there); each of these calls is instead the helper itself.
+			const posA0 = await page.evaluate(cellIndexForUrl, TEST_URL_A);
+			const posB0 = await page.evaluate(cellIndexForUrl, TEST_URL_B);
+			const initialPositions = { posA: posA0, posB: posB0 };
 
 			// Verify A is before B.
 			expect(initialPositions.posA).toBeLessThan(initialPositions.posB);
 
-			// Perform synthetic drag: move tile A to B's position.
-			const swapped = await page.evaluate((posA, posB) => {
-				const g = window.Grid;
-				const siteA = g.sites[posA];
-				const cellB = g.cells[posB];
+			// Perform a REAL synthetic drag: dragstart on site A's node, drop
+			// on cell B's node (both looked up fresh via DOM, not a page
+			// global — the drop handler accepts untrusted/synthetic events).
+			const swapped = await page.evaluate((a, b) => {
+				const cells = Array.from(document.querySelectorAll('#newtab-grid > .newtab-cell'));
+				const findIndex = (url: string) => cells.findIndex(cell => {
+					const link = cell.querySelector('.newtab-site a.newtab-link') as HTMLAnchorElement | null;
+					return link != null && link.href === url;
+				});
+				const posA = findIndex(a);
+				const posB = findIndex(b);
+				if (posA === -1 || posB === -1) {return false;}
+				const siteA = cells[posA].querySelector('.newtab-site') as HTMLElement | null;
+				const cellB = cells[posB];
 				if (!siteA || !cellB) {return false;}
 
 				// Simulate dragstart on site A.
@@ -100,7 +123,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 					clientX: 100,
 					clientY: 100,
 				});
-				siteA.node.dispatchEvent(dragStartEvent);
+				siteA.dispatchEvent(dragStartEvent);
 
 				// Simulate drop on cell B (drop handler accepts untrusted events).
 				const dropEvent = new DragEvent('drop', {
@@ -108,10 +131,10 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 					cancelable: true,
 					dataTransfer: new DataTransfer(),
 				});
-				cellB.node.dispatchEvent(dropEvent);
+				cellB.dispatchEvent(dropEvent);
 
 				return true;
-			}, initialPositions.posA, initialPositions.posB);
+			}, TEST_URL_A, TEST_URL_B);
 			expect(swapped).toBe(true);
 
 			// Wait for Updater.updateGrid to complete.
@@ -121,32 +144,18 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
-			const newPositions = await waitForCondition(
-				page,
-				(a, b) => {
-					const g = window.Grid;
-					if (!g || !g.sites) {return false;}
-					const posA = g.sites.findIndex((s: any) => s && s.url === a);
-					const posB = g.sites.findIndex((s: any) => s && s.url === b);
-					if (posA === -1 || posB === -1) {return false;}
-					return { posA, posB };
-				},
-				[TEST_URL_A, TEST_URL_B],
-				{ timeout: 10_000, message: 'Tiles not found after reload' }
-			) as { posA: number; posB: number };
+			await waitForCondition(page, bothCellsExist, [TEST_URL_A, TEST_URL_B], { timeout: 10_000, message: 'Tiles not found after reload' });
+			const newPositions = {
+				posA: await page.evaluate(cellIndexForUrl, TEST_URL_A),
+				posB: await page.evaluate(cellIndexForUrl, TEST_URL_B),
+			};
 
 			// The tiles should have swapped: A should now be after B.
 			expect(newPositions.posA).toBeGreaterThan(newPositions.posB);
 
-			// Cleanup: unpin both.
-			await page.evaluate(async (a, b) => {
-				await new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: a }, resolve);
-				});
-				await new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: b }, resolve);
-				});
-			}, TEST_URL_A, TEST_URL_B);
+			// Cleanup: remove both.
+			await removeTileByUrl(page, TEST_URL_A);
+			await removeTileByUrl(page, TEST_URL_B);
 		} catch (e) {
 			await captureFailure(page, 'drag-reorder');
 			throw e;
@@ -171,16 +180,17 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 			await waitForGridReady(page);
 
-			// Enable lock via Prefs (direct, reliable).
-			await page.evaluate(() => {
-				Prefs.locked = true;
-			});
-			await new Promise(r => setTimeout(r, 500));
-
-			// Verify locked attribute on root.
-			const locked = await page.evaluate(() => {
-				return document.documentElement.getAttribute('locked');
-			});
+			// Enable lock via storage (direct, reliable). Poll rather than
+			// fixed-sleep: setPrefs only STARTS the async storage.onChanged →
+			// updateUI chain that reflects the pref onto <html locked>.
+			await setPrefs(page, { locked: true });
+			const locked = await waitForCondition(
+				page,
+				() => document.documentElement.getAttribute('locked') === 'true'
+					? document.documentElement.getAttribute('locked') : false,
+				[],
+				{ timeout: 10_000, message: 'locked attribute never became true' }
+			);
 			expect(locked).toBe('true');
 
 			// §3c: hover actions are NOT gated on lock anymore — the row is
@@ -193,15 +203,9 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			});
 			expect(actionsDisplay).not.toBe('none');
 
-			// Cleanup: unlock and unpin.
-			await page.evaluate(() => {
-				Prefs.locked = false;
-			});
-			await page.evaluate(async (u) => {
-				return new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Tiles.unpinTile', url: u }, resolve);
-				});
-			}, TEST_URL_A);
+			// Cleanup: unlock and remove.
+			await setPrefs(page, { locked: false });
+			await removeTileByUrl(page, TEST_URL_A);
 		} catch (e) {
 			await captureFailure(page, 'drag-reorder-locked');
 			throw e;

@@ -4,7 +4,7 @@
 
 /**
  * THE load-bearing module-scope regression test (MODERNIZATION.md, slices
- * M1 → M5).
+ * M1 → M5; chrome-prep C3d retires the last survivors).
  *
  * M1's premise: with the background flipped to `{"scripts":
  * ["lib/background-main.js"], "type": "module"}`, every file
@@ -22,13 +22,15 @@
  * NONE of those M2/M3/M4 `globalThis` bridge assignments
  * (`withStore`/`SAFE_PROTOCOLS`/`Tiles`/`Background`/the capture-pipeline
  * exports/`makeZip`/`readZip`) exist anymore — every consumer reaches them
- * via real `import` bindings instead. This file's job flips accordingly:
- * prove the RETIRED bridges are actually gone (a regression here would mean
- * someone re-added a `globalThis.X = …` line instead of using a real
- * import), while the Decision-2 dual-scope bridge (`Prefs`/`Blocked`/
- * `Filters`/`NeverCapture` from prefs.js; `compareVersions` from common.js —
- * these stay bridge-mode PERMANENTLY, since the page still needs them as a
- * classic `<script>` global) still lands correctly.
+ * via real `import` bindings instead.
+ *
+ * The Decision-2 dual-scope bridge (`Prefs`/`Blocked`/`Filters`/
+ * `NeverCapture` from prefs.js; `compareVersions` from common.js) was
+ * expected to survive PERMANENTLY, since the page read it as a classic
+ * `<script>` global. chrome-prep C3d (CHROME_PREP.md maintainer directive 1)
+ * retires it too: newTab.js/fx-newTab.js/awesomebar.js now import these for
+ * real, so this file's job flips fully to negative assertions — prove every
+ * bridge, Decision-2 survivors included, is actually gone from `globalThis`.
  *
  * This natively `import()`s lib/background-main.js — the manifest's actual
  * background entry — with the browser/chrome surface it touches at its own
@@ -39,6 +41,8 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { Prefs, Blocked, Filters, NeverCapture } from '../../webextension/prefs.js';
+import { compareVersions } from '../../webextension/common.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -142,35 +146,46 @@ describe('module-scope bridge — lib/background-main.js\'s globalThis surface a
 		// --- Native import() of the manifest's real background entry ---
 		await import(/* @vite-ignore */ webext('lib/background-main.js'));
 
-		// Flush the top-level Prefs.init() chain.
-		await vi.waitFor(() => expect((globalThis as any).Prefs).toBeDefined());
+		// Flush the top-level Prefs.init() chain. `Prefs` is now a real,
+		// statically-imported binding (no globalThis bridge survives to read
+		// it off) — the object itself is available synchronously on import;
+		// this waits on its `init`-populated shape as the settle signal.
+		await vi.waitFor(() => expect(typeof Prefs.init).toBe('function'));
 	});
 
 	// ------------------------------------------------------------------
-	// Decision-2 dual-scope bridge — permanent, still expected on globalThis
+	// Decision-2 dual-scope bridge — retired as of chrome-prep C3d. Real
+	// imports (above) are the only way anything reaches these now; verify
+	// the objects themselves still have their expected shape...
 	// ------------------------------------------------------------------
-	it('common.js defines globalThis.compareVersions', () => {
-		expect(typeof (globalThis as any).compareVersions).toBe('function');
+	it('prefs.js/common.js export Prefs/Blocked/Filters/NeverCapture/compareVersions with their expected shape', () => {
+		expect(typeof compareVersions).toBe('function');
+		expect(typeof Prefs.init).toBe('function');
+		expect(typeof Blocked.isBlocked).toBe('function');
+		expect(typeof Filters.getList).toBe('function');
+		expect(typeof NeverCapture.matches).toBe('function');
 	});
 
-	it('prefs.js defines globalThis.Prefs', () => {
-		expect(typeof (globalThis as any).Prefs).toBe('object');
-		expect(typeof (globalThis as any).Prefs.init).toBe('function');
+	// ...and that NONE of them ever leak onto globalThis anymore (the
+	// chrome-prep C3d retirement itself).
+	it('does NOT bridge globalThis.compareVersions', () => {
+		expect((globalThis as any).compareVersions).toBeUndefined();
 	});
 
-	it('prefs.js defines globalThis.Blocked', () => {
-		expect(typeof (globalThis as any).Blocked).toBe('object');
-		expect(typeof (globalThis as any).Blocked.isBlocked).toBe('function');
+	it('does NOT bridge globalThis.Prefs', () => {
+		expect((globalThis as any).Prefs).toBeUndefined();
 	});
 
-	it('prefs.js defines globalThis.Filters', () => {
-		expect(typeof (globalThis as any).Filters).toBe('object');
-		expect(typeof (globalThis as any).Filters.getList).toBe('function');
+	it('does NOT bridge globalThis.Blocked', () => {
+		expect((globalThis as any).Blocked).toBeUndefined();
 	});
 
-	it('prefs.js defines globalThis.NeverCapture', () => {
-		expect(typeof (globalThis as any).NeverCapture).toBe('object');
-		expect(typeof (globalThis as any).NeverCapture.matches).toBe('function');
+	it('does NOT bridge globalThis.Filters', () => {
+		expect((globalThis as any).Filters).toBeUndefined();
+	});
+
+	it('does NOT bridge globalThis.NeverCapture', () => {
+		expect((globalThis as any).NeverCapture).toBeUndefined();
 	});
 
 	// ------------------------------------------------------------------

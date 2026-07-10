@@ -5,25 +5,41 @@
 /**
  * Layout-invariant E2E regression tests for the drag-and-drop pipeline.
  *
- * These tests do NOT simulate HTML5 drag (Puppeteer can't trigger native
- * drag events reliably and synthetic dispatchEvent doesn't fire the
- * browser's drag-image / drop-target machinery). Instead they exercise the
- * layout properties the drag pipeline assumes:
+ * Tests 1-2 exercise the layout properties the drag pipeline assumes via
+ * plain DOM attribute/style manipulation (no drag gesture, no page globals):
  *
  *   1. A `[frozen]` (position: absolute) tile uses #ntt-vertical-margin as
  *      its offsetParent, not its cell — verified by setting style.left and
  *      reading offsetLeft.
  *   2. Cell row heights survive when every tile is `[frozen]` — verified by
  *      setting `[frozen]` on every tile in the grid and re-measuring a row.
- *   3. The cell position cache refreshes after `openDrawer` triggers the
- *      push-layout (which doesn't fire a window resize).
+ *
+ * Tests 3-4 cover the "no resize event on push-layout" regression
+ * end-to-end, without reading `Grid`/`Drag` page globals (chrome-prep C3d,
+ * CHROME_PREP.md maintainer directive 1):
+ *
+ *   3. DOM proof the grid narrows when the drawer opens (push-layout fires
+ *      no `resize` event) — checked via the cell's live
+ *      `getBoundingClientRect()`, not the internal position cache.
+ *   4. DOM proof a REAL `dragstart` dispatched right after that transition
+ *      picks up the CURRENT (narrow) cell geometry, not a stale cached one —
+ *      fx-newTab.js's `Drag.start` always measures `cellNode.offsetWidth`
+ *      live, so this exercises the actual defensive freshness the pipeline
+ *      relies on, via a genuine gesture rather than a mocked `Drag.start()`
+ *      call.
+ *
+ * KNOWN-FLAKY CLASS (accepted by CHROME_PREP.md directive 1): synthesized
+ * DnD in headless Firefox can occasionally misfire. Quarantine policy:
+ * investigate on 3 consecutive CI failures; never revert to page-global
+ * driving as the fix.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
 import {
 	connectToFirefox, openNewTab, waitForGridReady, waitForCondition,
-	resetTestState, getNewTabURL,
+	resetTestState, getNewTabURL, siteLinkExists, openDrawerUI, closeDrawerUI,
+	removeTileByUrl,
 } from './_helpers.ts';
 
 describe('E2E: Drag layout invariants', () => {
@@ -45,22 +61,12 @@ describe('E2E: Drag layout invariants', () => {
 		const url = await getNewTabURL();
 		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
 		await waitForGridReady(page);
-		await waitForCondition(
-			page,
-			u => {
-				const g = (window as any).Grid;
-				return g && g.sites && g.sites.some((s: any) => s && s.url === u);
-			},
-			[TEST_URL],
-			{ timeout: 10_000, message: 'pinned tile did not surface in grid' }
-		);
+		await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 10_000, message: 'pinned tile did not surface in grid' });
 	}, 90_000);
 
 	afterAll(async () => {
 		if (page) {
-			await page.evaluate(u => new Promise<void>(resolve => {
-				chrome.runtime.sendMessage({ name: 'Tiles.removeTile', url: u }, () => resolve());
-			}), TEST_URL).catch(() => {});
+			await removeTileByUrl(page, TEST_URL).catch(() => {});
 			await page.close();
 		}
 		if (browser) {
@@ -130,71 +136,90 @@ describe('E2E: Drag layout invariants', () => {
 		expect(result.afterHeight).toBeGreaterThan(result.initialHeight! * 0.7);
 	}, 30_000);
 
-	it('regression: openDrawer refreshes Grid.cells[].position cache (push-layout has no resize event)', async () => {
-		// Without this refresh, Drag.start would freeze the tile to the
-		// pre-drawer cell width — too big when the drawer is open. We
-		// now schedule a refresh via setTimeout(240) after the drawer
-		// transition (220ms).
+	it('regression: the grid narrows when the drawer opens (push-layout has no resize event)', async () => {
+		// DOM proof of the underlying layout fact (no page-global cache
+		// read): opening the drawer narrows #newtab-grid via push-layout,
+		// which fires no `resize` event — the very reason Grid.cells[]'s
+		// position cache needs an explicit refresh in production. Test 4
+		// proves a real drag right after this transition picks up the new
+		// (narrow) geometry rather than a stale cached one.
 		try {
-			// Capture baseline before opening the drawer.
 			const before = await page.evaluate(() => {
-				(window as any).Grid.cacheCellPositions();
-				return (window as any).Grid.cells[0].position.width;
+				const cell = document.querySelector('#newtab-grid > .newtab-cell') as HTMLElement;
+				return cell.getBoundingClientRect().width;
 			});
 
-			await page.evaluate(() => (window as any).newTabTools.openDrawer());
-			// Wait past the 240ms refresh tick that openDrawer scheduled.
-			await new Promise(r => setTimeout(r, 400));
+			await openDrawerUI(page);
+			// Wait past the drawer's CSS transition (~220ms) + the 240ms
+			// defensive cache-refresh tick it schedules.
+			await new Promise(r => setTimeout(r, 500));
 
-			const after = await page.evaluate(() => (window as any).Grid.cells[0].position.width);
-			// The grid is narrower with the drawer open, so the cached
-			// position width must reflect that. Permissive bound: at
-			// least 20px less, more than enough to prove the cache
-			// updated.
+			const after = await page.evaluate(() => {
+				const cell = document.querySelector('#newtab-grid > .newtab-cell') as HTMLElement;
+				return cell.getBoundingClientRect().width;
+			});
+			// Permissive bound: at least 20px narrower, more than enough to
+			// prove the push-layout narrowed the grid.
 			expect(after).toBeLessThan(before - 20);
 		} finally {
-			await page.evaluate(() => (window as any).newTabTools.closeDrawer());
+			await closeDrawerUI(page);
 			await new Promise(r => setTimeout(r, 400));
 		}
 	}, 60_000);
 
-	it('Drag.start refreshes the cache defensively (works even if openDrawer never fired)', async () => {
-		// Belt-and-braces: even if the drawer-transition timeout was
-		// missed for any reason (browser tab backgrounded, throttled), a
-		// drag must always start from a fresh cache.
-		const cachedBefore = await page.evaluate(() => {
-			(window as any).Grid.cacheCellPositions();
-			return (window as any).Grid.cells[0].position.width;
-		});
+	it('a real dragstart right after the drawer opens freezes the tile to the CURRENT (narrow) cell width, not a stale one', async () => {
+		// Real gesture (chrome-prep C3d — no `Drag.start()` mock-event call,
+		// no page-global reads): dispatch a genuine `dragstart` DragEvent on
+		// the tile node. fx-newTab.js's `Site.handleEvent`/`Drag.start` only
+		// run when the board is unlocked, so the drawer must be open first —
+		// the exact scenario the "no resize event" regression concerns.
+		try {
+			await openDrawerUI(page);
+			await new Promise(r => setTimeout(r, 500));
 
-		// Mutate the cache to simulate staleness.
-		await page.evaluate(() => {
-			(window as any).Grid.cells[0].position.width = 9999;
-		});
+			const result = await page.evaluate(() => {
+				const site = document.querySelector('.newtab-site') as HTMLElement;
+				const cell = site.closest('.newtab-cell') as HTMLElement;
+				const liveCellWidth = cell.getBoundingClientRect().width;
+				const rect = site.getBoundingClientRect();
 
-		// Build a minimal mock event and call Drag.start. This bypasses
-		// HTML5 drag (which Puppeteer can't reliably trigger) but
-		// exercises the cache-refresh side-effect.
-		await page.evaluate(() => {
-			const site = (window as any).Grid.sites.find((s: any) => s);
-			const rect = site.node.getBoundingClientRect();
-			(window as any).Drag.start(site, {
-				clientX: rect.left + 10,
-				clientY: rect.top + 10,
-				dataTransfer: {
-					mozCursor: '', effectAllowed: '',
-					setData() {}, setDragImage() {},
-				},
+				const dt = new DataTransfer();
+				const dragstart = new DragEvent('dragstart', {
+					bubbles: true, cancelable: true,
+					clientX: rect.left + 10, clientY: rect.top + 10,
+					dataTransfer: dt,
+				});
+				site.dispatchEvent(dragstart);
+
+				const frozen = site.getAttribute('frozen') === 'true';
+				const frozenWidth = parseFloat(site.style.width || '0');
+
+				// Real dragend to unfreeze + restore the tile, matching what
+				// a user releasing the drag would do (no actual drop target
+				// registered, so Drag.end slides it back to its cell).
+				const dragend = new DragEvent('dragend', {
+					bubbles: true, cancelable: true, dataTransfer: dt,
+				});
+				site.dispatchEvent(dragend);
+
+				return { frozen, frozenWidth, liveCellWidth };
 			});
-			// Reset the dragged state — we only care about the cache effect.
-			(window as any).Drag._draggedSite = null;
-			site.node.removeAttribute('frozen');
-			site.node.removeAttribute('dragged');
-		});
 
-		const cachedAfter = await page.evaluate(() => (window as any).Grid.cells[0].position.width);
-		// The cache should have been overwritten back to the real width.
-		expect(cachedAfter).not.toBe(9999);
-		expect(cachedAfter).toBeCloseTo(cachedBefore, -1);
-	}, 30_000);
+			expect(result.frozen).toBe(true);
+			// The frozen tile's width must match the CURRENT narrow cell
+			// width (Drag.start measures `cellNode.offsetWidth` live) —
+			// not some earlier, pre-drawer, wider value.
+			expect(result.frozenWidth).toBeCloseTo(result.liveCellWidth, 0);
+
+			// Cleanup settles asynchronously (Transformation.slideSiteTo).
+			await new Promise(r => setTimeout(r, 400));
+			const stillFrozen = await page.evaluate(() =>
+				document.querySelector('.newtab-site')!.hasAttribute('frozen')
+			);
+			expect(stillFrozen).toBe(false);
+		} finally {
+			await closeDrawerUI(page);
+			await new Promise(r => setTimeout(r, 400));
+		}
+	}, 60_000);
 });

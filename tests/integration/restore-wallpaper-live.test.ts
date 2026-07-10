@@ -50,6 +50,10 @@ describe('restore applies the wallpaper live (no reload)', () => {
 		// Object-URL hygiene helpers (audit §4.3) used by refreshBackgroundImage.
 		const fresh = extractMethod(source, '_freshObjectURL');
 		const drop = extractMethod(source, '_dropObjectURL');
+		// Stand-in for the extracted updateUI body's bare `Grid` reads —
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
+		// optional in this vm harness (C3a guard-removal fallout pattern).
+		(globalThis as any).Grid = { sites: [] };
 		const code = `globalThis.__nt = { ${updateUI}, ${refreshBackgroundImage}, ${fresh}, ${drop}, _objectURLs: {},`
 			+ ' backgroundFake: { style: {} }, removeBackgroundButton: {} };';
 		vm.runInThisContext(code, { filename: 'wallpaper-live-harness.js' });

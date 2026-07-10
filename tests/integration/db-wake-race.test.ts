@@ -21,8 +21,9 @@
  * lib/messages.js, imported directly (no vm-load). The webNavigation.
  * onCompleted listener now lives in lib/background-main.js's own top level
  * — reaching it means importing the real entry point, which side-effect-
- * imports the REAL common.js/prefs.js (Decision 2's dual-scope bridge files
- * stay bridge-mode permanently). Rather than stubbing `Prefs` as a plain
+ * imports the REAL common.js/prefs.js (Decision 2's dual-scope bridge files —
+ * their `globalThis` bridge assignments retired in chrome-prep C3d; this file
+ * imports `Prefs` directly now). Rather than stubbing `Prefs` as a plain
  * object, this test seeds `chrome.storage.local` (jest-webextension-mock's
  * built-in store already implements the real get(id|array|defaults-object)
  * contract) BEFORE importing, and lets the real prefs.js compute `Prefs`/
@@ -43,6 +44,7 @@ import { Tiles } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
 import { _captureSessionsForTests } from '../../webextension/lib/capture.js';
 import { handleMessage } from '../../webextension/lib/messages.js';
+import { Prefs, NeverCapture } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEBEXT = path.resolve(__dirname, '../../webextension');
@@ -238,8 +240,10 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		await import(/* @vite-ignore */ webext('lib/background-main.js'));
 
 		// Flush the top-level Prefs.init() chain so `Prefs.history === false`
-		// before any test runs.
-		await vi.waitFor(() => expect((globalThis as any).Prefs?.history).toBe(false));
+		// before any test runs. `Prefs` is a real, statically-imported binding
+		// now (chrome-prep C3d retired the `globalThis` bridge) — same module
+		// instance lib/background-main.js's own import resolves to.
+		await vi.waitFor(() => expect(Prefs.history).toBe(false));
 
 		const navCalls = (globalThis as any).chrome.webNavigation.onCompleted.addListener.mock.calls;
 		expect(navCalls.length).toBe(1);
@@ -261,7 +265,7 @@ describe('db-wake-race — message handlers wait for the DB (audit §2.1/§2.2)'
 		mockDBInstance._stores.tiles.length = 0;
 		mockDBInstance._stores.thumbnails.length = 0;
 		mockDBInstance._stores.background.length = 0;
-		(globalThis as any).NeverCapture._list = [];
+		NeverCapture._list = [];
 
 		// Force a fresh "db is still opening" state for this test: no cached
 		// connection, no in-flight open promise — lib/db.js's public escape

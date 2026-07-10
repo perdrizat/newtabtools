@@ -18,21 +18,16 @@ const webExtGlobals = {
 	globalThis: 'readonly',
 };
 
-// Extension-specific globals exposed on the new tab page and background page.
-// Used inside page.evaluate() callbacks in E2E tests and in integration tests
-// that load/mock the extension scripts. PAGE_MODULES.md P5: pruned to names
-// actually grepped as still in use (bare identifiers in E2E page.evaluate()
-// callbacks, plus `(window as any).X` casts) — `Blocked` and `DropTargetShim`
-// had zero remaining references anywhere under tests/ (E2E or integration) as
-// bare/unimported identifiers, so they're dropped; every name below still has
-// at least one E2E .ts file referencing it.
-const nttGlobals = {
-	Background: 'readonly',
-	Drag: 'readonly',
+// A handful of fast-tier integration suites still read a bare `Prefs.foo`/
+// `Tiles.foo`/`Filters.foo`/`Updater.foo` identifier as vm-harness plumbing —
+// a fixture seeded via `globalThis.X = {...}` for a `vm`-extracted/sandboxed
+// method body to read, not a page/production bridge (chrome-prep C3d retired
+// every production `globalThis.X = X;` bridge assignment, and with it, the
+// E2E/UAT harness's page-global reads — this allowlist no longer needs to
+// cover those; see globals.d.ts's matching prune). Kept minimal: only the
+// four names actually still read bare, grepped as of chrome-prep C3d.
+const nttVmHarnessGlobals = {
 	Filters: 'readonly',
-	Grid: 'readonly',
-	newTabTools: 'readonly',
-	Page: 'readonly',
 	Prefs: 'readonly',
 	Tiles: 'readonly',
 	Updater: 'readonly',
@@ -174,15 +169,14 @@ export default [
 		// PAGE_MODULES.md P4) is retired; this is now the one block for all of
 		// webextension/**/*.js.
 		//
-		// Every page file's `globalThis.X = X;` bridge assignment (see the
-		// comment at each file's end) is TEST-ONLY as of P5 — E2E/UAT
-		// page-context evaluation and any fast-tier suite still reading a bare
-		// identifier off a computed-path dynamic import (PAGE_MODULES.md's
-		// TEST-ONLY bridge policy). No production exception remains: P2-P5
-		// review finding 1's dependency-inversion remediation (2026-07-10)
-		// dissolved awesomebar.js's reads of `Grid`/`newTabTools` — its
-		// `getString`/`isValidURL` uses moved to real `common.js` imports, and
-		// its tiles read moved to an injected `tilesSource` callback.
+		// Every page file's `globalThis.X = X;` bridge assignment (once
+		// TEST-ONLY as of P5, for E2E/UAT page-context evaluation and any
+		// fast-tier suite reading a bare identifier off a computed-path
+		// dynamic import) is deleted as of chrome-prep C3d: the E2E/UAT
+		// harness now drives the real page via runtime messages/
+		// `browser.storage.local`/DOM observation/synthesized DOM events
+		// instead of page globals, so zero bridge assignments remain in this
+		// glob's files.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2020,
@@ -223,8 +217,11 @@ export default [
 	{
 		// E2E tests and helpers. These run in Node but often contain
 		// evaluate() blocks that run in the browser, plus Puppeteer's
-		// own browser-like API. nttGlobals covers extension-specific
-		// objects (Prefs, Grid, Tiles, etc.) referenced in page.evaluate().
+		// own browser-like API. Extension-specific globals (Prefs, Grid,
+		// Tiles, etc.) needed no allowlist here as of chrome-prep C3d: the
+		// E2E/UAT harness no longer reads page-context globals (runtime
+		// messages/storage/DOM/synthesized events instead), so the
+		// `nttGlobals` allowlist that used to cover them was deleted.
 		// tests/unit/_fixtures/*.mjs are Node child-process fixtures (the
 		// raw-module-eval net, chrome-prep C3b) — same Node runtime profile.
 		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs', 'tests/uat/**/*.mjs', 'tests/unit/_fixtures/**/*.mjs', 'scripts/**/*.mjs'],
@@ -235,7 +232,6 @@ export default [
 				...globals.node,
 				...globals.browser,
 				...globals.vitest,
-				...nttGlobals,
 				chrome: 'readonly',
 			},
 		},
@@ -258,7 +254,7 @@ export default [
 				...globals.node,
 				...globals.browser,
 				...globals.vitest,
-				...nttGlobals,
+				...nttVmHarnessGlobals,
 				chrome: 'readonly',
 				browser: 'readonly',
 			},

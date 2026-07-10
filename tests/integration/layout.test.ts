@@ -67,6 +67,11 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			history: true, recent: true,
 		};
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
+		// Stand-in for the extracted updateUI body's bare `Grid` reads —
+		// chrome-prep C3d dropped the `'Grid' in window` sniffs that used to
+		// make it optional in this vm harness (same pattern as the C3a
+		// guard-removal fallout).
+		globalThis.Grid = { sites: [] };
 
 		(globalThis as any).browser = {
 			theme: {

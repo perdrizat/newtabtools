@@ -229,11 +229,25 @@ try {
 
 	// 05 — add-tile autocomplete (Tile panel). "tech" matches several open tabs
 	await click('[data-drawer-tab="tile"]'); await sleep(400);
-	await ev('newTabTools.pinURLInput.focus(); newTabTools.pinURLInput.value = "tech"; newTabTools.autocomplete(); return true');
+	// DOM-driven (no page-global `newTabTools` reference — chrome-prep C3d
+	// retired that bridge): the real input listener (newTab.js) runs
+	// autocomplete() itself once a genuine `input` event fires.
+	await ev(`
+		const input = document.getElementById('options-pinURL-input');
+		input.focus();
+		input.value = 'tech';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		return true;
+	`);
 	await sleep(1500);
-	console.log(`  (autocomplete suggestions: ${await ev('return newTabTools.pinURLAutocomplete.querySelectorAll(".autocomplete-title").length')})`);
+	console.log(`  (autocomplete suggestions: ${await ev("return document.getElementById('autocomplete').querySelectorAll('.autocomplete-title').length")})`);
 	await shot('05-add-tile-autocomplete');
-	await ev('newTabTools.pinURLInput.value = ""; newTabTools.autocomplete(); return true');
+	await ev(`
+		const input = document.getElementById('options-pinURL-input');
+		input.value = '';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		return true;
+	`);
 
 	// 06 — settings drawer (Page panel)
 	await click('[data-drawer-tab="page"]'); await sleep(500);

@@ -110,10 +110,3 @@ export const TileStats = {
 		}
 	},
 };
-
-// page-modules P2 (PAGE_MODULES.md): TileStats is a real export now, but the
-// globalThis bridge SURVIVES — newTab.js/fx-newTab.js still read it as a bare
-// identifier (they stay vm-loaded classic scripts until P5) and E2E/UAT
-// page-context evaluation reads it off globalThis too (TEST-ONLY thereafter,
-// once the last production consumer migrates).
-globalThis.TileStats = TileStats;
