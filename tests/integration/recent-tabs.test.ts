@@ -15,6 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { isValidURL } from '../../webextension/common.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -58,10 +59,16 @@ describe('Recently-closed tabs — newTab.js', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const refreshRecent = extractMethod(source, 'refreshRecent');
 		const trimRecent = extractMethod(source, 'trimRecent');
-		const isValidURL = extractMethod(source, 'isValidURL');
+		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
+		// real `isValidURL` export (P2-P5 review finding 1, revised
+		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
+		// real globalThis, so the delegate's bare-identifier call resolves as
+		// long as the real function is exposed there first (below).
+		const isValidURLBody = extractMethod(source, 'isValidURL');
 		const _formatAge = extractMethod(source, '_formatAge');
 
 		globalThis.Prefs = { recent: true };
+		(globalThis as any).isValidURL = isValidURL;
 
 		chrome.sessions = {
 			getRecentlyClosed: vi.fn(),
@@ -73,7 +80,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 		// behavioural tests control how many cards refreshRecent may render
 		// (default 10, matching the old hard cap). The real slot-sizing math
 		// is covered by titlebar-slots.test.ts.
-		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`;
+		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURLBody}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`;
 		vm.runInThisContext(code, { filename: 'recent-tabs-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

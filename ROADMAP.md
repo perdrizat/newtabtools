@@ -80,32 +80,31 @@ historical reference only — do not merge it.
 Concrete items not yet on a horizon. Roughly priority-ordered within each group.
 
 **Tooling / debt**
-- Page scripts as real ES modules / retire the `globalThis` bridge — the successor
-  arc the modernization work deliberately left out. Untangles the
-  `newTabTools ↔ Grid/Page/Updater` global mesh and lets `common.js`/`prefs.js`
-  gain real `export`s. **Planned:** see [`PAGE_MODULES.md`](PAGE_MODULES.md)
-  (ships as 2.4.0).
+- Page scripts as real ES modules / retire the `globalThis` bridge — **Done**
+  (page-modules arc, executed 2026-07-10, slices P1–P5; ships as 2.4.0).
+  Untangled the `newTabTools ↔ Grid/Page/Updater` global mesh; `common.js`/
+  `prefs.js` gained real `export`s. Record: [`PAGE_MODULES.md`](PAGE_MODULES.md)
+  + git history. The live remainder is the surviving-bridge entry below.
 - Page-scope `el(tag, className, text?)` DOM builder + `textContent` normalization
   across the ~37 near-identical `createElement` blocks (2026-07-09 Stage-H review
   §8 — deferred by design to keep the conversion diff mechanical).
 - Dedupe the near-identical favicon cursor walks in `lib/messages.js`
   (`getFavicons`/`getFaviconsByHost`; Stage-M review, opportunistic).
-- `lib/background-main.js` is excluded from `checkJs` (documented tsconfig gotcha:
-  excluding the entry keeps tsc from pulling untyped dual-scope imports into the
-  program) — spot-check it manually on change, or find a lint-grade alternative.
-- Retire the surviving page `globalThis` bridges — three prerequisites, in
-  order (see `PAGE_MODULES.md` TEST-ONLY bridge policy + the 2026-07-10 P2–P5
-  review findings 1–2): (a) convert awesomebar.js's `Grid`/`newTabTools`
-  bare-global reads to real imports — blocked on typing the monoliths (a
-  static import would pull newTab.js/fx-newTab.js into the checked program),
-  so it rides the future monolith-typing/splitting arc; (b) retire
-  `pageMessageHandler`'s now-dead early-broadcast queue (`flushQueued`, the
-  `typeof Updater/Grid` triggers, the M5-era queue tests — provably
-  unreachable since P5's import cycle guarantees evaluation order); (c) move
-  the E2E/UAT harness off page-global access (`window.Tiles`/`Prefs`/`Grid`/…
-  reached via page-context evaluation) — drive test setup through messages/UI
-  instead. Also sweep the remaining dead-true `typeof Prefs/Grid` guards in
-  newTab.js when (b) lands.
+- Retire the surviving page `globalThis` bridges — two remaining prerequisites
+  (see `PAGE_MODULES.md` TEST-ONLY bridge policy + the 2026-07-10 P2–P5 review
+  findings 1–2). Prerequisite (a) — converting awesomebar.js off the
+  `Grid`/`newTabTools` bare globals — is DONE: the review's revised
+  remediation (dependency inversion, not a static import of the monoliths)
+  extracted `getString`/`isValidURL` to `common.js` and gave the tiles list an
+  injected `tilesSource` seam (`AwesomeBar.init({ tilesSource: () =>
+  Grid.sites })`), so it never needed the monolith-typing arc. Remaining:
+  (b) retire `pageMessageHandler`'s now-dead early-broadcast queue
+  (`flushQueued`, the `typeof Updater/Grid` triggers, the M5-era queue tests —
+  provably unreachable since P5's import cycle guarantees evaluation order),
+  which also sweeps the remaining dead-true `typeof Prefs/Grid` guards in
+  newTab.js; (c) move the E2E/UAT harness off page-global access
+  (`window.Tiles`/`Prefs`/`Grid`/… reached via page-context evaluation) —
+  drive test setup through messages/UI instead.
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The 11-scenario suite covers env/smoke (`00`, `01`), tiles (`10`, `11`), drawer
@@ -151,8 +150,13 @@ alternatives. Detail lives in git history / the linked docs.
 - **Dual-scope `globalThis` bridge** (2026-07-09). `common.js`/`prefs.js` load both as
   classic page scripts and into the background module graph, so they assign
   `globalThis.X = …` instead of using `export`; background modules read them only via
-  `lib/platform.js` accessors. Retires when the page goes modular (see backlog /
-  `PAGE_MODULES.md`).
+  `lib/platform.js` accessors. **Outcome (2026-07-10):** retired as a read path in
+  the page-modules arc — both files gained real `export`s, `lib/platform.js`'s five
+  bridge getters are deleted, and background/page consumers import for real.
+  TEST-ONLY `globalThis` assignments survive for E2E/UAT page-context evaluation
+  only — no production exception remains (awesomebar.js's `Grid`/`newTabTools`
+  reads were dissolved by dependency inversion, P2–P5 review finding 1) — see
+  [`PAGE_MODULES.md`](PAGE_MODULES.md).
 - **`idb` library rejected; IndexedDB wrapper stays hand-rolled** (2026-07-09,
   re-evaluated at module extraction). Zero-runtime-deps policy; `lib/db.js`'s
   `withStore` is ~50 lines and the reconnect semantics are ours either way. Revisit
@@ -167,8 +171,9 @@ alternatives. Detail lives in git history / the linked docs.
   (~1130 fast tests, architecture-coupled) and the edge-case knowledge in the
   capture pipeline, for benefits reachable incrementally. Migrated instead.
   **Outcome:** the ES-module rewrite of the background shipped as
-  [`MODERNIZATION.md`](MODERNIZATION.md) Stage M (2026-07-09), followed by the
-  HTML5 page conversion in Stage H.
+  modernization Stage M / 2.2.0 (2026-07-09), followed by the HTML5 page
+  conversion in Stage H / 2.3.0, and the page-modules arc / 2.4.0
+  (`PAGE_MODULES.md`); the arc working docs live in git history.
 - **Chrome via single-source / dual-build, not parallel branches** — long-lived branches
   carry permanent merge cost.
 - **AMO: new listing / ID `newtabtools@symlink.ch`, not ID-transfer** — clean state

@@ -14,19 +14,20 @@ import { Background, Tiles } from './tiles-shim.js';
 import { NttIcons } from './icons.js';
 import { TileStats } from './stats.js';
 import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
-import { compareVersions } from './common.js';
+import { compareVersions, getString, isValidURL } from './common.js';
 import { Grid, Page, Updater } from './fx-newTab.js';
 
 export const newTabTools = {
+	// P2-P5 review finding 1 (revised remediation, 2026-07-10): the bodies
+	// moved to common.js's `getString`/`isValidURL` (shared page-side leaf
+	// utilities, importable without dragging this monolith along); these
+	// stay as one-line delegates since many internal call sites and tests
+	// still use `newTabTools.getString`/`isValidURL`.
 	getString(name, ...substitutions) {
-		return chrome.i18n.getMessage(name, substitutions);
+		return getString(name, ...substitutions);
 	},
 	isValidURL(url) {
-		try {
-			return ['ftp:', 'http:', 'https:'].includes(new URL(url).protocol);
-		} catch (ex) {
-			return false;
-		}
+		return isValidURL(url);
 	},
 	normalizePinURL(raw) {
 		let v = (raw || '').trim();
@@ -2044,7 +2045,7 @@ export const newTabTools = {
 			Page.init();
 			newTabTools._initTitlebar();
 			if (typeof AwesomeBar !== 'undefined') {
-				AwesomeBar.init();
+				AwesomeBar.init({ tilesSource: () => Grid.sites });
 			}
 			newTabTools._initAutoSaveIndicator();
 			newTabTools.updateUI();
@@ -2445,13 +2446,12 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 // page-modules P5 (PAGE_MODULES.md): both names above are real exports now
 // (fx-newTab.js, page-main.js use the named import). These assignments
 // survive for the fast-tier harness (computed-path dynamic imports of this
-// file still read them as bare identifiers in some suites), E2E/UAT
-// page-context evaluation — AND one production consumer (P2-P5 review
-// finding 1): awesomebar.js still reads `newTabTools` as a bare global
-// (importing the monoliths from it would drag them into the typed program,
-// which P5 deliberately avoided). So `newTabTools`'s bridge is LOAD-BEARING
-// for titlebar search until awesomebar converts; `pageMessageHandler`'s is
-// test-only. Retiring them = the awesomebar conversion + moving the test
-// harness off page-globals — ROADMAP backlog.
+// file still read them as bare identifiers in some suites) and E2E/UAT
+// page-context evaluation — TEST-ONLY, genuinely, as of the P2-P5 review
+// finding 1 dependency-inversion remediation (2026-07-10): awesomebar.js no
+// longer reads `newTabTools` (its `getString`/`isValidURL` uses moved to
+// common.js imports); no production consumer reads either name off
+// `globalThis` anymore. Retiring them = moving the test harness off
+// page-globals — ROADMAP backlog.
 globalThis.newTabTools = newTabTools;
 globalThis.pageMessageHandler = pageMessageHandler;

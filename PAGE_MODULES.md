@@ -1,20 +1,24 @@
 # Page Modules Arc — Page Scripts as Real ES Modules / Retire the globalThis Bridge
 
-**Status: IN PROGRESS** (authored 2026-07-10; execution started 2026-07-10 on branch `page-modules`). Successor arc to the 2026-07 background
+**Status: DONE** (executed 2026-07-10 on branch `page-modules`; slices P1–P5
+landed, each with its own adjudicated code review). Successor arc to the 2026-07 background
 ES-module rewrite + HTML5 page conversion (records: git history; reviews and
 inventories in `audit/2026-07-09-*`). Ships as **2.4.0** (minor, maintainer
 decision; 3.0.0 is reserved for the AMO release once this arc and the follow-up
 audits land) — behavior-preserving by definition, UAT-verified as such.
-This file becomes the living checklist when work starts; update it per slice.
+The P gate (full UAT + audit + version bump + docs sweep) is the one remaining
+step; see the status board and checklist below.
 
-Current state this arc changes: `newTab.html` loads eight classic
+Historical starting point (state *before* this arc; no longer current —
+superseded by P1–P5 below): `newTab.html` loaded eight classic
 `<script>` tags (`common.js` mid-body at :445; `icons.js`, `stats.js`,
 `tiles-shim.js`, `prefs.js`, `awesomebar.js`, `newTab.js`, `fx-newTab.js` at
 :461-467) sharing ONE implicit global scope, held together by `/* globals */`
-headers and load order. The background is already fully modular; the two worlds
-meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
-`lib/platform.js` getters read them). This arc makes the page speak real
-`import`/`export` and deletes the bridge.
+headers and load order. The background was already fully modular; the two worlds
+met at the dual-scope bridge (`common.js`/`prefs.js` assigned `globalThis.X =`,
+`lib/platform.js` getters read them). This arc made the page speak real
+`import`/`export` and deleted that read path (TEST-ONLY `globalThis`
+assignments survive per the policy below).
 
 ## Status board (live)
 
@@ -24,8 +28,8 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 | P2 — leaf modules: icons, stats, tiles-shim | done | `4e2924b` |
 | P3 — dual-scope endgame: common/prefs real exports + prefs change seam | done | `aa8adcf` |
 | P4 — awesomebar module | done | `b4e7a12` |
-| P5 — the monolith pair (newTab.js + fx-newTab.js) + harness retirement | pending | — |
-| P gate — full UAT + audit + minor bump | pending | — |
+| P5 — the monolith pair (newTab.js + fx-newTab.js) + harness retirement | done | `03501ba` + `6505173` |
+| P gate — full UAT + audit + minor bump | done | (release commit) |
 
 ## Decisions of record
 
@@ -520,11 +524,11 @@ is type-as-you-touch, a different arc.)*
       pruned to names grepped as still referenced by E2E `page.evaluate()`
       callbacks (`Blocked`/`DropTargetShim` dropped — zero remaining
       references anywhere under `tests/`). `/* globals */`/`/* exported */`
-      headers deleted under `webextension/` (awesomebar.js keeps its
-      narrower `/* globals Grid, newTabTools */` — converting those two to
-      real imports was judged out of this slice's scope, newTab.js/
-      fx-newTab.js/page-main.js only; noted as a follow-up in its own
-      comment).
+      headers deleted under `webextension/` (awesomebar.js briefly kept a
+      narrower `/* globals Grid, newTabTools */` — resolved same day at the
+      P gate by the P2–P5 review finding-1 dependency inversion:
+      `getString`/`isValidURL` extracted to common.js, tiles injected via
+      `AwesomeBar.init({tilesSource})`; no page file reads any global now).
 - [x] tsconfig: no include change; verified `pnpm typecheck` is clean and the
       monoliths are not reachable via any static specifier (only computed-path
       `webextPath(...)` dynamic imports reference them) — confirmed by grep
@@ -535,13 +539,25 @@ is type-as-you-touch, a different arc.)*
       retry).
 
 ### P gate
-- [ ] Full `pnpm test`, **full UAT**, `pnpm audit --audit-level=high`, boot-
-      timing numbers vs. P1 baseline re-checked, minor version bump (2.4.0, daily
-      rule), CHANGELOG promotion, build.
-- [ ] Docs sweep: CONTRIBUTING architecture + "Rules for new code" Modules
+- [x] Full `pnpm test` (fast 1302/1302 + full E2E 127/127, E2E and full UAT
+      run in parallel — maintainer-approved, separate ports/profiles),
+      **full UAT 11/11** (21 benign observations), `pnpm audit
+      --audit-level=high` clean, boot-timing re-checked, CHANGELOG promoted
+      to `## [2.4.0] — 2026-07-10`, minor bump + build.
+      **Boot-timing at gate (2026-07-10, fully modular page):** firstTileSeen
+      median 96 (pre-arc baseline 95 — unchanged), domInteractive median 12
+      (pre-arc 26), domContentLoadedEventEnd median 25, fcp median 13
+      (pre-arc 27). The arc is timing-neutral on grid-populated and improved
+      on parse metrics.
+      **Pre-release addendum:** the P2–P5 review's revised finding-1
+      remediation (awesomebar dependency inversion — `getString`/`isValidURL`
+      to common.js, `tilesSource` injection) landed at the gate per
+      maintainer decision; all gates re-run green on the final tree.
+- [x] Docs sweep: CONTRIBUTING architecture + "Rules for new code" Modules
       bullet (page files are no longer the classic-script exception), TESTING
-      harness idioms (imports everywhere; loadModule/mountSite gone), README
-      architecture line, ROADMAP backlog entry closed, this file's board.
+      harness idioms (imports everywhere; loadModule gone, mountSite async),
+      README architecture line, ROADMAP backlog entry closed, this file's
+      board.
 
 ## Test-harness strategy (summary)
 

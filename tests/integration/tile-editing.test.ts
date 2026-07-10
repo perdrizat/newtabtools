@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { isValidURL } from '../../webextension/common.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -51,7 +52,12 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'optionsOnClick');
 		const normalizePinURL = extractMethod(source, 'normalizePinURL');
-		const isValidURL = extractMethod(source, 'isValidURL');
+		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
+		// real `isValidURL` export (P2-P5 review finding 1, revised
+		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
+		// real globalThis, so the delegate's bare-identifier call resolves as
+		// long as the real function is exposed there first (below).
+		const isValidURLBody = extractMethod(source, 'isValidURL');
 		const historyTitleFor = extractMethod(source, 'historyTitleFor');
 
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
@@ -60,12 +66,13 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		globalThis.Updater = { updateGrid: vi.fn() };
 		globalThis.Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
 		globalThis.Grid = { cells: [{ index: 0, containsPinnedSite: () => false }] };
+		(globalThis as any).isValidURL = isValidURL;
 		// chrome.history.search is needed by historyTitleFor — return [] so
 		// it resolves to null and the url-set flow continues synchronously.
 		(globalThis as any).chrome = (globalThis as any).chrome || {};
 		(globalThis as any).chrome.history = { search: vi.fn((_q: any, cb: any) => cb([])) };
 
-		const code = `var newTabTools = { ${body}, ${normalizePinURL}, ${isValidURL}, ${historyTitleFor}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
+		const code = `var newTabTools = { ${body}, ${normalizePinURL}, ${isValidURLBody}, ${historyTitleFor}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
 		vm.runInThisContext(code, { filename: 'tile-editing-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

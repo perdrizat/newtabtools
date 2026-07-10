@@ -17,8 +17,15 @@
  * `NttIcons` is the real singleton (its `create()` works fine against jsdom's
  * `document.createElementNS`, so no stub is needed); `Prefs` is the real
  * singleton too, mutated in place per test (`Prefs.titleBarSearch = ...`)
- * rather than replaced. `Grid`/`newTabTools` stay bare-global stand-ins —
- * fx-newTab.js/newTab.js don't export until P5.
+ * rather than replaced.
+ *
+ * P2-P5 review finding 1 (revised remediation, 2026-07-10): `Grid`/
+ * `newTabTools` are gone from this file entirely. `getString`/`isValidURL`
+ * are the real common.js imports (backed by the real `chrome.i18n.getMessage`
+ * — this suite's local `chrome` mock below includes `i18n.getMessage` so they
+ * resolve, echoing the key like `tests/setup.js`'s global mock does); the
+ * tiles list is injected via `AwesomeBar.init({ tilesSource })` instead of a
+ * `globalThis.Grid` stand-in.
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
@@ -26,6 +33,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { AwesomeBar } from '../../webextension/awesomebar.js';
+import { getString } from '../../webextension/common.js';
 import { Prefs } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,10 +46,6 @@ describe('AwesomeBar — DOM wiring', () => {
 
 	beforeAll(() => {
 		originalTitleBarSearch = Prefs.titleBarSearch;
-		(globalThis as any).newTabTools = {
-			isValidURL: (u: string) => { try { return ['http:', 'https:'].includes(new URL(u).protocol); } catch { return false; } },
-			getString: (k: string, p?: string) => p ? `Search the web for “${p}”` : k,
-		};
 	});
 
 	afterEach(() => {
@@ -55,12 +59,12 @@ describe('AwesomeBar — DOM wiring', () => {
 				<input id="ntt-search-input" type="text" />
 			</div>
 		`;
-		(globalThis as any).Grid = { sites: [{ url: 'https://github.com/', title: 'GitHub' }] };
 		Prefs.titleBarSearch = true;
 		tabsUpdate = vi.fn();
 		tabsCreate = vi.fn();
 		searchSearch = vi.fn();
 		(globalThis as any).chrome = {
+			i18n: { getMessage: (key: string) => key },
 			tabs: { update: tabsUpdate, create: tabsCreate },
 			bookmarks: { search: (_q: string, cb: (r: unknown[]) => void) => cb([]) },
 			history: { search: (_o: unknown, cb: (r: unknown[]) => void) => cb([]) },
@@ -73,7 +77,7 @@ describe('AwesomeBar — DOM wiring', () => {
 		AwesomeBar._results = [];
 		AwesomeBar._index = -1;
 		AwesomeBar._permChecked = false;
-		AwesomeBar.init();
+		AwesomeBar.init({ tilesSource: () => [{ url: 'https://github.com/', title: 'GitHub' }] });
 	});
 
 	function render(query: string) {
@@ -101,8 +105,8 @@ describe('AwesomeBar — DOM wiring', () => {
 		const sections = [...dd.querySelectorAll('.ntt-awesomebar-section')].map(s => s.textContent);
 		// Headers must be the i18n-resolved values (the mock getString echoes the
 		// message key), never a raw English literal baked into awesomebar.js.
-		expect(sections).toContain(newTabTools.getString('awesomebar_section_top'));
-		expect(sections).toContain(newTabTools.getString('awesomebar_section_web'));
+		expect(sections).toContain(getString('awesomebar_section_top'));
+		expect(sections).toContain(getString('awesomebar_section_web'));
 		expect(sections).not.toContain('Top match');
 		expect(sections).not.toContain('Search the web');
 		expect(dd.querySelectorAll('.ntt-awesomebar-row').length).toBeGreaterThan(1);
@@ -203,6 +207,28 @@ describe('AwesomeBar — DOM wiring', () => {
 		expect(urls).toContain('https://github.com/'); // tile
 		expect(urls).toContain('https://gitlab.com/');  // bookmark
 		expect(urls).toContain('https://git-scm.com/'); // history
+	});
+
+	it('without a tilesSource injected, _tiles() resolves empty and _query surfaces no tile-section result, without throwing (mirrors the old typeof-Grid-undefined degradation)', async () => {
+		const original = (AwesomeBar as any)._tilesSource;
+		(AwesomeBar as any)._tilesSource = null;
+		try {
+			await expect(AwesomeBar._tiles()).resolves.toEqual([]);
+			(globalThis as any).chrome.bookmarks.search = (_q: string, cb: (r: unknown[]) => void) =>
+				cb([{ url: 'https://gitlab.com/', title: 'GitLab' }]);
+			expect(() => AwesomeBar._query('git')).not.toThrow();
+			await new Promise(r => setTimeout(r, 0));
+			const urls = [...document.querySelectorAll('#ntt-awesomebar .ntt-awesomebar-url')].map(u => u.textContent);
+			expect(urls).not.toContain('https://github.com/'); // no tile source → no tile result
+			expect(urls).toContain('https://gitlab.com/'); // the other sources still work
+		} finally {
+			(AwesomeBar as any)._tilesSource = original;
+		}
+	});
+
+	it('init() with no options at all does not throw and leaves the tiles source unset', () => {
+		expect(() => AwesomeBar.init()).not.toThrow();
+		expect((AwesomeBar as any)._tilesSource).toBeNull();
 	});
 
 	it('regression (June review §4.4): a thrown render error inside _query\'s Promise.all chain is caught, not an unhandled rejection', async () => {

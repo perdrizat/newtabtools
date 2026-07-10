@@ -178,12 +178,11 @@ export default [
 		// comment at each file's end) is TEST-ONLY as of P5 — E2E/UAT
 		// page-context evaluation and any fast-tier suite still reading a bare
 		// identifier off a computed-path dynamic import (PAGE_MODULES.md's
-		// TEST-ONLY bridge policy) — with ONE production exception (P2-P5
-		// review finding 1): awesomebar.js still reads `Grid`/`newTabTools`
-		// as bare globals (its `/* globals */` pragma), because importing the
-		// monoliths from it would drag them into the typed program. Those two
-		// bridges are load-bearing until the awesomebar conversion (ROADMAP
-		// backlog).
+		// TEST-ONLY bridge policy). No production exception remains: P2-P5
+		// review finding 1's dependency-inversion remediation (2026-07-10)
+		// dissolved awesomebar.js's reads of `Grid`/`newTabTools` — its
+		// `getString`/`isValidURL` uses moved to real `common.js` imports, and
+		// its tiles read moved to an injected `tilesSource` callback.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2020,

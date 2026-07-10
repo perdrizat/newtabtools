@@ -87,3 +87,44 @@ export function compareVersions(a, b) {
 // why (checked-JS's ambient-global-from-assignment inference otherwise
 // overrides tests/integration/globals.d.ts's deliberately loose `any`).
 globalThis.compareVersions = /** @type {any} */ (compareVersions);
+
+/**
+ * Look up a localized string from `_locales/<lang>/messages.json`, with
+ * optional positional `$1`/`$2`/… substitutions. Extracted from newTab.js's
+ * `newTabTools` object (P2-P5 review finding 1, revised remediation,
+ * 2026-07-10): it is a generic i18n leaf, not something that belongs to "the
+ * page controller" — moving it here lets awesomebar.js (and any future page
+ * consumer) `import` it directly instead of reaching into the monolith or a
+ * `globalThis` bridge. `newTabTools.getString` is now a one-line delegate to
+ * this function. Note: `lib/platform.js` has its own, separate i18n wrappers
+ * for the background scope (the Chrome-fork seam) — this is the page-side
+ * utility; the slight overlap is deliberate, not duplication to dedupe.
+ * @param {string} name Message key.
+ * @param {...(string|undefined)} substitutions Positional substitution
+ *   values ($1, $2, …). `undefined` is tolerated (a caller building a
+ *   substitution from an optional field, e.g. awesomebar.js's search-prompt
+ *   query) — `chrome.i18n.getMessage` treats it the same as omitting it.
+ * @returns {string}
+ */
+export function getString(name, ...substitutions) {
+	return chrome.i18n.getMessage(name, substitutions);
+}
+
+/**
+ * Whether `url` parses and uses an allow-listed protocol (`ftp:`/`http:`/
+ * `https:`). Extracted from newTab.js's `newTabTools` object alongside
+ * `getString` (P2-P5 review finding 1, revised remediation, 2026-07-10) — a
+ * protocol-allowlist guard with no dependency on the page controller.
+ * `newTabTools.isValidURL` is now a one-line delegate to this function.
+ * Tolerant of non-string/unparseable input (returns `false` rather than
+ * throwing), which is why callers may pass a nullable `url`.
+ * @param {string|null|undefined} url
+ * @returns {boolean}
+ */
+export function isValidURL(url) {
+	try {
+		return ['ftp:', 'http:', 'https:'].includes(new URL(/** @type {string} */ (url)).protocol);
+	} catch (ex) {
+		return false;
+	}
+}

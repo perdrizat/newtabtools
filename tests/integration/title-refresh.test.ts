@@ -22,6 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { isValidURL } from '../../webextension/common.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -88,6 +89,11 @@ describe('Set Title (options-title-set) marks titleIsUserSet', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'optionsOnClick');
 		const normalize = extractMethod(source, 'normalizePinURL');
+		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
+		// real `isValidURL` export (P2-P5 review finding 1, revised
+		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
+		// real globalThis, so the delegate's bare-identifier call resolves as
+		// long as the real function is exposed there first (below).
 		const isValid = extractMethod(source, 'isValidURL');
 		const historyTitleFor = extractMethod(source, 'historyTitleFor');
 
@@ -98,6 +104,7 @@ describe('Set Title (options-title-set) marks titleIsUserSet', () => {
 		(globalThis as any).Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
 		(globalThis as any).Grid = { cells: [{ index: 0, containsPinnedSite: () => false }] };
 		(globalThis as any).chrome = { history: { search: (_q: any, cb: any) => cb([]) } };
+		(globalThis as any).isValidURL = isValidURL;
 
 		const code = `var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
 		vm.runInThisContext(code, { filename: 'title-set-harness.js' });
@@ -129,11 +136,17 @@ describe('Set URL clears title, calls historyTitleFor, applies fresh title', () 
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'optionsOnClick');
 		const normalize = extractMethod(source, 'normalizePinURL');
+		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
+		// real `isValidURL` export (P2-P5 review finding 1, revised
+		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
+		// real globalThis, so the delegate's bare-identifier call resolves as
+		// long as the real function is exposed there first (below).
 		const isValid = extractMethod(source, 'isValidURL');
 		const historyTitleFor = extractMethod(source, 'historyTitleFor');
 
 		(globalThis as any).Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
 		(globalThis as any).Prefs = { rows: 3, columns: 3 };
+		(globalThis as any).isValidURL = isValidURL;
 
 		const code = `var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
 		vm.runInThisContext(code, { filename: 'url-set-harness.js' });

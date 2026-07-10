@@ -2337,13 +2337,14 @@ export var UndoDialog = {
 // page-modules P5 (PAGE_MODULES.md): all four names above are real exports
 // now (newTab.js, page-main.js use named imports). These assignments survive
 // for E2E/UAT page-context evaluation and fast-tier suites reading bare
-// identifiers off a computed-path dynamic import — AND one production
-// consumer (P2-P5 review finding 1): awesomebar.js still reads `Grid` as a
-// bare global (importing the monoliths from it would drag them into the
-// typed program, which P5 deliberately avoided). So `Grid`'s bridge is
-// LOAD-BEARING for titlebar search until awesomebar converts; the other
-// three are test-only. Retiring them = the awesomebar conversion + moving
-// the test harness off page-globals — ROADMAP backlog.
+// identifiers off a computed-path dynamic import — TEST-ONLY, genuinely, as
+// of the P2-P5 review finding 1 dependency-inversion remediation
+// (2026-07-10): awesomebar.js no longer reads `Grid` (its one dependency —
+// a read-only list of the current tiles' `url`/`title` — is now injected via
+// `AwesomeBar.init({ tilesSource: () => Grid.sites })`, wired by newTab.js);
+// no production consumer reads any of the four names off `globalThis`
+// anymore. Retiring them = moving the test harness off page-globals —
+// ROADMAP backlog.
 globalThis.Page = Page;
 globalThis.Grid = Grid;
 globalThis.Updater = Updater;

@@ -2,8 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* globals Grid, newTabTools */
-
+import { getString, isValidURL } from './common.js';
 import { NttIcons } from './icons.js';
 import { Prefs } from './prefs.js';
 
@@ -16,23 +15,31 @@ import { Prefs } from './prefs.js';
  * startup — the module does not self-init so it loads cleanly under test).
  *
  * PAGE_MODULES.md P4: the first page file with real `import`s — `NttIcons`/
- * `Prefs` above are genuine ES-module bindings now (icons.js/prefs.js gained
- * `export`s in P2/P3). `Grid`/`newTabTools` stay bare globals (see the
- * globals pragma above) as of P4; newTab.js/fx-newTab.js gained real
- * `export`s of their own in P5, but converting this file's remaining two
- * globals to real imports was not part of that slice's scope (newTab.js,
- * fx-newTab.js, page-main.js) — left as a follow-up, not a blocker (both
- * references here are call-time only, same as every other cross-file read
- * in the mesh).
+ * `Prefs` are genuine ES-module bindings (icons.js/prefs.js gained `export`s
+ * in P2/P3). P2-P5 review finding 1 (revised remediation, 2026-07-10):
+ * `getString`/`isValidURL` (formerly read off the `newTabTools` bare global)
+ * are real imports from common.js too — they were generic leaf utilities
+ * that happened to live on the page controller monolith, not something that
+ * belonged to it. The one remaining coupling, a read-only list of the
+ * current tiles' `url`/`title` (formerly `Grid.sites` read off a bare
+ * global), is now an injected `tilesSource` callback (see `init()`) — the
+ * controller wires the widget instead of the widget reaching back into the
+ * controller. This file reads no page global at all anymore; the
+ * `Grid`/`newTabTools` `globalThis` bridge assignments in fx-newTab.js/
+ * newTab.js are TEST-ONLY as a result.
  *
  * @typedef {{url: string, title: string}} SourceItem A tile/bookmark/history
  *   entry as `buildResults` consumes it.
  * @typedef {{tiles?: SourceItem[], bookmarks?: SourceItem[], history?: SourceItem[]}} Sources
  * @typedef {{section: string, type: string, title: string, url: string|null, query?: string}} ResultItem
+ * @typedef {() => Array<{url?: string, title?: string}|null|undefined>} TilesSource
+ *   Mirrors `Grid.sites` (`fx-newTab.js`): cells may be empty, so elements
+ *   may be `null`/`undefined`; `_tiles()` filters those (and any without a
+ *   `url`) out, same as the old `typeof Grid` read did.
  */
 export const AwesomeBar = {
 	// Per-section dropdown-header labels, as i18n message keys (resolved via
-	// newTabTools.getString at render time — never store display text here).
+	// getString at render time — never store display text here).
 	SECTION_LABELS: {
 		top: 'awesomebar_section_top',
 		match: 'awesomebar_section_match',
@@ -147,8 +154,18 @@ export const AwesomeBar = {
 	_queryToken: 0,
 	_permChecked: false,
 	_hasHistoryBookmarks: false,
+	/** @type {TilesSource | null} */
+	_tilesSource: null,
 
-	init() {
+	/**
+	 * @param {{tilesSource?: TilesSource}} [options] `tilesSource` is a
+	 *   callback returning the current tiles list (`Grid.sites`, injected by
+	 *   newTab.js — see the file header). Omitted/falsy degrades the same way
+	 *   the old `typeof Grid !== 'undefined'` read did: `_tiles()` resolves an
+	 *   empty list, no throw.
+	 */
+	init({ tilesSource } = {}) {
+		this._tilesSource = tilesSource || null;
 		this.input = /** @type {HTMLInputElement} */ (document.getElementById('ntt-search-input'));
 		this.searchBox = /** @type {HTMLElement} */ (document.getElementById('ntt-search'));
 		if (!this.input || !this.searchBox) {
@@ -268,8 +285,8 @@ export const AwesomeBar = {
 	_tiles() {
 		/** @type {SourceItem[]} */
 		let out = [];
-		if (typeof Grid !== 'undefined' && Grid && Grid.sites) {
-			for (let s of Grid.sites) {
+		if (this._tilesSource) {
+			for (let s of this._tilesSource()) {
 				if (s && s.url) {
 					out.push({ url: s.url, title: s.title || s.url });
 				}
@@ -352,7 +369,7 @@ export const AwesomeBar = {
 				let header = document.createElement('div');
 				header.className = 'ntt-awesomebar-section';
 				let labelKey = /** @type {Record<string, string>} */ (this.SECTION_LABELS)[r.section];
-				header.textContent = labelKey ? newTabTools.getString(labelKey) : r.section;
+				header.textContent = labelKey ? getString(labelKey) : r.section;
 				this.dropdown.appendChild(header);
 			}
 
@@ -368,7 +385,7 @@ export const AwesomeBar = {
 			text.className = 'ntt-awesomebar-text';
 			let title = document.createElement('span');
 			title.className = 'ntt-awesomebar-title';
-			title.textContent = r.type === 'search' ? newTabTools.getString('search_prompt', r.query) : r.title;
+			title.textContent = r.type === 'search' ? getString('search_prompt', r.query) : r.title;
 			text.appendChild(title);
 			if (r.url) {
 				let url = document.createElement('span');
@@ -429,7 +446,7 @@ export const AwesomeBar = {
 		}
 
 		let url = result.url;
-		if (typeof newTabTools !== 'undefined' && newTabTools.isValidURL && !newTabTools.isValidURL(url)) {
+		if (!isValidURL(url)) {
 			return;
 		}
 		if (newTab) {

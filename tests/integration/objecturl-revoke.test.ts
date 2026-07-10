@@ -23,6 +23,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { isValidURL } from '../../webextension/common.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -207,10 +208,16 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 	beforeAll(() => {
 		const refreshRecent = extractMethod(source, 'refreshRecent');
 		const trimRecent = extractMethod(source, 'trimRecent');
-		const isValidURL = extractMethod(source, 'isValidURL');
+		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
+		// real `isValidURL` export (P2-P5 review finding 1, revised
+		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
+		// real globalThis, so the delegate's bare-identifier call resolves as
+		// long as the real function is exposed there first.
+		const isValidURLBody = extractMethod(source, 'isValidURL');
 		const _formatAge = extractMethod(source, '_formatAge');
+		(globalThis as any).isValidURL = isValidURL;
 		vm.runInThisContext(
-			`var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURL}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
+			`var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURLBody}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
 			{ filename: 'recent-revoke-harness.js' },
 		);
 		harness = (globalThis as any).newTabTools;

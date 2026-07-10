@@ -18,8 +18,8 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 
 ## What's in this repo
 
-- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152. The new tab page is an HTML5 document (`newTab.html`); the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`).
-- [`PAGE_MODULES.md`](PAGE_MODULES.md) — the working plan for the next arc (page scripts as ES modules). Completed-arc records (the MV3 migration, the background-modules + HTML5 modernization) live in git history and their reviews in [`audit/`](audit/).
+- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`); the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`).
+- [`PAGE_MODULES.md`](PAGE_MODULES.md) — the page-modules arc's record (page scripts converted to real ES modules; ships as 2.4.0). Completed-arc records (the MV3 migration, the background-modules + HTML5 modernization) live in git history and their reviews in [`audit/`](audit/).
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against release-channel Firefox (>= 152) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`ROADMAP.md`](ROADMAP.md) — direction (Now / Next / Later), scope & non-goals, backlog, and the load-bearing decisions of record.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.

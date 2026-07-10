@@ -104,13 +104,45 @@ E2E/UAT harness off page-globals" is incomplete (it must also convert
 `globalThis.Grid`/`globalThis.newTabTools`. The `_tiles()` read degrades
 silently (`typeof Grid` → false, grid-aware results vanish), but the unguarded
 `newTabTools.getString(...)`/`isValidURL(...)` calls throw `ReferenceError` the
-moment the user opens the awesome bar — broken titlebar search. **Fix (correct
-the paper trail now; the code is fine):** downgrade the blanket "no production
-consumer reads a page global anymore" claim in `fx-newTab.js`, `newTab.js`,
-`CHANGELOG.md`, and `eslint.config.js` to name the `awesomebar.js` exception —
-PAGE_MODULES.md's P5 checklist item 5 is already honest about it; the other four
-spots overreach. The real remediation (convert awesomebar's two globals to
-imports) is correctly deferred, but the label must match reality until then.
+moment the user opens the awesome bar — broken titlebar search.
+
+**Fix now (the code is fine, the paper trail isn't):** downgrade the blanket
+"no production consumer reads a page global anymore" claim in `fx-newTab.js`,
+`newTab.js`, `CHANGELOG.md`, and `eslint.config.js` to name the `awesomebar.js`
+exception — PAGE_MODULES.md's P5 checklist item 5 is already honest about it;
+the other four spots overreach.
+
+**Remediation direction (revised — supersedes "convert the globals to imports,
+blocked on typing the monoliths").** An outside-in look at what awesomebar
+actually consumes shows its coupling to the two monoliths is *incidental*, not
+domain: from `Grid` it reads one thing — a read-only list of the current tiles'
+`url`/`title` (`_tiles()`); from `newTabTools` it uses two generic utilities —
+`getString` (i18n, literally `chrome.i18n.getMessage`) and `isValidURL` (a
+protocol-allowlist guard). None of these belong to "the grid renderer" or "the
+page controller"; they're a data query and two leaf utilities that happen to
+live on the god-objects because the page was historically one global scope.
+
+So the better fix is **not** a static `import { Grid } from './fx-newTab.js'`
+(which would drag ~4.8k untyped monolith lines into the `checkJs` program — see
+the coverage rationale in PAGE_MODULES.md Decision 2 and tsconfig's
+import-following note), but **dependency inversion**:
+1. extract `getString`/`isValidURL` into shared **leaf modules** (already-typed
+   peers of `prefs.js`/`icons.js`); awesomebar imports those — no monolith
+   touched, and the monoliths shrink, which *helps* their eventual split;
+2. give the tiles list a **source seam** — `AwesomeBar.init({ tilesSource: () =>
+   Grid.sites })`; the widget stores a callback and never names `Grid`;
+3. the controller *wires* the widget (injects the source, calls `init()`)
+   instead of the widget reaching back up into the controller.
+
+This dissolves awesomebar's dependency on both monoliths outright — the
+`globalThis.Grid`/`globalThis.newTabTools` bridges are no longer needed by any
+production consumer, so the finding self-resolves — and it does **not** wait on
+the monolith-typing arc. It is out of scope for the page-modules arc itself
+(whose thesis is mechanical, import-only diffs); track it as its own small
+feature-extraction arc. The ROADMAP item should therefore read *"extract
+`getString`/`isValidURL` to leaf modules + inject the tiles source into
+`AwesomeBar.init()`"*, **not** *"convert awesomebar's globals to imports —
+blocked on typing the monoliths."*
 
 ### 2. Dead `typeof X !== 'undefined'` guards left behind by the import conversion  — *simplification*
 **File:** `webextension/newTab.js:2174` (`pageMessageHandler`), `webextension/awesomebar.js:210,321` · severity: low
@@ -178,23 +210,39 @@ CSP, permissions, or `host_permissions` edits anywhere in the arc.
 - **The open P5 gate noted in the scope line closed before this adjudication:**
   full E2E 127/127, UAT spot-run 01/10/23/31 4/4 (first attempt aborted by the
   same session rate limit that cut the finders short; clean on retry).
-- **1 — executed as prescribed (paper trail corrected; conversion deferred).**
-  The four overreaching "no production consumer" claims (fx-newTab.js,
-  newTab.js, eslint.config.js, CHANGELOG) now name the awesomebar.js
-  exception and mark `Grid`/`newTabTools`'s bridges LOAD-BEARING. The real
-  conversion is blocked on exactly what the review inferred: a static import
-  of the monoliths from awesomebar.js (which is in the typed program) would
-  pull both into `checkJs` — it rides the future monolith-typing arc, now an
-  explicit ROADMAP backlog prerequisite.
-- **2 — executed narrowly.** awesomebar.js's dead `typeof Prefs`/`typeof
-  NttIcons` guards dropped (real imports since P4). Declined for now: the
-  `pageMessageHandler` `typeof Updater/Grid` guards — they double as the
-  early-broadcast queue's triggers; removing them means retiring the whole
-  (now provably dead) queue mechanism plus its M5-era tests, a standalone
-  cleanup recorded in the ROADMAP backlog rather than a drive-by. The six
-  additional dead-true `typeof` guards in newTab.js (1216–1824, not listed by
-  the finding) are likewise left for that sweep — deliberately-untouched
-  monolith style.
+- **1 — executed same day in two stages, superseding the initial fix.**
+  First pass: the paper-trail-only fix originally adjudicated here (the four
+  overreaching "no production consumer" claims corrected to name the
+  awesomebar.js exception, `Grid`/`newTabTools`'s bridges marked
+  LOAD-BEARING, real conversion deferred to a future monolith-typing arc).
+  That same day, pre-2.4.0-release, the maintainer executed the finding's
+  revised remediation instead: dependency inversion, not a static import of
+  the monoliths. `getString`/`isValidURL` moved from newTab.js's
+  `newTabTools` object to real `common.js` exports (`newTabTools.getString`/
+  `isValidURL` are now one-line delegates); the tiles read moved to an
+  injected `AwesomeBar.init({ tilesSource: () => Grid.sites })` callback
+  wired by newTab.js, replacing the `Grid.sites` bare-global read. This
+  dissolves awesomebar.js's coupling to both monoliths outright — it imports
+  no page global at all now, its `/* globals Grid, newTabTools */` pragma is
+  gone, and the `Grid`/`newTabTools` `globalThis` bridge assignments in
+  fx-newTab.js/newTab.js are genuinely TEST-ONLY (no production consumer
+  reads either). The monolith-typing arc is no longer a prerequisite for
+  this finding; the ROADMAP backlog item is reworded to the two remaining
+  prerequisites ((b) the `pageMessageHandler` dead-queue retirement, (c) the
+  E2E/UAT harness migration off page-globals).
+- **2 — executed narrowly, then completed for awesomebar.js by finding 1's
+  remediation.** awesomebar.js's dead `typeof Prefs`/`typeof NttIcons` guards
+  dropped (real imports since P4) at initial adjudication. The `typeof
+  Grid`/`typeof newTabTools` guards this finding said "must stay until
+  finding 1 is resolved" are now gone too — finding 1's dependency-inversion
+  fix removed the bare-global reads entirely, not just the guards around
+  them. Still declined for now: the `pageMessageHandler` `typeof
+  Updater/Grid` guards — they double as the early-broadcast queue's
+  triggers; removing them means retiring the whole (now provably dead) queue
+  mechanism plus its M5-era tests, a standalone cleanup recorded in the
+  ROADMAP backlog rather than a drive-by. The six additional dead-true
+  `typeof` guards in newTab.js (1216–1824, not listed by the finding) are
+  likewise left for that sweep — deliberately-untouched monolith style.
 - **Also-noted items:** stale `globals.d.ts` ambient declarations pruned
   (`Site`/`Drop`/`Cell`/`DropTargetShim`/`zip`); the singleton
   cross-contamination spot-check is accepted as covered by the per-file module
