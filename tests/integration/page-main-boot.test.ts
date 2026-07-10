@@ -77,7 +77,12 @@ function webext(relPath: string): string {
 // eight entries to ten — `Updater`/`UndoDialog` moved out of fx-newTab.js
 // into their own updater.js/undo-dialog.js modules, imported by name just
 // before fx-newTab.js (which still needs both, for its own Grid/Site/Drag/
-// Drop use).
+// Drop use). chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/`DropTargetShim`/
+// `DropPreview` also moved out, to their own drag-drop.js module — but
+// page-main.js itself never calls any of the four directly (only
+// fx-newTab.js does, via its own import of drag-drop.js), so this list stays
+// at ten entries; drag-drop.js's module evaluation is reached transitively
+// through fx-newTab.js's import, same as transformation.js's today.
 const PAGE_FILES_IN_LOAD_ORDER = [
 	'common.js',
 	'icons.js',

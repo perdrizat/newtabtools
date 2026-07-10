@@ -4,15 +4,22 @@
 
 // chrome-prep C4a (CHROME_PREP.md): extracted verbatim from fx-newTab.js's
 // `Transformation` singleton (C3b typed it there; this slice only moves the
-// code — no rewrite, per the arc's slicing rule). `Grid`/`Drag` (still
-// defined in fx-newTab.js — Cell/Site/Grid don't move until C4c, Drag/Drop
-// don't move until C4b) and `newTabTools` (newTab.js) are real, call-time-only
-// references back into files that in turn import THIS file (fx-newTab.js
-// imports `Transformation` for its own Grid/Drag/Site use) — a legal ESM
-// cycle under Decision 3 (PAGE_MODULES.md): every reference below is inside a
-// method body, never a top-level read, so none of these bindings are touched
-// before the cycle finishes initializing.
-import { Grid, Drag } from './fx-newTab.js';
+// code — no rewrite, per the arc's slicing rule). `Grid` (still defined in
+// fx-newTab.js — Cell/Site/Grid don't move until C4c) and `newTabTools`
+// (newTab.js) are real, call-time-only references back into files that in
+// turn import THIS file (fx-newTab.js imports `Transformation` for its own
+// Grid/Site use) — a legal ESM cycle under Decision 3 (PAGE_MODULES.md):
+// every reference below is inside a method body, never a top-level read, so
+// none of these bindings are touched before the cycle finishes initializing.
+// chrome-prep C4b (CHROME_PREP.md): `Drag` moved out of fx-newTab.js to
+// drag-drop.js, which itself imports `Transformation` from THIS file (Drag's
+// own `drag()`/`end()` call `Transformation.setSitePosition`/
+// `slideSiteTo`) — so this import specifier changes from `./fx-newTab.js` to
+// `./drag-drop.js`, but the reference stays the same legal call-time-only
+// cycle shape (`rearrangeSites` reads `Drag.draggedSite` inside its forEach
+// callback, never at top level).
+import { Grid } from './fx-newTab.js';
+import { Drag } from './drag-drop.js';
 import { newTabTools } from './newTab.js';
 
 /**

@@ -467,8 +467,42 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       `ReferenceError`, not TDZ/SyntaxError); targeted E2E
       drag-layout+drag-reorder+tile-redesign 27/27, loads-cleanly+
       boot-timing 4/4.
-- [ ] **C4b** — `drag-drop.js` (Drag, Drop, DropTargetShim, DropPreview +
-      their constants — one module; they are one subsystem).
+- [x] **C4b** — `drag-drop.js` (813 lines total): `Drag`/`Drop`/
+      `DropTargetShim`/`DropPreview` + their shared `DELAY_REARRANGE_MS`
+      constant, moved verbatim (types unchanged); fx-newTab.js 1961 → 1200
+      lines (772 removed / 11 added per numstat — the adversarial review
+      corrected the implementer's 768/7 arithmetic; totals reconcile). `DropTargetShim`/`DropPreview` gain a
+      real `export` (previously module-local `var`) so fx-newTab.js/tests can
+      import them — the only non-mechanical edit, required for the move (same
+      class as C4a's `Cell` export). fx-newTab.js re-points its own
+      `Drag`/`Drop`/`DropTargetShim` use to the new specifier (`DropPreview`
+      has no remaining call site there — only `Drop`, now in drag-drop.js,
+      calls it, so it isn't imported back); `transformation.js`'s `Drag`
+      import (used by `rearrangeSites`'s dragged-site check) re-points from
+      `./fx-newTab.js` to `./drag-drop.js` likewise — the only sibling C4a
+      module needing a specifier change (`updater.js` has no runtime
+      Drag/Drop reference, only a stale comment mention, left as-is).
+      `page-main.js`'s import list is UNAFFECTED (stays at ten entries): it
+      never calls any of the four directly, same as C4a's `Transformation`
+      (drag-drop.js's evaluation is reached transitively through
+      fx-newTab.js's own import) — the arc's own "honestly" instruction
+      pointed at growing 10→11, but the actual consumer inventory doesn't
+      support it, so the derived `page-module-scope.test.ts` sanity net and
+      the two hand-written mirrors (`page-main-boot.test.ts`,
+      `prefs-onchange-seam.test.ts`) all stay at 10, with a comment recording
+      why. Consumer fallout: `tests/integration/drag-reorder.test.ts`
+      (vm-harness suite) imports `Drag`/`Drop` from the new specifier instead
+      of destructuring off `fx`, mirroring the C4a `Updater`/`Transformation`
+      pattern; `tests/integration/drag-invariants.test.ts`'s
+      "`Drag.start` refreshes the cell position cache" source-grep assertion
+      now reads `drag-drop.js` instead of `fx-newTab.js` (the other two
+      assertions in that describe block — `--ntt-rows`/`--ntt-cols`,
+      `cacheCellPositions`'s early-return — stay on `fxSource`, since `Grid`
+      didn't move); `tests/integration/_helpers.ts`'s `ensureSiteEnv` doc
+      comment updated to note the five names' new home. Gates: fast
+      1311/1311, lint/typecheck/lint:webext clean, tripwire green (missing-
+      browser-API `ReferenceError`, not TDZ/SyntaxError); targeted E2E
+      drag-layout+drag-reorder+tile-redesign+loads-cleanly+boot-timing 31/31.
 - [ ] **C4c** — `site.js`, `cell.js`, `grid.js`, `page.js` (Page was missing
       from the original phase list — it becomes its own small module);
       fx-newTab.js is DELETED when this lands. UAT spot-run (tiles: 01/10/23).

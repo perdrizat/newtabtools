@@ -117,7 +117,10 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 	// eight entries to ten — `Updater`/`UndoDialog` moved out of fx-newTab.js
 	// into their own updater.js/undo-dialog.js modules, imported by name just
 	// before fx-newTab.js (which still needs both, for its own Grid/Site/
-	// Drag/Drop use).
+	// Drag/Drop use). chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/
+	// `DropTargetShim`/`DropPreview` also moved out, to their own drag-drop.js
+	// module — but page-main.js never calls any of the four directly (only
+	// fx-newTab.js does), so this list stays at ten entries.
 	const PAGE_FILES_IN_LOAD_ORDER = [
 		'common.js', 'icons.js', 'stats.js', 'tiles-shim.js', 'prefs.js',
 		'awesomebar.js', 'newTab.js', 'undo-dialog.js', 'updater.js', 'fx-newTab.js',

@@ -31,6 +31,10 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
 const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+// chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/`DropTargetShim`/
+// `DropPreview` moved out of fx-newTab.js into their own drag-drop.js module
+// — the `Drag.start` invariant below now reads from here instead.
+const DRAG_DROP_PATH = path.resolve(__dirname, '../../webextension/drag-drop.js');
 
 describe('Drag invariants — CSS rules the drag pipeline depends on', () => {
 	let css: string;
@@ -78,10 +82,13 @@ describe('Drag invariants — CSS rules the drag pipeline depends on', () => {
 
 describe('Drag invariants — JS contracts the drag pipeline depends on', () => {
 	let fxSource: string;
+	let dragDropSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drag invariants
 		fxSource = fs.readFileSync(FX_PATH, 'utf8');
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drag invariants
+		dragDropSource = fs.readFileSync(DRAG_DROP_PATH, 'utf8');
 	});
 
 	it('--ntt-rows is set on the grid alongside --ntt-cols', () => {
@@ -102,7 +109,7 @@ describe('Drag invariants — JS contracts the drag pipeline depends on', () => 
 		// last cacheCellPositions call, which is stale if the drawer
 		// opened/closed since then (push-layout shrinks the grid but no
 		// resize event fires).
-		const startBlock = fxSource.match(/start\(site,\s*event\)\s*\{[\s\S]*?_setDragData/);
+		const startBlock = dragDropSource.match(/start\(site,\s*event\)\s*\{[\s\S]*?_setDragData/);
 		expect(startBlock).not.toBeNull();
 		expect(startBlock![0]).toMatch(/Grid\.cacheCellPositions\(\)/);
 	});

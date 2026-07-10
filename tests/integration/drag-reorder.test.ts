@@ -40,6 +40,12 @@
  * The `let X: any` locals below stay untyped this slice (test-only mocks
  * exercising both fx-newTab.js and newTab.js together, deeper than the
  * `_helpers.ts` dividend covers) — C3c can retype them once newTab.js is.
+ *
+ * chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop` moved out of fx-newTab.js
+ * into their own `drag-drop.js` module — imported directly below instead of
+ * destructured off `fx`, same pattern C4a established for
+ * `Updater`/`Transformation` (same singleton objects either way, since
+ * fx-newTab.js itself imports `Drag`/`Drop` from this same specifier).
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -116,6 +122,9 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		// both from these same specifiers.
 		const updaterMod = await import('../../webextension/updater.js');
 		const transformationMod = await import('../../webextension/transformation.js');
+		// chrome-prep C4b (CHROME_PREP.md): Drag/Drop moved out of fx-newTab.js
+		// into drag-drop.js — same reasoning as the C4a imports just above.
+		const dragDropMod = await import('../../webextension/drag-drop.js');
 
 		Grid = fx.Grid;
 		Updater = updaterMod.Updater;
@@ -148,10 +157,10 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 			removeAttribute: vi.fn(),
 		})) as any;
 
-		Drag = fx.Drag;
-		Drop = fx.Drop;
+		Drag = dragDropMod.Drag;
+		Drop = dragDropMod.Drop;
 		Transformation = transformationMod.Transformation;
-		// DropPreview is defined by fx-newTab.js but not directly tested here.
+		// DropPreview is defined by drag-drop.js but not directly tested here.
 	});
 
 	beforeEach(() => {
