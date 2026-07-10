@@ -3,43 +3,49 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Phase 4-3 — Awesome bar DOM/browser wiring. Loads the real awesomebar.js into
- * the jsdom global scope and exercises init → render → keyboard-nav → activate
- * with mocked WebExtension APIs. (The pure result model is covered in
+ * Phase 4-3 — Awesome bar DOM/browser wiring. Natively imports the real
+ * awesomebar.js and exercises init → render → keyboard-nav → activate with
+ * mocked WebExtension APIs. (The pure result model is covered in
  * awesomebar.test.ts; live `/` interception + real search in the E2E tier.)
+ *
+ * PAGE_MODULES.md P4: awesomebar.js now real-imports `NttIcons`/`Prefs`
+ * (icons.js/prefs.js gained `export`s in P2/P3) instead of reading them as
+ * bare globals, so this suite can no longer stand up a stub via
+ * `globalThis.NttIcons = {...}` / `globalThis.Prefs = {...}` before a vm load
+ * — a replacement object would be invisible to the real import binding (the
+ * same P3 tiles-store.js gotcha, PAGE_MODULES.md's "second-order fallout").
+ * `NttIcons` is the real singleton (its `create()` works fine against jsdom's
+ * `document.createElementNS`, so no stub is needed); `Prefs` is the real
+ * singleton too, mutated in place per test (`Prefs.titleBarSearch = ...`)
+ * rather than replaced. `Grid`/`newTabTools` stay bare-global stand-ins —
+ * fx-newTab.js/newTab.js don't export until P5.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
+import { AwesomeBar } from '../../webextension/awesomebar.js';
+import { Prefs } from '../../webextension/prefs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AB_PATH = path.resolve(__dirname, '../../webextension/awesomebar.js');
-
-function loadAwesomeBar() {
-	// eslint-disable-next-line ntt/no-source-grep -- loading module into jsdom global for behavioral test
-	const source = fs.readFileSync(AB_PATH, 'utf8');
-	vm.runInThisContext(source, { filename: 'awesomebar.js' });
-	return (globalThis as any).AwesomeBar;
-}
 
 describe('AwesomeBar — DOM wiring', () => {
-	let AwesomeBar: any;
 	let tabsUpdate: any;
 	let tabsCreate: any;
 	let searchSearch: any;
+	let originalTitleBarSearch: boolean;
 
 	beforeAll(() => {
-		AwesomeBar = loadAwesomeBar();
-		(globalThis as any).NttIcons = {
-			create: () => document.createElement('span'),
-		};
+		originalTitleBarSearch = Prefs.titleBarSearch;
 		(globalThis as any).newTabTools = {
 			isValidURL: (u: string) => { try { return ['http:', 'https:'].includes(new URL(u).protocol); } catch { return false; } },
 			getString: (k: string, p?: string) => p ? `Search the web for “${p}”` : k,
 		};
+	});
+
+	afterEach(() => {
+		Prefs.titleBarSearch = originalTitleBarSearch;
 	});
 
 	beforeEach(() => {
@@ -50,7 +56,7 @@ describe('AwesomeBar — DOM wiring', () => {
 			</div>
 		`;
 		(globalThis as any).Grid = { sites: [{ url: 'https://github.com/', title: 'GitHub' }] };
-		(globalThis as any).Prefs = { titleBarSearch: true };
+		Prefs.titleBarSearch = true;
 		tabsUpdate = vi.fn();
 		tabsCreate = vi.fn();
 		searchSearch = vi.fn();
@@ -63,7 +69,7 @@ describe('AwesomeBar — DOM wiring', () => {
 		(globalThis as any).browser = { search: { search: searchSearch } };
 
 		// Reset module instance state between tests.
-		AwesomeBar.dropdown = undefined;
+		(AwesomeBar as any).dropdown = undefined;
 		AwesomeBar._results = [];
 		AwesomeBar._index = -1;
 		AwesomeBar._permChecked = false;

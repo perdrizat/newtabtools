@@ -18,6 +18,18 @@ import { vi } from 'vitest';
 // its callers) to become async.
 import '../../webextension/icons.js';
 
+// page-modules P4 (PAGE_MODULES.md): this file used to also export a
+// `loadModule(relativePath, sandbox)` helper — a `vm.createContext` +
+// `vm.runInContext` sandbox loader for script-mode files, with its own
+// chrome/browser mock defaults. `tests/integration/awesomebar.test.ts` was
+// its last consumer (P2/P3 already migrated every other vm-loading suite);
+// once awesomebar.js gained a real `export` this slice, that test moved to a
+// native `import` too (the same reason icons.js's vm load was dropped above),
+// leaving `loadModule` with zero callers. Deleted here rather than waiting
+// for P5's harness retirement, per PAGE_MODULES.md's P4 checklist. `mountSite`
+// below still needs `vm.runInThisContext` for fx-newTab.js (a classic script
+// until P5), so the `vm`/`vi` imports stay.
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const NEWTAB_HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
@@ -48,39 +60,6 @@ export function readNewTabHtml(): string {
 /** Parses `newTab.html` with the same `DOMParser` the fast tier uses elsewhere. */
 export function parseNewTabDocument(): Document {
 	return new DOMParser().parseFromString(readNewTabHtml(), 'text/html');
-}
-
-export function loadModule(relativePath: string, sandbox?: Record<string, unknown>): Record<string, unknown> {
-	const fullPath = path.resolve(__dirname, relativePath);
-	const source = fs.readFileSync(fullPath, 'utf8');
-
-	const defaults: Record<string, unknown> = {
-		console,
-		setTimeout,
-		clearTimeout,
-		setInterval,
-		clearInterval,
-		Promise,
-		URL,
-		Object,
-		Array,
-		chrome: {
-			runtime: { sendMessage: vi.fn() },
-			tabs: { create: vi.fn() },
-			i18n: { getMessage: vi.fn(() => '') },
-			storage: { local: { get: vi.fn(), set: vi.fn(), remove: vi.fn() } },
-		},
-		browser: {
-			storage: { local: { get: vi.fn(), set: vi.fn(), remove: vi.fn() } },
-			permissions: { contains: vi.fn().mockResolvedValue(true) },
-			history: { getVisits: vi.fn().mockResolvedValue([]) },
-			topSites: { get: vi.fn().mockResolvedValue([]) },
-		},
-	};
-
-	const ctx = vm.createContext({ ...defaults, ...sandbox });
-	vm.runInContext(source, ctx, { filename: path.basename(fullPath) });
-	return ctx;
 }
 
 let _siteEnvLoaded = false;

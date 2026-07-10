@@ -158,9 +158,9 @@ export default [
 		// M5 — background.js and its tiles.js bridge shim are gone). This is
 		// now: the page files still loaded as classic-script-syntax modules via
 		// page-main.js's side-effect imports — newTab.js, fx-newTab.js,
-		// awesomebar.js, action.js. Classic script syntax (`globalThis.X = …`,
-		// no `import`/`export`) works for these until their own P4/P5 slices
-		// convert them. PAGE_MODULES.md P1: page-main.js (the page's new
+		// action.js. Classic script syntax (`globalThis.X = X;`,
+		// no `import`/`export`) works for these until their own P5 slice
+		// converts them. PAGE_MODULES.md P1: page-main.js (the page's new
 		// ES-module entry) also lives directly under webextension/ and would
 		// otherwise match this glob too — the more specific
 		// lib/**/*.js-plus-page-main.js block below overrides
@@ -175,7 +175,11 @@ export default [
 		// since the page still needs them as classic-`<script>` globals) and
 		// moved to the module-mode block below, alongside icons.js/stats.js/
 		// tiles-shim.js, for the same reason: `export` syntax needs
-		// sourceType: 'module' to parse.
+		// sourceType: 'module' to parse. P4: awesomebar.js gained real
+		// `import`s/`export` too (its own `globalThis.AwesomeBar = ...` bridge
+		// assignment stays, still read as a bare identifier by newTab.js, which
+		// stays classic-script/vm-loaded until P5, plus E2E/UAT page-context)
+		// and moved to the module-mode block below for the same reason.
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2018,
@@ -205,16 +209,21 @@ export default [
 		// drift (code review, 2026-07-10-page-modules-p1-code-review.md
 		// finding 6). PAGE_MODULES.md P2: icons.js/stats.js/tiles-shim.js
 		// gained real `export`s (their `globalThis.X = X;` bridge assignments
-		// stay — still read as bare identifiers by newTab.js/fx-newTab.js/
-		// awesomebar.js, which stay classic-script/vm-loaded until P4/P5), so
-		// `export` syntax needs this block's sourceType: 'module' too; the
-		// general script-mode block above would otherwise fail to parse them.
-		// P3: common.js/prefs.js gained real `export`s too (their
-		// `globalThis.X = …` bridge assignments stay — still read as bare
-		// identifiers by newTab.js/fx-newTab.js/awesomebar.js, which stay
-		// classic-script/vm-loaded until P4/P5, plus E2E/UAT page-context), so
-		// they join this block for the same `export`-needs-module-mode reason.
-		files: ['webextension/lib/**/*.js', 'webextension/page-main.js', 'webextension/icons.js', 'webextension/stats.js', 'webextension/tiles-shim.js', 'webextension/common.js', 'webextension/prefs.js'],
+		// stay — still read as bare identifiers by newTab.js/fx-newTab.js,
+		// which stay classic-script/vm-loaded until P5), so `export` syntax
+		// needs this block's sourceType: 'module' too; the general script-mode
+		// block above would otherwise fail to parse them. P3: common.js/prefs.js
+		// gained real `export`s too (their `globalThis.X = X;` bridge
+		// assignments stay — still read as bare identifiers by
+		// newTab.js/fx-newTab.js, which stay classic-script/vm-loaded until P5,
+		// plus E2E/UAT page-context), so they join this block for the same
+		// `export`-needs-module-mode reason. P4: awesomebar.js gained real
+		// `import`s/`export` too (its own `globalThis.AwesomeBar = X;` bridge
+		// assignment stays — still read as a bare identifier by newTab.js,
+		// which stays classic-script/vm-loaded until P5, plus E2E/UAT
+		// page-context), so it joins this block for the same
+		// `export`-needs-module-mode reason.
+		files: ['webextension/lib/**/*.js', 'webextension/page-main.js', 'webextension/icons.js', 'webextension/stats.js', 'webextension/tiles-shim.js', 'webextension/common.js', 'webextension/prefs.js', 'webextension/awesomebar.js'],
 		languageOptions: {
 			ecmaVersion: 2020,
 			sourceType: 'module',

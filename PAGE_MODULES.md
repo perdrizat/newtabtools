@@ -22,8 +22,8 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 |---|---|---|
 | P1 — module entry flip (`page-main.js`) + boot orchestration | done | `4de0411` |
 | P2 — leaf modules: icons, stats, tiles-shim | done | `4e2924b` |
-| P3 — dual-scope endgame: common/prefs real exports + prefs change seam | pending | — |
-| P4 — awesomebar module | pending | — |
+| P3 — dual-scope endgame: common/prefs real exports + prefs change seam | done | `aa8adcf` |
+| P4 — awesomebar module | done | — |
 | P5 — the monolith pair (newTab.js + fx-newTab.js) + harness retirement | pending | — |
 | P gate — full UAT + audit + minor bump | pending | — |
 
@@ -256,9 +256,7 @@ the graph with named imports, and the leaves' own test suites go native.)*
       guards for the WebExtension type's optional `visitTime` field).
 - [x] Gates + targeted E2E: fast 1282/1282, lint/typecheck/lint:webext clean;
       targeted E2E 29/29 in 3.7 min (loads-cleanly, boot-timing,
-      event-page-lifecycle, tile-redesign, pin-persists). Fast-tier
-      gates already green (fast 1282/1282, lint/typecheck/lint:webext clean);
-      targeted E2E is orchestrator-run, not part of this slice.
+      event-page-lifecycle, tile-redesign, pin-persists).
 
 ### P3 — dual-scope endgame (touches background; FULL E2E per the tiering)
 *(Revised 2026-07-10, same strangler reality as P2: the `globalThis`
@@ -353,10 +351,84 @@ planned module-scope.test.ts negative assertions therefore defer to P5.)*
       not part of this slice.)*
 
 ### P4 — awesomebar module
-- [ ] `export const AwesomeBar`; imports NttIcons/Prefs/Tiles; its
-      `globalThis` assignment dies; newTab.js imports it.
-- [ ] awesomebar test suites → native imports.
-- [ ] Gates.
+*(Revised 2026-07-10, same strangler reality: newTab.js can't import until
+P5, so `globalThis.AwesomeBar` SURVIVES as a production bridge until then —
+what P4 converts is awesomebar.js's own READ side: it becomes the first page
+file with real `import`s, consuming the P2/P3 exports.)*
+- [x] `export const AwesomeBar` + real `import { NttIcons } from './icons.js'`,
+      `import { Prefs } from './prefs.js'`. The checklist's planned third
+      import, `Tiles` (tiles-shim.js), was NOT added: grepping the file's own
+      `/* globals */` header (`Grid, NttIcons, Prefs, newTabTools` — `Tiles`
+      was never in it) and its body (no `Tiles` identifier anywhere;
+      `_tiles()` reads `Grid.sites`, not `Tiles`) confirms the header's claim
+      didn't include it and the body doesn't use it — so the true import set
+      is `{NttIcons, Prefs}`, narrower than the plan's draft text. `Grid`/
+      `newTabTools` stay bare globals (fx-newTab.js/newTab.js can't export
+      until P5); `/* globals */` header shrunk to `Grid, newTabTools`. The
+      `globalThis.AwesomeBar` assignment stays, comment updated (consumer:
+      newTab.js until P5, plus E2E/UAT page-context).
+- [x] awesomebar test suites → native imports. `awesomebar.test.ts` (pure
+      `buildResults`/`nextIndex` model) drops `loadModule` entirely — no
+      chrome/browser mocks needed for either describe block.
+      `awesomebar-dom.test.ts` (DOM/browser wiring) drops its
+      `vm.runInThisContext` + `fs.readFileSync` load for a native import;
+      its old `globalThis.NttIcons = {...}` / `globalThis.Prefs = {...}`
+      stubs, installed *before* the vm load, no longer work now that
+      awesomebar.js real-imports both (a stand-in object assigned to
+      `globalThis.X` is invisible to a real import binding — the same P3
+      tiles-store.js "second-order fallout" gotcha). Fixed the same way P3
+      fixed it: `NttIcons` needs no stub at all (its `create()` works fine
+      against jsdom's `document.createElementNS`); `Prefs` is imported for
+      real and mutated in place per test (`Prefs.titleBarSearch = true` in
+      `beforeEach`, restored in a new `afterEach` from a `beforeAll`-captured
+      original value) instead of replaced.
+      `tests/integration/_helpers.ts`'s `loadModule` (`vm.createContext` +
+      `vm.runInContext` sandbox loader) had zero remaining consumers once
+      `awesomebar.test.ts` migrated (per the P3 report, it was the last) —
+      deleted here rather than waiting for P5, with the helper's comments
+      updated (its `vm`/`vi` imports stay: `mountSite` still
+      `vm.runInThisContext`-loads fx-newTab.js, a classic script until P5).
+      Guard tests `page-module-scope.test.ts` / `page-main-boot.test.ts`
+      needed no changes — both already natively `import()` awesomebar.js by
+      computed path (dynamic, not statically analyzed), so its new internal
+      `import`s of icons.js/prefs.js just hit the module cache those tests
+      already populated earlier in the load order.
+- [x] eslint: `awesomebar.js` moved to the module-mode block (alongside
+      icons.js/stats.js/tiles-shim.js/common.js/prefs.js); the script-mode
+      block's comment updated — its set shrinks to newTab.js/fx-newTab.js/
+      action.js.
+      **JSDoc fallout (larger than P2/P3's "handful" precedent, but still
+      fixed with real JSDoc, no exclusions):** natively importing
+      awesomebar.js from `.ts` test files pulled it into the checked-JS
+      program for the first time (it isn't reachable from any
+      `tsconfig.json` `include` glob otherwise). It's a DOM/browser-glue
+      object literal with many untyped params and runtime-assigned
+      properties, so the fallout was substantial: three typedefs
+      (`SourceItem`, `Sources`, `ResultItem`) replacing `buildResults`'
+      member-less inline object-literal JSDoc types (`{tiles?, ...}` — a
+      JSDoc shape omitting member types, which produces implicit-`any`
+      members); explicit `@type`/`@param`/`@returns` on every method and
+      helper arrow function; `input`/`searchBox`/`dropdown` declared as
+      typed fields (`HTMLInputElement`/`HTMLElement`, cast through `any` at
+      their pre-`init()` placeholder value — the same "cast through `any`
+      for a narrow, documented reason" idiom prefs.js already uses for its
+      `__defineGetter__` wiring) rather than left nullable throughout (which
+      would have forced non-null assertions at every one of their ~20 call
+      sites); inline casts for chrome-API callback params (`chrome` is
+      ambiently typed `any` in `tests/integration/globals.d.ts`, so TS can't
+      infer a callback's parameter type from an `any`-typed call and flags
+      it regardless). Two real (non-JSDoc-only) fixes surfaced along the
+      way, both behavior-preserving: `_iconFor` gained an explicit
+      null-check on `NttIcons.create()`'s result before returning it (its
+      declared return type is nullable; all four names this file passes it
+      always produce a real icon, so the fallback span is unreachable in
+      practice, same as before) — and `_query`'s `this._tiles(q)` call
+      dropped a stray, always-ignored `q` argument (`_tiles` takes no
+      parameters; the extra argument was silently accepted by JS and never
+      flagged until awesomebar.js entered the typed program).
+- [x] Gates: fast 1296/1296, lint/typecheck/lint:webext clean; targeted E2E
+      15/15 in 1.8 min (loads-cleanly, boot-timing, event-page-lifecycle,
+      awesomebar, titlebar).
 
 ### P5 — the monolith pair + harness retirement (one slice; they are one cycle)
 - [ ] `newTab.js` exports `newTabTools`, `pageMessageHandler`; `fx-newTab.js`

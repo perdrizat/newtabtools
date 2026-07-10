@@ -9,21 +9,18 @@
  * dropdown renders. The list always ends with a single "search the web" entry.
  * `AwesomeBar.nextIndex` is the wrap-around cursor math for Up/Down nav.
  *
- * Loaded through the shared `loadModule` vm harness so the module's `browser`/
- * `chrome`/`document` references at init don't need a real browser.
+ * PAGE_MODULES.md P4: awesomebar.js now has a real `export`, so this suite
+ * natively imports it instead of vm-loading it through `loadModule` (which
+ * can't parse `import`/`export` syntax). Neither describe block below
+ * exercises `init()`/DOM/browser glue — that's covered behaviorally in
+ * awesomebar-dom.test.ts — so no chrome/browser mocks are needed here beyond
+ * what tests/setup.js already installs globally for module import.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import { loadModule } from './_helpers.ts';
+import { describe, it, expect } from 'vitest';
+import { AwesomeBar } from '../../webextension/awesomebar.js';
 
 describe('AwesomeBar.buildResults — pure result model', () => {
-	let AwesomeBar: any;
-
-	beforeAll(() => {
-		const ctx = loadModule('../../webextension/awesomebar.js');
-		AwesomeBar = ctx.AwesomeBar;
-	});
-
 	const sources = () => ({
 		tiles: [{ url: 'https://github.com/', title: 'GitHub' }],
 		bookmarks: [{ url: 'https://gitlab.com/', title: 'GitLab' }],
@@ -112,12 +109,6 @@ describe('AwesomeBar.buildResults — pure result model', () => {
 });
 
 describe('AwesomeBar.nextIndex — wrap-around cursor', () => {
-	let AwesomeBar: any;
-
-	beforeAll(() => {
-		AwesomeBar = loadModule('../../webextension/awesomebar.js').AwesomeBar;
-	});
-
 	it('moves down and wraps from last to first', () => {
 		expect(AwesomeBar.nextIndex(0, 3, +1)).toBe(1);
 		expect(AwesomeBar.nextIndex(2, 3, +1)).toBe(0);

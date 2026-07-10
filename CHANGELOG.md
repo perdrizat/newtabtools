@@ -33,6 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Fast-tier suites that vm-loaded `prefs.js` (`prefs-persistence.test.ts`, `tile-stats.test.ts`'s statType behavioral suite, `filter-cap.test.ts`'s host-normalization suite, `never-capture.test.ts`) move to native `import`, with `Prefs`/`Blocked`/`Filters`/`NeverCapture` treated as shared singletons (state reset per test) rather than a fresh `vm` context per suite.
 - Tests exercising `lib/tiles-store.js` (`filter-cap.test.ts`, `tiles-pin.test.ts`, `background-and-history.test.ts`) now mutate the real `Prefs`/`Blocked`/`Filters` singletons in place instead of replacing `globalThis.X` with a stand-in object — the lib's real imports no longer read `globalThis` at call time, so a replacement object is no longer visible to it.
 - `eslint.config.js`: `common.js`/`prefs.js` move into the module-mode block (real `export` syntax needs `sourceType: 'module'`).
+- `awesomebar.js` gains real `export`/`import`s (`NttIcons`/`Prefs` from icons.js/prefs.js) — the first page file to real-import another; `globalThis.AwesomeBar` bridge assignment stays (newTab.js reads it until P5) (PAGE_MODULES.md P4).
+- `tests/integration/awesomebar.test.ts`/`awesomebar-dom.test.ts` move from `loadModule`/`vm.runInThisContext` to native `import`; the DOM suite mutates the real `Prefs` singleton in place instead of stubbing `globalThis.Prefs`/`globalThis.NttIcons`.
+- `eslint.config.js`: `awesomebar.js` moves into the module-mode block.
 
 ### Removed
 
@@ -40,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Two dead `.replace()` neutralizing strips and their stale comment in `tests/integration/tile-url-render.test.ts` — `fx-newTab.js`'s top level has been definition-only since P1, so there was nothing left to strip (P1 review finding 4).
 - `tests/integration/reset-and-autosave.test.ts`'s `prefsChanged` source-grep test, replaced by `prefs-onchange-seam.test.ts`'s behavioral coverage of the same call site (now in `page-main.js`, not `prefs.js`).
 - `tests/integration/backup-restore.test.ts`'s dead `Filters.normalizeHost` stub — `lib/backup.js` imports the real `Filters` singleton now, so the stand-in was no longer reachable (and coincidentally passed only because it reimplemented the same logic).
+- `tests/integration/_helpers.ts`'s `loadModule` vm-sandbox loader — `awesomebar.test.ts` was its last consumer (PAGE_MODULES.md P4).
 
 ## [2.3.0] — 2026-07-10
 

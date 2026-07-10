@@ -2,8 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported AwesomeBar */
-/* globals Grid, NttIcons, Prefs, newTabTools */
+/* globals Grid, newTabTools */
+
+import { NttIcons } from './icons.js';
+import { Prefs } from './prefs.js';
 
 /**
  * Awesome bar (Phase 4-3). Wires the titlebar search box into a dropdown that
@@ -12,8 +14,19 @@
  * the cursor math (`nextIndex`) are pure and unit-tested; everything else is
  * DOM / WebExtension glue installed by `init()` (called from newTabTools
  * startup — the module does not self-init so it loads cleanly under test).
+ *
+ * PAGE_MODULES.md P4: the first page file with real `import`s — `NttIcons`/
+ * `Prefs` above are genuine ES-module bindings now (icons.js/prefs.js gained
+ * `export`s in P2/P3). `Grid`/`newTabTools` stay bare globals (see the
+ * globals pragma above) because newTab.js/fx-newTab.js can't export until
+ * P5 — they're still classic-script/vm-loaded.
+ *
+ * @typedef {{url: string, title: string}} SourceItem A tile/bookmark/history
+ *   entry as `buildResults` consumes it.
+ * @typedef {{tiles?: SourceItem[], bookmarks?: SourceItem[], history?: SourceItem[]}} Sources
+ * @typedef {{section: string, type: string, title: string, url: string|null, query?: string}} ResultItem
  */
-var AwesomeBar = {
+export const AwesomeBar = {
 	// Per-section dropdown-header labels, as i18n message keys (resolved via
 	// newTabTools.getString at render time — never store display text here).
 	SECTION_LABELS: {
@@ -29,9 +42,9 @@ var AwesomeBar = {
 	 * Build the ordered, de-duplicated, sectioned result list for `query`.
 	 *
 	 * @param {string} query Raw search text.
-	 * @param {{tiles?, bookmarks?, history?}} sources Arrays of {url, title}.
+	 * @param {Sources} sources Arrays of {url, title}.
 	 * @param {{limit?: number}} [opts] Per-section cap for match/history.
-	 * @returns {Array<{section, type, title, url, query?}>}
+	 * @returns {ResultItem[]}
 	 *   `section` ∈ top|match|history|web, `type` ∈ tile|bookmark|history|search.
 	 *   Always ends with exactly one `type:'search'` web entry. Empty array for
 	 *   a blank query.
@@ -43,13 +56,20 @@ var AwesomeBar = {
 		}
 		let limit = (opts && opts.limit) || 6;
 		let terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+		/** @param {SourceItem} item */
 		let matches = item => {
 			let hay = ((item.title || '') + ' ' + (item.url || '')).toLowerCase();
 			return terms.every(t => hay.includes(t));
 		};
 
 		// Priority order tile > bookmark > history; first writer per URL wins.
+		/** @type {Set<string>} */
 		let seen = new Set();
+		/**
+		 * @param {SourceItem[] | undefined} list
+		 * @param {string} type
+		 * @returns {Array<{type: string, title: string, url: string}>}
+		 */
 		let take = (list, type) => {
 			let out = [];
 			for (let item of (list || [])) {
@@ -66,6 +86,7 @@ var AwesomeBar = {
 		let bookmarks = take(sources && sources.bookmarks, 'bookmark');
 		let history = take(sources && sources.history, 'history');
 
+		/** @type {ResultItem[]} */
 		let results = [];
 
 		// Top match: the single highest-priority local hit, promoted out of its
@@ -91,6 +112,11 @@ var AwesomeBar = {
 	 * Wrap-around cursor for Up/Down navigation. `delta` is +1 (down) or -1
 	 * (up). From no-selection (-1) a Down lands on the first item and an Up on
 	 * the last. Returns -1 when the list is empty.
+	 *
+	 * @param {number} current
+	 * @param {number} count
+	 * @param {number} delta
+	 * @returns {number}
 	 */
 	nextIndex(current, count, delta) {
 		if (count <= 0) {
@@ -104,6 +130,14 @@ var AwesomeBar = {
 
 	// ---- DOM / browser glue ------------------------------------------------
 
+	/** @type {HTMLInputElement} */
+	input: /** @type {any} */ (undefined),
+	/** @type {HTMLElement} */
+	searchBox: /** @type {any} */ (undefined),
+	/** @type {HTMLElement} */
+	dropdown: /** @type {any} */ (undefined),
+
+	/** @type {ResultItem[]} */
 	_results: [],
 	_index: -1,
 	_queryToken: 0,
@@ -111,8 +145,8 @@ var AwesomeBar = {
 	_hasHistoryBookmarks: false,
 
 	init() {
-		this.input = document.getElementById('ntt-search-input');
-		this.searchBox = document.getElementById('ntt-search');
+		this.input = /** @type {HTMLInputElement} */ (document.getElementById('ntt-search-input'));
+		this.searchBox = /** @type {HTMLElement} */ (document.getElementById('ntt-search'));
 		if (!this.input || !this.searchBox) {
 			return;
 		}
@@ -151,7 +185,7 @@ var AwesomeBar = {
 		}
 		this._permChecked = true;
 		try {
-			chrome.permissions.contains({ permissions: ['bookmarks', 'history'] }, granted => {
+			chrome.permissions.contains({ permissions: ['bookmarks', 'history'] }, (/** @type {boolean} */ granted) => {
 				this._hasHistoryBookmarks = !!granted;
 			});
 		} catch (e) {
@@ -159,11 +193,12 @@ var AwesomeBar = {
 		}
 	},
 
+	/** @param {KeyboardEvent} event */
 	_onGlobalKey(event) {
 		if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) {
 			return;
 		}
-		let active = document.activeElement;
+		let active = /** @type {HTMLElement | null} */ (document.activeElement);
 		let tag = active && active.tagName ? active.tagName.toLowerCase() : '';
 		if (active === this.input || tag === 'input' || tag === 'textarea' || (active && active.isContentEditable)) {
 			return;
@@ -176,6 +211,7 @@ var AwesomeBar = {
 		this.input.focus();
 	},
 
+	/** @param {KeyboardEvent} event */
 	_onKeydown(event) {
 		switch (event.key) {
 		case 'ArrowDown':
@@ -206,6 +242,7 @@ var AwesomeBar = {
 		}
 	},
 
+	/** @param {string} value */
 	_query(value) {
 		let q = (value || '').trim();
 		if (!q) {
@@ -213,7 +250,7 @@ var AwesomeBar = {
 			return;
 		}
 		let token = ++this._queryToken;
-		Promise.all([this._tiles(q), this._bookmarks(q), this._history(q)]).then(([tiles, bookmarks, history]) => {
+		Promise.all([this._tiles(), this._bookmarks(q), this._history(q)]).then(([tiles, bookmarks, history]) => {
 			if (token !== this._queryToken) {
 				return; // a newer query superseded this one
 			}
@@ -221,7 +258,9 @@ var AwesomeBar = {
 		}).catch(console.error);
 	},
 
+	/** @returns {Promise<SourceItem[]>} */
 	_tiles() {
+		/** @type {SourceItem[]} */
 		let out = [];
 		if (typeof Grid !== 'undefined' && Grid && Grid.sites) {
 			for (let s of Grid.sites) {
@@ -233,13 +272,17 @@ var AwesomeBar = {
 		return Promise.resolve(out);
 	},
 
+	/**
+	 * @param {string} q
+	 * @returns {Promise<SourceItem[]>}
+	 */
 	_bookmarks(q) {
-		return new Promise(resolve => {
+		return new Promise((/** @type {(value: SourceItem[]) => void} */ resolve) => {
 			try {
-				chrome.bookmarks.search(q, results => {
+				chrome.bookmarks.search(q, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
 					resolve((results || [])
-						.filter(b => b.url)
-						.map(b => ({ url: b.url, title: b.title || b.url })));
+						.filter((/** @type {{url?: string}} */ b) => b.url)
+						.map((/** @type {{url?: string, title?: string}} */ b) => ({ url: /** @type {string} */ (b.url), title: b.title || /** @type {string} */ (b.url) })));
 				});
 			} catch (e) {
 				resolve([]);
@@ -247,13 +290,17 @@ var AwesomeBar = {
 		});
 	},
 
+	/**
+	 * @param {string} q
+	 * @returns {Promise<SourceItem[]>}
+	 */
 	_history(q) {
-		return new Promise(resolve => {
+		return new Promise((/** @type {(value: SourceItem[]) => void} */ resolve) => {
 			try {
-				chrome.history.search({ text: q, startTime: 0, maxResults: 12 }, results => {
+				chrome.history.search({ text: q, startTime: 0, maxResults: 12 }, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
 					resolve((results || [])
-						.filter(h => h.url)
-						.map(h => ({ url: h.url, title: h.title || h.url })));
+						.filter((/** @type {{url?: string}} */ h) => h.url)
+						.map((/** @type {{url?: string, title?: string}} */ h) => ({ url: /** @type {string} */ (h.url), title: h.title || /** @type {string} */ (h.url) })));
 				});
 			} catch (e) {
 				resolve([]);
@@ -261,15 +308,23 @@ var AwesomeBar = {
 		});
 	},
 
+	/**
+	 * @param {string} type
+	 * @returns {Element}
+	 */
 	_iconFor(type) {
-		let name = { tile: 'grid', bookmark: 'bookmark', history: 'history', search: 'search' }[type] || 'search';
+		let name = /** @type {Record<string, string>} */ ({ tile: 'grid', bookmark: 'bookmark', history: 'history', search: 'search' })[type] || 'search';
 		if (typeof NttIcons !== 'undefined' && NttIcons.create) {
-			return NttIcons.create(name, 15);
+			let icon = NttIcons.create(name, 15);
+			if (icon) {
+				return icon;
+			}
 		}
 		let span = document.createElement('span');
 		return span;
 	},
 
+	/** @param {ResultItem[]} results */
 	_render(results) {
 		this._results = results;
 		this._index = -1;
@@ -282,13 +337,14 @@ var AwesomeBar = {
 		}
 
 		let rowIndex = 0;
+		/** @type {string | null} */
 		let lastSection = null;
 		for (let r of results) {
 			if (r.section !== lastSection) {
 				lastSection = r.section;
 				let header = document.createElement('div');
 				header.className = 'ntt-awesomebar-section';
-				let labelKey = this.SECTION_LABELS[r.section];
+				let labelKey = /** @type {Record<string, string>} */ (this.SECTION_LABELS)[r.section];
 				header.textContent = labelKey ? newTabTools.getString(labelKey) : r.section;
 				this.dropdown.appendChild(header);
 			}
@@ -322,30 +378,37 @@ var AwesomeBar = {
 		this._select(0);
 	},
 
+	/** @param {number} index */
 	_select(index) {
 		this._index = index;
 		let rows = this.dropdown.querySelectorAll('.ntt-awesomebar-row');
 		for (let row of rows) {
-			row.classList.toggle('selected', Number(row.dataset.index) === index);
+			row.classList.toggle('selected', Number((/** @type {HTMLElement} */ (row)).dataset.index) === index);
 		}
 	},
 
+	/** @param {MouseEvent} event */
 	_onResultClick(event) {
-		let row = event.target.closest ? event.target.closest('.ntt-awesomebar-row') : null;
+		let target = /** @type {Element | null} */ (event.target);
+		let row = target && target.closest ? target.closest('.ntt-awesomebar-row') : null;
 		if (!row) {
 			return;
 		}
-		let result = this._results[Number(row.dataset.index)];
+		let result = this._results[Number((/** @type {HTMLElement} */ (row)).dataset.index)];
 		if (result) {
 			this._activate(result, event.ctrlKey || event.metaKey);
 		}
 	},
 
+	/**
+	 * @param {ResultItem} result
+	 * @param {boolean} newTab
+	 */
 	_activate(result, newTab) {
 		if (result.type === 'search') {
 			try {
 				browser.search.search({
-					query: result.query,
+					query: /** @type {string} */ (result.query),
 					disposition: newTab ? 'NEW_TAB' : 'CURRENT_TAB',
 				});
 			} catch (e) {
@@ -385,7 +448,8 @@ var AwesomeBar = {
 	},
 };
 
-// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
-// longer lands on `globalThis`; these names are consumed cross-file and by
-// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+// page-modules P4 (PAGE_MODULES.md): AwesomeBar gained a real `export` this
+// slice, but the bridge assignment SURVIVES — its production consumer,
+// newTab.js, can't `import` it until P5 (still classic-script/vm-loaded), and
+// E2E/UAT page-context evaluation reads it off globalThis too.
 globalThis.AwesomeBar = AwesomeBar;
