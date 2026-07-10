@@ -49,11 +49,15 @@ import { el } from './dom.js';
 /**
  * A tab/bookmark/history item as read by `autocomplete`'s `maybeAddItem` —
  * `browser.tabs.Tab`/`browser.bookmarks.BookmarkTreeNode`/`browser.history.
- * HistoryItem` all declare both fields optional (`url?`/`title?`); this
- * typedef assumes both are always present, matching the existing (unguarded)
- * code — a real item missing either would already throw here before this
- * slice too. Latent gap, reported not fixed (chrome-prep C3c).
- * @typedef {{url: string, title: string}} AutocompleteCandidate
+ * HistoryItem` all declare `title` optional. `maybeAddItem` used to assume it
+ * was always present and call `item.title.toLowerCase()` unguarded — a real
+ * title-less tab/history entry threw there, killing the whole autocomplete
+ * pass (surfaced report-only by chrome-prep C3c's typing pass; fixed per
+ * maintainer adjudication, interim round between C4b/C4c: `maybeAddItem`
+ * normalizes a missing `title` to `''` at the boundary before using it).
+ * `url` stays required — nothing normalizes a missing URL, matching the
+ * existing (unguarded) assumption there.
+ * @typedef {{url: string, title?: string}} AutocompleteCandidate
  */
 
 /**
@@ -254,18 +258,6 @@ const NewTabToolsObject = {
 	optionsNeverCaptureAdd: /** @type {HTMLButtonElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLElement} */
 	optionsNeverCaptureList: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
-	// `context-menu`/`newtabtools-pintile`/`newtabtools-unpintile` do not
-	// exist as element ids anywhere in newTab.html — `document.
-	// getElementById` always returns `null` for these three at runtime.
-	// Latent dead assignment, reported not fixed (chrome-prep C3c): neither
-	// this file nor fx-newTab.js reads any of the three afterwards, so it's
-	// inert today, but a future reader would need a null-check.
-	/** @type {HTMLElement | null | undefined} */
-	contextMenu: undefined,
-	/** @type {HTMLElement | null | undefined} */
-	contextMenuPin: undefined,
-	/** @type {HTMLElement | null | undefined} */
-	contextMenuUnpin: undefined,
 
 	// P2-P5 review finding 1 (revised remediation, 2026-07-10): the bodies
 	// moved to common.js's `getString`/`isValidURL` (shared page-side leaf
@@ -375,10 +367,20 @@ const NewTabToolsObject = {
 		 * @param {string} type
 		 */
 		let maybeAddItem = (item, type) => {
+			// Boundary normalization (chrome-prep interim fix, C4b/C4c):
+			// `title` is optional on all three source shapes
+			// (`browser.tabs.Tab`/`BookmarkTreeNode`/`HistoryItem`) — a
+			// title-less item used to throw on `item.title.toLowerCase()`
+			// below (killing the whole autocomplete pass) and, past that
+			// guard, would have stored the literal string `"undefined"` into
+			// `dataset.title` (DOMStringMap assignment stringifies its
+			// value). Normalize once, here, so every read below sees a plain
+			// string.
+			let title = item.title || '';
 			if (!this.isValidURL(item.url) || urls.includes(item.url)) {
 				return;
 			}
-			if (!valueParts.every(vp => item.url.toLowerCase().includes(vp) || item.title.toLowerCase().includes(vp))) {
+			if (!valueParts.every(vp => item.url.toLowerCase().includes(vp) || title.toLowerCase().includes(vp))) {
 				return;
 			}
 
@@ -387,7 +389,7 @@ const NewTabToolsObject = {
 			if (Tiles.isPinned(item.url)) {
 				option.classList.add('pinned');
 			}
-			option.dataset.title = /** @type {HTMLElement} */ (option.querySelector('.autocomplete-title')).textContent = item.title;
+			option.dataset.title = /** @type {HTMLElement} */ (option.querySelector('.autocomplete-title')).textContent = title;
 			option.dataset.url = /** @type {HTMLElement} */ (option.querySelector('.autocomplete-url')).textContent = item.url;
 			if (++count > 10) {
 				option.hidden = true;
@@ -2703,10 +2705,7 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		'optionsNeverCaptureHost': 'options-nevercapture-host',
 		'optionsNeverCaptureAdd': 'options-nevercapture-add',
 		'optionsNeverCaptureList': 'options-nevercapture-list',
-		'databaseError': 'database-error',
-		'contextMenu': 'context-menu',
-		'contextMenuPin': 'newtabtools-pintile',
-		'contextMenuUnpin': 'newtabtools-unpintile'
+		'databaseError': 'database-error'
 	};
 	for (let key in uiElements) {
 		let value = (/** @type {Record<string, string>} */ (uiElements))[key];

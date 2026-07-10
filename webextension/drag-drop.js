@@ -480,14 +480,17 @@ export var DropTargetShim = {
 		// in case the dragover event hasn't been fired.
 		this._updateDropTarget(event);
 
-		// A site was successfully dropped. NOTE (chrome-prep C3b typing
-		// finding, report-only): `_lastDropTarget` can genuinely be `null`
-		// here (no cell found under the drop point) — `_dispatchEvent`
-		// dereferences `target.node` unconditionally, so this is a
-		// pre-existing possible-null-dereference the type system surfaces;
-		// cast rather than silently adding a guard, per this slice's
-		// no-behavior-change rule.
-		this._dispatchEvent(event, 'drop', /** @type {Cell} */ (this._lastDropTarget));
+		// A site was successfully dropped. `_lastDropTarget` can genuinely be
+		// `null` here (no cell found under the drop point) — `_dispatchEvent`
+		// dereferences `target.node` unconditionally, so this used to be a
+		// TypeError path (chrome-prep C3b typing finding, report-only;
+		// adjudicated and fixed in the chrome-prep interim round between
+		// C4b/C4c): guard and early-return instead of dispatching a 'drop'
+		// event with no target.
+		if (!this._lastDropTarget) {
+			return;
+		}
+		this._dispatchEvent(event, 'drop', this._lastDropTarget);
 	},
 
 	/**

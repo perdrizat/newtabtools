@@ -26,6 +26,12 @@ import { compareVersions } from '../common.js';
  * @property {number} [id]
  * @property {string} url
  * @property {string} [title]
+ * @property {boolean} [titleIsUserSet] Set/cleared by newTab.js's tile-title
+ *   editing (options-title-set/-remove, options-url-set) to distinguish a
+ *   user-set title from an auto-derived one. Mirrors tiles-shim.js's
+ *   page-side `Tile` typedef (chrome-prep C3c added it there; doc-truth fix
+ *   here, interim round between C4b/C4c — this file's storage layer already
+ *   round-trips the property untyped, since IndexedDB is schema-less).
  * @property {number} [position]
  * @property {Blob} [image]
  * @property {boolean} [imageIsThumbnail]

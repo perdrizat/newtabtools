@@ -91,6 +91,7 @@ function mockDataTransfer() {
 describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 	let Drag: any;
 	let Drop: any;
+	let DropTargetShim: any;
 	let Transformation: any;
 	let Grid: any;
 	let Updater: any;
@@ -159,6 +160,10 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 
 		Drag = dragDropMod.Drag;
 		Drop = dragDropMod.Drop;
+		// chrome-prep interim fix (between C4b/C4c): `DropTargetShim` gains a
+		// direct test below (the null-`_lastDropTarget` drop guard) —
+		// imported alongside `Drag`/`Drop` from the same specifier.
+		DropTargetShim = dragDropMod.DropTargetShim;
 		Transformation = transformationMod.Transformation;
 		// DropPreview is defined by drag-drop.js but not directly tested here.
 	});
@@ -169,6 +174,8 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		Drag._offsetX = null;
 		Drag._offsetY = null;
 		Drop._lastDropTarget = null;
+		DropTargetShim._lastDropTarget = null;
+		DropTargetShim._cellPositions = null;
 		(Prefs as any).locked = false;
 		// Set _node to a mock so Grid.node works.
 		Grid._node = { querySelectorAll: vi.fn(() => []) };
@@ -343,5 +350,21 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		Drag._draggedSite = { pin: vi.fn(), cell: { index: 0 } };
 		Drop.drop(cell, {});
 		expect(Updater.updateGrid).toHaveBeenCalled();
+	});
+
+	// ==================== DropTargetShim._drop ====================
+
+	it('_drop does not throw when the drop lands with no cell under it (null _lastDropTarget)', () => {
+		// No cells in the grid (beforeEach's Grid._cells = []), so
+		// `_findDropTarget` returns null and `_lastDropTarget` stays null —
+		// the "drop with no cell under it" path (chrome-prep C3b typing
+		// finding, adjudicated: `_dispatchEvent` used to dereference
+		// `target.node` unconditionally).
+		const event = {
+			preventDefault: vi.fn(),
+			dataTransfer: mockDataTransfer(),
+		};
+		expect(() => DropTargetShim._drop(event)).not.toThrow();
+		expect(DropTargetShim._lastDropTarget).toBeNull();
 	});
 });

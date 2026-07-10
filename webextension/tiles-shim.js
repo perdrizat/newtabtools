@@ -13,11 +13,10 @@
  * @property {string} [title]
  * @property {boolean} [titleIsUserSet] Set/cleared by newTab.js's tile-title
  *   editing (options-title-set/-remove, options-url-set) to distinguish a
- *   user-set title from an auto-derived one. NOTE (chrome-prep C3c): missing
- *   from lib/tiles-store.js's parallel background-side `Tile` typedef too —
- *   out of this slice's scope (that file belongs to the already-typed
- *   background program), reported here since this typedef is supposed to
- *   mirror it.
+ *   user-set title from an auto-derived one. Mirrored onto
+ *   lib/tiles-store.js's parallel background-side `Tile` typedef too
+ *   (chrome-prep C3c added it here; the mirror was fixed in the interim
+ *   round between C4b/C4c).
  * @property {number} [id]
  * @property {number} [position]
  * @property {Blob} [image]
