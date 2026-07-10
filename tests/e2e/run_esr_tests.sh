@@ -28,6 +28,40 @@ PROFILE_DIR="$SCRIPT_DIR/test-profile"
 export NTT_E2E_PROFILE_DIR="$PROFILE_DIR"
 ARTIFACTS_DIR="$SCRIPT_DIR/_artifacts"
 
+# 0. Concurrency lock. Incident (2026-07-09/10): a second, unauthorized
+# invocation of this script ran while a first was still mid-suite. Both
+# invocations share $PORT and $PROFILE_DIR — the second's "fresh profile"
+# `rm -rf "$PROFILE_DIR"` below deleted the first run's live profile out from
+# under it, and when the second run's own EXIT trap later fired
+# `pkill -f "$PROFILE_DIR"`, it killed the FIRST run's Firefox (same path,
+# now reused). Three full-suite runs were lost. `mkdir` is atomic (POSIX
+# guarantees exactly one caller wins when two processes race it), so it
+# doubles as a simple lock: this directory's existence, gated on whether the
+# PID recorded inside it is still alive, means "a run is in progress."
+LOCK_DIR="$SCRIPT_DIR/.runner-lock"
+LOCK_PID_FILE="$LOCK_DIR/pid"
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  STALE_PID=""
+  if [ -f "$LOCK_PID_FILE" ]; then
+    STALE_PID="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+  fi
+  if [ -n "$STALE_PID" ] && kill -0 "$STALE_PID" 2>/dev/null; then
+    echo "Error: another E2E run is active (PID $STALE_PID) — refusing to double-run; remove $LOCK_DIR if stale." >&2
+    exit 1
+  fi
+  # The lock dir exists but its owning PID is gone (or was never recorded) —
+  # a stale lock left behind by a run that didn't exit cleanly. Reclaim it.
+  echo "Stale E2E runner lock found (owner PID ${STALE_PID:-unknown} not running) — reclaiming." >&2
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+fi
+echo $$ > "$LOCK_PID_FILE"
+# Covers exits before the fuller `cleanup` trap below is installed (e.g. the
+# Firefox-binary preflight checks); `cleanup` itself releases the lock too,
+# and replaces this trap once it's installed.
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 # Fresh profile every run so tests are fully isolated. Read from prefs.js
 # inside _helpers.js to discover the extension UUID.
 rm -rf "$PROFILE_DIR" "$ARTIFACTS_DIR"
@@ -89,6 +123,8 @@ cleanup() {
   pkill -f "$PROFILE_DIR" 2>/dev/null || true
   wait "$WEB_EXT_PID" 2>/dev/null || true
   rm -rf "$PROFILE_DIR"
+  # Release the concurrency lock acquired near the top of this script.
+  rm -rf "$LOCK_DIR"
 }
 trap cleanup EXIT
 

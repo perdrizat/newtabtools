@@ -13,6 +13,7 @@ test-results/
 .github/logs/
 tests/e2e/test-profile/
 tests/e2e/_artifacts/
+tests/e2e/.runner-lock/
 tests/uat/artifacts/
 dist/
 .vitest-cache/

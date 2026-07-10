@@ -28,7 +28,7 @@ by maintainer).
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
-| C4 — split the monoliths into feature modules | pending | — |
+| C4 — split the monoliths into feature modules | a+b done (`6a6ff20`, `1bdb418`); c+d pending | — |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
@@ -503,6 +503,14 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       1311/1311, lint/typecheck/lint:webext clean, tripwire green (missing-
       browser-API `ReferenceError`, not TDZ/SyntaxError); targeted E2E
       drag-layout+drag-reorder+tile-redesign+loads-cleanly+boot-timing 31/31.
+- *Interim round (2026-07-10, between C4b and C4c, not an arc slice): the
+  adjudicated "Bucket A" latent-bug fixes from C3's disclosed NOTEs landed —
+  `DropTargetShim._drop`'s null-`_lastDropTarget` guard, `maybeAddItem`'s
+  title-less-item boundary normalization, the dead `contextMenu`/
+  `contextMenuPin`/`contextMenuUnpin` `uiElements` removal, and
+  `lib/tiles-store.js`'s `Tile.titleIsUserSet` doc-truth fix — plus the E2E
+  runner concurrency lock (`tests/e2e/run_esr_tests.sh`). See CHANGELOG.md
+  `[Unreleased]` for the itemized list.*
 - [ ] **C4c** — `site.js`, `cell.js`, `grid.js`, `page.js` (Page was missing
       from the original phase list — it becomes its own small module);
       fx-newTab.js is DELETED when this lands. UAT spot-run (tiles: 01/10/23).

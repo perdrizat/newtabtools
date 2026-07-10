@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - ESLint guard (`no-restricted-globals` on `webextension/lib/**/*.js`, seam `lib/thumbnail-image.js` and vendored `lib/zip/**` excluded) forbidding `document`/`window`/`Image`/`OffscreenCanvas`/`DOMParser`/`XMLSerializer`/`localStorage` in the background scope, plus a regression test asserting the rule via ESLint's own config resolution (CHROME_PREP.md C1).
 - `webextension/dom.js`: page-side `el(tag, className, text)` DOM-builder leaf + `tests/unit/dom.test.ts`; mechanically normalized 26 of the 37 `document.createElement` blocks across `newTab.js`/`fx-newTab.js`/`awesomebar.js` onto it (behavior-identical; CHROME_PREP.md C2).
 - `tests/unit/raw-module-eval.test.ts` + `tests/unit/_fixtures/raw-import-page-graph.mjs`: raw-Node (no vite transform) import of page-main.js asserting the failure class is a missing-browser-API ReferenceError, never SyntaxError or a TDZ `before initialization` — the permanent tripwire for the C3b TDZ incident class the fast tier cannot see.
+- `tests/e2e/run_esr_tests.sh` gains a `mkdir`-based concurrency lock (`tests/e2e/.runner-lock`, PID-checked, stale locks reclaimed) that refuses a second concurrent invocation instead of letting it clobber the first run's shared profile dir/port.
 
 ### Changed
 
@@ -30,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Six `'Grid' in window` sniffs in `newTab.js` (statType chip re-render, cacheCellPositions rAF, never-capture button refresh, data-selected ring sweep, history-permission chip re-render, applyTileAspect) flipped from always-true to always-false when C3d deleted the `globalThis.Grid` bridge, silently disabling their branches — sniffs dropped (`Grid` is a real import; real null-guards like `Grid.node` kept); caught by the full-E2E rank-chip failure.
 - `Tiles.removeTile` wire misuse: seven E2E call sites sent `{ url }` but the dispatch reads `message.tile` (silent cleanup no-op); plus twelve sites sent `Tiles.unpinTile`, which is not among the 19 frozen wire names at all (also silent no-op) — all nineteen swapped onto a new `removeTileByUrl(page, url)` helper in `tests/e2e/_helpers.ts` (getTile→removeTile, wire-shape gotcha documented).
 - Fixed-sleep-after-`setPrefs` races (fixed sleep vs the async storage.onChanged→updateUI chain, flaky under full-suite load) converted to bounded DOM polls: drawer.test.ts (rank chips), tile-aspect.test.ts (tileaspect attr), layout-tuning.test.ts (titlesize/spacing/margin), filter-cap.test.ts (filter-button enablement), drag-reorder.test.ts (locked attr), recent-tabs.test.ts (stored-favicon img).
+- `webextension/drag-drop.js`'s `DropTargetShim._drop` no longer dereferences a `null` `_lastDropTarget` (TypeError when a drop lands with no cell under it) — early-returns instead; adjudicated chrome-prep C3b typing finding.
+- `webextension/newTab.js`'s pin-URL autocomplete `maybeAddItem` no longer throws on a title-less tab/bookmark/history item (`title` is optional on all three WebExtension shapes) — normalizes a missing `title` to `''` at the boundary instead of storing the literal string `"undefined"`; adjudicated chrome-prep C3c typing finding.
+- Removed the dead `contextMenu`/`contextMenuPin`/`contextMenuUnpin` `uiElements` entries in `webextension/newTab.js` — their ids don't exist in `newTab.html` (always resolved to `null`) and nothing read them; adjudicated chrome-prep C3c typing finding.
+- `webextension/lib/tiles-store.js`'s `Tile` typedef gains the missing `titleIsUserSet` property, mirroring `tiles-shim.js`'s page-side copy (doc-truth only); adjudicated chrome-prep C3c typing finding.
 
 ### Removed
 
