@@ -10,10 +10,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - ESLint guard (`no-restricted-globals` on `webextension/lib/**/*.js`, seam `lib/thumbnail-image.js` and vendored `lib/zip/**` excluded) forbidding `document`/`window`/`Image`/`OffscreenCanvas`/`DOMParser`/`XMLSerializer`/`localStorage` in the background scope, plus a regression test asserting the rule via ESLint's own config resolution (CHROME_PREP.md C1).
 - `webextension/dom.js`: page-side `el(tag, className, text)` DOM-builder leaf + `tests/unit/dom.test.ts`; mechanically normalized 26 of the 37 `document.createElement` blocks across `newTab.js`/`fx-newTab.js`/`awesomebar.js` onto it (behavior-identical; CHROME_PREP.md C2).
+- `tests/unit/raw-module-eval.test.ts` + `tests/unit/_fixtures/raw-import-page-graph.mjs`: raw-Node (no vite transform) import of page-main.js asserting the failure class is a missing-browser-API ReferenceError, never SyntaxError or a TDZ `before initialization` — the permanent tripwire for the C3b TDZ incident class the fast tier cannot see.
 
 ### Changed
 
 - Four vm-harness tests (`recent-tabs.test.ts`, `objecturl-revoke.test.ts`, `favicons.test.ts`, `favicon-overlay-and-pin.test.ts`) that extract page methods by source instead of importing them now also expose the real `el` on `globalThis`, mirroring the existing `isValidURL` exposure, since the C2 sweep introduced the same bare-identifier dependency inside the extracted method bodies.
+- `webextension/fx-newTab.js` is fully-typed checked JS (real JSDoc — no `any`-cast escape hatches beyond the documented `globalThis` bridge exception) and enters `tsconfig.json`'s checked program; `webextension/newTab.js` joins it (the ESM cycle pulls both in together) behind a staged, documented `@ts-nocheck` pending its own typing in C3c (CHROME_PREP.md C3b).
+- C3b TDZ incident (E2E-caught, fixed in-slice): the `newTabTools` cycle-import typing moved off a top-level `const` read (raw-load `ReferenceError: … before initialization`, page never booted) onto newTab.js's export itself via `NewTabToolsPageRefs` + const-impl/typed-export (the prefs.js `PrefsAccessors` pattern).
+- `tiles-shim.js` gains a real `Tile` typedef (mirroring `lib/tiles-store.js`'s) and precise `Tiles.*` method signatures, surfaced by fx-newTab.js's now-checked usage.
+- `tests/integration/_helpers.ts`'s `ensureSiteEnv`/`mountSite`, and the `fx-newTab.js` import in `drag-reorder.test.ts`/`tile-url-render.test.ts`, drop the computed-path `webextPath(...)` obfuscation for a literal-string dynamic `import()` now that `tsc` type-checks fx-newTab.js directly (still dynamic, not static, to preserve DOM-mount-before-import ordering).
+
+### Fixed
+
+- `tests/integration/drag-invariants.test.ts`'s `--ntt-rows`/`--ntt-cols` wiring-check regexes tolerate the JSDoc type-assertion casts chrome-prep C3b added around `Prefs.rows`/`Prefs.columns` (type-only, erased at runtime).
 
 ### Removed
 

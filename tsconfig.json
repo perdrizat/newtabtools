@@ -19,10 +19,24 @@
 	},
 	"include": [
 		"webextension/lib/**/*.js",
+		"webextension/fx-newTab.js",
+		"webextension/newTab.js",
 		"tests/unit/**/*.js",
 		"tests/integration/**/*.js",
 		"tests/**/*.ts"
 	],
+	// chrome-prep C3b (CHROME_PREP.md): explicit entries for the two page
+	// monoliths, not a `webextension/*.js` glob — awesomebar.js/common.js/
+	// dom.js/icons.js/prefs.js/stats.js/tiles-shim.js are pulled into the
+	// program anyway by import-following once fx-newTab.js is included (see
+	// the note below); action.js/page-main.js are NOT imported by either
+	// monolith and stay out until their own slice adds them on purpose.
+	// newTab.js and fx-newTab.js form an ESM cycle (PAGE_MODULES.md Decision
+	// 3), so tsc pulls both into the program together the moment either is
+	// included — the reason C3b stages a temporary `@ts-nocheck` on newTab.js
+	// (CHROME_PREP.md C3 slicing note) rather than typing it for real this
+	// slice.
+	//
 	// `exclude` only prunes candidates matched by `include`'s globs — it does
 	// NOT stop tsc from following a real `import` out of an included file and
 	// pulling the imported file into the program anyway (a well-known tsconfig

@@ -159,10 +159,58 @@ same staged-scaffold logic as P1's bridge):*
   assertions + `globals.d.ts`/`nttGlobals` cleanup. FULL E2E at C3d; smoke
   trio for a–c (a is behavior-removal with test replacement; b/c are
   type-only).*
-- [ ] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/
+- [~] Full-quality JSDoc for newTab.js + fx-newTab.js (typedefs for Site/link/
       grid-cell shapes, event payloads; no `any`-casts as escape hatches —
       maintainer directive 2). Monoliths enter the typed program; the
       computed-path "hide from tsc" import pattern retires.
+      **C3b (2026-07-10): fx-newTab.js done, newTab.js staged.**
+      `tsconfig.json` gains explicit `webextension/fx-newTab.js` +
+      `webextension/newTab.js` include entries (the ESM cycle pulls both into
+      the program together regardless — awesomebar.js/common.js/dom.js/
+      icons.js/prefs.js/stats.js/tiles-shim.js follow via import-following,
+      no entries needed). fx-newTab.js is fully typed: central typedefs
+      (`Link` reused from tiles-shim.js's new `Tile`, `NttRect`,
+      `SiteIndexState`, `CellNode`/`SiteNode` expando aliases,
+      `NewTabToolsPageRefs`); `Site`/`Cell` stay constructor-function +
+      `.prototype` (per maintainer directive, not converted to `class`);
+      4 total `@ts-expect-error` (all on the top-of-file `DOMRect.prototype`
+      shim — real global-interface augmentation, not expressible from
+      checked JS without a new ambient `.d.ts`). newTab.js gets a staged,
+      loud `@ts-nocheck` — the ONLY suppression this slice besides the 4
+      above — removed in C3c. Leaf fallout fixed: `tiles-shim.js` gains a
+      `Tile` typedef + precise `Tiles.*` signatures. Test-side dividend:
+      `_helpers.ts`'s `ensureSiteEnv`/`mountSite`, `drag-reorder.test.ts`,
+      `tile-url-render.test.ts` drop the computed-path `webextPath(...)`
+      obfuscation for a literal-string dynamic `import()` (still dynamic,
+      not static — the DOM-mount-before-import ordering newTab.js's
+      top-level DOM-wiring needs can't be expressed with a static import).
+      Two latent argument-count/null findings surfaced by typing, reported
+      not fixed: `Cell.handleEvent` calls `Drop.enter`/`Drop.drop` with an
+      unused second (`event`) argument the functions never declared; `Drop`'s
+      `_drop` passes a possibly-`null` `_lastDropTarget` into
+      `_dispatchEvent`, which dereferences it unconditionally.
+      **C3b incident (caught by full E2E, fixed same slice):** the first cut
+      typed the `newTabTools` cycle import via an aliased import + top-level
+      `const` — a TOP-LEVEL READ of the cycle binding while in TDZ (Decision
+      3 violation): raw module loading threw `ReferenceError: … before
+      initialization`, page-main.js's whole graph rejected, and the page
+      never booted in real Firefox — while the fast tier stayed green,
+      because vite/vitest's module transform does not preserve TDZ semantics
+      for cyclic imports. Fix: plain `import { newTabTools }`; the
+      `NewTabToolsPageRefs` intersection moved ONTO newTab.js's export
+      (const-impl + typed-export, the prefs.js `PrefsAccessors` pattern —
+      `@ts-nocheck` suppresses reporting in-file but still publishes declared
+      types to importers). Permanent tripwire:
+      `tests/unit/raw-module-eval.test.ts` + its
+      `tests/unit/_fixtures/raw-import-page-graph.mjs` fixture spawn raw Node
+      (no transform) to import page-main.js and assert the failure class is
+      a missing-browser-API ReferenceError, never SyntaxError or a TDZ
+      `before initialization` — red on the bug, green after the fix. The
+      diff review also reverted a boundary-contract drift: `Drag.drag` takes
+      the `Site` again and `DropTargetShim._dragover` dereferences
+      `._newtabSite` at the call site, as before (C4 moves these functions;
+      contracts must travel unchanged). Gates: fast 1310/1310,
+      lint/typecheck/lint:webext clean.
 - [x] Retire `pageMessageHandler`'s dead early-broadcast queue (+ its M5-era
       tests) and the dead-true `typeof` guards (newTab.js 1216–1824 sweep) —
       provably unreachable since P5's import cycle. (C3a, chrome-prep) Direct
@@ -219,8 +267,26 @@ same staged-scaffold logic as P1's bridge):*
 ### C gate
 - [ ] Full `pnpm test`, full UAT, `pnpm audit --audit-level=high`,
       boot-timing re-check, 2.5.0 bump, CHANGELOG promotion, build, docs sweep
-      (CONTRIBUTING/TESTING/README/ROADMAP + this file), follow-up code review
+      (CONTRIBUTING/TESTING/README + this file), follow-up code review
       round adjudicated.
+- [ ] **Dissolve ROADMAP.md** (maintainer decision 2026-07-10): work items →
+      GitHub issues (Chrome-port stage 3, favicon cursor-walk dedup, UAT
+      backlog scenarios, README troubleshooting, SARIF/JUnit exploration) —
+      EXCEPT the AMO release process, which goes into CONTRIBUTING.md as a
+      "Releasing to AMO" note for future contributors (maintainer amendment:
+      no GH issue for it — screenshots checklist pointer to
+      `docs/amo-listing.md`, the new-listing/ID decision
+      `newtabtools@symlink.ch`, listing copy/PRIVACY/reviewer-notes state,
+      the 3.0.0 reservation); Scope & North Star + Non-goals → README
+      "Scope" section; code-constraining decisions of record (frozen wire
+      names, zero-runtime-deps, Fx-152 gate, no-build, event-page state
+      placement, Chrome-via-dual-build, restore-validator independence) →
+      CONTRIBUTING; historical outcomes → deleted (git history + audit/ +
+      closed issues #2–#5 already hold them). Add a three-line "Where things
+      live" note to CONTRIBUTING (work → GH issues; decisions → CONTRIBUTING;
+      history → CHANGELOG/audit/git). Then `git rm ROADMAP.md` + redirect
+      every ROADMAP reference (CONTRIBUTING Key Files, README, TESTING,
+      CLAUDE.md-symlink content, eslint/test comments if any).
 
 ## What the Chrome port then reduces to (unchanged from the audit)
 

@@ -2,6 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+// @ts-nocheck — chrome-prep C3b STAGED SCAFFOLD (CHROME_PREP.md C3 slicing
+// note): this file and fx-newTab.js form an ESM import cycle, so adding
+// either to tsconfig.json's checked program pulls BOTH in together. C3b
+// types fx-newTab.js for real; this file stages through with `@ts-nocheck`
+// so the untyped monolith doesn't block that work, and loses this directive
+// in C3c when newTab.js itself gets full-quality JSDoc. Do not add new
+// suppressions elsewhere on the strength of this one — this is the ONLY
+// `@ts-nocheck`/`@ts-expect-error`-style escape hatch this slice permits.
+
 // page-modules P5 (PAGE_MODULES.md): real imports replace the former
 // `/* globals */` header. `Page`/`Grid`/`Updater` come from fx-newTab.js,
 // which forms a legal ESM cycle with this file (Decision 3) — every
@@ -18,7 +27,28 @@ import { compareVersions, getString, isValidURL } from './common.js';
 import { Grid, Page, Updater } from './fx-newTab.js';
 import { el } from './dom.js';
 
-export const newTabTools = {
+/**
+ * Runtime-added UI-element refs: the object literal below is the method
+ * surface; the post-literal IIFE at the bottom of this file assigns these
+ * properties at runtime (a `uiElements` id → `document.getElementById`
+ * lookup loop plus a few direct assignments), invisible to structural
+ * inference of the literal. Declared here and intersected onto the exported
+ * `newTabTools` binding (below the literal) — the exact prefs.js
+ * `PrefsAccessors` const-impl + typed-export pattern — so the fx-newTab.js
+ * cycle import sees the real shape through its PLAIN import, with no
+ * top-level read of the cycle binding on the importing side (PAGE_MODULES.md
+ * Decision 3; the chrome-prep C3b TDZ incident is why that matters — see
+ * fx-newTab.js's import header). This file is `@ts-nocheck` until C3c, which
+ * suppresses error REPORTING here but still publishes declared types to
+ * importers; the typedef deliberately covers only the members fx-newTab.js
+ * touches today — C3c completes it.
+ * @typedef {Object} NewTabToolsPageRefs
+ * @property {HTMLElement} page
+ * @property {HTMLElement} databaseError
+ * @property {number | null} selectedSiteIndex
+ */
+
+const NewTabToolsObject = {
 	// P2-P5 review finding 1 (revised remediation, 2026-07-10): the bodies
 	// moved to common.js's `getString`/`isValidURL` (shared page-side leaf
 	// utilities, importable without dragging this monolith along); these
@@ -2128,6 +2158,9 @@ export const newTabTools = {
 		});
 	}
 };
+
+/** @type {typeof NewTabToolsObject & NewTabToolsPageRefs} */
+export const newTabTools = /** @type {any} */ (NewTabToolsObject);
 
 /**
  * Page-side broadcast listener — the page's first and only runtime.onMessage

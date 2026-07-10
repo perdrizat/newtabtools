@@ -88,8 +88,13 @@ describe('Drag invariants — JS contracts the drag pipeline depends on', () => 
 		// Required so the `grid-template-rows: repeat(var(--ntt-rows...))`
 		// CSS rule has a value to use; otherwise it falls back to the
 		// default of 3 and a 4×4 grid renders its 4th row at auto size.
-		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-rows['"]\s*,\s*Prefs\.rows\s*\)/);
-		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-cols['"]\s*,\s*Prefs\.columns\s*\)/);
+		// The `(?:\/\*\*.*?\*\/\s*\(\s*)*` bit tolerates chrome-prep C3b's
+		// JSDoc type-assertion wrappers around the value (type-only, erased
+		// at runtime — `setProperty`'s string param needs a cast since
+		// `Prefs.rows`/`columns` are numbers) without loosening what the test
+		// actually checks: that `Prefs.rows`/`Prefs.columns` is the value.
+		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-rows['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.rows\s*\)+/);
+		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-cols['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.columns\s*\)+/);
 	});
 
 	it('Drag.start refreshes the cell position cache before computing offsets', () => {

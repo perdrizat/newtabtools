@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { webextPath, parseNewTabDocument } from './_helpers';
+import { parseNewTabDocument } from './_helpers';
 
 describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 	let addTitle: any;
@@ -34,15 +34,21 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 		// trailer this test used to strip out was hoisted to page-main.js.
 		// page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
 		// `import`/`export` syntax this slice, which `vm.runInThisContext`
-		// (script-mode) can no longer parse — natively `import()`ing it instead
-		// (a computed-path specifier, so `tsc` doesn't follow the monolith into
-		// the typed program). Importing it transitively imports and evaluates
-		// newTab.js too (the legal cycle, Decision 3), whose top-level
-		// DOM-wiring IIFE needs the real markup's element ids — mounting the
-		// shipped `newTab.html` body first is the same precedent
-		// page-module-scope.test.ts and `_helpers.ts`'s `mountSite()` use.
+		// (script-mode) can no longer parse — natively `import()`ing it
+		// instead. chrome-prep C3b (CHROME_PREP.md): fx-newTab.js is now in
+		// tsconfig.json's checked program in its own right, so this is a
+		// plain literal-string dynamic import rather than the old
+		// `@vite-ignore`d computed-path one — `tsc` resolves/types it like a
+		// static import. It stays dynamic (not top-level static), though:
+		// importing it transitively imports and evaluates newTab.js too (the
+		// legal cycle, Decision 3), whose top-level DOM-wiring IIFE needs the
+		// real markup's element ids — mounting the shipped `newTab.html` body
+		// first is the same precedent page-module-scope.test.ts and
+		// `_helpers.ts`'s `mountSite()` use, and a static import is hoisted
+		// above all of a module's own top-level code, so there's no way to
+		// sequence "mount the DOM, then import" with one.
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
-		const fx = await import(/* @vite-ignore */ webextPath('fx-newTab.js'));
+		const fx = await import('../../webextension/fx-newTab.js');
 
 		addTitle = fx.Site.prototype.addTitle;
 		expect(addTitle).toBeTypeOf('function');

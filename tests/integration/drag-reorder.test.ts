@@ -20,21 +20,30 @@
  *
  * page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
  * `import`/`export` syntax this slice, which `vm.runInThisContext`
- * (script-mode) can no longer parse — natively `import()`ing it instead (a
- * computed-path specifier, so `tsc` doesn't follow the monolith into the
- * typed program). Importing it transitively imports and evaluates newTab.js
- * too (the legal cycle, Decision 3), so `document.body` needs the real
- * markup mounted first (newTab.js's top-level DOM-wiring IIFE needs real
- * element ids — the page-module-scope.test.ts precedent). `Prefs`/`Tiles`/
+ * (script-mode) can no longer parse — natively `import()`ing it instead.
+ * chrome-prep C3b (CHROME_PREP.md): fx-newTab.js is now in tsconfig.json's
+ * checked program in its own right, so the specifier below is a plain
+ * literal-string dynamic import rather than the old `@vite-ignore`d
+ * computed-path one — `tsc` can resolve/type it like a static import. It
+ * stays a dynamic (not top-level static) `import()`, though: importing it
+ * transitively imports and evaluates newTab.js too (the legal cycle,
+ * Decision 3), so `document.body` needs the real markup mounted first
+ * (newTab.js's top-level DOM-wiring IIFE needs real element ids — the
+ * page-module-scope.test.ts precedent), and a static import is hoisted
+ * above all of a module's own top-level code, so there's no way to
+ * sequence "mount the DOM, then import" with one. `Prefs`/`Tiles`/
  * `newTabTools` are now real singletons `fx-newTab.js` imports for real, so
  * this test drives their REAL state in place (mutating properties/methods)
  * rather than replacing the `globalThis.X` bindings the old vm harness
  * pre-seeded — a stand-in object assigned over `globalThis.X` is invisible
  * to a real `import` binding (the P3/P4 "second-order fallout" precedent).
+ * The `let X: any` locals below stay untyped this slice (test-only mocks
+ * exercising both fx-newTab.js and newTab.js together, deeper than the
+ * `_helpers.ts` dividend covers) — C3c can retype them once newTab.js is.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { webextPath, parseNewTabDocument } from './_helpers';
+import { parseNewTabDocument } from './_helpers';
 import { Prefs } from '../../webextension/prefs.js';
 import { Tiles } from '../../webextension/tiles-shim.js';
 
@@ -98,8 +107,8 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		(Prefs as any).columns = 3;
 		Tiles.getAllTiles = vi.fn().mockResolvedValue([]);
 
-		const fx = await import(/* @vite-ignore */ webextPath('fx-newTab.js'));
-		const nt = await import(/* @vite-ignore */ webextPath('newTab.js'));
+		const fx = await import('../../webextension/fx-newTab.js');
+		const nt = await import('../../webextension/newTab.js');
 
 		Grid = fx.Grid;
 		Updater = fx.Updater;

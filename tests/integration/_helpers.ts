@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { vi } from 'vitest';
+import { Prefs } from '../../webextension/prefs.js';
 
 // page-modules P2 (PAGE_MODULES.md): icons.js gained a real `export`, which
 // `vm.runInThisContext` (a script-mode loader) can no longer parse — see the
@@ -67,7 +68,21 @@ export function parseNewTabDocument(): Document {
 	return new DOMParser().parseFromString(readNewTabHtml(), 'text/html');
 }
 
-let _siteEnvPromise: Promise<any> | null = null;
+/**
+ * fx-newTab.js's module namespace type. chrome-prep C3b (CHROME_PREP.md):
+ * fx-newTab.js is now in tsconfig.json's checked program in its own right, so
+ * the computed-path `import()` this file used specifically to hide the
+ * (then-unchecked) monolith from `tsc` is no longer needed for typing
+ * purposes — but the LAZY, deferred-until-called nature of `ensureSiteEnv`
+ * still is (see below), so the specifier changes from a computed
+ * `webextPath('fx-newTab.js')` expression to this literal-string dynamic
+ * `import()`, which `tsc` resolves and types like a static import while
+ * still only evaluating fx-newTab.js's (and, transitively, newTab.js's) top
+ * level when `ensureSiteEnv()` is actually called.
+ */
+type FxNewTabModule = typeof import('../../webextension/fx-newTab.js');
+
+let _siteEnvPromise: Promise<FxNewTabModule> | null = null;
 
 /**
  * Loads the real page-module cycle (fx-newTab.js <-> newTab.js,
@@ -76,12 +91,18 @@ let _siteEnvPromise: Promise<any> | null = null;
  * looks up real element ids (options-toggle, wallpaper-close, …) and throws
  * on a null element, the same reason page-module-scope.test.ts mounts it
  * before importing (its own comment has the details) — then natively
- * `import()`s fx-newTab.js by computed path (`@vite-ignore`, so `tsc`
- * doesn't follow the monolith into the typed program). Importing
- * fx-newTab.js transitively imports and evaluates newTab.js too (the legal
- * cycle, Decision 3): both files' `Prefs`/`Tiles`/`Blocked`/`NeverCapture`/
- * `TileStats`/`newTabTools` references are the same real singleton objects
- * this helper (and any caller) also reaches via a matching `import()`.
+ * `import()`s fx-newTab.js by a literal-string path (chrome-prep C3b: no
+ * longer `@vite-ignore`d behind a computed path — see `FxNewTabModule`
+ * above — but still a dynamic, lazily-evaluated `import()`, not a static
+ * top-level one: fx-newTab.js transitively imports and evaluates newTab.js
+ * (the legal cycle, Decision 3), whose top-level DOM-wiring would throw if
+ * it ran before the `document.body.innerHTML` mount two lines below, and a
+ * static import is hoisted above all of a module's own top-level code, so
+ * there is no way to sequence "mount the DOM, then import" with one). Both
+ * files' `Prefs`/`Tiles`/`Blocked`/`NeverCapture`/`TileStats`/`newTabTools`
+ * references are the same real singleton objects this helper (and any
+ * caller) also reaches via the static `Prefs` import above (prefs.js has no
+ * top-level DOM dependency, so it needs no such deferral).
  *
  * `Prefs.init()` is deliberately NOT called here (that's real boot — out of
  * scope per Decision 3, "booting in jsdom is out of scope"). Before `init()`
@@ -111,7 +132,7 @@ let _siteEnvPromise: Promise<any> | null = null;
  * the test file, this function's one-time `Prefs.statType = 'none'` seed
  * would run afterward (inside `mountSite`) and clobber the override.
  */
-export async function ensureSiteEnv(): Promise<any> {
+export async function ensureSiteEnv(): Promise<FxNewTabModule> {
 	if (!_siteEnvPromise) {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
@@ -122,9 +143,8 @@ export async function ensureSiteEnv(): Promise<any> {
 			URL.revokeObjectURL = vi.fn();
 		}
 
-		_siteEnvPromise = import(/* @vite-ignore */ webextPath('fx-newTab.js')).then(async fx => {
-			const { Prefs } = await import(/* @vite-ignore */ webextPath('prefs.js'));
-			(Prefs as any).statType = 'none';
+		_siteEnvPromise = import('../../webextension/fx-newTab.js').then(fx => {
+			Prefs.statType = 'none';
 			return fx;
 		});
 	}
@@ -132,7 +152,11 @@ export async function ensureSiteEnv(): Promise<any> {
 }
 
 export async function mountSite(
-	linkData: Record<string, unknown>,
+	// chrome-prep C3b: fx-newTab.js's `Site` constructor is now typed for
+	// real (its `Link` param requires `url: string`, everything else
+	// optional) — every real call site already passes one, so this just
+	// documents that instead of the looser `Record<string, unknown>`.
+	linkData: { url: string } & Record<string, unknown>,
 ): Promise<{ site: any; node: HTMLElement; cleanup: () => void }> {
 	const fx = await ensureSiteEnv();
 
