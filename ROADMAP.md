@@ -55,23 +55,34 @@ tiers; all 7 pre-takeover security findings resolved). The remaining last mile:
   `tests/uat/newtabtools_knowngood.zip` (see `docs/amo-listing.md` "Screenshots
   checklist"). The UAT browser daemon already renders that fixture at Full HD and can
   produce these.
-- [ ] First submission to the AMO Developer Hub — ships as **3.0.0**, gated on the
-  page-modules arc ([`PAGE_MODULES.md`](PAGE_MODULES.md), releases as 2.4.0) and
-  the follow-up security/code audit round (maintainer decision 2026-07-10; the
-  premature 3.0.0 tag was renumbered to 2.3.0). ID/listing decision is settled:
-  new listing under `newtabtools@symlink.ch` (not an ID-transfer). Listing copy,
+- [ ] First submission to the AMO Developer Hub — ships as **3.0.0**, gated on
+  the chrome-prep program ([`CHROME_PREP.md`](CHROME_PREP.md), releases as
+  2.5.0) and its follow-up security/code audit round (maintainer decisions
+  2026-07-10; the page-modules arc shipped as 2.4.0, and the premature 3.0.0
+  tag was renumbered to 2.3.0). ID/listing decision is settled: new listing
+  under `newtabtools@symlink.ch` (not an ID-transfer). Listing copy,
   `PRIVACY.md`, `LICENSE`, and reviewer notes are in place.
+
+## Next — Chrome-prep program (2.5.0)
+
+**Planned and in progress: see [`CHROME_PREP.md`](CHROME_PREP.md)** (maintainer
+decision 2026-07-10: the full program precedes the 3.0.0 AMO release). Arcs:
+background DOM-guard, leaf utilities, typed monoliths + principled
+gesture-driven test harness + total bridge retirement, monolith split into
+feature modules, capability-seam completion (divergence audit, targeted
+wrappers, in-house namespace normalization — no polyfill dep), two-target
+manifest authoring. Two Chrome design decisions settled up front (context
+menus: in-tile action row is the Chrome interaction; theme:
+`prefers-color-scheme` source, `browser.theme` as Firefox bonus).
 
 ## Later — Chrome extension (stage 3)
 
-After the AMO release bakes. Single-source / dual-build (shared `webextension/`
-with per-target manifest variants), **not** a long-lived parallel branch. The
-capability layer Chrome forks already exists (`lib/platform.js`) and the image
-pipeline sits behind the `lib/thumbnail-image.js` seam (swap for
-OffscreenCanvas/`createImageBitmap` in a service-worker build) — remaining
-Chrome-only work is that swap, a polyfill, the dual-manifest build, and CWS
-review posture for `<all_urls>`. The previous maintainer's `chrome` branch is
-historical reference only — do not merge it.
+After the AMO release bakes, and on top of the chrome-prep program above.
+Single-source / dual-build (shared `webextension/` with per-target manifest
+overlays), **not** a long-lived parallel branch. The port then reduces to:
+fork the seam implementations, write the OffscreenCanvas
+`lib/thumbnail-image.js`, add the Chrome manifest overlay. The previous
+maintainer's `chrome` branch is historical reference only — do not merge it.
 
 ---
 
@@ -86,25 +97,16 @@ Concrete items not yet on a horizon. Roughly priority-ordered within each group.
   `prefs.js` gained real `export`s. Record: [`PAGE_MODULES.md`](PAGE_MODULES.md)
   + git history. The live remainder is the surviving-bridge entry below.
 - Page-scope `el(tag, className, text?)` DOM builder + `textContent` normalization
-  across the ~37 near-identical `createElement` blocks (2026-07-09 Stage-H review
-  §8 — deferred by design to keep the conversion diff mechanical).
+  — **scheduled: chrome-prep arc C2** ([`CHROME_PREP.md`](CHROME_PREP.md)).
 - Dedupe the near-identical favicon cursor walks in `lib/messages.js`
   (`getFavicons`/`getFaviconsByHost`; Stage-M review, opportunistic).
-- Retire the surviving page `globalThis` bridges — two remaining prerequisites
-  (see `PAGE_MODULES.md` TEST-ONLY bridge policy + the 2026-07-10 P2–P5 review
-  findings 1–2). Prerequisite (a) — converting awesomebar.js off the
-  `Grid`/`newTabTools` bare globals — is DONE: the review's revised
-  remediation (dependency inversion, not a static import of the monoliths)
-  extracted `getString`/`isValidURL` to `common.js` and gave the tiles list an
-  injected `tilesSource` seam (`AwesomeBar.init({ tilesSource: () =>
-  Grid.sites })`), so it never needed the monolith-typing arc. Remaining:
-  (b) retire `pageMessageHandler`'s now-dead early-broadcast queue
-  (`flushQueued`, the `typeof Updater/Grid` triggers, the M5-era queue tests —
-  provably unreachable since P5's import cycle guarantees evaluation order),
-  which also sweeps the remaining dead-true `typeof Prefs/Grid` guards in
-  newTab.js; (c) move the E2E/UAT harness off page-global access
-  (`window.Tiles`/`Prefs`/`Grid`/… reached via page-context evaluation) —
-  drive test setup through messages/UI instead.
+- Retire the surviving page `globalThis` bridges — **scheduled: chrome-prep
+  arc C3** ([`CHROME_PREP.md`](CHROME_PREP.md)), which absorbs both remaining
+  prerequisites: the dead early-broadcast queue retirement (+ the dead-true
+  `typeof` guard sweep in newTab.js) and the E2E/UAT harness migration off
+  page-globals (maintainer directive: principled gesture/UI driving, no test
+  handle). History of prerequisite (a) — the awesomebar dependency inversion —
+  is in the 2026-07-10 P2–P5 review adjudication (done, shipped in 2.4.0).
 
 **UAT tier** (the tier itself is built — see `TESTING.md` and `tests/uat/README.md`)
 - The 11-scenario suite covers env/smoke (`00`, `01`), tiles (`10`, `11`), drawer
