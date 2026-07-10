@@ -7,8 +7,10 @@
  *
  * Dedups the near-identical
  * `let x = document.createElement(tag); x.className = c; x.textContent = t;`
- * boilerplate repeated across newTab.js/fx-newTab.js/awesomebar.js (Stage-H
- * review §8 backlog item). Pure `document.createElement` wrapper — no event
+ * boilerplate repeated across newTab.js/site.js/grid.js/awesomebar.js
+ * (Stage-H review §8 backlog item; site.js/grid.js were part of one page
+ * monolith at the time, later split up in chrome-prep C4). Pure
+ * `document.createElement` wrapper — no event
  * wiring, no attribute loops, no children — so it only replaces the narrow
  * "create + optional className + optional textContent" shape; blocks that
  * set other attributes, branch on conditions, or build children stay as

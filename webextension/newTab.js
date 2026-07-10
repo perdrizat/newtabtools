@@ -3,43 +3,43 @@
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // page-modules P5 (PAGE_MODULES.md): real imports replace the former
-// `/* globals */` header. `Page`/`Grid` come from fx-newTab.js, which forms
-// a legal ESM cycle with this file (Decision 3) — every cross-reference
-// below is call-time only (inside functions/callbacks), never a top-level
-// read, so the cycle's evaluation order (fx-newTab.js's own top level, which
-// imports this file, finishes before this file's top level runs — see
-// PAGE_MODULES.md's P5 checklist note) never matters. chrome-prep C4a
-// (CHROME_PREP.md): `Updater` moved out of fx-newTab.js into its own
-// updater.js module — imported directly below instead.
+// `/* globals */` header. `Grid` (grid.js) and `Page` (page.js) each form a
+// legal ESM cycle with this file (Decision 3) — every cross-reference below
+// is call-time only (inside functions/callbacks), never a top-level read, so
+// the cycle's evaluation order (grid.js's/page.js's own top level, which
+// import this file, finish before this file's top level runs — see
+// PAGE_MODULES.md's P5 checklist note) never matters. `Updater` (updater.js,
+// chrome-prep C4a, CHROME_PREP.md) is imported directly below too.
 import { AwesomeBar } from './awesomebar.js';
 import { Background, Tiles } from './tiles-shim.js';
 import { NttIcons } from './icons.js';
 import { TileStats } from './stats.js';
 import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
 import { compareVersions, getString, isValidURL } from './common.js';
-import { Grid, Page } from './fx-newTab.js';
+import { Grid } from './grid.js';
+import { Page } from './page.js';
 import { Updater } from './updater.js';
 import { el } from './dom.js';
 
 /**
- * Runtime-added UI-element refs read from OUTSIDE this file (fx-newTab.js's
- * cycle import, page-main.js). The object literal below is the method
- * surface; the post-literal IIFE at the bottom of this file assigns these
- * three properties (plus every other `uiElements` entry — see the literal's
- * own declared placeholders below, the Cell.prototype `position`/`_grid`
- * convention, fx-newTab.js) at runtime, invisible to structural inference of
- * the literal on its own. Declared here and intersected onto the exported
- * `newTabTools` binding (below the literal) — the exact prefs.js
- * `PrefsAccessors` const-impl + typed-export pattern — so the fx-newTab.js
- * cycle import sees the real shape through its PLAIN import, with no
+ * Runtime-added UI-element refs read from OUTSIDE this file (grid.js's and
+ * site.js's cycle imports, plus page-main.js). The object literal below is
+ * the method surface; the post-literal IIFE at the bottom of this file
+ * assigns these three properties (plus every other `uiElements` entry — see
+ * the literal's own declared placeholders below, the Cell.prototype
+ * `position`/`_grid` convention, cell.js) at runtime, invisible to structural
+ * inference of the literal on its own. Declared here and intersected onto the
+ * exported `newTabTools` binding (below the literal) — the exact prefs.js
+ * `PrefsAccessors` const-impl + typed-export pattern — so grid.js's/site.js's
+ * cycle imports see the real shape through their PLAIN import, with no
  * top-level read of the cycle binding on the importing side (PAGE_MODULES.md
  * Decision 3; the chrome-prep C3b TDZ incident is why that matters — see
- * fx-newTab.js's import header). Kept deliberately narrow (chrome-prep C3c,
- * CHROME_PREP.md): only the refs an EXTERNAL cycle import actually reads go
- * here — every other `uiElements` ref is declared directly on the object
- * literal instead (so this file's own methods see them too, which an
- * intersection applied only to the export binding never would — `this`
- * inside a method is typed from the literal's own inferred shape).
+ * CHROME_PREP.md's C3b entry). Kept deliberately narrow
+ * (chrome-prep C3c, CHROME_PREP.md): only the refs an EXTERNAL cycle import
+ * actually reads go here — every other `uiElements` ref is declared directly
+ * on the object literal instead (so this file's own methods see them too,
+ * which an intersection applied only to the export binding never would —
+ * `this` inside a method is typed from the literal's own inferred shape).
  * @typedef {Object} NewTabToolsPageRefs
  * @property {HTMLElement} page
  * @property {HTMLElement} databaseError
@@ -62,26 +62,28 @@ import { el } from './dom.js';
 
 /**
  * The persisted tile/link shape — reused from tiles-shim.js (already
- * imported for `Tiles`/`Background`), the same `Link` alias fx-newTab.js
- * declares for its own copy of this typedef.
+ * imported for `Tiles`/`Background`), the same `Link` alias site.js declares
+ * for its own copy of this typedef (site.js owns `Link` — see its own
+ * typedef-ownership note).
  * @typedef {import('./tiles-shim.js').Tile} Link
  */
 
 /**
- * `Site`, the fx-newTab.js constructor-function this file reads via
+ * `Site`, the site.js constructor-function this file reads via
  * `this.selectedSite`/`Grid.sites[...]` — a type-only import (erased at
- * compile time, so reading it here is NOT a top-level read of the fx-newTab.js
+ * compile time, so reading it here is NOT a top-level read of the site.js
  * cycle binding; Decision 3 only restricts VALUE reads).
- * @typedef {import('./fx-newTab.js').Site} Site
+ * @typedef {import('./site.js').Site} Site
  */
 
 /**
- * `CellNode`/`SiteNode` — the expando back-reference typedefs fx-newTab.js
- * declares for `Cell`/`Site` DOM nodes, reused here (type-only import, same
+ * `CellNode`/`SiteNode` — the expando back-reference typedefs `Cell`/`Site`
+ * declare for their DOM nodes, reused here (type-only import, same
  * TDZ-safety note as `Site` above) for the context-menu handlers, which walk
- * cell/site DOM structure directly instead of going through `Grid`.
- * @typedef {import('./fx-newTab.js').CellNode} CellNode
- * @typedef {import('./fx-newTab.js').SiteNode} SiteNode
+ * cell/site DOM structure directly instead of going through `Grid`. Owned by
+ * cell.js (`CellNode`) and site.js (`SiteNode`) respectively.
+ * @typedef {import('./cell.js').CellNode} CellNode
+ * @typedef {import('./site.js').SiteNode} SiteNode
  */
 
 /**
@@ -134,7 +136,7 @@ const NewTabToolsObject = {
 	// Internal state fields assigned via `this.x = …` inside methods below,
 	// not visible to the object literal's structural inference unless
 	// declared as literal keys up front (the Cell.prototype `position`/`_grid`
-	// precedent, fx-newTab.js). None of these are read by fx-newTab.js, so
+	// precedent, cell.js). None of these are read by grid.js/site.js, so
 	// they stay off `NewTabToolsPageRefs` — internal to this file only.
 	/** @type {number | null} */
 	_selectedSiteIndex: null,
@@ -184,16 +186,16 @@ const NewTabToolsObject = {
 	// Runtime-added UI-element refs (the `uiElements` id → `document.
 	// getElementById` lookup loop in the post-literal IIFE at the bottom of
 	// this file). `page`/`databaseError`/`selectedSiteIndex` are ALSO on
-	// `NewTabToolsPageRefs` above (fx-newTab.js's cycle import reads them).
-	// Typed non-null, matching that convention: every method below only ever
-	// runs after `startup()` (called once, at the bottom of this file), by
-	// which point the IIFE has already populated every ref — same call-time
-	// guarantee `NewTabToolsPageRefs` relies on for `page`/`databaseError`.
-	// The declared value has to bridge through `unknown` (a direct `null` →
-	// non-null-element assertion doesn't type-check — neither type
-	// sufficiently overlaps the other); this is the file's placeholder-value
-	// idiom (see fx-newTab.js's `refreshThumbnail`/`Transformation.intersect`
-	// casts for the same double-cast shape).
+	// `NewTabToolsPageRefs` above (grid.js's/site.js's cycle imports read
+	// them). Typed non-null, matching that convention: every method below
+	// only ever runs after `startup()` (called once, at the bottom of this
+	// file), by which point the IIFE has already populated every ref — same
+	// call-time guarantee `NewTabToolsPageRefs` relies on for
+	// `page`/`databaseError`. The declared value has to bridge through
+	// `unknown` (a direct `null` → non-null-element assertion doesn't
+	// type-check — neither type sufficiently overlaps the other); this is the
+	// file's placeholder-value idiom (see site.js's `refreshThumbnail`/
+	// `Transformation.intersect` casts for the same double-cast shape).
 	/** @type {HTMLLinkElement} */
 	darkIcons: /** @type {HTMLLinkElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLElement} */
@@ -360,7 +362,7 @@ const NewTabToolsObject = {
 
 		// No null-check: this template sibling is always present in
 		// newTab.html's markup (same unguarded assumption as every other
-		// `.content`-reading template lookup in this file/fx-newTab.js).
+		// `.content`-reading template lookup in this file/grid.js).
 		let template = /** @type {HTMLTemplateElement} */ (newTabTools.pinURLAutocomplete.nextElementSibling);
 		/**
 		 * @param {AutocompleteCandidate} item
@@ -482,10 +484,11 @@ const NewTabToolsObject = {
 	optionsOnClick(event) {
 		// `event.target` is read repeatedly across this delegated handler
 		// (attached once on the whole drawer) — cast once, matching
-		// fx-newTab.js's `_onClick`/`_dispatchEvent` precedent, rather than
-		// re-casting at every read. `DelegatedEventTarget` covers the various
-		// optional form-control members read below (`disabled`/`dataset`)
-		// that only some concrete target elements actually declare.
+		// site.js's `_onClick`/drag-drop.js's `_dispatchEvent` precedent,
+		// rather than re-casting at every read. `DelegatedEventTarget` covers
+		// the various optional form-control members read below
+		// (`disabled`/`dataset`) that only some concrete target elements
+		// actually declare.
 		let target = /** @type {DelegatedEventTarget} */ (event.target);
 		if (target.disabled) {
 			return;
@@ -766,8 +769,8 @@ const NewTabToolsObject = {
 			// `count` (a `number`) assigns fine at runtime — `textContent`'s
 			// WebIDL setter stringifies any value — the cast documents that
 			// instead of inserting a `String(...)` call that would
-			// (redundantly) do it a second time (the fx-newTab.js
-			// `_renderGrid` precedent for this exact idiom).
+			// (redundantly) do it a second time (grid.js's `_renderGrid`
+			// precedent for this exact idiom).
 			unpinned.textContent = /** @type {string} */ (count == -1 ? this.getString('filter_unlimited') : count);
 			/** @type {HTMLButtonElement} */ (row.querySelector('.minus-button')).disabled = count == -1;
 
@@ -885,8 +888,8 @@ const NewTabToolsObject = {
 			// `mozOpaque`/`mozImageSmoothingEnabled` are legacy Firefox-only
 			// canvas extensions, not declared by `lib.dom.d.ts` — global-
 			// interface augmentation, not expressible from checked JS
-			// without a new ambient `.d.ts` (the fx-newTab.js `DOMRect`
-			// shim precedent).
+			// without a new ambient `.d.ts` (cell.js's `DOMRect` shim
+			// precedent).
 			// @ts-expect-error — see comment above.
 			canvas.mozOpaque = false;
 			if ('imageSmoothingEnabled' in canvas) {
@@ -944,7 +947,7 @@ const NewTabToolsObject = {
 	},
 	// Object-URL hygiene (audit 2026-06-10 §4.3): blob URLs are only freed on
 	// document unload, so repeated-render sites revoke their prior URL before
-	// creating a replacement (the fx-newTab.js refreshThumbnail pattern).
+	// creating a replacement (site.js's refreshThumbnail pattern).
 	// Each key names one owner surface (e.g. 'background', 'editorThumb') —
 	// never stash a URL another surface still displays.
 	/** @type {Record<string, string>} */
@@ -2554,7 +2557,7 @@ const NewTabToolsObject = {
 				if (!link.image) {
 					let thumb = thumbs.get(link.url);
 					if (thumb) {
-						// Stash on the site under the same key fx-newTab's
+						// Stash on the site under the same key site.js's
 						// refreshThumbnail uses, so whichever path re-renders
 						// the tile next revokes the other's URL (§4.3).
 						if (s._thumbnailObjectURL) {
@@ -2633,8 +2636,8 @@ export const newTabTools = /** @type {any} */ (NewTabToolsObject);
  * (lib/messages.js).
  *
  * Dispatches directly — no guard, no queue. `Updater`/`Grid` are real
- * ES-module imports from fx-newTab.js (top of this file), and
- * PAGE_MODULES.md's P5 import cycle guarantees fx-newTab.js's own top-level
+ * ES-module imports (top of this file, from updater.js/grid.js), and
+ * PAGE_MODULES.md's P5 import cycle guarantees grid.js's own top-level
  * evaluation completes BEFORE this file's top level reaches the
  * `browser.runtime.onMessage.addListener(pageMessageHandler)` call below —
  * so by the time the listener can ever be invoked, both names are already
@@ -2674,7 +2677,7 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 	let uiElements = {
 		'darkIcons': 'dark-icons',
 		'backgroundFake': 'background-fake',
-		'page': 'newtab-scrollbox', // used in fx-newTab.js
+		'page': 'newtab-scrollbox', // used in grid.js
 		'optionsToggleButton': 'options-toggle',
 		'pinURLBlocked': 'options-pinURL-blocked',
 		'pinURLInput': 'options-pinURL-input',

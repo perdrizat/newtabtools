@@ -111,7 +111,7 @@ describe('E2E: Edit/Done mode lock cycle (Board A §2)', () => {
 				{ timeout: 15_000, message: 'tile not pinned' }
 			);
 			// Select the tile via its own in-tile "edit" action button —
-			// fx-newTab.js's Site._onClick 'edit' case opens the drawer,
+			// site.js's Site._onClick 'edit' case opens the drawer,
 			// switches to the Tile tab, AND sets selectedSiteIndex, all from
 			// one real click.
 			await page.evaluate((u) => {

@@ -72,17 +72,21 @@ function webext(relPath: string): string {
 // top-level IIFE wires up real DOM element refs by id, so it must run AFTER
 // `document.body.innerHTML` is set in beforeAll below, not at test-file-parse
 // time (same DOM-mount-before-evaluation ordering `_helpers.ts`'s
-// `ensureSiteEnv` documents for fx-newTab.js).
+// `ensureSiteEnv` documents for site.js).
 // chrome-prep C4a (CHROME_PREP.md): page-main.js's import list grows from
-// eight entries to ten — `Updater`/`UndoDialog` moved out of fx-newTab.js
-// into their own updater.js/undo-dialog.js modules, imported by name just
-// before fx-newTab.js (which still needs both, for its own Grid/Site/Drag/
-// Drop use). chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/`DropTargetShim`/
-// `DropPreview` also moved out, to their own drag-drop.js module — but
-// page-main.js itself never calls any of the four directly (only
-// fx-newTab.js does, via its own import of drag-drop.js), so this list stays
-// at ten entries; drag-drop.js's module evaluation is reached transitively
-// through fx-newTab.js's import, same as transformation.js's today.
+// eight entries to ten — `Updater`/`UndoDialog` moved to their own
+// updater.js/undo-dialog.js modules, imported by name just before the former
+// page monolith's own import (which still needed both, for its own
+// Grid/Site/Drag/Drop use). chrome-prep C4b (CHROME_PREP.md):
+// `Drag`/`Drop`/`DropTargetShim`/`DropPreview` also moved out, to their own
+// drag-drop.js module — but page-main.js itself never calls any of the four
+// directly, so this list stayed at ten entries; drag-drop.js's module
+// evaluation is reached transitively, same as transformation.js's today.
+// chrome-prep C4c (CHROME_PREP.md) dissolved the page monolith into
+// grid.js/cell.js/site.js/page.js; page-main.js's own `Grid` import
+// re-points to grid.js (last entry below) — cell.js/site.js/page.js are
+// reached transitively (grid.js imports cell.js/site.js; newTab.js imports
+// page.js), so the list stays at ten entries.
 const PAGE_FILES_IN_LOAD_ORDER = [
 	'common.js',
 	'icons.js',
@@ -93,7 +97,7 @@ const PAGE_FILES_IN_LOAD_ORDER = [
 	'newTab.js',
 	'undo-dialog.js',
 	'updater.js',
-	'fx-newTab.js',
+	'grid.js',
 ];
 
 describe('page-main.js — the new-tab page\'s module entry point', () => {
@@ -115,7 +119,7 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 		// `import`s (chrome-prep C3d retired the `globalThis` bridge these
 		// used to also land on) — capture the bindings this file needs from
 		// newTab.js/undo-dialog.js's own module exports (chrome-prep C4a:
-		// `UndoDialog` moved out of fx-newTab.js into its own module).
+		// `UndoDialog` moved to its own module).
 		let newTabToolsModule: any;
 		let undoDialogModule: any;
 		for (const file of PAGE_FILES_IN_LOAD_ORDER) {

@@ -7,8 +7,9 @@
  * `Filters`/`NeverCapture` are real `export`s, consumed by real `import`s
  * from both scopes — `lib/background-main.js` and its background-side
  * consumers (`lib/tiles-store.js`, `lib/capture.js`, `lib/backup.js`,
- * `lib/messages.js`) on one side, `newTab.js`/`fx-newTab.js`/`awesomebar.js`
- * on the page side. The four `globalThis.X = …` bridge assignments that
+ * `lib/messages.js`) on one side, `newTab.js`/`grid.js`/`site.js`/`cell.js`/
+ * `awesomebar.js` on the page side. The four `globalThis.X = …` bridge
+ * assignments that
  * survived through PAGE_MODULES.md (TEST-ONLY, for E2E/UAT page-context
  * evaluation) are retired as of chrome-prep C3d: the E2E/UAT harness now
  * drives the real page via messages/storage/DOM instead of reading page

@@ -24,26 +24,31 @@
 	},
 	"include": [
 		"webextension/lib/**/*.js",
-		"webextension/fx-newTab.js",
 		"webextension/newTab.js",
 		"tests/unit/**/*.js",
 		"tests/integration/**/*.js",
 		"tests/**/*.ts"
 	],
-	// chrome-prep C3b/C3c (CHROME_PREP.md): explicit entries for the two page
-	// monoliths, not a `webextension/*.js` glob — awesomebar.js/common.js/
-	// dom.js/icons.js/prefs.js/stats.js/tiles-shim.js are pulled into the
-	// program anyway by import-following once fx-newTab.js is included (see
-	// the note below); action.js/page-main.js are NOT imported by either
-	// monolith and stay out until their own slice adds them on purpose. Both
-	// monoliths are now fully typed (C3b fx-newTab.js, C3c newTab.js) — a
-	// `webextension/*.js` glob was reconsidered at C3c and rejected: it would
-	// also match action.js/page-main.js, growing the checked program (not
-	// leaving it identical) rather than simplifying it, since neither is
-	// typed yet. The two explicit entries stay until those files get their
-	// own slice. newTab.js and fx-newTab.js form an ESM cycle (PAGE_MODULES.md
-	// Decision 3), so tsc pulls both into the program together the moment
-	// either is included.
+	// chrome-prep C3b/C3c (CHROME_PREP.md): originally two explicit entries,
+	// one for each of the two page monoliths — C3b/C3c typed both;
+	// awesomebar.js/common.js/dom.js/icons.js/prefs.js/stats.js/
+	// tiles-shim.js were pulled into the program anyway by import-following.
+	// chrome-prep C4c (CHROME_PREP.md) dissolved the second monolith into
+	// grid.js/cell.js/site.js/page.js — the explicit entry for it is
+	// dropped rather than replaced with four new ones, following the same
+	// import-following logic C4a/C4b already relied on for
+	// transformation.js/updater.js/undo-dialog.js/drag-drop.js (none of
+	// which ever got their own entry): newTab.js imports `Grid` (grid.js)
+	// and `Page` (page.js) directly, and grid.js imports `Cell` (cell.js)
+	// and `Site` (site.js) directly, so all four are reachable via
+	// import-following from the one remaining `newTab.js` entry — verified
+	// by running `pnpm typecheck` after the drop and confirming the checked
+	// program (and its error count) is unchanged. `action.js`/`page-main.js`
+	// are NOT imported by newTab.js and stay out until their own slice adds
+	// them on purpose. `newTab.js`'s cycles with `grid.js`/`page.js`
+	// (PAGE_MODULES.md Decision 3) are what pull each into the program the
+	// moment `newTab.js` is included — the same mechanism the old two-entry
+	// comment described for newTab.js's cycle with its former partner.
 	//
 	// `exclude` only prunes candidates matched by `include`'s globs — it does
 	// NOT stop tsc from following a real `import` out of an included file and

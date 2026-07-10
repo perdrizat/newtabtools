@@ -12,10 +12,11 @@ import { Prefs } from '../../webextension/prefs.js';
 // `vm.runInThisContext` (a script-mode loader) can no longer parse — see the
 // removed load in mountSite() below. A plain top-level import here runs once
 // per test file (module imports are cached, but each test file gets its own
-// module registry) and its `globalThis.NttIcons = NttIcons;` bridge
-// assignment (still present — fx-newTab.js reads it as a bare identifier)
-// covers what the vm load used to provide, without needing mountSite() (or
-// its callers) to become async.
+// module registry) and covers what the vm load used to provide, without
+// needing mountSite() (or its callers) to become async. (Its former
+// `globalThis.NttIcons = NttIcons;` bridge assignment is gone as of
+// chrome-prep C3d — retired along with every other bridge — so this is a
+// plain real import now, nothing more.)
 import '../../webextension/icons.js';
 
 // page-modules P4 (PAGE_MODULES.md): this file used to also export a
@@ -23,15 +24,15 @@ import '../../webextension/icons.js';
 // `vm.runInContext` sandbox loader for script-mode files, with its own
 // chrome/browser mock defaults. Deleted once its last consumer migrated to a
 // native import (P4). P5 (PAGE_MODULES.md): `mountSite`'s own `vm` use is
-// gone too — fx-newTab.js gained real `import`/`export` this slice, which
-// `vm.runInThisContext` can no longer parse, so `ensureSiteEnv` below
+// gone too — the page monolith gained real `import`/`export` in that slice,
+// which `vm.runInThisContext` can no longer parse, so `ensureSiteEnv` below
 // natively `import()`s it instead. chrome-prep C3c (CHROME_PREP.md): the
 // computed-path `webextPath(relPath)` specifier this used to hide the
 // (then-unchecked) monolith from `tsc` (PAGE_MODULES.md's P1 precedent,
 // page-module-scope.test.ts) is gone — C3b/C3c typed both monoliths for
 // real, so `webextPath` had no remaining call site (dead export) and is
 // deleted along with the `WEBEXT_DIR` constant it existed to build. The
-// specifier below is now a literal string — see `FxNewTabModule`'s docstring
+// specifier below is now a literal string — see `SiteModule`'s docstring
 // for why the `import()` itself still has to stay dynamic (evaluation
 // order, not tsc-hiding).
 
@@ -68,40 +69,36 @@ export function parseNewTabDocument(): Document {
 }
 
 /**
- * fx-newTab.js's module namespace type. chrome-prep C3b (CHROME_PREP.md):
- * fx-newTab.js is now in tsconfig.json's checked program in its own right, so
- * the computed-path `import()` this file used specifically to hide the
- * (then-unchecked) monolith from `tsc` is no longer needed for typing
- * purposes — but the LAZY, deferred-until-called nature of `ensureSiteEnv`
- * still is (see below), so the specifier changes from a computed
- * `webextPath('fx-newTab.js')` expression to this literal-string dynamic
- * `import()`, which `tsc` resolves and types like a static import while
- * still only evaluating fx-newTab.js's (and, transitively, newTab.js's) top
- * level when `ensureSiteEnv()` is actually called.
+ * site.js's module namespace type. chrome-prep C4c (CHROME_PREP.md) dissolved
+ * the former page monolith into grid.js/cell.js/site.js/page.js; this helper
+ * only ever needed `Site` from it (see `mountSite` below), so it now imports
+ * site.js directly by a literal-string dynamic `import()`, which `tsc`
+ * resolves and types like a static import while still only evaluating
+ * site.js's (and, transitively, newTab.js's) top level when
+ * `ensureSiteEnv()` is actually called.
  */
-type FxNewTabModule = typeof import('../../webextension/fx-newTab.js');
+type SiteModule = typeof import('../../webextension/site.js');
 
-let _siteEnvPromise: Promise<FxNewTabModule> | null = null;
+let _siteEnvPromise: Promise<SiteModule> | null = null;
 
 /**
- * Loads the real page-module cycle (fx-newTab.js <-> newTab.js,
- * PAGE_MODULES.md P5) exactly once per test file (memoized): mounts the
- * shipped `newTab.html` body FIRST — newTab.js's top-level DOM-wiring IIFE
- * looks up real element ids (options-toggle, wallpaper-close, …) and throws
- * on a null element, the same reason page-module-scope.test.ts mounts it
- * before importing (its own comment has the details) — then natively
- * `import()`s fx-newTab.js by a literal-string path (chrome-prep C3b: no
- * longer `@vite-ignore`d behind a computed path — see `FxNewTabModule`
- * above — but still a dynamic, lazily-evaluated `import()`, not a static
- * top-level one: fx-newTab.js transitively imports and evaluates newTab.js
- * (the legal cycle, Decision 3), whose top-level DOM-wiring would throw if
- * it ran before the `document.body.innerHTML` mount two lines below, and a
- * static import is hoisted above all of a module's own top-level code, so
- * there is no way to sequence "mount the DOM, then import" with one). Both
- * files' `Prefs`/`Tiles`/`Blocked`/`NeverCapture`/`TileStats`/`newTabTools`
- * references are the same real singleton objects this helper (and any
- * caller) also reaches via the static `Prefs` import above (prefs.js has no
- * top-level DOM dependency, so it needs no such deferral).
+ * Loads the real page-module cycle (site.js <-> newTab.js, PAGE_MODULES.md
+ * P5) exactly once per test file (memoized): mounts the shipped
+ * `newTab.html` body FIRST — newTab.js's top-level DOM-wiring IIFE looks up
+ * real element ids (options-toggle, wallpaper-close, …) and throws on a null
+ * element, the same reason page-module-scope.test.ts mounts it before
+ * importing (its own comment has the details) — then natively `import()`s
+ * site.js by a literal-string path (still a dynamic, lazily-evaluated
+ * `import()`, not a static top-level one: site.js transitively imports and
+ * evaluates newTab.js (the legal cycle, Decision 3), whose top-level
+ * DOM-wiring would throw if it ran before the `document.body.innerHTML`
+ * mount two lines below, and a static import is hoisted above all of a
+ * module's own top-level code, so there is no way to sequence "mount the
+ * DOM, then import" with one). Both files' `Prefs`/`Tiles`/`Blocked`/
+ * `NeverCapture`/`TileStats`/`newTabTools` references are the same real
+ * singleton objects this helper (and any caller) also reaches via the
+ * static `Prefs` import above (prefs.js has no top-level DOM dependency, so
+ * it needs no such deferral).
  *
  * `Prefs.init()` is deliberately NOT called here (that's real boot — out of
  * scope per Decision 3, "booting in jsdom is out of scope"). Before `init()`
@@ -121,15 +118,13 @@ let _siteEnvPromise: Promise<FxNewTabModule> | null = null;
  * callers that need one mutate the (real, imported) singleton directly, in
  * place, per test — see tile-redesign.test.ts for the pattern.
  *
- * Returns fx-newTab.js's module namespace (`Page`/`Grid`/`Site`/`Cell`).
- * chrome-prep C4a (CHROME_PREP.md): `Updater`/`UndoDialog`/`Transformation`
- * moved out to their own `updater.js`/`undo-dialog.js`/`transformation.js`
- * modules; chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/`DropTargetShim`/
- * `DropPreview` moved out to their own `drag-drop.js` module — a caller that
- * needs one of these five imports it directly from its own specifier instead
- * of destructuring it off this function's return value (same singleton
- * either way, since fx-newTab.js imports `Drag`/`Drop`/`DropTargetShim` — and
- * `Updater`/`Transformation`/`UndoDialog` — from these same specifiers).
+ * Returns site.js's module namespace (`Site`). chrome-prep C4a/C4b/C4c
+ * (CHROME_PREP.md) split `Updater`/`UndoDialog`/`Transformation`/`Drag`/
+ * `Drop`/`DropTargetShim`/`DropPreview`/`Grid`/`Cell`/`Page` out to their own
+ * `updater.js`/`undo-dialog.js`/`transformation.js`/`drag-drop.js`/`grid.js`/
+ * `cell.js`/`page.js` modules — a caller that needs one of these imports it
+ * directly from its own specifier instead of destructuring it off this
+ * function's return value (same singleton either way).
  *
  * Exported (not just used internally by `mountSite`) so a caller that needs
  * to override one of the seeded defaults (e.g. tile-redesign.test.ts sets
@@ -138,7 +133,7 @@ let _siteEnvPromise: Promise<FxNewTabModule> | null = null;
  * the test file, this function's one-time `Prefs.statType = 'none'` seed
  * would run afterward (inside `mountSite`) and clobber the override.
  */
-export async function ensureSiteEnv(): Promise<FxNewTabModule> {
+export async function ensureSiteEnv(): Promise<SiteModule> {
 	if (!_siteEnvPromise) {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
@@ -149,22 +144,22 @@ export async function ensureSiteEnv(): Promise<FxNewTabModule> {
 			URL.revokeObjectURL = vi.fn();
 		}
 
-		_siteEnvPromise = import('../../webextension/fx-newTab.js').then(fx => {
+		_siteEnvPromise = import('../../webextension/site.js').then(site => {
 			Prefs.statType = 'none';
-			return fx;
+			return site;
 		});
 	}
 	return _siteEnvPromise;
 }
 
 export async function mountSite(
-	// chrome-prep C3b: fx-newTab.js's `Site` constructor is now typed for
+	// chrome-prep C3b: site.js's `Site` constructor is now typed for
 	// real (its `Link` param requires `url: string`, everything else
 	// optional) — every real call site already passes one, so this just
 	// documents that instead of the looser `Record<string, unknown>`.
 	linkData: { url: string } & Record<string, unknown>,
 ): Promise<{ site: any; node: HTMLElement; cleanup: () => void }> {
-	const fx = await ensureSiteEnv();
+	const siteModule = await ensureSiteEnv();
 
 	// The real newTab.html already ships this exact template (id="newtab-site")
 	// — mounting the shipped body above provides it, so there is nothing left
@@ -172,7 +167,7 @@ export async function mountSite(
 	const template = document.getElementById('newtab-site') as HTMLTemplateElement;
 	const node = template.content.firstElementChild!.cloneNode(true) as HTMLElement;
 	document.body.appendChild(node);
-	const site = new fx.Site(node, linkData);
+	const site = new siteModule.Site(node, linkData);
 
 	return {
 		site,

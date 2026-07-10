@@ -523,7 +523,7 @@ export async function resetTestState(browser: Browser): Promise<void> {
  * `_render()`, which — when the cell count doesn't already match
  * `rows*columns` — calls `_renderGrid()` FIRST (appending all `.newtab-cell`
  * nodes synchronously) before the async `_renderSites()` populates tiles
- * (verified against fx-newTab.js's `Grid.init`/`_render`/`_renderGrid`). This
+ * (verified against grid.js's `Grid.init`/`_render`/`_renderGrid`). This
  * is the same readiness point the old `Grid.ready` (`!!Grid._node`) getter
  * captured — neither guarantees tiles have finished loading, only that the
  * grid DOM exists. `#newtab-scrollbox` isn't used instead because it's in the

@@ -2,25 +2,25 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// chrome-prep C4b (CHROME_PREP.md): extracted verbatim from fx-newTab.js's
-// `Drag`/`Drop`/`DropTargetShim`/`DropPreview` singletons (C3b typed them
-// there; this slice only moves the code — no rewrite, per the arc's slicing
-// rule) plus their shared `DELAY_REARRANGE_MS` constant. The four are one
-// subsystem (mutual coupling: `Drop`/`DropTargetShim` read `Drag`'s dragged-
-// site state, `Drop` calls `DropPreview.rearrange`), so they move together
-// rather than split further. `Grid`/`newTabTools` (still defined in
-// fx-newTab.js/newTab.js — Cell/Site/Grid don't move until C4c) are real,
-// call-time-only references back into files that in turn import THIS file
-// (fx-newTab.js's `Page`/`Cell`/`Site` call `Drag.start`/`Drag.end`/
-// `Drag.draggedSite`/`Drop.enter`/`Drop.exit`/`Drop.drop`/
-// `DropTargetShim.init`) — a legal ESM cycle under Decision 3
-// (PAGE_MODULES.md): every reference below is inside a method body, never a
-// top-level read. `Transformation`/`Updater` are sibling modules extracted in
-// C4a; this file now joins fx-newTab.js as a second importer of both (no new
+// chrome-prep C4b (CHROME_PREP.md): extracted verbatim (C3b typed the
+// `Drag`/`Drop`/`DropTargetShim`/`DropPreview` singletons before this slice
+// moved them; no rewrite, per the arc's slicing rule) plus their shared
+// `DELAY_REARRANGE_MS` constant. The four are one subsystem (mutual coupling:
+// `Drop`/`DropTargetShim` read `Drag`'s dragged-site state, `Drop` calls
+// `DropPreview.rearrange`), so they move together rather than split further.
+// `Grid`/`newTabTools` are real, call-time-only references back into files
+// that in turn import THIS file (page.js's `Page`, cell.js's `Cell`, site.js's
+// `Site` call `Drag.start`/`Drag.end`/`Drag.draggedSite`/`Drop.enter`/
+// `Drop.exit`/`Drop.drop`/`DropTargetShim.init`) — a legal ESM cycle under
+// Decision 3 (PAGE_MODULES.md): every reference below is inside a method
+// body, never a top-level read. `Transformation`/`Updater` are sibling
+// modules extracted in C4a; this file is a second importer of both (no new
 // cycle between them — neither transformation.js nor updater.js imports this
-// file, though transformation.js now imports `Drag` FROM here instead of from
-// fx-newTab.js — see its own updated header comment).
-import { Grid } from './fx-newTab.js';
+// file, though transformation.js imports `Drag` FROM here — see its own
+// updated header comment). chrome-prep C4c (CHROME_PREP.md): `Grid` moved out
+// to grid.js (this import's specifier changes accordingly); `Site`/`Cell`/
+// `NttRect`/`SiteNode` moved out to site.js/cell.js/cell.js/site.js.
+import { Grid } from './grid.js';
 import { newTabTools } from './newTab.js';
 import { Prefs } from './prefs.js';
 import { Transformation } from './transformation.js';
@@ -28,15 +28,15 @@ import { Updater } from './updater.js';
 import { el } from './dom.js';
 
 /**
- * `Site`/`Cell`/`NttRect`/`SiteNode` stay owned by fx-newTab.js (still read
- * by stayers there — `Grid`/`Cell`/`Site` themselves), so per the arc's
+ * `Site`/`SiteNode` stay owned by site.js, `Cell`/`NttRect` by cell.js (still
+ * read by stayers there — `Grid`/`Cell`/`Site` themselves), so per the arc's
  * typedef-ownership rule they're referenced here via
- * `import('./fx-newTab.js').X`, same as transformation.js/updater.js's own
- * typedef blocks.
- * @typedef {import('./fx-newTab.js').Site} Site
- * @typedef {import('./fx-newTab.js').Cell} Cell
- * @typedef {import('./fx-newTab.js').NttRect} NttRect
- * @typedef {import('./fx-newTab.js').SiteNode} SiteNode
+ * `import('./site.js' | './cell.js').X`, same as transformation.js/updater.js's
+ * own typedef blocks.
+ * @typedef {import('./site.js').Site} Site
+ * @typedef {import('./cell.js').Cell} Cell
+ * @typedef {import('./cell.js').NttRect} NttRect
+ * @typedef {import('./site.js').SiteNode} SiteNode
  */
 
 /**

@@ -25,7 +25,7 @@ import { el } from '../../webextension/dom.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 // M3 (MODERNIZATION.md): captureTab/startCaptureSession/fetchFaviconBlob/
 // pickAndStore moved from background.js to lib/capture.js — this wiring
 // check now source-scans the new home. The 'Thumbnails.getFavicons' message
@@ -213,7 +213,7 @@ describe('Site.applyFavicon — DOM swap', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const body = extractMethod(source, 'applyFavicon');
 		const code = `var _applyHarness = { ${body} };`;
 		// chrome-prep C2: `applyFavicon`'s img-swap block now calls the

@@ -17,7 +17,7 @@ import {
 
 /**
  * Select a pinned tile for editing via its own in-tile "edit" action button
- * (fx-newTab.js's `Site._onClick` 'edit' case: opens the drawer, switches to
+ * (site.js's `Site._onClick` 'edit' case: opens the drawer, switches to
  * the Tile tab, AND sets `selectedSiteIndex` — all from one real click, no
  * page-global writes).
  */

@@ -6,7 +6,7 @@
  * Integration test: tile-URL render path characterization.
  * Phase 1 slot 2 of the migration plan (MIGRATION.md).
  *
- * Loads the real `fx-newTab.js` via `vm.runInThisContext` and exercises
+ * Natively `import()`s the real `site.js` and exercises
  * `Site.prototype.addTitle` — the function that writes stored URLs into the
  * DOM as `<a href="...">`. The §2.1 finding in the security audit is that
  * this path performs NO sanitization: any URL stored in IDB (including
@@ -28,29 +28,30 @@ describe('tile-URL render path — addTitle (Phase 1 slot 2)', () => {
 	let addTitle: any;
 
 	beforeAll(async () => {
-		// fx-newTab.js is mostly declarations (Grid, Cell, Site, Drag, Drop, etc.).
-		// page-modules P1 (PAGE_MODULES.md): its top level is now
-		// definition-only — the former `UndoDialog.init(); newTabTools.startup();`
-		// trailer this test used to strip out was hoisted to page-main.js.
-		// page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
-		// `import`/`export` syntax this slice, which `vm.runInThisContext`
+		// site.js (chrome-prep C4c, CHROME_PREP.md, split out of the former
+		// page monolith) holds `Site`'s constructor+prototype (Grid/Cell/Drag/
+		// Drop live in their own sibling modules). page-modules P1
+		// (PAGE_MODULES.md): its top level is now definition-only — the former
+		// `UndoDialog.init(); newTabTools.startup();` trailer this test used to
+		// strip out was hoisted to page-main.js. page-modules P5
+		// (PAGE_MODULES.md): the former page monolith gained real
+		// `import`/`export` syntax in that slice, which `vm.runInThisContext`
 		// (script-mode) can no longer parse — natively `import()`ing it
-		// instead. chrome-prep C3b (CHROME_PREP.md): fx-newTab.js is now in
-		// tsconfig.json's checked program in its own right, so this is a
-		// plain literal-string dynamic import rather than the old
+		// instead. chrome-prep C3b (CHROME_PREP.md) typed it for real, so this
+		// is a plain literal-string dynamic import rather than the old
 		// `@vite-ignore`d computed-path one — `tsc` resolves/types it like a
 		// static import. It stays dynamic (not top-level static), though:
-		// importing it transitively imports and evaluates newTab.js too (the
-		// legal cycle, Decision 3), whose top-level DOM-wiring IIFE needs the
-		// real markup's element ids — mounting the shipped `newTab.html` body
-		// first is the same precedent page-module-scope.test.ts and
+		// importing site.js transitively imports and evaluates newTab.js too
+		// (the legal cycle, Decision 3), whose top-level DOM-wiring IIFE needs
+		// the real markup's element ids — mounting the shipped `newTab.html`
+		// body first is the same precedent page-module-scope.test.ts and
 		// `_helpers.ts`'s `mountSite()` use, and a static import is hoisted
 		// above all of a module's own top-level code, so there's no way to
 		// sequence "mount the DOM, then import" with one.
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
-		const fx = await import('../../webextension/fx-newTab.js');
+		const site = await import('../../webextension/site.js');
 
-		addTitle = fx.Site.prototype.addTitle;
+		addTitle = site.Site.prototype.addTitle;
 		expect(addTitle).toBeTypeOf('function');
 	});
 

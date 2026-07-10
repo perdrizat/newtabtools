@@ -2,28 +2,28 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// chrome-prep C4a (CHROME_PREP.md): extracted verbatim from fx-newTab.js's
-// `UndoDialog` singleton (C3b typed it there; this slice only moves the
-// code — no rewrite, per the arc's slicing rule). `newTabTools` (newTab.js)
-// is a real, call-time-only reference back into a file that in turn imports
-// THIS file (fx-newTab.js's `Site.block()` calls `UndoDialog.show()`) — a
-// legal ESM cycle under Decision 3 (PAGE_MODULES.md): every reference below
-// is inside a method body, never a top-level read. `Updater` is a sibling
-// module extracted in the same slice (no cycle between the two — updater.js
-// never imports this file).
+// chrome-prep C4a (CHROME_PREP.md): extracted verbatim (C3b typed the
+// `UndoDialog` singleton before this slice moved it; no rewrite, per the
+// arc's slicing rule). `newTabTools` (newTab.js) is a real, call-time-only
+// reference back into a file that in turn imports THIS file (site.js's
+// `Site.block()` calls `UndoDialog.show()`) — a legal ESM cycle under
+// Decision 3 (PAGE_MODULES.md): every reference below is inside a method
+// body, never a top-level read. `Updater` is a sibling module extracted in
+// the same slice (no cycle between the two — updater.js never imports this
+// file).
 import { Blocked } from './prefs.js';
 import { Tiles } from './tiles-shim.js';
 import { newTabTools } from './newTab.js';
 import { Updater } from './updater.js';
 
 /**
- * `Link` is fx-newTab.js's own alias of `tiles-shim.js`'s `Tile` type — used
+ * `Link` is site.js's own alias of `tiles-shim.js`'s `Tile` type — used
  * by both this mover and stayers there (`Grid.createSite`, `Site`), so per
- * the arc's typedef-ownership rule it stays owned by fx-newTab.js and is
- * referenced here via `import('./fx-newTab.js').Link`, same as `Site`/`Cell`.
- * @typedef {import('./fx-newTab.js').Site} Site
- * @typedef {import('./fx-newTab.js').Cell} Cell
- * @typedef {import('./fx-newTab.js').Link} Link
+ * the arc's typedef-ownership rule it stays owned by site.js and is
+ * referenced here via `import('./site.js').Link`, same as `Site`.
+ * @typedef {import('./site.js').Site} Site
+ * @typedef {import('./cell.js').Cell} Cell
+ * @typedef {import('./site.js').Link} Link
  */
 
 /**

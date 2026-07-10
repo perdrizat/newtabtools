@@ -2,30 +2,30 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// chrome-prep C4a (CHROME_PREP.md): extracted verbatim from fx-newTab.js's
-// `Updater` singleton (C3b typed it there; this slice only moves the code —
-// no rewrite, per the arc's slicing rule). `Grid` (still defined in
-// fx-newTab.js — Cell/Site/Grid don't move until C4c) and `newTabTools`
-// (newTab.js) are real, call-time-only references back into files that in
-// turn import THIS file (fx-newTab.js's Site/Drag/Drop call
-// `Updater.updateGrid()`) — a legal ESM cycle under Decision 3
-// (PAGE_MODULES.md): every reference below is inside a method body, never a
-// top-level read. `Transformation` is a sibling module extracted in the same
-// slice (no cycle between the two — transformation.js never imports this
-// file).
+// chrome-prep C4a (CHROME_PREP.md): extracted verbatim (C3b typed the
+// `Updater` singleton before this slice moved it; no rewrite, per the arc's
+// slicing rule). `Grid` and `newTabTools` (newTab.js) are real,
+// call-time-only references back into files that in turn import THIS file
+// (site.js's Site/drag-drop.js's Drag/Drop call `Updater.updateGrid()`) — a
+// legal ESM cycle under Decision 3 (PAGE_MODULES.md): every reference below
+// is inside a method body, never a top-level read. `Transformation` is a
+// sibling module extracted in the same slice (no cycle between the two —
+// transformation.js never imports this file). chrome-prep C4c
+// (CHROME_PREP.md): `Grid` moved out to grid.js (this import's specifier
+// changes accordingly).
 import { Tiles } from './tiles-shim.js';
-import { Grid } from './fx-newTab.js';
+import { Grid } from './grid.js';
 import { newTabTools } from './newTab.js';
 import { Transformation } from './transformation.js';
 
 /**
- * `Link` is fx-newTab.js's own alias of `tiles-shim.js`'s `Tile` type — used
+ * `Link` is site.js's own alias of `tiles-shim.js`'s `Tile` type — used
  * by both this mover and stayers there (`Grid.createSite`, `Site`), so per
- * the arc's typedef-ownership rule it stays owned by fx-newTab.js and is
- * referenced here via `import('./fx-newTab.js').Link`, same as `Site`/`Cell`.
- * @typedef {import('./fx-newTab.js').Site} Site
- * @typedef {import('./fx-newTab.js').Cell} Cell
- * @typedef {import('./fx-newTab.js').Link} Link
+ * the arc's typedef-ownership rule it stays owned by site.js and is
+ * referenced here via `import('./site.js').Link`, same as `Site`.
+ * @typedef {import('./site.js').Site} Site
+ * @typedef {import('./cell.js').Cell} Cell
+ * @typedef {import('./site.js').Link} Link
  */
 
 /**

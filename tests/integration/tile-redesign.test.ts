@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mountSite, ensureSiteEnv, readNewTabHtml } from './_helpers';
-// page-modules P5 (PAGE_MODULES.md): fx-newTab.js's Site now real-imports
+// page-modules P5 (PAGE_MODULES.md): site.js's Site now real-imports
 // `Prefs`/`TileStats`/`NeverCapture` (from prefs.js/stats.js) instead of
 // reading them off `globalThis` — a stand-in object assigned over
 // `globalThis.X` is invisible to that binding (the P3/P4 "second-order
@@ -293,8 +293,8 @@ describe('Tile redesign — logo-emanation fallback (newTab.css)', () => {
 	});
 });
 
-// The fx-newTab.js behaviours that used to be asserted as source-string matches
-// (`expect(fxSource).toContain('_renderActions')`, etc.) are now covered
+// The site.js behaviours that used to be asserted as source-string matches
+// (`expect(siteSource).toContain('_renderActions')`, etc.) are now covered
 // behaviorally: action buttons + the removed "open" action in the §4.2 suite
 // below, brand-color sanitisation there too, and objectURL revocation in
 // objecturl-revoke.test.ts. The two stat-chip checks and the siteGlyph-sharing

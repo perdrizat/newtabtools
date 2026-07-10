@@ -25,16 +25,17 @@ import { el } from './dom.js';
  * current tiles' `url`/`title` (formerly `Grid.sites` read off a bare
  * global), is now an injected `tilesSource` callback (see `init()`) — the
  * controller wires the widget instead of the widget reaching back into the
- * controller. This file reads no page global at all anymore; the
- * `Grid`/`newTabTools` `globalThis` bridge assignments in fx-newTab.js/
- * newTab.js are TEST-ONLY as a result.
+ * controller. This file reads no page global at all anymore; chrome-prep C3d
+ * (CHROME_PREP.md) later deleted the `Grid`/`newTabTools` `globalThis` bridge
+ * assignments entirely (grid.js/newTab.js), so there is nothing left to read
+ * even in tests.
  *
  * @typedef {{url: string, title: string}} SourceItem A tile/bookmark/history
  *   entry as `buildResults` consumes it.
  * @typedef {{tiles?: SourceItem[], bookmarks?: SourceItem[], history?: SourceItem[]}} Sources
  * @typedef {{section: string, type: string, title: string, url: string|null, query?: string}} ResultItem
  * @typedef {() => Array<{url?: string, title?: string}|null|undefined>} TilesSource
- *   Mirrors `Grid.sites` (`fx-newTab.js`): cells may be empty, so elements
+ *   Mirrors `Grid.sites` (`grid.js`): cells may be empty, so elements
  *   may be `null`/`undefined`; `_tiles()` filters those (and any without a
  *   `url`) out, same as the old `typeof Grid` read did.
  */

@@ -68,7 +68,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 
 			// Target the specific tile by finding its `.newtab-site` node via DOM
 			// (its href identifies which URL it renders; `pinned` is a real
-			// reflected attribute — see fx-newTab.js's Site#pin/unpin).
+			// reflected attribute — see site.js's Site#pin/unpin).
 			await waitForCondition(
 				page,
 				(u) => {

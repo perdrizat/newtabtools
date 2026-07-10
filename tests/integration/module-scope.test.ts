@@ -28,7 +28,7 @@
  * `NeverCapture` from prefs.js; `compareVersions` from common.js) was
  * expected to survive PERMANENTLY, since the page read it as a classic
  * `<script>` global. chrome-prep C3d (CHROME_PREP.md maintainer directive 1)
- * retires it too: newTab.js/fx-newTab.js/awesomebar.js now import these for
+ * retires it too: newTab.js/site.js/grid.js/awesomebar.js now import these for
  * real, so this file's job flips fully to negative assertions — prove every
  * bridge, Decision-2 survivors included, is actually gone from `globalThis`.
  *

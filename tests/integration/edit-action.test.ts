@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -41,7 +41,7 @@ describe('Site._onClick — "edit" action opens the drawer on the Tile tab', () 
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		body = extractMethod(source, '_onClick');
 	});
 

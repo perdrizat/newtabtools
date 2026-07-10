@@ -153,7 +153,7 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	// module import — legitimate there, unlike a page-context global read).
 	// These E2E tests instead prove the icons pipeline is actually wired into
 	// the real page: every pinned tile's action row renders each action's
-	// icon as a real inline SVG (fx-newTab.js's Site#_renderActionButtons).
+	// icon as a real inline SVG (site.js's Site#_renderActions).
 
 	it('the tile action row renders inline SVG icons (edit/never-capture/pin/remove)', async () => {
 		const icons = await page.evaluate(() => {

@@ -28,7 +28,7 @@ by maintainer).
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
-| C4 — split the monoliths into feature modules | a+b done (`6a6ff20`, `1bdb418`); c+d pending | — |
+| C4 — split the monoliths into feature modules | a+b done (`6a6ff20`, `1bdb418`); c done (uncommitted); d pending | — |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
@@ -511,9 +511,48 @@ the only boot site. FULL E2E per slice; purity review per slice.*
   `lib/tiles-store.js`'s `Tile.titleIsUserSet` doc-truth fix — plus the E2E
   runner concurrency lock (`tests/e2e/run_esr_tests.sh`). See CHANGELOG.md
   `[Unreleased]` for the itemized list.*
-- [ ] **C4c** — `site.js`, `cell.js`, `grid.js`, `page.js` (Page was missing
-      from the original phase list — it becomes its own small module);
-      fx-newTab.js is DELETED when this lands. UAT spot-run (tiles: 01/10/23).
+- [x] **C4c** — fx-newTab.js (1200 lines) DELETED, dissolved into four new
+      modules, each moved verbatim (types unchanged): `site.js` (701 lines:
+      `Site` + its private rendering helpers `siteGlyph`/`siteHue`/
+      `siteBrandColor`; owns the `Link`/`SiteNode` typedefs), `cell.js`
+      (265 lines: `Cell`; owns `CellNode` + the `DOMRect` polyfill/prototype
+      shim and its `NttRect` typedef — placement decision: `Cell` is
+      `NttRect`'s only in-file consumer among the four movers, so the shim
+      travels with its dominant consumer; all 4 `@ts-expect-error`s moved
+      verbatim, count unchanged), `grid.js` (233 lines: `Grid`), `page.js`
+      (73 lines: `Page` — its own small module per the slice note; a leaf
+      among the movers, nothing imports `Page` back, so it adds no new
+      cycle). Sum 1272 (+72 vs 1200 = per-file MPL headers + module
+      doc-comments + the cross-module `import` lines/typedef blocks that
+      replace single-file adjacency). One new value cycle:
+      grid.js<->site.js (`Grid.createSite` constructs `Site`; `Site`'s
+      never-capture handler calls `Grid.refresh()`) — call-time-only both
+      ways, tripwire green. Consumers re-pointed, no re-export shim:
+      newTab.js (`Grid`→grid.js, `Page`→page.js), page-main.js
+      (`Grid`→grid.js; import list stays at ten — C4b honest-accounting
+      precedent: cell.js/site.js/page.js reached transitively),
+      transformation.js/updater.js/drag-drop.js (`Grid`→grid.js + typedef
+      re-points), undo-dialog.js (typedef re-points only), awesomebar.js
+      (verified: none). tsconfig `include`: the fx-newTab.js entry DROPPED,
+      not replaced with four new ones — all four movers are reachable via
+      import-following from the remaining newTab.js entry (verified:
+      typecheck error count unchanged at zero). Tests: `_helpers.ts`'s
+      `ensureSiteEnv` dynamic import → site.js; drag-reorder/
+      tile-url-render/pin-url-autocomplete-title re-pointed; source-grep
+      suites (site-brand-color, favicon-overlay-and-pin, favicons,
+      edit-action, drawer-permissions, auto-thumbnail, css-grid,
+      drag-invariants) re-read site.js/grid.js; page-module-scope's derived
+      sanity-net last-entry invariant → grid.js; page-main-boot/
+      prefs-onchange-seam hardcoded arrays → grid.js. Repo-wide `fx-newTab`
+      grep: zero live references — only historical docs (CHANGELOG/
+      PAGE_MODULES/CHROME_PREP/audit/) + frozen UAT artifacts remain.
+      Gates: fast 1314/1314, lint/typecheck/lint:webext clean, tripwire
+      green (missing-browser-API `ReferenceError: window is not defined`,
+      not TDZ/SyntaxError); E2E ran the FULL suite 127/127 across 32 files
+      (the targeted six-file invocation's `--` separator made vitest run
+      everything — a superset of the requested batch; boot-timing median
+      firstTileSeen 95ms, unchanged). UAT spot-run (tiles: 01/10/23) still
+      owed before the C gate.
 - [ ] **C4d** — newTab.js: DESIGN PASS FIRST (the newTabTools god-object's
       method groups share `this`/uiElements state — unlike fx-newTab's
       already-separate singletons, this split needs a state-ownership design:

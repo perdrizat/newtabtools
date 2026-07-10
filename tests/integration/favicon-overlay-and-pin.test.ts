@@ -34,7 +34,7 @@ import vm from 'node:vm';
 import { el } from '../../webextension/dom.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const ICONS_PATH = path.resolve(__dirname, '../../webextension/icons.js');
 
@@ -75,7 +75,7 @@ describe('applyFavicon — overlay badge is updated too', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading method for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const body = extractMethod(source, 'applyFavicon');
 		const code = `var _applyHarness = { ${body} };`;
 		// chrome-prep C2: `applyFavicon`'s img-swap block now calls the
@@ -224,7 +224,7 @@ describe('siteBrandColor — emits oklch() not hsl()', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading top-level fns
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const siteHue = extractTopLevelFunction(source, 'siteHue');
 		const siteBrandColor = extractTopLevelFunction(source, 'siteBrandColor');
 		const code = `${siteHue}\n${siteBrandColor}\nthis.siteHue = siteHue; this.siteBrandColor = siteBrandColor;`;
@@ -286,7 +286,7 @@ describe('_renderActions — picks pin vs unpin based on isPinned', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: source-level branch
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		renderActions = extractMethod(source, '_renderActions');
 	});
 
@@ -302,7 +302,7 @@ describe('updateAttributes — swaps the pin icon when isPinned flips', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading method for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const updateAttrs = extractMethod(source, 'updateAttributes');
 		const code = `var _attrHarness = { ${updateAttrs} };`;
 		vm.runInThisContext(code, { filename: 'update-attrs-harness.js' });

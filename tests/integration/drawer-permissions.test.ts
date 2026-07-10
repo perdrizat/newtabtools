@@ -23,7 +23,7 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -109,7 +109,7 @@ describe('Stat chip rank wiring — _renderStatChip', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const renderStatChip = extractMethod(source, '_renderStatChip');
 		const code = `var _renderHarness = { ${renderStatChip} };`;
 		vm.runInThisContext(code, { filename: 'render-harness.js' });

@@ -6,8 +6,8 @@
  * The persisted tile/link shape (mirrors `lib/tiles-store.js`'s `Tile`
  * typedef — kept as a separate, page-side declaration rather than a
  * cross-boundary `import()` reference, since page files don't import `lib/`
- * at runtime and this leaf is the one newTab.js/fx-newTab.js already import
- * for the Tiles/Background proxy).
+ * at runtime and this leaf is the one newTab.js/grid.js/site.js/others
+ * already import for the Tiles/Background proxy).
  * @typedef {Object} Tile
  * @property {string} url
  * @property {string} [title]

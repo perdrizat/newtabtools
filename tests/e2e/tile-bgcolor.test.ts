@@ -53,7 +53,7 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 			await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 10_000, message: 'Pinned tile not in grid' });
 
 			// Select the pinned tile for editing via its in-tile "edit" action
-			// button (fx-newTab.js's Site._onClick 'edit' case: opens the
+			// button (site.js's Site._onClick 'edit' case: opens the
 			// drawer, switches to the Tile tab, and sets selectedSiteIndex —
 			// all in one real click, no page-global writes).
 			await page.evaluate((u) => {

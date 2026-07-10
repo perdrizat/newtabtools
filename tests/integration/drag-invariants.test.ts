@@ -30,10 +30,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = path.resolve(__dirname, '../../webextension/newTab.css');
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const GRID_PATH = path.resolve(__dirname, '../../webextension/grid.js');
 // chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop`/`DropTargetShim`/
-// `DropPreview` moved out of fx-newTab.js into their own drag-drop.js module
-// — the `Drag.start` invariant below now reads from here instead.
+// `DropPreview` moved to their own drag-drop.js module — the `Drag.start`
+// invariant below reads from here instead.
 const DRAG_DROP_PATH = path.resolve(__dirname, '../../webextension/drag-drop.js');
 
 describe('Drag invariants — CSS rules the drag pipeline depends on', () => {
@@ -81,12 +81,12 @@ describe('Drag invariants — CSS rules the drag pipeline depends on', () => {
 });
 
 describe('Drag invariants — JS contracts the drag pipeline depends on', () => {
-	let fxSource: string;
+	let gridSource: string;
 	let dragDropSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drag invariants
-		fxSource = fs.readFileSync(FX_PATH, 'utf8');
+		gridSource = fs.readFileSync(GRID_PATH, 'utf8');
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: drag invariants
 		dragDropSource = fs.readFileSync(DRAG_DROP_PATH, 'utf8');
 	});
@@ -100,8 +100,8 @@ describe('Drag invariants — JS contracts the drag pipeline depends on', () => 
 		// at runtime — `setProperty`'s string param needs a cast since
 		// `Prefs.rows`/`columns` are numbers) without loosening what the test
 		// actually checks: that `Prefs.rows`/`Prefs.columns` is the value.
-		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-rows['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.rows\s*\)+/);
-		expect(fxSource).toMatch(/setProperty\(\s*['"]--ntt-cols['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.columns\s*\)+/);
+		expect(gridSource).toMatch(/setProperty\(\s*['"]--ntt-rows['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.rows\s*\)+/);
+		expect(gridSource).toMatch(/setProperty\(\s*['"]--ntt-cols['"]\s*,\s*(?:\/\*\*.*?\*\/\s*\(\s*)*Prefs\.columns\s*\)+/);
 	});
 
 	it('Drag.start refreshes the cell position cache before computing offsets', () => {
@@ -119,7 +119,7 @@ describe('Drag invariants — JS contracts the drag pipeline depends on', () => 
 		// setTimeout, and the page can be torn down (cells gone) between
 		// scheduling and firing. The guard also keeps the integration
 		// drag-reorder harness (which mocks an empty Grid) green.
-		const cacheBlock = fxSource.match(/cacheCellPositions\(\)\s*\{[\s\S]*?\},/);
+		const cacheBlock = gridSource.match(/cacheCellPositions\(\)\s*\{[\s\S]*?\},/);
 		expect(cacheBlock).not.toBeNull();
 		expect(cacheBlock![0]).toMatch(/(!Grid\.cells|Grid\.cells\.length\s*===?\s*0)/);
 	});

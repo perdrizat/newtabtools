@@ -9,11 +9,13 @@
  * TDZ semantics for cyclic imports — a top-level read of a cycle import that
  * throws `ReferenceError: Cannot access 'X' before initialization` in real
  * Firefox (and raw Node) evaluates fine under the transform. Exactly that
- * class of bug shipped in chrome-prep C3b: fx-newTab.js gained a top-level
- * `const … = newTabToolsImpl` read of its newTab.js cycle import (a
- * PAGE_MODULES.md Decision-3 violation), the whole fast tier stayed green,
- * and every one of the 32 E2E files failed because page-main.js's module
- * graph rejected before `Grid.init()` could run.
+ * class of bug shipped in chrome-prep C3b: the page's cyclic-import entry
+ * file at the time (later dissolved into grid.js/cell.js/site.js/page.js in
+ * chrome-prep C4c) gained a top-level `const … = newTabToolsImpl` read of
+ * its newTab.js cycle import (a PAGE_MODULES.md Decision-3 violation), the
+ * whole fast tier stayed green, and every one of the 32 E2E files failed
+ * because page-main.js's module graph rejected before `Grid.init()` could
+ * run.
  *
  * THE NET: spawn a real `node` child (no transform, no shell) that raw-
  * imports `webextension/page-main.js` (the page's single boot entry, so the

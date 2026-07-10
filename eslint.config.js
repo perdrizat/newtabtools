@@ -159,8 +159,8 @@ export default [
 		// which is ignored above). page-main.js side-effect-imports the eight
 		// page files and runs the hoisted boot sequence, so it needs `import`
 		// syntax; icons.js/stats.js/tiles-shim.js (P2), common.js/prefs.js
-		// (P3), awesomebar.js (P4), and newTab.js/fx-newTab.js (P5) all gained
-		// real `import`/`export` syntax in their own slice. action.js has no
+		// (P3), awesomebar.js (P4), and newTab.js (P5) all gained real
+		// `import`/`export` syntax in their own slice. action.js has no
 		// `import`/`export` of its own (self-scoped, references only
 		// chrome/browser APIs) but is still parsed as sourceType: 'module' here
 		// to match how the browser actually loads it — there is no remaining

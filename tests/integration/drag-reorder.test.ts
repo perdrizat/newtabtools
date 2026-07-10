@@ -3,11 +3,13 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Integration test: drag-reorder tile logic in fx-newTab.js.
- * Phase 1 slot 9 of the migration plan (MIGRATION.md).
+ * Integration test: drag-reorder tile logic (grid.js/cell.js/site.js/
+ * drag-drop.js, chrome-prep C4c — CHROME_PREP.md — split these out of the
+ * former page monolith). Phase 1 slot 9 of the migration plan
+ * (MIGRATION.md).
  *
- * Loads the real Drag, Drop, and Site.handleEvent from `fx-newTab.js` with
- * mocked DOM and Grid. Characterizes:
+ * Loads the real Drag, Drop, and Site.handleEvent with mocked DOM and Grid.
+ * Characterizes:
  *   - Lock guard: Prefs.locked blocks dragstart
  *   - Drag.start: sets draggedSite, marks nodes as dragged, sets dataTransfer
  *   - Drag.end: clears draggedSite, removes dragged attrs
@@ -18,34 +20,33 @@
  * E2E note: drag-reorder is best characterized at Integration tier first
  * due to the complexity of simulating drag events in Puppeteer.
  *
- * page-modules P5 (PAGE_MODULES.md): fx-newTab.js gained real
- * `import`/`export` syntax this slice, which `vm.runInThisContext`
+ * page-modules P5 (PAGE_MODULES.md): the former page monolith gained real
+ * `import`/`export` syntax in that slice, which `vm.runInThisContext`
  * (script-mode) can no longer parse — natively `import()`ing it instead.
- * chrome-prep C3b (CHROME_PREP.md): fx-newTab.js is now in tsconfig.json's
- * checked program in its own right, so the specifier below is a plain
- * literal-string dynamic import rather than the old `@vite-ignore`d
- * computed-path one — `tsc` can resolve/type it like a static import. It
- * stays a dynamic (not top-level static) `import()`, though: importing it
- * transitively imports and evaluates newTab.js too (the legal cycle,
- * Decision 3), so `document.body` needs the real markup mounted first
- * (newTab.js's top-level DOM-wiring IIFE needs real element ids — the
- * page-module-scope.test.ts precedent), and a static import is hoisted
- * above all of a module's own top-level code, so there's no way to
- * sequence "mount the DOM, then import" with one. `Prefs`/`Tiles`/
- * `newTabTools` are now real singletons `fx-newTab.js` imports for real, so
- * this test drives their REAL state in place (mutating properties/methods)
+ * chrome-prep C3b (CHROME_PREP.md) typed it for real, so the specifier below
+ * is a plain literal-string dynamic import rather than the old
+ * `@vite-ignore`d computed-path one — `tsc` can resolve/type it like a
+ * static import. It stays a dynamic (not top-level static) `import()`,
+ * though: importing grid.js transitively imports and evaluates newTab.js
+ * too (the legal cycle, Decision 3), so `document.body` needs the real
+ * markup mounted first (newTab.js's top-level DOM-wiring IIFE needs real
+ * element ids — the page-module-scope.test.ts precedent), and a static
+ * import is hoisted above all of a module's own top-level code, so there's
+ * no way to sequence "mount the DOM, then import" with one. `Prefs`/`Tiles`/
+ * `newTabTools` are real singletons these modules import for real, so this
+ * test drives their REAL state in place (mutating properties/methods)
  * rather than replacing the `globalThis.X` bindings the old vm harness
  * pre-seeded — a stand-in object assigned over `globalThis.X` is invisible
  * to a real `import` binding (the P3/P4 "second-order fallout" precedent).
  * The `let X: any` locals below stay untyped this slice (test-only mocks
- * exercising both fx-newTab.js and newTab.js together, deeper than the
- * `_helpers.ts` dividend covers) — C3c can retype them once newTab.js is.
+ * exercising several modules together, deeper than the `_helpers.ts`
+ * dividend covers).
  *
- * chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop` moved out of fx-newTab.js
- * into their own `drag-drop.js` module — imported directly below instead of
- * destructured off `fx`, same pattern C4a established for
- * `Updater`/`Transformation` (same singleton objects either way, since
- * fx-newTab.js itself imports `Drag`/`Drop` from this same specifier).
+ * chrome-prep C4b (CHROME_PREP.md): `Drag`/`Drop` moved out to their own
+ * `drag-drop.js` module — imported directly below instead of destructured
+ * off the grid.js module namespace, same pattern C4a established for
+ * `Updater`/`Transformation`. chrome-prep C4c (CHROME_PREP.md): `Grid`
+ * itself moved out to grid.js (the specifier below changes accordingly).
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -88,7 +89,7 @@ function mockDataTransfer() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
+describe('Drag-reorder — grid.js/cell.js/site.js/drag-drop.js (Phase 1 slot 9)', () => {
 	let Drag: any;
 	let Drop: any;
 	let DropTargetShim: any;
@@ -103,7 +104,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		// importing (page-module-scope.test.ts's precedent).
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
-		// Real singletons fx-newTab.js/newTab.js import for real. `Prefs`'s
+		// Real singletons grid.js/newTab.js import for real. `Prefs`'s
 		// pref-name properties are plain, getter-less own-data properties
 		// before `Prefs.init()` runs (never called here — real boot is out of
 		// scope) — a direct assignment is immediate and synchronous, same as
@@ -114,20 +115,21 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		(Prefs as any).columns = 3;
 		Tiles.getAllTiles = vi.fn().mockResolvedValue([]);
 
-		const fx = await import('../../webextension/fx-newTab.js');
+		const gridMod = await import('../../webextension/grid.js');
 		const nt = await import('../../webextension/newTab.js');
 		// chrome-prep C4a (CHROME_PREP.md): Updater/Transformation moved out of
-		// fx-newTab.js into their own modules — imported directly below instead
-		// of destructured off `fx`. Same singleton objects either way (ESM's
-		// module cache dedupes by specifier), since fx-newTab.js itself imports
-		// both from these same specifiers.
+		// the former page monolith into their own modules — imported directly
+		// below instead of destructured off the grid.js module namespace. Same
+		// singleton objects either way (ESM's module cache dedupes by
+		// specifier), since grid.js/site.js themselves import both from these
+		// same specifiers.
 		const updaterMod = await import('../../webextension/updater.js');
 		const transformationMod = await import('../../webextension/transformation.js');
-		// chrome-prep C4b (CHROME_PREP.md): Drag/Drop moved out of fx-newTab.js
-		// into drag-drop.js — same reasoning as the C4a imports just above.
+		// chrome-prep C4b (CHROME_PREP.md): Drag/Drop moved out into drag-drop.js
+		// — same reasoning as the C4a imports just above.
 		const dragDropMod = await import('../../webextension/drag-drop.js');
 
-		Grid = fx.Grid;
+		Grid = gridMod.Grid;
 		Updater = updaterMod.Updater;
 		Updater.updateGrid = vi.fn();
 		newTabTools = nt.newTabTools;
@@ -135,7 +137,7 @@ describe('Drag-reorder — fx-newTab.js (Phase 1 slot 9)', () => {
 		newTabTools.startup = vi.fn();
 		newTabTools.getThumbnails = vi.fn().mockResolvedValue(undefined);
 
-		// Provide document methods fx-newTab.js needs. `_setDragData` is the only
+		// Provide document methods drag-drop.js/transformation.js need. `_setDragData` is the only
 		// createElement call reachable from the Drag/Drop/Transformation paths
 		// this file exercises (a 'div' for the drag-image element) — no more
 		// createElementNS namespace split post-H3, so this overrides createElement.

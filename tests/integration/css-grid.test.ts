@@ -60,13 +60,13 @@ describe('CSS Grid layout — newTab.css', () => {
 	});
 });
 
-describe('CSS Grid — fx-newTab.js _renderGrid', () => {
+describe('CSS Grid — grid.js _renderGrid', () => {
 	let source: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: JS grid rendering
 		source = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/fx-newTab.js'), 'utf8'
+			path.resolve(__dirname, '../../webextension/grid.js'), 'utf8'
 		);
 	});
 

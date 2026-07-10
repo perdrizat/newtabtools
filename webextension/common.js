@@ -5,7 +5,7 @@
 /**
  * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6): `compareVersions` is
  * a real `export`, consumed by real `import`s from `lib/tiles-store.js` (the
- * background read path) and `fx-newTab.js` (the page read path). The
+ * background read path) and `newTab.js` (the page read path). The
  * `globalThis.compareVersions = …` bridge assignment that survived through
  * PAGE_MODULES.md is retired as of chrome-prep C3d: every production and
  * test consumer now reaches this via a real `import`, so the bridge is gone

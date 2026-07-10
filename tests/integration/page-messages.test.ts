@@ -21,8 +21,8 @@
  *   - Dispatches DIRECTLY and synchronously, with no queue: chrome-prep C3a
  *     (CHROME_PREP.md) retired the MV3-review-§4.3/MODERNIZATION.md-M5
  *     early-broadcast queue + `flushQueued()` replay it used to fall back to.
- *     `Updater`/`Grid` are real ES-module imports from fx-newTab.js
- *     (PAGE_MODULES.md P5), and the P5 import cycle guarantees fx-newTab.js's
+ *     `Updater`/`Grid` are real ES-module imports (updater.js/grid.js)
+ *     (PAGE_MODULES.md P5), and the P5 import cycle guarantees grid.js's
  *     own top-level evaluation completes before newTab.js's
  *     `browser.runtime.onMessage.addListener(pageMessageHandler)` call can
  *     ever be invoked — so both names are always initialized by the time a
@@ -152,8 +152,8 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 	// -------------------------------------------------------------------------
 	// chrome-prep C3a (CHROME_PREP.md): the MV3-review-§4.3/MODERNIZATION.md-M5
 	// early-broadcast queue (`_queue`/`_enqueue`/`flushQueued()`) is retired —
-	// it existed only for a load-order hazard (fx-newTab.js's globals not yet
-	// existing when a broadcast arrived) that PAGE_MODULES.md's P5 import cycle
+	// it existed only for a load-order hazard (the page monolith's globals
+	// not yet existing when a broadcast arrived) that PAGE_MODULES.md's P5 import cycle
 	// made provably unreachable. These tests replace the old queue-behavior
 	// suite: they assert the apparatus is actually gone, and that both
 	// broadcasts dispatch straight through with no deferral of any kind.

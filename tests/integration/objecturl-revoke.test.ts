@@ -6,14 +6,14 @@
  * Audit 2026-06-10 §4.3/§8.7.4 — object-URL hygiene in newTab.js.
  *
  * Blob URLs are only freed on document unload, so every repeated-render site
- * must revoke its prior URL before creating a replacement (the
- * fx-newTab.js `refreshThumbnail` pattern: stash on the owner, revoke on
+ * must revoke its prior URL before creating a replacement (site.js's
+ * `refreshThumbnail` pattern: stash on the owner, revoke on
  * replace). These tests drive the real methods (vm-extracted) and assert the
  * revocation contract on the three highest-churn sites the audit flagged:
  *
  *   - `refreshBackgroundImage` — wallpaper blob re-rendered on pref changes
  *   - `getThumbnails`          — per-site IDB thumbnails (stash shared with
- *                                fx-newTab's `_thumbnailObjectURL` so a later
+ *                                site.js's `_thumbnailObjectURL` so a later
  *                                capture's refreshThumbnail revokes ours)
  *   - `refreshRecent`          — favicon blobs, cards rebuilt every refresh
  */
@@ -175,7 +175,7 @@ describe('getThumbnails — per-site stash, revoked on replace', () => {
 		};
 	});
 
-	it('stashes the created URL on the site (shared with fx-newTab refreshThumbnail)', () => {
+	it('stashes the created URL on the site (shared with site.js refreshThumbnail)', () => {
 		harness.getThumbnails();
 		expect(site.thumbnail.style.backgroundImage).toContain('blob:fake-1');
 		expect(site._thumbnailObjectURL).toBe('blob:fake-1');

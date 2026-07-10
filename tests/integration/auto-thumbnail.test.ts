@@ -949,27 +949,27 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 });
 
 // ===========================================================================
-// Remove-thumbnail button — fx-newTab.js (behavioral)
+// Remove-thumbnail button — site.js (behavioral)
 // ===========================================================================
 
-describe('Thumbnail action buttons — fx-newTab.js (behavioral)', () => {
-	let fxSource: string;
+describe('Thumbnail action buttons — site.js (behavioral)', () => {
+	let siteSource: string;
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check: action handler strings
-		fxSource = fs.readFileSync(
-			path.resolve(__dirname, '../../webextension/fx-newTab.js'), 'utf8'
+		siteSource = fs.readFileSync(
+			path.resolve(__dirname, '../../webextension/site.js'), 'utf8'
 		);
 	});
 
 	it('_onClick handles action buttons by data-action attribute', () => {
-		expect(fxSource).toContain('data-action');
+		expect(siteSource).toContain('data-action');
 	});
 
 	it('never-capture action sends Thumbnails.purgeHost message', () => {
 		// The refresh action (Thumbnails.capture) was removed with the refresh
 		// button; behavioral coverage for the purge lives in tile-redesign.test.ts.
-		expect(fxSource).toContain('Thumbnails.purgeHost');
+		expect(siteSource).toContain('Thumbnails.purgeHost');
 	});
 });
 

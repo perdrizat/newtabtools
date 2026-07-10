@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const FX_PATH = path.resolve(__dirname, '../../webextension/fx-newTab.js');
+const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 
 describe('siteHue + siteBrandColor', () => {
 	let siteHue: (url: string) => number | null;
@@ -30,13 +30,13 @@ describe('siteHue + siteBrandColor', () => {
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		// Both helpers are top-level `function` declarations. Extract them
 		// by name and evaluate inside a scoped IIFE so we can return refs.
 		const hueMatch = source.match(/^function\s+siteHue\([\s\S]*?\n\}/m);
 		const brandMatch = source.match(/^function\s+siteBrandColor\([\s\S]*?\n\}/m);
 		if (!hueMatch || !brandMatch) {
-			throw new Error('siteHue/siteBrandColor not found in fx-newTab.js');
+			throw new Error('siteHue/siteBrandColor not found in site.js');
 		}
 		// vm.createContext starts with no globals — explicitly hand it the
 		// host's URL constructor so `new URL(...)` works inside the body.
@@ -110,10 +110,10 @@ describe('siteGlyph — single-letter fallback (Phase 4-5 typography, by decisio
 
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading top-level helper for behavioral test
-		const source = fs.readFileSync(FX_PATH, 'utf8');
+		const source = fs.readFileSync(SITE_PATH, 'utf8');
 		const match = source.match(/^function\s+siteGlyph\([\s\S]*?\n\}/m);
 		if (!match) {
-			throw new Error('siteGlyph not found in fx-newTab.js');
+			throw new Error('siteGlyph not found in site.js');
 		}
 		const ctx = vm.createContext({ URL });
 		vm.runInContext(`${match[0]}\nglobalThis._siteGlyph = siteGlyph;`, ctx);

@@ -7,7 +7,9 @@
  *
  * Chrome-prep C2 (CHROME_PREP.md): extracted to dedup the ~26 near-identical
  * `document.createElement(tag); el.className = c; el.textContent = t;`
- * blocks scattered across newTab.js/fx-newTab.js/awesomebar.js. Covers the
+ * blocks scattered across newTab.js/site.js/grid.js/awesomebar.js (site.js/
+ * grid.js were part of one page monolith at the time, later split up in
+ * chrome-prep C4). Covers the
  * optional-vs-empty-string distinction the JSDoc calls out: an omitted
  * `className`/`text` argument must NOT touch the property (so it keeps
  * whatever the DOM default is), but an explicit `''` is a valid value that

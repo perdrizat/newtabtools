@@ -25,9 +25,9 @@
  * them real `export`s too, so this file (and every other lib/ module) now
  * reaches `Prefs`/`Blocked`/`Filters`/`NeverCapture`/`compareVersions` via a
  * real named `import` below, rather than lib/platform.js's now-retired
- * Decision-2 typed-getter seam. Only the page side (newTab.js/fx-newTab.js/
- * awesomebar.js until P4/P5) and E2E/UAT page-context evaluation still read
- * them off `globalThis` — this file no longer does. `tiles.js`
+ * Decision-2 typed-getter seam. Only the page side (until P4/P5) and E2E/UAT
+ * page-context evaluation still read them off `globalThis` — this file no
+ * longer does. `tiles.js`
  * (the former `Tiles`/`Background` → `globalThis` bridge shim) is gone: it
  * existed solely so background.js's bare-identifier reads could reach
  * `Tiles`/`Background`, and background.js is dissolved — every consumer

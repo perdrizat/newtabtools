@@ -2,23 +2,23 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// chrome-prep C4a (CHROME_PREP.md): extracted verbatim from fx-newTab.js's
-// `Transformation` singleton (C3b typed it there; this slice only moves the
-// code — no rewrite, per the arc's slicing rule). `Grid` (still defined in
-// fx-newTab.js — Cell/Site/Grid don't move until C4c) and `newTabTools`
+// chrome-prep C4a (CHROME_PREP.md): extracted verbatim (C3b typed the
+// `Transformation` singleton before this slice moved it; no rewrite, per the
+// arc's slicing rule). `Grid` and `newTabTools`
 // (newTab.js) are real, call-time-only references back into files that in
-// turn import THIS file (fx-newTab.js imports `Transformation` for its own
-// Grid/Site use) — a legal ESM cycle under Decision 3 (PAGE_MODULES.md):
-// every reference below is inside a method body, never a top-level read, so
-// none of these bindings are touched before the cycle finishes initializing.
-// chrome-prep C4b (CHROME_PREP.md): `Drag` moved out of fx-newTab.js to
-// drag-drop.js, which itself imports `Transformation` from THIS file (Drag's
-// own `drag()`/`end()` call `Transformation.setSitePosition`/
-// `slideSiteTo`) — so this import specifier changes from `./fx-newTab.js` to
-// `./drag-drop.js`, but the reference stays the same legal call-time-only
-// cycle shape (`rearrangeSites` reads `Drag.draggedSite` inside its forEach
-// callback, never at top level).
-import { Grid } from './fx-newTab.js';
+// turn import THIS file (grid.js's/site.js's Grid/Site use `Transformation`)
+// — a legal ESM cycle under Decision 3 (PAGE_MODULES.md): every reference
+// below is inside a method body, never a top-level read, so none of these
+// bindings are touched before the cycle finishes initializing. chrome-prep
+// C4b (CHROME_PREP.md): `Drag` moved out to drag-drop.js, which itself
+// imports `Transformation` from THIS file (Drag's own `drag()`/`end()` call
+// `Transformation.setSitePosition`/`slideSiteTo`) — the reference stays the
+// same legal call-time-only cycle shape (`rearrangeSites` reads
+// `Drag.draggedSite` inside its forEach callback, never at top level).
+// chrome-prep C4c (CHROME_PREP.md): `Grid` moved out to grid.js (this
+// import's specifier changes accordingly); `Site`/`Cell`/`NttRect` moved out
+// to site.js/site.js/cell.js respectively.
+import { Grid } from './grid.js';
 import { Drag } from './drag-drop.js';
 import { newTabTools } from './newTab.js';
 
@@ -27,16 +27,17 @@ import { newTabTools } from './newTab.js';
  * `freezeSitePosition`/`unfreezeSitePosition`/`slideSiteTo` (C3b's own
  * typedef comment explains why it's a separate intersection type rather than
  * a `Site` own-property) — so it moves here with its sole consumer, unlike
- * `NttRect`/`Site`/`Cell`, which stay owned by fx-newTab.js (still read by
- * stayers) and are referenced via `import('./fx-newTab.js').X` below.
+ * `NttRect`/`Site`/`Cell`, which stay owned by cell.js/site.js (still read by
+ * stayers there) and are referenced via `import('./cell.js' | './site.js').X`
+ * below.
  * @typedef {Object} SiteIndexState
  * @property {number} [index]
  */
 
 /**
- * @typedef {import('./fx-newTab.js').Site} Site
- * @typedef {import('./fx-newTab.js').Cell} Cell
- * @typedef {import('./fx-newTab.js').NttRect} NttRect
+ * @typedef {import('./site.js').Site} Site
+ * @typedef {import('./cell.js').Cell} Cell
+ * @typedef {import('./cell.js').NttRect} NttRect
  */
 
 /**

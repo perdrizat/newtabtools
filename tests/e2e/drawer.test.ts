@@ -402,7 +402,7 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 
 		try {
 			// Click the tile body (not an action button) while the drawer's
-			// Tile tab is open — fx-newTab.js's Site._onClick treats this as
+			// Tile tab is open — site.js's Site._onClick treats this as
 			// "select for editing" whenever `drawer-open` is set.
 			await page.evaluate(u => {
 				const tiles = Array.from(document.querySelectorAll('#newtab-grid .newtab-site')) as HTMLElement[];

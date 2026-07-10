@@ -15,10 +15,11 @@
  * boundary.
  *
  * Harness: the drag-reorder.test.ts pattern — mount the real newTab.html
- * body, then dynamically import fx-newTab.js (the legal cycle evaluates
- * newTab.js too; a static import can't sequence "mount, then import").
- * `chrome.tabs.query` is stubbed callback-style (the page calls it with a
- * callback, not a promise), feeding a title-less tab.
+ * body, then dynamically import newTab.js (the legal cycle with grid.js/
+ * page.js — chrome-prep C4c, CHROME_PREP.md — evaluates those too; a static
+ * import can't sequence "mount, then import"). `chrome.tabs.query` is
+ * stubbed callback-style (the page calls it with a callback, not a promise),
+ * feeding a title-less tab.
  */
 
 import { describe, it, expect, vi, beforeAll } from 'vitest';
@@ -29,7 +30,6 @@ describe('pin-URL autocomplete — title-less source items (adjudicated C3 findi
 
 	beforeAll(async () => {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
-		await import('../../webextension/fx-newTab.js');
 		const nt = await import('../../webextension/newTab.js');
 		newTabTools = nt.newTabTools;
 	});

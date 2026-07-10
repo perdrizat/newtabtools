@@ -23,7 +23,7 @@
  *      `getBoundingClientRect()`, not the internal position cache.
  *   4. DOM proof a REAL `dragstart` dispatched right after that transition
  *      picks up the CURRENT (narrow) cell geometry, not a stale cached one —
- *      fx-newTab.js's `Drag.start` always measures `cellNode.offsetWidth`
+ *      drag-drop.js's `Drag.start` always measures `cellNode.offsetWidth`
  *      live, so this exercises the actual defensive freshness the pipeline
  *      relies on, via a genuine gesture rather than a mocked `Drag.start()`
  *      call.
@@ -170,7 +170,7 @@ describe('E2E: Drag layout invariants', () => {
 	it('a real dragstart right after the drawer opens freezes the tile to the CURRENT (narrow) cell width, not a stale one', async () => {
 		// Real gesture (chrome-prep C3d — no `Drag.start()` mock-event call,
 		// no page-global reads): dispatch a genuine `dragstart` DragEvent on
-		// the tile node. fx-newTab.js's `Site.handleEvent`/`Drag.start` only
+		// the tile node. site.js's `Site.handleEvent`/drag-drop.js's `Drag.start` only
 		// run when the board is unlocked, so the drawer must be open first —
 		// the exact scenario the "no resize event" regression concerns.
 		try {

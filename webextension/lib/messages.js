@@ -15,7 +15,7 @@
  * a real `export` now, imported directly below. Its `globalThis.NeverCapture
  * = …` bridge assignment — once thought permanent, since the page read it as
  * a classic-`<script>` global — is retired as of chrome-prep C3d: newTab.js/
- * fx-newTab.js now import it for real too, so nothing reads it off
+ * site.js now import it for real too, so nothing reads it off
  * `globalThis` anymore.
  *
  * `makeZip`/`readZip` (lib/backup.js) are deliberately NOT a static import
