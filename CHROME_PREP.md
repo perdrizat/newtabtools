@@ -28,7 +28,7 @@ by maintainer).
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
-| C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+(d) |
+| C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
