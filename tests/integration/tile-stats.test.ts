@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'vm';
 import { readNewTabHtml } from './_helpers';
+import { TileStats } from '../../webextension/stats.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATS_PATH = path.resolve(__dirname, '../../webextension/stats.js');
@@ -40,29 +41,25 @@ describe('TileStats module — source presence', () => {
 	});
 });
 
-describe('TileStats — behavioral (vm.runInThisContext)', () => {
-	let TileStats: any;
+describe('TileStats — behavioral', () => {
+	// page-modules P2 (PAGE_MODULES.md): stats.js is a real ES module now
+	// (`export const TileStats`), imported natively above rather than
+	// vm-loaded per describe block. `globalThis.browser` stands in for the vm
+	// sandbox's `browser`; `_hasHistoryPermission` (the one piece of instance
+	// state) is reset every test since TileStats is now a shared singleton.
 	let mockGetVisits: ReturnType<typeof vi.fn>;
 
 	beforeAll(() => {
 		mockGetVisits = vi.fn();
 
-		const sandbox: Record<string, any> = {
-			browser: {
-				history: {
-					getVisits: mockGetVisits,
-				},
-				permissions: {
-					contains: vi.fn().mockResolvedValue(true),
-				},
+		(globalThis as any).browser = {
+			history: {
+				getVisits: mockGetVisits,
+			},
+			permissions: {
+				contains: vi.fn().mockResolvedValue(true),
 			},
 		};
-
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(STATS_PATH, 'utf8');
-		const ctx = vm.createContext(sandbox);
-		vm.runInContext(source, ctx);
-		TileStats = sandbox.TileStats;
 	});
 
 	beforeEach(() => {
@@ -181,7 +178,6 @@ describe('TileStats — behavioral (vm.runInThisContext)', () => {
 });
 
 describe('TileStats — history permission guard (§1.3)', () => {
-	let TileStats: any;
 	let mockGetVisits: ReturnType<typeof vi.fn>;
 	let mockContains: ReturnType<typeof vi.fn>;
 
@@ -189,22 +185,14 @@ describe('TileStats — history permission guard (§1.3)', () => {
 		mockGetVisits = vi.fn();
 		mockContains = vi.fn();
 
-		const sandbox: Record<string, any> = {
-			browser: {
-				history: {
-					getVisits: mockGetVisits,
-				},
-				permissions: {
-					contains: mockContains,
-				},
+		(globalThis as any).browser = {
+			history: {
+				getVisits: mockGetVisits,
+			},
+			permissions: {
+				contains: mockContains,
 			},
 		};
-
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(STATS_PATH, 'utf8');
-		const ctx = vm.createContext(sandbox);
-		vm.runInContext(source, ctx);
-		TileStats = sandbox.TileStats;
 	});
 
 	beforeEach(() => {

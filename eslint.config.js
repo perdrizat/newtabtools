@@ -156,10 +156,10 @@ export default [
 	{
 		// Script-mode files in webextension/ (MODERNIZATION.md Stage M, slice
 		// M5 — background.js and its tiles.js bridge shim are gone). This is
-		// now exactly: the page files loaded via classic `<script>` in
-		// newTab.html (newTab.js, fx-newTab.js, icons.js, awesomebar.js,
-		// stats.js, action.js, tiles-shim.js) plus common.js/prefs.js, the two
-		// dual-scope bridge files (MODERNIZATION.md Decision 2) that are ALSO
+		// now: the page files still loaded as classic-script-syntax modules via
+		// page-main.js's side-effect imports (newTab.js, fx-newTab.js,
+		// awesomebar.js, action.js) plus common.js/prefs.js, the two dual-scope
+		// bridge files (MODERNIZATION.md Decision 2) that are ALSO
 		// side-effect-imported by lib/background-main.js (a real ES module) —
 		// classic script syntax (`globalThis.X = …`, no `import`/`export`)
 		// works identically either way, which is the whole point of the
@@ -168,7 +168,11 @@ export default [
 		// ES-module entry) also lives directly under webextension/ and would
 		// otherwise match this glob too — the more specific
 		// lib/**/*.js-plus-page-main.js block below overrides
-		// sourceType/ecmaVersion for that one file.
+		// sourceType/ecmaVersion for that one file. P2: icons.js/stats.js/
+		// tiles-shim.js gained real `export`s and moved to that module-mode
+		// block too (their test suites now natively import them instead of
+		// vm-loading, so nothing here still needs script-mode parsing for
+		// them).
 		files: ['webextension/**/*.js'],
 		languageOptions: {
 			ecmaVersion: 2018,
@@ -190,15 +194,19 @@ export default [
 		// zip.js library, which is ignored above). These are written as ES
 		// modules and consumed both by tests (via Vitest) and, in time, by
 		// refactored portions of the legacy script-tag code. page-main.js
-		// side-effect-imports the eight classic-script page files (which stay
-		// sourceType: 'script' — the vm test harness depends on that) and
-		// runs the hoisted boot sequence, so it needs `import` syntax; it
-		// lives directly under webextension/, so the general
-		// 'webextension/**/*.js' script-mode block above also matches it —
-		// this more specific, later block overrides sourceType/ecmaVersion
-		// for both it and lib/**/*.js, one object, no drift (code review,
-		// 2026-07-10-page-modules-p1-code-review.md finding 6).
-		files: ['webextension/lib/**/*.js', 'webextension/page-main.js'],
+		// side-effect-imports the eight page files and runs the hoisted boot
+		// sequence, so it needs `import` syntax; it lives directly under
+		// webextension/, so the general 'webextension/**/*.js' script-mode
+		// block above also matches it — this more specific, later block
+		// overrides sourceType/ecmaVersion for it, lib/**/*.js, one object, no
+		// drift (code review, 2026-07-10-page-modules-p1-code-review.md
+		// finding 6). PAGE_MODULES.md P2: icons.js/stats.js/tiles-shim.js
+		// gained real `export`s (their `globalThis.X = X;` bridge assignments
+		// stay — still read as bare identifiers by newTab.js/fx-newTab.js/
+		// awesomebar.js, which stay classic-script/vm-loaded until P4/P5), so
+		// `export` syntax needs this block's sourceType: 'module' too; the
+		// general script-mode block above would otherwise fail to parse them.
+		files: ['webextension/lib/**/*.js', 'webextension/page-main.js', 'webextension/icons.js', 'webextension/stats.js', 'webextension/tiles-shim.js'],
 		languageOptions: {
 			ecmaVersion: 2020,
 			sourceType: 'module',

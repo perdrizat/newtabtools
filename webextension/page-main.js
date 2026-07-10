@@ -11,16 +11,19 @@
  * newTab.html now loads exactly one script — `<script type="module"
  * src="page-main.js">` — in place of the former eight classic `<script>`
  * tags. Each of those eight files (side-effect-imported below, in today's
- * exact load order) still uses classic-script syntax internally (no
- * `import`/`export` — the vm test harness that loads them individually
- * depends on that staying true until P2–P5 convert them one at a time), but
- * now runs as a real ES module, so a plain top-level `var X = …` no longer
- * lands on `globalThis` the way it did as a classic script. Every file that
- * other files (or E2E/UAT page-context evaluation) need to reach as a bare
- * identifier therefore ends with an explicit `globalThis.X = X;` bridge
- * assignment — see the comment at the end of each of the eight files.
- * `common.js`/`prefs.js` already had this form permanently (the dual-scope
- * bridge, PAGE_MODULES.md's predecessor arc); the other six gained it here.
+ * exact load order) now runs as a real ES module, so a plain top-level
+ * `var X = …` no longer lands on `globalThis` the way it did as a classic
+ * script. As of P2 (PAGE_MODULES.md), icons.js/stats.js/tiles-shim.js use
+ * real `export` syntax internally; awesomebar.js/newTab.js/fx-newTab.js/
+ * action.js still use classic-script syntax (no `import`/`export` — the vm
+ * test harness that loads them individually depends on that staying true
+ * until their own P4/P5 slices convert them). Every file that other files
+ * (or E2E/UAT page-context evaluation) need to reach as a bare identifier
+ * therefore ends with an explicit `globalThis.X = X;` bridge assignment —
+ * see the comment at the end of each of the eight files — regardless of
+ * whether that file also now has a real `export`; `common.js`/`prefs.js`
+ * already had this form permanently (the dual-scope bridge, PAGE_MODULES.md's
+ * predecessor arc); the other six gained it in P1.
  *
  * Decision 3 of record (PAGE_MODULES.md): no page module executes another
  * module's code at its own top level — every cross-module call happens
@@ -33,12 +36,19 @@
  * That trailer is hoisted here, unchanged in substance; fx-newTab.js's top
  * level is now definition-only.
  *
- * The globalThis bridge above is a staged, P1-only mechanism. P2–P5 replace
- * each file's `globalThis.X = X;` with a real `export`, and this file's
- * side-effect imports become named imports as each file's slice lands —
- * until then, `UndoDialog`/`newTabTools`/`pageMessageHandler` below are read
- * as bare identifiers that resolve through `globalThis` (hence the eslint
- * globals directive above instead of a named import).
+ * The globalThis bridge above is a staged mechanism, retired file-by-file as
+ * each one's slice lands. P2 (PAGE_MODULES.md, revised 2026-07-10) gave
+ * icons.js/stats.js/tiles-shim.js real `export`s — `NttIcons`/`TileStats`/
+ * `Tiles`/`Background` are now genuinely exported values, not just
+ * `globalThis` properties — but their consumers (awesomebar.js, newTab.js,
+ * fx-newTab.js) are still vm-loaded classic scripts until P4/P5 and so still
+ * read them as bare identifiers; the imports below therefore stay
+ * side-effect-only (a named-but-unused import would only trip
+ * `no-unused-vars`) rather than becoming named imports. `UndoDialog`/
+ * `newTabTools`/`pageMessageHandler` below are read as bare identifiers that
+ * resolve through `globalThis` (hence the eslint globals directive above
+ * instead of a named import); that becomes a real import only once
+ * newTab.js/fx-newTab.js convert in P5.
  */
 
 import './common.js';

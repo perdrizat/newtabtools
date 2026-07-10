@@ -8,6 +8,16 @@ import { fileURLToPath } from 'url';
 import vm from 'vm';
 import { vi } from 'vitest';
 
+// page-modules P2 (PAGE_MODULES.md): icons.js gained a real `export`, which
+// `vm.runInThisContext` (a script-mode loader) can no longer parse — see the
+// removed load in mountSite() below. A plain top-level import here runs once
+// per test file (module imports are cached, but each test file gets its own
+// module registry) and its `globalThis.NttIcons = NttIcons;` bridge
+// assignment (still present — fx-newTab.js reads it as a bare identifier)
+// covers what the vm load used to provide, without needing mountSite() (or
+// its callers) to become async.
+import '../../webextension/icons.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const NEWTAB_HTML_PATH = path.resolve(__dirname, '../../webextension/newTab.html');
@@ -102,11 +112,10 @@ export function mountSite(
 	}
 
 	if (!_siteEnvLoaded) {
-		const iconsPath = path.resolve(__dirname, '../../webextension/icons.js');
 		const fxPath = path.resolve(__dirname, '../../webextension/fx-newTab.js');
 
-		const iconsSource = fs.readFileSync(iconsPath, 'utf8');
-		vm.runInThisContext(iconsSource, { filename: 'icons.js' });
+		// icons.js is natively imported at module top (above) rather than
+		// vm-loaded here — see that import's comment.
 
 		(globalThis as any).Prefs = (globalThis as any).Prefs || { statType: 'none' };
 		(globalThis as any).Tiles = (globalThis as any).Tiles || { isPinned: vi.fn(() => false) };

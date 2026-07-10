@@ -11,13 +11,6 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ICONS_PATH = path.resolve(__dirname, '../../webextension/icons.js');
 
 const ALL_ICON_NAMES = [
 	'search', 'settings', 'pin', 'camera', 'camera-off', 'edit', 'close', 'plus',
@@ -30,11 +23,11 @@ const ALL_ICON_NAMES = [
 describe('NttIcons — icons.js', () => {
 	let NttIcons: any;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(ICONS_PATH, 'utf8');
-		vm.runInThisContext(source, { filename: 'icons.js' });
-		NttIcons = (globalThis as any).NttIcons;
+	beforeAll(async () => {
+		// page-modules P2 (PAGE_MODULES.md): icons.js is a real ES module now
+		// (`export const NttIcons`), so it's natively imported rather than
+		// vm-loaded — see webextension/icons.js's own header for the export.
+		({ NttIcons } = await import('../../webextension/icons.js'));
 	});
 
 	it('exposes NttIcons on globalThis', () => {

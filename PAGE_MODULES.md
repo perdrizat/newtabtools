@@ -20,7 +20,7 @@ meet at the dual-scope bridge (`common.js`/`prefs.js` assign `globalThis.X =`,
 
 | Step | Status | Commit |
 |---|---|---|
-| P1 — module entry flip (`page-main.js`) + boot orchestration | in progress | — |
+| P1 — module entry flip (`page-main.js`) + boot orchestration | done | `4de0411` |
 | P2 — leaf modules: icons, stats, tiles-shim | pending | — |
 | P3 — dual-scope endgame: common/prefs real exports + prefs change seam | pending | — |
 | P4 — awesomebar module | pending | — |
@@ -208,15 +208,57 @@ out of scope, ROADMAP backlog.
       finding 5 adjudicated keep-with-TEST-ONLY-marker (maintainer decision).
 
 ### P2 — leaf modules
-- [ ] `icons.js` → `export const NttIcons`; `stats.js` → `export const
-      TileStats`; `tiles-shim.js` → `export const Tiles, Background`.
-- [ ] Consumers (awesomebar, newTab, fx-newTab — still bridge-form modules) gain
-      real `import {NttIcons} from './icons.js'` etc.; the `globalThis`
-      assignments for these three names die; `/* globals */` headers shrink.
-- [ ] Tests for these files move vm-load → native import (icons.test.ts,
-      stats/tile-stats suites, tiles-shim consumers); mountSite stops
-      vm-loading icons.js (imports it instead).
-- [ ] Gates.
+*(Revised 2026-07-10: consumers do NOT gain import lines yet — newTab.js/
+fx-newTab.js/awesomebar.js are still vm-loaded by the fast-tier harness until
+their own slices, and `vm.runInThisContext` can't parse `import` syntax. The
+`globalThis` assignments therefore SURVIVE — they still have real in-page
+consumers until P5, plus the E2E/UAT harness per the TEST-ONLY policy above.
+P2's deliverable is: the leaf files speak `export`, `page-main.js` documents
+the graph with named imports, and the leaves' own test suites go native.)*
+- [x] `icons.js` → `export const NttIcons`; `stats.js` → `export const
+      TileStats`; `tiles-shim.js` → `export const Tiles, Background` — each
+      KEEPING its `globalThis` assignment, comment updated to name the
+      remaining consumers (page files until P4/P5; E2E/UAT page-context).
+      `/* exported */` pragmas deleted (real `export` replaces them); eslint's
+      script-mode `webextension/**/*.js` block can no longer parse `export`,
+      so the three files moved into the module-mode block alongside
+      `lib/**/*.js`/`page-main.js` (narrowest fix — only these three filenames
+      added, no broader glob change).
+- [x] `page-main.js`: side-effect imports stay as-is (a named-but-unused
+      import would only trip `no-unused-vars`; the entry stays the load-order
+      authority, nothing more). Header comment updated for accuracy (three of
+      the eight files now have real exports; the rest stay classic-script
+      until P4/P5).
+- [x] Tests for these files move vm-load → native import: `icons.test.ts`
+      (native `import()`), `stats.test.ts` (native `import`, `TileStats` now a
+      shared singleton — `_hasHistoryPermission` reset + `globalThis.browser`
+      replaced per test instead of a fresh vm context per call),
+      `tile-stats.test.ts`'s two `stats.js` `vm.runInContext` blocks (same
+      singleton treatment; its unrelated `prefs.js` vm blocks are untouched —
+      P3 scope). `tiles-shim.js` had no dedicated vm-load suite to migrate
+      (only `page-module-scope.test.ts`/`page-main-boot.test.ts` touch it,
+      already native-importing since P1, left unchanged per this slice's
+      guard-test rule). `_helpers.ts`'s `mountSite()` stops vm-loading
+      icons.js — replaced with a top-level `import '../../webextension/
+      icons.js'` (its `globalThis.NttIcons` bridge assignment covers what the
+      vm load provided); `mountSite()` and its ~20 call sites stay sync, no
+      async churn needed.
+      RED confirmed: reverting `icons.test.ts` to its vm form against the
+      now-exported `icons.js` throws `SyntaxError: Unexpected token 'export'`
+      at `vm.runInThisContext` — the same failure mode applies to
+      `stats.test.ts`/`tile-stats.test.ts`'s `vm.runInContext` calls and
+      `mountSite`'s `vm.runInThisContext(iconsSource, …)`.
+      `pnpm typecheck` newly pulled `icons.js`/`stats.js` into the program
+      (native, statically-resolvable `import` specifiers, unlike P1's
+      computed-path dynamic imports) — minimal JSDoc added (`el`/`create`/
+      `kebab`/`grip`/`dot` params in icons.js; `TileStats` method params +
+      `_hasHistoryPermission: boolean | null` in stats.js; `visitTime ?? 0`
+      guards for the WebExtension type's optional `visitTime` field).
+- [x] Gates + targeted E2E: fast 1282/1282, lint/typecheck/lint:webext clean;
+      targeted E2E 29/29 in 3.7 min (loads-cleanly, boot-timing,
+      event-page-lifecycle, tile-redesign, pin-persists). Fast-tier
+      gates already green (fast 1282/1282, lint/typecheck/lint:webext clean);
+      targeted E2E is orchestrator-run, not part of this slice.
 
 ### P3 — dual-scope endgame (touches background; E2E lifecycle tests are the point)
 - [ ] `common.js`: `export function compareVersions`; `prefs.js`:

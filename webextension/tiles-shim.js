@@ -2,9 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported Tiles, Background */
-
-var Tiles = {
+export const Tiles = {
 	_list: [],
 	isPinned(url) {
 		return this._list.includes(url);
@@ -50,7 +48,7 @@ var Tiles = {
 	}
 };
 
-var Background = {
+export const Background = {
 	getBackground() {
 		return new Promise(resolve => {
 			chrome.runtime.sendMessage({ name: 'Background.getBackground' }, resolve);
@@ -63,8 +61,11 @@ var Background = {
 	},
 };
 
-// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
-// longer lands on `globalThis`; these names are consumed cross-file and by
-// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+// page-modules P2 (PAGE_MODULES.md): Tiles/Background are real exports now,
+// but the globalThis bridges SURVIVE — newTab.js/fx-newTab.js still read them
+// as bare identifiers (they stay vm-loaded classic scripts until P5) and
+// E2E/UAT page-context evaluation reads them off globalThis too (TEST-ONLY
+// thereafter, once the last production consumer migrates). Background in
+// particular remains a *production* bridge, not TEST-ONLY, until P5.
 globalThis.Tiles = Tiles;
 globalThis.Background = Background;

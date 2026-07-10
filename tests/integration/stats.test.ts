@@ -8,111 +8,124 @@
  * `formatCount`/`formatAge` are pure; `compute` orchestrates them over
  * `browser.history`/`permissions`. The gaps the audit named — 0 visits, very
  * large counts, clock-skew (negative age / future visitTime) — plus the
- * stat-type branches are exercised here. Loaded via `loadModule` (vm) with a
- * fixed `Date.now()` so clock-dependent branches are deterministic.
+ * stat-type branches are exercised here.
+ *
+ * page-modules P2 (PAGE_MODULES.md): stats.js is a real ES module now
+ * (`export const TileStats`), so it's natively imported once (module-level
+ * singleton) rather than vm-loaded fresh per test via `loadModule`. That
+ * trades the old per-call isolation for two explicit resets each test:
+ * `TileStats._hasHistoryPermission` (the one piece of instance state) is
+ * cleared in `beforeEach`, and `browser` is replaced wholesale via
+ * `mockBrowser()` before each `compute()` call — the same substitution
+ * `loadModule`'s sandbox used to provide, just against the real `globalThis`
+ * instead of a vm context. `Date.now()` is spied fixed at `NOW` for the
+ * clock-dependent branches, restored after each test.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { loadModule } from './_helpers';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { TileStats } from '../../webextension/stats.js';
 
 // Fixed "now" for compute() — clock-dependent branches are deterministic.
 const NOW = Date.UTC(2026, 5, 22, 12, 0, 0);
 const HOUR = 3_600_000;
 
-function loadStats(sandbox: Record<string, unknown> = {}) {
-	const ctx = loadModule('../../webextension/stats.js', { Date: { now: () => NOW }, ...sandbox });
-	return (ctx as Record<string, any>).TileStats;
-}
-
-function browserWith(hasPerm: boolean, visits: Array<{ visitTime: number }> = []) {
-	return {
+function mockBrowser(hasPerm: boolean, visits: Array<{ visitTime: number }> = []) {
+	const browser = {
 		permissions: { contains: vi.fn().mockResolvedValue(hasPerm) },
 		history: { getVisits: vi.fn().mockResolvedValue(visits) },
 		storage: { local: { get: vi.fn(), set: vi.fn(), remove: vi.fn() } },
 	};
+	(globalThis as any).browser = browser;
+	return browser;
 }
 
+beforeEach(() => {
+	TileStats._hasHistoryPermission = null;
+	vi.spyOn(Date, 'now').mockReturnValue(NOW);
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
 describe('TileStats.formatCount', () => {
-	const S = loadStats();
 	it('renders sub-1000 verbatim', () => {
-		expect(S.formatCount(0)).toBe('0');
-		expect(S.formatCount(7)).toBe('7');
-		expect(S.formatCount(999)).toBe('999');
+		expect(TileStats.formatCount(0)).toBe('0');
+		expect(TileStats.formatCount(7)).toBe('7');
+		expect(TileStats.formatCount(999)).toBe('999');
 	});
 	it('renders thousands with a k suffix, trimming a whole .0', () => {
-		expect(S.formatCount(1000)).toBe('1k');
-		expect(S.formatCount(1500)).toBe('1.5k');
-		expect(S.formatCount(1234)).toBe('1.2k'); // toFixed(1) rounds
+		expect(TileStats.formatCount(1000)).toBe('1k');
+		expect(TileStats.formatCount(1500)).toBe('1.5k');
+		expect(TileStats.formatCount(1234)).toBe('1.2k'); // toFixed(1) rounds
 	});
 	it('does not overflow on very large counts', () => {
-		expect(S.formatCount(1_000_000)).toBe('1000k');
+		expect(TileStats.formatCount(1_000_000)).toBe('1000k');
 	});
 });
 
 describe('TileStats.formatAge', () => {
-	const S = loadStats();
 	it('sub-minute → "now"', () => {
-		expect(S.formatAge(0)).toBe('now');
-		expect(S.formatAge(59_999)).toBe('now');
+		expect(TileStats.formatAge(0)).toBe('now');
+		expect(TileStats.formatAge(59_999)).toBe('now');
 	});
 	it('minutes / hours / days boundaries', () => {
-		expect(S.formatAge(60_000)).toBe('1m');
-		expect(S.formatAge(59 * 60_000)).toBe('59m');
-		expect(S.formatAge(HOUR)).toBe('1h');
-		expect(S.formatAge(23 * HOUR)).toBe('23h');
-		expect(S.formatAge(24 * HOUR)).toBe('1d');
+		expect(TileStats.formatAge(60_000)).toBe('1m');
+		expect(TileStats.formatAge(59 * 60_000)).toBe('59m');
+		expect(TileStats.formatAge(HOUR)).toBe('1h');
+		expect(TileStats.formatAge(23 * HOUR)).toBe('23h');
+		expect(TileStats.formatAge(24 * HOUR)).toBe('1d');
 	});
 	it('clock-skew: negative age clamps to "now" (does not produce "-1m")', () => {
-		expect(S.formatAge(-5_000)).toBe('now');
-		expect(S.formatAge(-HOUR)).toBe('now');
+		expect(TileStats.formatAge(-5_000)).toBe('now');
+		expect(TileStats.formatAge(-HOUR)).toBe('now');
 	});
 });
 
 describe('TileStats.compute', () => {
 	it('statType "none" → null (no history hit)', async () => {
-		const S = loadStats({ browser: browserWith(true) });
-		expect(await S.compute('https://x.test/', 'none')).toBeNull();
+		mockBrowser(true);
+		expect(await TileStats.compute('https://x.test/', 'none')).toBeNull();
 	});
 
 	it('"rank" returns the 1-based rank without touching history', async () => {
-		const browser = browserWith(true);
-		const S = loadStats({ browser });
-		expect(await S.compute('https://x.test/', 'rank', 3)).toEqual({ type: 'rank', value: '3' });
+		const browser = mockBrowser(true);
+		expect(await TileStats.compute('https://x.test/', 'rank', 3)).toEqual({ type: 'rank', value: '3' });
 		expect(browser.history.getVisits).not.toHaveBeenCalled();
 	});
 
 	it('no history permission → null', async () => {
-		const S = loadStats({ browser: browserWith(false, [{ visitTime: NOW }]) });
-		expect(await S.compute('https://x.test/', 'visits')).toBeNull();
+		mockBrowser(false, [{ visitTime: NOW }]);
+		expect(await TileStats.compute('https://x.test/', 'visits')).toBeNull();
 	});
 
 	it('zero visits → null', async () => {
-		const S = loadStats({ browser: browserWith(true, []) });
-		expect(await S.compute('https://x.test/', 'visits')).toBeNull();
+		mockBrowser(true, []);
+		expect(await TileStats.compute('https://x.test/', 'visits')).toBeNull();
 	});
 
 	it('"visits" → count via formatCount', async () => {
 		const visits = Array.from({ length: 5 }, () => ({ visitTime: NOW - HOUR }));
-		const S = loadStats({ browser: browserWith(true, visits) });
-		expect(await S.compute('https://x.test/', 'visits')).toEqual({ type: 'visits', value: '5' });
+		mockBrowser(true, visits);
+		expect(await TileStats.compute('https://x.test/', 'visits')).toEqual({ type: 'visits', value: '5' });
 	});
 
 	it('"last" with a future visitTime (clock skew) → "now", not a negative age', async () => {
-		const S = loadStats({ browser: browserWith(true, [{ visitTime: NOW + 10_000 }]) });
-		expect(await S.compute('https://x.test/', 'last')).toEqual({ type: 'last', value: 'now' });
+		mockBrowser(true, [{ visitTime: NOW + 10_000 }]);
+		expect(await TileStats.compute('https://x.test/', 'last')).toEqual({ type: 'last', value: 'now' });
 	});
 
 	it('"fresh" within 24h → {type:fresh}; older → null', async () => {
-		const fresh = loadStats({ browser: browserWith(true, [{ visitTime: NOW - HOUR }]) });
-		expect(await fresh.compute('https://x.test/', 'fresh')).toEqual({ type: 'fresh', value: '' });
-		const stale = loadStats({ browser: browserWith(true, [{ visitTime: NOW - 48 * HOUR }]) });
-		expect(await stale.compute('https://x.test/', 'fresh')).toBeNull();
+		mockBrowser(true, [{ visitTime: NOW - HOUR }]);
+		expect(await TileStats.compute('https://x.test/', 'fresh')).toEqual({ type: 'fresh', value: '' });
+		TileStats._hasHistoryPermission = null;
+		mockBrowser(true, [{ visitTime: NOW - 48 * HOUR }]);
+		expect(await TileStats.compute('https://x.test/', 'fresh')).toBeNull();
 	});
 
 	it('a rejected history query → null (no throw)', async () => {
-		const browser = browserWith(true);
+		const browser = mockBrowser(true);
 		browser.history.getVisits = vi.fn().mockRejectedValue(new Error('history unavailable'));
-		const S = loadStats({ browser });
-		await expect(S.compute('https://x.test/', 'visits')).resolves.toBeNull();
+		await expect(TileStats.compute('https://x.test/', 'visits')).resolves.toBeNull();
 	});
 });

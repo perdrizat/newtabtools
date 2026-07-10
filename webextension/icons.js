@@ -2,11 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* exported NttIcons */
-
-var NttIcons = (() => {
+export const NttIcons = (() => {
 	const SVG_NS = 'http://www.w3.org/2000/svg';
 
+	/**
+	 * @param {string} tag
+	 * @param {Record<string, string | number | undefined>} [attrs]
+	 * @param {Element[]} [children]
+	 */
 	function el(tag, attrs, children) {
 		let node = document.createElementNS(SVG_NS, tag);
 		if (attrs) {
@@ -123,6 +126,7 @@ var NttIcons = (() => {
 		bookmark() {
 			return [el('path', { d: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z' })];
 		},
+		/** @param {string} [color] */
 		kebab(color) {
 			return [
 				el('circle', { cx: 12, cy: 6, r: 1.2, fill: color, stroke: 'none' }),
@@ -130,6 +134,7 @@ var NttIcons = (() => {
 				el('circle', { cx: 12, cy: 18, r: 1.2, fill: color, stroke: 'none' }),
 			];
 		},
+		/** @param {string} [color] */
 		grip(color) {
 			return [
 				el('circle', { cx: 9, cy: 6, r: 1.3, fill: color, stroke: 'none' }),
@@ -162,6 +167,7 @@ var NttIcons = (() => {
 		sparkline() {
 			return [el('polyline', { points: '2 14 6 10 10 13 14 7 18 11 22 5' })];
 		},
+		/** @param {string} [color] */
 		dot(color) {
 			return [el('circle', { cx: 12, cy: 12, r: 4, fill: color })];
 		},
@@ -207,6 +213,12 @@ var NttIcons = (() => {
 
 	const names = Object.keys(ICONS);
 
+	/**
+	 * @param {string} name
+	 * @param {number} [size]
+	 * @param {string} [color]
+	 * @param {number} [strokeWidth]
+	 */
 	function create(name, size, color, strokeWidth) {
 		if (size === undefined) {
 			size = 14;
@@ -218,7 +230,7 @@ var NttIcons = (() => {
 			strokeWidth = 1.7;
 		}
 
-		let builder = ICONS[name];
+		let builder = /** @type {Record<string, (color?: string) => Element[]>} */ (ICONS)[name];
 		if (!builder) {
 			return null;
 		}
@@ -241,7 +253,9 @@ var NttIcons = (() => {
 	return { create, names };
 })();
 
-// page-modules P1 (PAGE_MODULES.md) — in module scope, top-level `var` no
-// longer lands on `globalThis`; these names are consumed cross-file and by
-// E2E/UAT page-context evaluation; they retire per-slice in P2–P5.
+// page-modules P2 (PAGE_MODULES.md): NttIcons is a real export now, but the
+// globalThis bridge SURVIVES — awesomebar.js/newTab.js/fx-newTab.js still
+// read it as a bare identifier (they stay vm-loaded classic scripts until
+// P4/P5) and E2E/UAT page-context evaluation reads it off globalThis too
+// (TEST-ONLY thereafter, once the last production consumer migrates).
 globalThis.NttIcons = NttIcons;

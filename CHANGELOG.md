@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `tests/integration/page-module-scope.test.ts`'s `PAGE_FILES_IN_LOAD_ORDER` is now parsed from `page-main.js`'s own import lines instead of hardcoded, so the two can't drift (P1 review finding 8).
 - `eslint.config.js`: merged the duplicate `webextension/page-main.js` block into the `webextension/lib/**/*.js` module-mode block (P1 review finding 6).
 - `PAGE_MODULES.md`: recorded the all-or-nothing boot property (a throw in any of page-main.js's eight imports aborts the whole boot) as a deliberate, accepted P1 behavior change (P1 review finding 3).
+- `icons.js`/`stats.js`/`tiles-shim.js` gain real `export`s (`NttIcons`/`TileStats`/`Tiles`/`Background`), keeping their `globalThis` bridge assignments for still-classic-script consumers (PAGE_MODULES.md P2).
+- Their fast-tier suites (`icons.test.ts`, `stats.test.ts`, `tile-stats.test.ts`, `_helpers.ts`'s `mountSite`) move from vm-loading to native `import`.
 
 ### Removed
 
