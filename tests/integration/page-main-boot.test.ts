@@ -28,7 +28,7 @@
  *      early-broadcast queue it replayed provably unreachable; the boot order
  *      this suite pins shrank from three steps to two accordingly.)
  *
- * Design: leaf-import the ten page files first (same mechanism as
+ * Design: leaf-import the eleven page files first (same mechanism as
  * page-module-scope.test.ts) via real `import`s (chrome-prep C3d retired the
  * `globalThis` bridge these used to also land on), which gives this file the
  * real UndoDialog/newTabTools/pageMessageHandler bindings. Then spy on their
@@ -36,7 +36,7 @@
  * end-to-end in jsdom (real grid render, Prefs.init() network/storage chain,
  * etc.) is out of scope for this tier; the real boot is covered by E2E/UAT
  * (see boot-timing.test.ts for the timing side of that gate). Only then
- * natively `import()` page-main.js: its own ten imports hit the module
+ * natively `import()` page-main.js: its own eleven imports hit the module
  * cache this test file already populated (imports are per-file-registry, not
  * per-describe-block, and this suite runs in one test file), so its boot
  * calls land on the very SAME objects (same binding identity) this file just
@@ -47,7 +47,7 @@
  * modules is already loaded, so re-asserting a couple of them post-import
  * would be pre-satisfied by construction, not a real check of page-main.js's
  * own import list. The real net for "does page-main.js's import list actually
- * name all ten files, in order" is page-module-scope.test.ts's derived
+ * name all eleven files, in order" is page-module-scope.test.ts's derived
  * PAGE_FILES_IN_LOAD_ORDER (parsed from this same page-main.js source, code
  * review finding 8) plus its per-file import assertions; what THIS file adds
  * on top is the thing nothing else covers — that importing the real entry
@@ -86,7 +86,10 @@ function webext(relPath: string): string {
 // grid.js/cell.js/site.js/page.js; page-main.js's own `Grid` import
 // re-points to grid.js (last entry below) — cell.js/site.js/page.js are
 // reached transitively (grid.js imports cell.js/site.js; newTab.js imports
-// page.js), so the list stays at ten entries.
+// page.js), so the list stays at ten entries. chrome-prep C4d (CHROME_PREP.md)
+// split newTab.js into seven leaf modules; page-main.js's list grows to
+// eleven — `autosave-indicator.js`'s `_markAutoSaved` is the one leaf it
+// calls by name, placed just before `grid.js` so that invariant holds.
 const PAGE_FILES_IN_LOAD_ORDER = [
 	'common.js',
 	'icons.js',
@@ -97,6 +100,7 @@ const PAGE_FILES_IN_LOAD_ORDER = [
 	'newTab.js',
 	'undo-dialog.js',
 	'updater.js',
+	'autosave-indicator.js',
 	'grid.js',
 ];
 
@@ -115,7 +119,7 @@ describe('page-main.js — the new-tab page\'s module entry point', () => {
 		// browser, including the shared browser.menus mock newTab.js's
 		// top-level IIFE needs (code review finding 7).
 
-		// --- leaf-import the ten page files first, in order, via real
+		// --- leaf-import the eleven page files first, in order, via real
 		// `import`s (chrome-prep C3d retired the `globalThis` bridge these
 		// used to also land on) — capture the bindings this file needs from
 		// newTab.js/undo-dialog.js's own module exports (chrome-prep C4a:

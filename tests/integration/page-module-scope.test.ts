@@ -36,14 +36,17 @@
  * hoisted it out to page-main.js's boot sequence (not imported here —
  * booting in jsdom is out of scope; the real boot is covered by E2E/UAT).
  *
- * Natively `import()`s the ten page files (chrome-prep C4a, CHROME_PREP.md:
+ * Natively `import()`s the eleven page files (chrome-prep C4a, CHROME_PREP.md:
  * grew from eight — `Updater`/`UndoDialog` moved to their own
  * updater.js/undo-dialog.js modules; chrome-prep C4c further dissolved the
  * former page monolith into grid.js/cell.js/site.js/page.js, reached
- * transitively — the list stays at ten entries, see its own comment below),
- * in page-main.js's exact load order, with the browser/chrome/DOM surface
- * each file's own top level touches (see each import site below)
- * mocked/provided just enough that import doesn't throw.
+ * transitively — the list stayed at ten entries; chrome-prep C4d split
+ * newTab.js into seven leaf modules, growing the list to eleven —
+ * `autosave-indicator.js`'s `_markAutoSaved` is the one leaf page-main.js
+ * calls by name, see its own comment below), in page-main.js's exact load
+ * order, with the browser/chrome/DOM surface each file's own top level
+ * touches (see each import site below) mocked/provided just enough that
+ * import doesn't throw.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -87,7 +90,10 @@ function webext(relPath: string): string {
 // dissolved that monolith into grid.js/cell.js/site.js/page.js; page-main.js
 // only ever named-imported `Grid` from it, so the last-entry invariant below
 // now reads `grid.js` — cell.js/site.js/page.js are reached transitively,
-// so the length (ten) is unchanged too.
+// so the length (ten) is unchanged too. chrome-prep C4d (CHROME_PREP.md)
+// split newTab.js into seven leaf modules; page-main.js grows to eleven
+// entries — `_markAutoSaved` (autosave-indicator.js) is the one leaf this
+// file calls by name, placed before `Grid`'s import so `grid.js` stays last.
 // eslint-disable-next-line ntt/no-source-grep -- supplies the expected load order from the single source of truth (page-main.js); the import behavior itself is exercised natively below, not asserted via string match
 const pageMainSource = fs.readFileSync(PAGE_MAIN_PATH, 'utf8');
 const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import\s+(?:\{[^}]*\}\s+from\s+)?'\.\/([^']+)';$/gm)]
@@ -96,7 +102,7 @@ const PAGE_FILES_IN_LOAD_ORDER = [...pageMainSource.matchAll(/^import\s+(?:\{[^}
 // Sanity net: if the regex silently matches nothing (or the wrong thing)
 // because page-main.js's import syntax changes, fail loudly here instead of
 // quietly running zero/wrong imports below.
-if (PAGE_FILES_IN_LOAD_ORDER.length !== 10
+if (PAGE_FILES_IN_LOAD_ORDER.length !== 11
 	|| PAGE_FILES_IN_LOAD_ORDER[0] !== 'common.js'
 	|| PAGE_FILES_IN_LOAD_ORDER[PAGE_FILES_IN_LOAD_ORDER.length - 1] !== 'grid.js') {
 	throw new Error(
@@ -140,7 +146,7 @@ describe('module-scope bridge — page files\' globalThis surface after PAGE_MOD
 		}
 	});
 
-	it('imports all ten page files without throwing (Decision-3 guard: no top-level cross-module calls)', () => {
+	it('imports all eleven page files without throwing (Decision-3 guard: no top-level cross-module calls)', () => {
 		expect(importError).toBeNull();
 	});
 
@@ -214,6 +220,10 @@ describe('module-scope bridge — page files\' globalThis surface after PAGE_MOD
 
 	it('drag-drop.js does not define globalThis.Drag (the E2E drag-layout bridge is retired — real dragstart/dragend events drive it now)', () => {
 		expect(typeof (globalThis as any).Drag).toBe('undefined');
+	});
+
+	it('autosave-indicator.js does not define globalThis._markAutoSaved (chrome-prep C4d: split out of newTab.js, born post-C3d with no bridge to begin with)', () => {
+		expect(typeof (globalThis as any)._markAutoSaved).toBe('undefined');
 	});
 
 	// ------------------------------------------------------------------

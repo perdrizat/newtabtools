@@ -19,42 +19,28 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 const PREFS_PATH = path.resolve(__dirname, '../../webextension/prefs.js');
 const BACKUP_PATH = path.resolve(__dirname, '../../webextension/lib/backup.js');
 const CDN = 'https://firefox-settings-attachments.cdn.mozilla.net/';
 
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) { throw new Error(`${methodName} not found`); }
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') { depth++; }
-		else if (source[i] === '}') { depth--; if (depth === 0) { return source.substring(start, i + 1); } }
-	}
-	throw new Error('Unbalanced braces');
-}
+// chrome-prep C4d (CHROME_PREP.md): `fetchFirefoxWallpapers`/`selectWallpaper`/
+// `refreshBackgroundImage` are real wallpaper.js exports now (moved verbatim
+// out of newTab.js) — imported directly instead of vm-extracted from
+// newTab.js source (C4a/b/c "import from the new specifier" precedent).
 
 describe('fetchFirefoxWallpapers — passes through background_position + solid_color', () => {
-	let harness: any;
+	let fetchFirefoxWallpapers: () => Promise<any[]>;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading method for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const method = extractMethod(source, 'fetchFirefoxWallpapers');
-		const code = `var newTabTools = { ${method}, _wallpaperCache: null };`;
-		vm.runInThisContext(code, { filename: 'wallpaper-pos-harness.js' });
-		harness = (globalThis as any).newTabTools;
-	});
-
-	beforeEach(() => {
-		harness._wallpaperCache = null;
+	beforeEach(async () => {
+		// `_wallpaperCache` is wallpaper.js's own module-private state — a
+		// fresh module instance per test (`vi.resetModules()` + a fresh
+		// dynamic `import()`) resets it, the same effect the old
+		// per-`beforeAll` harness object had (wallpaper-picker.test.ts's own
+		// header comment has the full rationale).
+		vi.resetModules();
+		({ fetchFirefoxWallpapers } = await import('../../webextension/wallpaper.js'));
 	});
 
 	it('forwards background_position when set, defaults to "center center" otherwise', async () => {
@@ -73,7 +59,7 @@ describe('fetchFirefoxWallpapers — passes through background_position + solid_
 				],
 			}),
 		});
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(2);
 		expect(result[0].backgroundPosition).toBe('top left');
 		expect(result[1].backgroundPosition).toBe('center center');
@@ -87,7 +73,7 @@ describe('fetchFirefoxWallpapers — passes through background_position + solid_
 				],
 			}),
 		});
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
 		expect(result[0].solidColor).toBe('#76C1FF');
 		expect(result[0].imageUrl).toBeFalsy();
@@ -106,7 +92,7 @@ describe('fetchFirefoxWallpapers — passes through background_position + solid_
 				],
 			}),
 		});
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		const titles = result.map((r: any) => r.title).sort();
 		expect(titles).toEqual(['pink', 'real']);
 		const real = result.find((r: any) => r.title === 'real');
@@ -115,69 +101,60 @@ describe('fetchFirefoxWallpapers — passes through background_position + solid_
 });
 
 describe('selectWallpaper — writes backgroundPosition and applies to body', () => {
-	let harness: any;
-	let prefsStore: Record<string, any>;
+	let selectWallpaper: (w: any) => Promise<void>;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading methods for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const select = extractMethod(source, 'selectWallpaper');
-		const refresh = extractMethod(source, 'refreshBackgroundImage');
-		// Tiny stub harness with the methods bound and a fake `Prefs` /
-		// `Background` so the behaviour is observable.
-		const code = `
-			var Prefs = { backgroundUrl: '', backgroundPosition: 'center center', backgroundColor: '' };
-			var Background = { setBackground: function() { return Promise.resolve(); }, getBackground: function() { return Promise.resolve(null); } };
-			var newTabTools = {
-				${select},
-				${refresh},
-				backgroundFake: { style: {} },
-				removeBackgroundButton: { disabled: false, blur: function() {} },
-			};
-			this.__h = { newTabTools: newTabTools, Prefs: Prefs };
-		`;
-		const ctx: any = { document: globalThis.document, Promise: globalThis.Promise };
-		vm.createContext(ctx);
-		vm.runInContext(code, ctx);
-		harness = ctx.__h;
-		prefsStore = harness.Prefs;
+	beforeAll(async () => {
+		// `selectWallpaper` reads the REAL `Prefs`/`Background`/`uiRefs`
+		// singletons (prefs.js/tiles-shim.js/ui-refs.js) — mutated directly
+		// below instead of the old isolated vm context's local `Prefs`/
+		// `Background` fakes (which no real module import can see).
+		({ selectWallpaper } = await import('../../webextension/wallpaper.js'));
+		const { Background } = await import('../../webextension/tiles-shim.js');
+		Background.setBackground = vi.fn().mockResolvedValue(undefined);
+		const { uiRefs } = await import('../../webextension/ui-refs.js');
+		uiRefs.backgroundFake = { style: {} } as any;
+		uiRefs.removeBackgroundButton = { disabled: false, blur: vi.fn() } as any;
 	});
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		document.body.innerHTML = '<div id="wallpaper-grid"></div>';
 		document.body.style.backgroundImage = '';
 		document.body.style.backgroundPosition = '';
 		document.body.style.backgroundColor = '';
-		prefsStore.backgroundUrl = '';
-		prefsStore.backgroundPosition = 'center center';
-		prefsStore.backgroundColor = '';
+		const { Prefs } = await import('../../webextension/prefs.js');
+		Prefs.backgroundUrl = '';
+		Prefs.backgroundPosition = 'center center';
+		Prefs.backgroundColor = '';
 	});
 
 	it('writes backgroundUrl + backgroundPosition + applies styles when given a wallpaper record', async () => {
+		const { Prefs } = await import('../../webextension/prefs.js');
 		const wp = {
 			imageUrl: 'https://example.com/wp.avif',
 			backgroundPosition: 'top right',
 		};
-		await harness.newTabTools.selectWallpaper(wp);
-		expect(prefsStore.backgroundUrl).toBe('https://example.com/wp.avif');
-		expect(prefsStore.backgroundPosition).toBe('top right');
+		await selectWallpaper(wp);
+		expect(Prefs.backgroundUrl).toBe('https://example.com/wp.avif');
+		expect(Prefs.backgroundPosition).toBe('top right');
 		expect(document.body.style.backgroundImage).toContain('https://example.com/wp.avif');
 		// jsdom canonicalises `top right` → `right top`; both render identically.
 		expect(document.body.style.backgroundPosition).toMatch(/^(top right|right top)$/);
 	});
 
 	it('writes solidColor only (clears backgroundUrl) for solid-color records', async () => {
+		const { Prefs } = await import('../../webextension/prefs.js');
 		const wp = { solidColor: '#76C1FF' };
-		await harness.newTabTools.selectWallpaper(wp);
-		expect(prefsStore.backgroundUrl).toBe('');
-		expect(prefsStore.backgroundColor).toBe('#76C1FF');
+		await selectWallpaper(wp);
+		expect(Prefs.backgroundUrl).toBe('');
+		expect(Prefs.backgroundColor).toBe('#76C1FF');
 		expect(document.body.style.backgroundColor).toBe('rgb(118, 193, 255)');
 	});
 
 	it('accepts a bare URL string (back-compat) and falls back to "center center"', async () => {
-		await harness.newTabTools.selectWallpaper('https://example.com/legacy.png');
-		expect(prefsStore.backgroundUrl).toBe('https://example.com/legacy.png');
-		expect(prefsStore.backgroundPosition).toBe('center center');
+		const { Prefs } = await import('../../webextension/prefs.js');
+		await selectWallpaper('https://example.com/legacy.png');
+		expect(Prefs.backgroundUrl).toBe('https://example.com/legacy.png');
+		expect(Prefs.backgroundPosition).toBe('center center');
 	});
 });
 

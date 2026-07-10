@@ -29,6 +29,16 @@
  * file only ever called into `Grid` by name (now from grid.js), never into
  * `Cell`/`Site`/`Page` directly — `cell.js`/`site.js` are reached
  * transitively through grid.js's own imports, `page.js` through newTab.js's.
+ * chrome-prep C4d (CHROME_PREP.md) split newTab.js into seven leaf modules;
+ * this file's import list grows from ten to eleven — `_markAutoSaved`
+ * (formerly `newTabTools._markAutoSaved()`) moved to its own
+ * `autosave-indicator.js`, which this file now calls directly (the one
+ * moved function this file ever called by name). The other six leaves
+ * (theme.js/wallpaper.js/titlebar.js/filters-ui.js/object-urls.js/
+ * ui-refs.js) are reached transitively through newTab.js's own imports —
+ * honest accounting, same as C4b/C4c's cell.js/site.js/page.js precedent —
+ * so they add no entry here. Placed before the `Grid` import so the
+ * "ends with grid.js" invariant stays true.
  *
  * Decision 3 of record (PAGE_MODULES.md): no page module executes another
  * module's code at its own top level — every cross-module call happens
@@ -69,6 +79,7 @@ import './awesomebar.js';
 import { newTabTools } from './newTab.js';
 import { UndoDialog } from './undo-dialog.js';
 import { Updater } from './updater.js';
+import { _markAutoSaved } from './autosave-indicator.js';
 import { Grid } from './grid.js';
 
 UndoDialog.init();
@@ -80,8 +91,8 @@ newTabTools.startup();
 // the boot calls above so a pref change firing mid-boot can't race startup().
 Prefs.onChange(function(keys) {
 	newTabTools.updateUI(keys);
-	if (typeof newTabTools._markAutoSaved === 'function') {
-		newTabTools._markAutoSaved();
+	if (typeof _markAutoSaved === 'function') {
+		_markAutoSaved();
 	}
 	if (keys.includes('rows') || keys.includes('columns')) {
 		Grid.refresh().then(function() {

@@ -28,7 +28,7 @@ by maintainer).
 | C1 — background DOM-guard (no DOM outside thumbnail-image.js) | done | `c3cab0a` |
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
-| C4 — split the monoliths into feature modules | a+b done (`6a6ff20`, `1bdb418`); c done (uncommitted); d pending | — |
+| C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+(d) |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
@@ -553,13 +553,80 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       everything — a superset of the requested batch; boot-timing median
       firstTileSeen 95ms, unchanged). UAT spot-run (tiles: 01/10/23) still
       owed before the C gate.
-- [ ] **C4d** — newTab.js: DESIGN PASS FIRST (the newTabTools god-object's
-      method groups share `this`/uiElements state — unlike fx-newTab's
-      already-separate singletons, this split needs a state-ownership design:
-      likely extract the self-contained subsystems (wallpaper, theme,
-      message glue) as modules and keep drawer+startup as the residual
-      controller; the design pass decides and records it here before code).
-      UAT spot-run (drawer: 20–23).
+- [x] **C4d** — newTab.js split. **DESIGN DECIDED (2026-07-11, from the
+      coupling-map analysis).**
+      **Extract as leaf modules (fan-out-only, no new cycle edges):**
+      `theme.js` (updateThemeColours/getThemedImageURL/_theme + parseColour,
+      its dominant consumer), `wallpaper.js` (cache/picker/apply +
+      _wallpaperCache), `titlebar.js` (recent-tabs: _initTitlebar/
+      _layoutTitlebar/refreshRecent/_formatAge + computeTitlebarSlots +
+      private state; reads Grid.sites call-time only), `autosave-indicator.js`
+      (+ formatRelativeTime), `filters-ui.js` (fillFilterUI/
+      fillNeverCaptureUI), and a tiny `object-urls.js` (the _objectURLs Map +
+      _freshObjectURL/_dropObjectURL — genuinely shared between wallpaper and
+      tile-editing; becomes explicit shared plumbing instead of hidden
+      `this` state).
+      **Mechanism:** new `ui-refs.js` leaf — a typed refs object populated
+      once by newTab.js's boot IIFE; extracted modules import it and access
+      fields call-time only (Decision-3 safe; the NewTabToolsPageRefs
+      pattern generalized).
+      **Stay in the residual controller (newTab.js):** startup/boot + ALL
+      event-listener wiring (single delegated listeners stay whole);
+      `updateUI(keys)` dispatch (central by design — a fan-in hub; moving it
+      is naming, not decoupling); tile-tab editing + the `selectedSiteIndex`
+      seam (a real selection-controller API used by site.js/context-menu/
+      drawer — its extraction is a future arc); drawer chrome; context menu;
+      pin-URL autocomplete (its window keydown handler is shared with
+      wallpaper/drawer Escape — splitting fragments one listener into
+      three); backup/restore+reset (small, stateless, not worth a module).
+      **Stated rule:** extracted leaves NEVER call back into
+      newTab.js/updateUI — residual code calls leaf render functions
+      directly, one-way.
+      **Purity regime for this slice:** `this.X` → `uiRefs.X`/module-function
+      rewrites are sanctioned; every transformation is declared in the
+      ledger, and the adversarial review verifies bodies modulo exactly the
+      declared rewrites.
+      UAT spot-run (drawer: 20–23) at the end.
+      **Completion note (2026-07-11):** newTab.js 2891 → 1991 lines. Per-module
+      line counts: `theme.js` 194, `wallpaper.js` 258, `titlebar.js` 393,
+      `autosave-indicator.js` 88, `filters-ui.js` 129, `object-urls.js` 46,
+      `ui-refs.js` 58 (sum 1166; the delta over the 900-line reduction is
+      per-file MPL headers + module doc-comments + import lines, the C4c
+      precedent). `ui-refs.js` field inventory: `backgroundFake`/
+      `removeBackgroundButton` (wallpaper.js only), `recentList`/
+      `optionsFilterHostAutocomplete` (titlebar.js/filters-ui.js only),
+      `optionsFilter`/`optionsNeverCaptureList` (read by both a leaf and
+      residual code — the two residual call sites now read the same
+      `uiRefs` object instead of a duplicate ref). uiElements-vs-uiRefs
+      choice: newTab.js KEEPS its own `uiElements` table for every other,
+      residual-only ref (the smaller honest diff — only 6 of ~35 fields
+      move) — recorded here and in ui-refs.js's own header comment.
+      `object-urls.js`'s `_objectURLs` stays a plain object (not a real ES
+      `Map`) — the design note's prose is descriptive, not a rewrite
+      mandate; converting would trade a verbatim move for an unsanctioned
+      rewrite. One new cycle class: `titlebar.js`→`grid.js` and
+      `filters-ui.js`→`grid.js` (call-time-only `Grid.sites` reads),
+      extending the existing newTab.js↔grid.js↔site.js cycle — no leaf
+      imports newTab.js directly. `page-main.js`'s import list grows ten →
+      eleven (`_markAutoSaved`, autosave-indicator.js — its one direct call;
+      placed before `grid.js` so the "ends with grid.js" sanity-net
+      invariant holds); the other six leaves are reached transitively
+      through newTab.js's own imports (C4b/C4c honest-accounting
+      precedent), adding no entry. Consumer/test re-point: ~14 integration
+      test files re-pointed from vm-extracting moved bodies out of
+      newTab.js's source onto real imports of the new modules (plus
+      `page-module-scope.test.ts`/`page-main-boot.test.ts`/
+      `prefs-onchange-seam.test.ts`'s load-order arrays/length, ten → eleven).
+      Latent bugs disclosed, not fixed: `titlebar.js`'s `_recentCardCount`
+      module state is write-only (was already dead as a `this.` property in
+      the original newTab.js; only newly lint-visible as a lexical
+      binding — silenced with a disclosed `eslint-disable` line, not
+      deleted). Gates: fast 1314/1314, lint/typecheck/lint:webext clean,
+      tripwire green (`ReferenceError: window is not defined`, not
+      TDZ/SyntaxError); targeted E2E (loads-cleanly, boot-timing, theme,
+      wallpaper-picker, titlebar, recent-tabs, drawer, filter-cap,
+      never-capture) 38/38. UAT spot-run (drawer: 20–23) still owed before
+      the C gate — out of scope for this slice's requested gates.
 - [ ] Gates + FULL E2E per slice + UAT spot-runs as marked.
 
 ### C5 — capability-seam completion (Decision 4)

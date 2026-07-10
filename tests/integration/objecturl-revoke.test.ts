@@ -3,13 +3,20 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Audit 2026-06-10 §4.3/§8.7.4 — object-URL hygiene in newTab.js.
+ * Audit 2026-06-10 §4.3/§8.7.4 — object-URL hygiene, split (chrome-prep C4d,
+ * CHROME_PREP.md) between object-urls.js (`_freshObjectURL`/
+ * `_dropObjectURL`), wallpaper.js (`refreshBackgroundImage`), titlebar.js
+ * (`refreshRecent`), and newTab.js (`getThumbnails`, unmoved).
  *
  * Blob URLs are only freed on document unload, so every repeated-render site
  * must revoke its prior URL before creating a replacement (site.js's
  * `refreshThumbnail` pattern: stash on the owner, revoke on
- * replace). These tests drive the real methods (vm-extracted) and assert the
- * revocation contract on the three highest-churn sites the audit flagged:
+ * replace). These tests drive the REAL exported functions (chrome-prep C4d:
+ * `_freshObjectURL`/`_dropObjectURL`/`refreshBackgroundImage`/`refreshRecent`
+ * are real module exports now, not vm-extracted method bodies — the C4a/b/c
+ * "import from the new specifier" precedent) plus `getThumbnails`
+ * (vm-extracted: still resident in newTab.js) and assert the revocation
+ * contract on the highest-churn sites the audit flagged:
  *
  *   - `refreshBackgroundImage` — wallpaper blob re-rendered on pref changes
  *   - `getThumbnails`          — per-site IDB thumbnails (stash shared with
@@ -23,8 +30,31 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
-import { isValidURL } from '../../webextension/common.js';
-import { el } from '../../webextension/dom.js';
+// titlebar.js (for `refreshRecent`, below) imports `Grid` from grid.js,
+// which in turn imports newTab.js (the pre-existing newTab.js<->grid.js<->
+// site.js cycle) — whose own top level runs a boot IIFE that touches real
+// newTab.html DOM ids. Mocking grid.js wholesale (recent-tabs.test.ts's
+// precedent) severs that edge so importing titlebar.js here doesn't
+// transitively evaluate newTab.js at all; `refreshRecent`'s tileURLs check
+// reads `Grid.sites`, which the mock's empty array satisfies (no test below
+// exercises the tile-URL-skip behavior).
+vi.mock('../../webextension/grid.js', () => ({ Grid: { sites: [] } }));
+import { _freshObjectURL, _dropObjectURL } from '../../webextension/object-urls.js';
+import { refreshBackgroundImage } from '../../webextension/wallpaper.js';
+import { refreshRecent } from '../../webextension/titlebar.js';
+import { uiRefs } from '../../webextension/ui-refs.js';
+// `refreshBackgroundImage`/`refreshRecent` read the REAL `Prefs`/`Background`
+// singletons now (prefs.js/tiles-shim.js) — a `(globalThis as any).Prefs =
+// {...}` stand-in no longer reaches them (same "second-order fallout" class
+// _helpers.ts's `ensureSiteEnv` documents). `Prefs`'s pref-name properties
+// are plain, getter-less own-data properties before `Prefs.init()` (not
+// called here — booting in jsdom is out of scope), so a direct assignment
+// is read back synchronously with no storage round-trip (`ensureSiteEnv`'s
+// `Prefs.statType = 'none'` precedent); `Background`'s methods are replaced
+// in place with `vi.fn()`, the same pattern C4a/b/c's tests use for
+// `Grid.refresh`/`Updater.updateGrid`.
+import { Prefs } from '../../webextension/prefs.js';
+import { Background } from '../../webextension/tiles-shim.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -59,86 +89,76 @@ beforeEach(() => {
 });
 
 describe('object-URL helper — _freshObjectURL / _dropObjectURL', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		const fresh = extractMethod(source, '_freshObjectURL');
-		const drop = extractMethod(source, '_dropObjectURL');
-		vm.runInThisContext(
-			`var _urlHarness = { ${fresh}, ${drop}, _objectURLs: {} };`,
-			{ filename: 'objecturl-harness.js' },
-		);
-		harness = (globalThis as any)._urlHarness;
+	// object-urls.js's `_objectURLs` map is module-private state (chrome-prep
+	// C4d) — drop the keys this suite uses BEFORE each test resets the spies
+	// above, so leftover state from a prior test doesn't pollute this test's
+	// revokeSpy call count.
+	beforeEach(() => {
+		_dropObjectURL('bg');
+		_dropObjectURL('editorThumb');
+		revokeSpy.mockClear();
 	});
 
-	beforeEach(() => { harness._objectURLs = {}; });
-
 	it('first use creates without revoking; replacement revokes the prior URL', () => {
-		const url1 = harness._freshObjectURL('bg', new Blob(['a']));
+		const url1 = _freshObjectURL('bg', new Blob(['a']));
 		expect(url1).toBe('blob:fake-1');
 		expect(revokeSpy).not.toHaveBeenCalled();
-		const url2 = harness._freshObjectURL('bg', new Blob(['b']));
+		const url2 = _freshObjectURL('bg', new Blob(['b']));
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 		expect(url2).toBe('blob:fake-2');
 	});
 
 	it('keys are independent owners', () => {
-		harness._freshObjectURL('bg', new Blob(['a']));
-		harness._freshObjectURL('editorThumb', new Blob(['b']));
+		_freshObjectURL('bg', new Blob(['a']));
+		_freshObjectURL('editorThumb', new Blob(['b']));
 		expect(revokeSpy).not.toHaveBeenCalled();
 	});
 
 	it('_dropObjectURL revokes and forgets; double-drop is a no-op', () => {
-		harness._freshObjectURL('bg', new Blob(['a']));
-		harness._dropObjectURL('bg');
+		_freshObjectURL('bg', new Blob(['a']));
+		_dropObjectURL('bg');
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
-		harness._dropObjectURL('bg');
-		expect(revokeSpy).toHaveBeenCalledTimes(1);
+		revokeSpy.mockClear();
+		_dropObjectURL('bg');
+		expect(revokeSpy).not.toHaveBeenCalled();
 	});
 });
 
 describe('refreshBackgroundImage — wallpaper blob revoked on re-render', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		const refresh = extractMethod(source, 'refreshBackgroundImage');
-		const fresh = extractMethod(source, '_freshObjectURL');
-		const drop = extractMethod(source, '_dropObjectURL');
-		vm.runInThisContext(
-			`var _bgHarness = { ${refresh}, ${fresh}, ${drop}, _objectURLs: {} };`,
-			{ filename: 'bg-harness.js' },
-		);
-		harness = (globalThis as any)._bgHarness;
-	});
-
 	beforeEach(() => {
-		harness._objectURLs = {};
-		harness.backgroundFake = { style: {} };
-		harness.removeBackgroundButton = { disabled: false, blur: vi.fn() };
-		(globalThis as any).Prefs = { backgroundUrl: '', backgroundColor: '', backgroundPosition: '' };
-		(globalThis as any).Background = { getBackground: vi.fn().mockResolvedValue(new Blob(['img'])) };
+		// `background` is refreshBackgroundImage's owner key (wallpaper.js) —
+		// drop it before resetting spies so a prior test's stashed URL can't
+		// leak an extra revoke call into this test.
+		_dropObjectURL('background');
+		revokeSpy.mockClear();
+		uiRefs.backgroundFake = { style: {} } as any;
+		uiRefs.removeBackgroundButton = { disabled: false, blur: vi.fn() } as any;
+		Prefs.backgroundUrl = '';
+		Prefs.backgroundColor = '';
+		Prefs.backgroundPosition = '';
+		Background.getBackground = vi.fn().mockResolvedValue(new Blob(['img']));
 	});
 
 	it('two consecutive IDB-blob renders revoke the first URL', async () => {
-		await harness.refreshBackgroundImage();
+		await refreshBackgroundImage();
 		expect(document.body.style.backgroundImage).toContain('blob:fake-1');
 		expect(revokeSpy).not.toHaveBeenCalled();
-		await harness.refreshBackgroundImage();
+		await refreshBackgroundImage();
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 		expect(document.body.style.backgroundImage).toContain('blob:fake-2');
 	});
 
 	it('switching to a CDN wallpaper revokes the stale blob URL', async () => {
-		await harness.refreshBackgroundImage();
-		(globalThis as any).Prefs.backgroundUrl = 'https://firefox-settings-attachments.cdn.mozilla.net/x.jpg';
-		await harness.refreshBackgroundImage();
+		await refreshBackgroundImage();
+		Prefs.backgroundUrl = 'https://firefox-settings-attachments.cdn.mozilla.net/x.jpg';
+		await refreshBackgroundImage();
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 	});
 
 	it('clearing the background (no blob, no prefs) revokes the stale blob URL', async () => {
-		await harness.refreshBackgroundImage();
-		(globalThis as any).Background.getBackground = vi.fn().mockResolvedValue(null);
-		await harness.refreshBackgroundImage();
+		await refreshBackgroundImage();
+		Background.getBackground = vi.fn().mockResolvedValue(null);
+		await refreshBackgroundImage();
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 	});
 });
@@ -193,7 +213,6 @@ describe('getThumbnails — per-site stash, revoked on replace', () => {
 });
 
 describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
-	let harness: any;
 	let faviconsByHost: Map<string, Blob>;
 
 	function makeMockElement(): any {
@@ -206,39 +225,32 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		};
 	}
 
+	// `refreshRecent` (titlebar.js, chrome-prep C4d) calls `_layoutTitlebar`
+	// internally — no longer an overridable `this.` method, so this suite
+	// gives it real `#ntt-titlebar`/`#ntt-titlebar-recent` elements to
+	// measure (clientWidth stubbed via defineProperty — jsdom has no real
+	// layout engine) instead of stubbing `_layoutTitlebar` itself.
+	let recentMeasureEl: HTMLElement;
+
 	beforeAll(() => {
-		const refreshRecent = extractMethod(source, 'refreshRecent');
-		const trimRecent = extractMethod(source, 'trimRecent');
-		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
-		// real `isValidURL` export (P2-P5 review finding 1, revised
-		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
-		// real globalThis, so the delegate's bare-identifier call resolves as
-		// long as the real function is exposed there first.
-		const isValidURLBody = extractMethod(source, 'isValidURL');
-		const _formatAge = extractMethod(source, '_formatAge');
-		(globalThis as any).isValidURL = isValidURL;
-		// chrome-prep C2: `refreshRecent`'s card-building block now calls the
-		// page-side `el()` leaf (webextension/dom.js) as a bare identifier —
-		// same reason as the `isValidURL` exposure above.
-		(globalThis as any).el = el;
-		vm.runInThisContext(
-			`var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURLBody}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`,
-			{ filename: 'recent-revoke-harness.js' },
-		);
-		harness = (globalThis as any).newTabTools;
+		const titlebarEl = document.createElement('div');
+		titlebarEl.id = 'ntt-titlebar';
+		document.body.appendChild(titlebarEl);
+		recentMeasureEl = document.createElement('div');
+		recentMeasureEl.id = 'ntt-titlebar-recent';
+		Object.defineProperty(recentMeasureEl, 'clientWidth', { value: 400, configurable: true });
+		document.body.appendChild(recentMeasureEl);
 	});
 
 	beforeEach(() => {
-		harness._recentFaviconURLs = undefined;
-		harness.recentList = {
+		uiRefs.recentList = {
 			hidden: false,
 			querySelectorAll: vi.fn(() => []),
 			removeChild: vi.fn(),
 			appendChild: vi.fn((el: any) => el),
-		};
-		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
+		} as any;
 		faviconsByHost = new Map([['example.com', new Blob(['f'])]]);
-		(globalThis as any).Prefs = { recent: true };
+		Prefs.recent = true;
 		const items = [
 			// No session favIconUrl → falls back to the stored (Blob) favicon.
 			{ tab: { url: 'https://example.com/article', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
@@ -254,7 +266,10 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		// `refreshRecent` builds 'img' elements via one shape and everything else
 		// (the 'a'/'span' card structure) via `makeMockElement`'s generic shape —
 		// both now go through `document.createElement` (no more createElementNS
-		// namespace split), so the mock dispatches on the tag name.
+		// namespace split), so the mock dispatches on the tag name. Overriding
+		// `document.createElement` here doesn't disturb `recentMeasureEl`/
+		// `titlebarEl` above — those were built with the real implementation
+		// in `beforeAll`, before this override is installed.
 		document.createElement = vi.fn((tag: string) =>
 			tag === 'img'
 				? { classList: { add: vi.fn() }, onerror: null, src: '', remove: vi.fn() }
@@ -263,16 +278,18 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		document.createTextNode = vi.fn((text: string) => ({ textContent: text })) as any;
 	});
 
-	it('creates a blob URL for a stored favicon and records it for revocation', () => {
-		harness.refreshRecent();
+	// `_recentFaviconURLs` is titlebar.js's own module-private state
+	// (chrome-prep C4d) — unlike the old vm-harness (a fresh object literal
+	// per test), there's no way to reset it between tests from outside the
+	// module. Combined into one test (rather than two, each asserting on a
+	// slice of the same before/after sequence) so this suite's own
+	// revokeSpy/createSpy history stays self-contained instead of depending
+	// on a previous test's leftover render state.
+	it('creates a blob URL for a stored favicon, then revokes it on the next rebuild', () => {
+		refreshRecent();
 		expect(createSpy).toHaveBeenCalledTimes(1);
-		expect(harness._recentFaviconURLs).toContain('blob:fake-1');
-	});
-
-	it('the next rebuild revokes the prior render\'s favicon URLs', () => {
-		harness.refreshRecent();
 		expect(revokeSpy).not.toHaveBeenCalled();
-		harness.refreshRecent();
+		refreshRecent();
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 	});
 });

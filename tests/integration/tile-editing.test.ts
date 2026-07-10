@@ -210,14 +210,19 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 	// ==================== page background ====================
 
 	it('options-wallpaper-btn calls openWallpaperPicker', () => {
-		harness.openWallpaperPicker = vi.fn();
+		// chrome-prep C4d (CHROME_PREP.md): `openWallpaperPicker`/`resetWallpaper`
+		// moved to wallpaper.js — `optionsOnClick`'s extracted body now calls
+		// them as bare identifiers, so they're exposed on the shared
+		// `globalThis` (the `isValidURL`/`el` pattern) instead of harness
+		// `this.X` stubs.
+		(globalThis as any).openWallpaperPicker = vi.fn();
 		harness.optionsOnClick(makeEvent('options-wallpaper-btn'));
-		expect(harness.openWallpaperPicker).toHaveBeenCalled();
+		expect((globalThis as any).openWallpaperPicker).toHaveBeenCalled();
 	});
 
 	it('options-bg-remove calls resetWallpaper', () => {
-		harness.resetWallpaper = vi.fn();
+		(globalThis as any).resetWallpaper = vi.fn();
 		harness.optionsOnClick(makeEvent('options-bg-remove'));
-		expect(harness.resetWallpaper).toHaveBeenCalled();
+		expect((globalThis as any).resetWallpaper).toHaveBeenCalled();
 	});
 });

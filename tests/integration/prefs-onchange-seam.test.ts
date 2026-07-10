@@ -125,10 +125,14 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 	// site.js/page.js; page-main.js's own `Grid` import re-points to grid.js
 	// (its specifier below), and the list stays at ten entries for the same
 	// honest-accounting reason (page-main.js never calls Cell/Site/Page
-	// directly either).
+	// directly either). chrome-prep C4d (CHROME_PREP.md) split newTab.js
+	// into seven leaf modules; the list grows to eleven — `_markAutoSaved`
+	// moved to its own autosave-indicator.js, the one leaf page-main.js
+	// calls by name (placed before `grid.js` so that invariant holds).
 	const PAGE_FILES_IN_LOAD_ORDER = [
 		'common.js', 'icons.js', 'stats.js', 'tiles-shim.js', 'prefs.js',
-		'awesomebar.js', 'newTab.js', 'undo-dialog.js', 'updater.js', 'grid.js',
+		'awesomebar.js', 'newTab.js', 'undo-dialog.js', 'updater.js',
+		'autosave-indicator.js', 'grid.js',
 	];
 
 	let Prefs: any;
@@ -141,18 +145,21 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 	beforeAll(async () => {
 		document.body.innerHTML = parseNewTabDocument().body.innerHTML;
 
-		// Leaf-import the ten page files first, in page-main.js's order, via
-		// real `import`s (chrome-prep C3d retired the `globalThis` bridge
-		// these used to also land on) — capture the bindings this file needs
-		// so the spies below wrap the actual production objects (crib:
-		// page-main-boot.test.ts). chrome-prep C4a: `Updater`/`UndoDialog`
-		// moved to their own modules; chrome-prep C4c: `Grid` moved to
-		// grid.js.
+		// Leaf-import the eleven page files first, in page-main.js's order,
+		// via real `import`s (chrome-prep C3d retired the `globalThis`
+		// bridge these used to also land on) — capture the bindings this
+		// file needs so the spies below wrap the actual production objects
+		// (crib: page-main-boot.test.ts). chrome-prep C4a: `Updater`/
+		// `UndoDialog` moved to their own modules; chrome-prep C4c: `Grid`
+		// moved to grid.js; chrome-prep C4d: `_markAutoSaved` moved to
+		// autosave-indicator.js — this suite now spies on ITS module export
+		// instead of the former `newTabTools._markAutoSaved` method.
 		let prefsModule: any;
 		let newTabModule: any;
 		let gridModule: any;
 		let undoDialogModule: any;
 		let updaterModule: any;
+		let autosaveModule: any;
 		for (const file of PAGE_FILES_IN_LOAD_ORDER) {
 			const mod = await import(/* @vite-ignore */ webext(file));
 			if (file === 'prefs.js') { prefsModule = mod; }
@@ -160,6 +167,7 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 			if (file === 'grid.js') { gridModule = mod; }
 			if (file === 'undo-dialog.js') { undoDialogModule = mod; }
 			if (file === 'updater.js') { updaterModule = mod; }
+			if (file === 'autosave-indicator.js') { autosaveModule = mod; }
 		}
 		Prefs = prefsModule.Prefs;
 
@@ -173,7 +181,7 @@ describe('page-main.js registers the seam that reproduces the old updateUI/refre
 		vi.spyOn(newTabModule.newTabTools, 'startup').mockImplementation(() => {});
 
 		updateUISpy = vi.spyOn(newTabModule.newTabTools, 'updateUI').mockImplementation(() => {});
-		markAutoSavedSpy = vi.spyOn(newTabModule.newTabTools, '_markAutoSaved').mockImplementation(() => {});
+		markAutoSavedSpy = vi.spyOn(autosaveModule, '_markAutoSaved').mockImplementation(() => {});
 		resizeSpy = vi.spyOn(newTabModule.newTabTools, 'resizeOptionsThumbnail').mockImplementation(() => {});
 		refreshSpy = vi.spyOn(gridModule.Grid, 'refresh').mockResolvedValue(undefined);
 		updateGridSpy = vi.spyOn(updaterModule.Updater, 'updateGrid').mockImplementation(() => {});

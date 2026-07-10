@@ -6,9 +6,18 @@
  * Integration test: light/dark/auto theme switching in newTab.js.
  * Phase 1 slot 10 of the migration plan (MIGRATION.md).
  *
- * Extracts `updateThemeColours`, `getThemedImageURL`, `optionsOnChange`,
- * and theme-related branches of `updateUI` from the real `newTab.js` via
- * `vm.runInThisContext` with mocked DOM, Prefs, and browser.theme.
+ * chrome-prep C4d (CHROME_PREP.md): `updateThemeColours`/`getThemedImageURL`/
+ * `parseColour` are real theme.js exports now (moved verbatim out of
+ * newTab.js) — imported directly instead of vm-extracted from newTab.js
+ * source (C4a/b/c "import from the new specifier" precedent), and driven
+ * against the REAL `Prefs` singleton (prefs.js — theme.js imports it for
+ * real, so a `globalThis.Prefs` stand-in no longer reaches it; same
+ * "second-order fallout" class _helpers.ts's `ensureSiteEnv` documents).
+ * `optionsOnChange`/theme-related `updateUI` branches stay vm-extracted from
+ * newTab.js (residual, unmoved) — their bodies now call `updateThemeColours`
+ * as a bare identifier (real module-level function reference), so it's
+ * exposed on the shared `globalThis` (the `isValidURL`/`el` pattern) for
+ * those tests, instead of a harness `this.X` stub.
  *
  * Characterizes:
  *   - optionsOnChange: theme pref writes
@@ -26,6 +35,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { Prefs } from '../../webextension/prefs.js';
+import { updateThemeColours, parseColour } from '../../webextension/theme.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -50,16 +61,17 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 	beforeAll(() => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const updateThemeColours = extractMethod(source, 'updateThemeColours');
-		const getThemedImageURL = extractMethod(source, 'getThemedImageURL');
 		const optionsOnChange = extractMethod(source, 'optionsOnChange');
 		const updateUI = extractMethod(source, 'updateUI');
-		const parseColour = extractMethod(source, 'parseColour');
 		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
 		const syncToggle = extractMethod(source, '_syncDrawerToggle');
 		const syncSlider = extractMethod(source, '_syncDrawerSlider');
 
-		globalThis.Prefs = { theme: 'system', locked: false, rows: 3, columns: 3, opacity: 80, margin: ['small','small','small','small'], spacing: 'small', titleSize: 'small', history: true, recent: true };
+		// `Prefs` is the REAL singleton (prefs.js) — aliased onto `globalThis`
+		// so the vm-extracted `optionsOnChange`/`updateUI` bodies' bare
+		// `Prefs` reads resolve to the SAME object theme.js's own `import {
+		// Prefs }` binding points at (not a second, disconnected stand-in).
+		(globalThis as any).Prefs = Prefs;
 		globalThis.Filters = { getList: vi.fn(() => ({})) };
 		// Stand-in for the extracted updateUI body's bare `Grid` reads --
 		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
@@ -84,15 +96,22 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).window = {
 			matchMedia: vi.fn().mockReturnValue({ matches: false, addEventListener: vi.fn() }),
 		};
-		const code = `var newTabTools = { ${updateThemeColours}, ${getThemedImageURL}, ${optionsOnChange}, ${updateUI}, ${parseColour}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null, resizeOptionsThumbnail() {}, refreshRecent() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, applyTileAspect() {} };`;
+		// chrome-prep C4d: `updateThemeColours`/`refreshBackgroundImage`/
+		// `refreshRecent`/`fillNeverCaptureUI` moved to theme.js/wallpaper.js/
+		// titlebar.js/filters-ui.js — `updateUI`'s extracted body calls them
+		// as bare identifiers now.
+		(globalThis as any).updateThemeColours = vi.fn();
+		(globalThis as any).refreshBackgroundImage = vi.fn();
+		(globalThis as any).refreshRecent = vi.fn();
+		(globalThis as any).fillNeverCaptureUI = vi.fn();
+		const code = `var newTabTools = { ${optionsOnChange}, ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, resizeOptionsThumbnail() {}, applyTileAspect() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		(globalThis as any).Prefs.theme = 'system';
-		harness._theme = null;
+		Prefs.theme = 'system';
 		harness.darkIcons = { disabled: false };
 
 		// Reset document.documentElement mocks
@@ -124,8 +143,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 	it('updateThemeColours clears all CSS properties when theme is not "system"', async () => {
 		Prefs.theme = 'light';
-		await harness.updateThemeColours();
-		expect(harness._theme).toBeNull();
+		await updateThemeColours();
 		// All 7 properties should be cleared (set to null)
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--fore-opaque', null);
@@ -139,17 +157,15 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(30, 30, 30)', ntp_text: 'rgb(200, 200, 200)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(browser.theme.getCurrent).toHaveBeenCalled();
-		expect(harness._theme).toBeTruthy();
 	});
 
 	it('updateThemeColours uses updateInfo.theme when provided', async () => {
 		Prefs.theme = 'system';
 		const theme = { colors: { ntp_background: 'rgb(10, 10, 10)', ntp_text: 'rgb(220, 220, 220)' } };
-		await harness.updateThemeColours({ theme });
+		await updateThemeColours({ theme });
 		expect(browser.theme.getCurrent).not.toHaveBeenCalled();
-		expect(harness._theme).toBe(theme);
 	});
 
 	it('updateThemeColours computes CSS custom properties from theme colors', async () => {
@@ -157,7 +173,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(30, 30, 30)', ntp_text: 'rgb(200, 200, 200)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
 			'--back-opaque', 'rgb(30, 30, 30)',
 		);
@@ -171,7 +187,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { toolbar: 'rgb(50, 50, 50)', toolbar_text: 'rgb(180, 180, 180)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
 			'--back-opaque', 'rgb(50, 50, 50)',
 		);
@@ -188,7 +204,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(240, 240, 240)', ntp_text: 'rgb(50, 50, 50)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
 			'--contrast-opaque', 'rgb(255, 255, 255)',
 		);
@@ -200,7 +216,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(30, 30, 30)', ntp_text: 'rgb(200, 200, 200)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
 			'--contrast-opaque', 'rgb(0, 0, 0)',
 		);
@@ -212,7 +228,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		const spy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 		Prefs.theme = 'system';
 		(globalThis as any).browser.theme.getCurrent.mockRejectedValue(new Error('no theme'));
-		await expect(harness.updateThemeColours()).resolves.not.toThrow();
+		await expect(updateThemeColours()).resolves.not.toThrow();
 		// Properties should still be cleared (null values)
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 		spy.mockRestore();
@@ -223,7 +239,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'not-a-color', ntp_text: 'also-bad' },
 		});
-		await expect(harness.updateThemeColours()).resolves.not.toThrow();
+		await expect(updateThemeColours()).resolves.not.toThrow();
 	});
 
 	// ==================== Default-Firefox-theme regression ====================
@@ -231,7 +247,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 	it('updateThemeColours handles theme.colors === null without throwing', async () => {
 		Prefs.theme = 'system';
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({ colors: null });
-		await expect(harness.updateThemeColours()).resolves.not.toThrow();
+		await expect(updateThemeColours()).resolves.not.toThrow();
 		// All properties should be cleared (null) since there are no colors to apply
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--fore-opaque', null);
@@ -240,13 +256,13 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 	it('updateThemeColours handles theme with no colors key without throwing', async () => {
 		Prefs.theme = 'system';
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({});
-		await expect(harness.updateThemeColours()).resolves.not.toThrow();
+		await expect(updateThemeColours()).resolves.not.toThrow();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 	});
 
 	it('updateThemeColours handles updateInfo with null theme.colors', async () => {
 		Prefs.theme = 'system';
-		await expect(harness.updateThemeColours({ theme: { colors: null } })).resolves.not.toThrow();
+		await expect(updateThemeColours({ theme: { colors: null } })).resolves.not.toThrow();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 	});
 
@@ -257,7 +273,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(40, 40, 40)', ntp_text: 'rgb(210, 210, 210)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
 			'--back-opaque', 'rgb(40, 40, 40)',
 		);
@@ -268,13 +284,13 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 	it('theme=light does not call browser.theme.getCurrent', async () => {
 		Prefs.theme = 'light';
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(browser.theme.getCurrent).not.toHaveBeenCalled();
 	});
 
 	it('theme=dark does not call browser.theme.getCurrent', async () => {
 		Prefs.theme = 'dark';
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		expect(browser.theme.getCurrent).not.toHaveBeenCalled();
 	});
 
@@ -283,7 +299,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).browser.theme.getCurrent.mockResolvedValue({
 			colors: { ntp_background: 'rgb(40, 40, 40)', ntp_text: 'rgb(210, 210, 210)' },
 		});
-		await harness.updateThemeColours();
+		await updateThemeColours();
 		// Should clear (null) — forced palette ignores browser theme
 		expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
 	});
@@ -294,8 +310,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		Prefs.theme = 'dark';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'dark');
 	});
@@ -304,8 +319,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		Prefs.theme = 'light';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(harness.darkIcons.disabled).toBe(true);
 	});
@@ -314,8 +328,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		Prefs.theme = 'dark';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(harness.darkIcons.disabled).toBe(false);
 	});
@@ -325,8 +338,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).window.matchMedia.mockReturnValue({ matches: true });
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'dark');
 		expect(harness.darkIcons.disabled).toBe(false);
@@ -337,8 +349,7 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).window.matchMedia.mockReturnValue({ matches: false });
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'light');
 		expect(harness.darkIcons.disabled).toBe(true);
@@ -350,40 +361,37 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		Prefs.theme = 'system';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
-		expect(browser.theme.onUpdated.addListener).toHaveBeenCalledWith(harness.updateThemeColours);
+		expect(browser.theme.onUpdated.addListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
 	});
 
 	it('updateUI removes onUpdated listener when theme is light', () => {
 		Prefs.theme = 'light';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
-		expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith(harness.updateThemeColours);
+		expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
 	});
 
 	it('updateUI removes onUpdated listener when theme is dark', () => {
 		Prefs.theme = 'dark';
 		const mockRadio = { checked: false };
 		document.querySelector = vi.fn(() => mockRadio) as any;
-		harness.updateThemeColours = vi.fn();
-		harness.getThemedImageURL = vi.fn().mockResolvedValue(null);
+		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
-		expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith(harness.updateThemeColours);
+		expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
 	});
 
 	// ==================== parseColour ====================
 
 	it('parseColour parses rgb() string', () => {
-		const result = harness.parseColour('rgb(100, 150, 200)');
+		const result = parseColour('rgb(100, 150, 200)');
 		expect(result).toEqual({ r: 100, g: 150, b: 200 });
 	});
 
 	it('parseColour returns null for unparseable input', () => {
-		expect(harness.parseColour('not-a-color')).toBeNull();
+		expect(parseColour('not-a-color')).toBeNull();
 	});
 });

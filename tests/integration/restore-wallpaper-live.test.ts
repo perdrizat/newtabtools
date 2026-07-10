@@ -12,7 +12,17 @@
  * pref changes — exactly as it already does for theme, spacing, grid size, etc.
  *
  * Regression guard for the "wallpaper only appears after a manual reload" bug.
- * Loads the real `updateUI` + `refreshBackgroundImage` from newTab.js.
+ *
+ * chrome-prep C4d (CHROME_PREP.md): `refreshBackgroundImage` is a real
+ * wallpaper.js export now (moved verbatim out of newTab.js) — imported
+ * directly and exposed on `globalThis` (below) so `updateUI`'s
+ * vm-extracted, still-resident body can reach it as the bare identifier its
+ * real source now calls (C4a/b/c "import from the new specifier" precedent
+ * for the move; the `isValidURL`/`el` pattern for the harness exposure).
+ * `Prefs`/`uiRefs` are the REAL singletons `refreshBackgroundImage` itself
+ * reads (prefs.js/ui-refs.js) — a `globalThis.Prefs` stand-in wouldn't reach
+ * it (same "second-order fallout" class _helpers.ts's `ensureSiteEnv`
+ * documents).
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -20,6 +30,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+import { Prefs } from '../../webextension/prefs.js';
+import { uiRefs } from '../../webextension/ui-refs.js';
+import { refreshBackgroundImage } from '../../webextension/wallpaper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -46,27 +59,27 @@ describe('restore applies the wallpaper live (no reload)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading methods for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const updateUI = extractMethod(source, 'updateUI');
-		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
-		// Object-URL hygiene helpers (audit §4.3) used by refreshBackgroundImage.
-		const fresh = extractMethod(source, '_freshObjectURL');
-		const drop = extractMethod(source, '_dropObjectURL');
 		// Stand-in for the extracted updateUI body's bare `Grid` reads —
 		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
 		// optional in this vm harness (C3a guard-removal fallout pattern).
 		(globalThis as any).Grid = { sites: [] };
-		const code = `globalThis.__nt = { ${updateUI}, ${refreshBackgroundImage}, ${fresh}, ${drop}, _objectURLs: {},`
-			+ ' backgroundFake: { style: {} }, removeBackgroundButton: {} };';
+		(globalThis as any).refreshBackgroundImage = refreshBackgroundImage;
+		uiRefs.backgroundFake = { style: {} } as any;
+		uiRefs.removeBackgroundButton = { disabled: false, blur: () => {} } as any;
+		const code = `globalThis.__nt = { ${updateUI} };`;
 		vm.runInThisContext(code, { filename: 'wallpaper-live-harness.js' });
 		nt = (globalThis as any).__nt;
 	});
 
 	beforeEach(() => {
 		document.body.removeAttribute('style');
-		(globalThis as any).Prefs = { backgroundUrl: '', backgroundPosition: 'center center', backgroundColor: '' };
+		Prefs.backgroundUrl = '';
+		Prefs.backgroundPosition = 'center center';
+		Prefs.backgroundColor = '';
 	});
 
 	it('applies a restored CDN wallpaper to document.body when backgroundUrl changes', () => {
-		(globalThis as any).Prefs.backgroundUrl = CDN + 'main-workspace/newtab-wallpapers-v2/abc.avif';
+		Prefs.backgroundUrl = CDN + 'main-workspace/newtab-wallpapers-v2/abc.avif';
 
 		// Simulate the storage.onChanged → prefsChanged → updateUI(keys) path.
 		nt.updateUI(['backgroundUrl']);

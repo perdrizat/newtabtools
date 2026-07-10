@@ -20,58 +20,31 @@
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
 import { Tiles } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
 import { Prefs, Blocked, Filters } from '../../webextension/prefs.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) {throw new Error(`${methodName} not found`);}
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') {depth++;}
-		else if (source[i] === '}') { depth--; if (depth === 0) {return source.substring(start, i + 1);} }
-	}
-	throw new Error('Unbalanced braces');
-}
+// chrome-prep C4d (CHROME_PREP.md): `refreshBackgroundImage` is a real
+// wallpaper.js export now (moved verbatim out of newTab.js, alongside
+// `_freshObjectURL`/`_dropObjectURL` to object-urls.js) — imported directly
+// instead of vm-extracted from newTab.js source (C4a/b/c "import from the
+// new specifier" precedent), and driven against the REAL `Background`/
+// `uiRefs` singletons it reads (tiles-shim.js/ui-refs.js — a
+// `globalThis.Background` stand-in no longer reaches it; same
+// "second-order fallout" class _helpers.ts's `ensureSiteEnv` documents).
+import { refreshBackgroundImage } from '../../webextension/wallpaper.js';
+import { uiRefs } from '../../webextension/ui-refs.js';
+import { Background } from '../../webextension/tiles-shim.js';
 
 // ==================== refreshBackgroundImage ====================
 
 describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const refreshBackgroundImage = extractMethod(source, 'refreshBackgroundImage');
-		// Object-URL hygiene helpers (audit §4.3) used by refreshBackgroundImage.
-		const fresh = extractMethod(source, '_freshObjectURL');
-		const drop = extractMethod(source, '_dropObjectURL');
-
-		globalThis.Background = { getBackground: vi.fn() };
-		globalThis.Prefs = { backgroundUrl: '' };
-
-		const code = `var newTabTools = { ${refreshBackgroundImage}, ${fresh}, ${drop}, _objectURLs: {}, backgroundFake: { style: {} }, removeBackgroundButton: { disabled: false, blur: function(){} } };`;
-		vm.runInThisContext(code, { filename: 'background-render-harness.js' });
-		harness = (globalThis as any).newTabTools;
-	});
-
 	beforeEach(() => {
 		vi.clearAllMocks();
-		(globalThis as any).Prefs.backgroundUrl = '';
-		harness.backgroundFake = { style: { backgroundImage: null } };
-		harness.removeBackgroundButton = { disabled: false, blur: vi.fn() };
-		harness._objectURLs = {};
+		Prefs.backgroundUrl = '';
+		Prefs.backgroundColor = '';
+		uiRefs.backgroundFake = { style: { backgroundImage: null } } as any;
+		uiRefs.removeBackgroundButton = { disabled: false, blur: vi.fn() } as any;
+		Background.getBackground = vi.fn();
 		globalThis.URL.revokeObjectURL = vi.fn();
 		document.body.style.backgroundImage = '';
 	});
@@ -79,37 +52,37 @@ describe('Page background rendering — newTab.js (Phase 1 slot 15)', () => {
 	it('applies background image URL to document.body when background exists', async () => {
 		const blob = new Blob(['img']);
 		globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake-bg');
-		(globalThis as any).Background.getBackground.mockResolvedValue(blob);
-		await harness.refreshBackgroundImage();
+		(Background.getBackground as any).mockResolvedValue(blob);
+		await refreshBackgroundImage();
 		expect(document.body.style.backgroundImage).toBe('url("blob:fake-bg")');
-		expect(harness.backgroundFake.style.backgroundImage).toBe('url("blob:fake-bg")');
-		expect(harness.removeBackgroundButton.disabled).toBe(false);
+		expect(uiRefs.backgroundFake.style.backgroundImage).toBe('url("blob:fake-bg")');
+		expect(uiRefs.removeBackgroundButton.disabled).toBe(false);
 	});
 
 	it('clears background image when no background stored', async () => {
 		document.body.style.backgroundImage = 'url("old")';
-		(globalThis as any).Background.getBackground.mockResolvedValue(null);
-		await harness.refreshBackgroundImage();
+		(Background.getBackground as any).mockResolvedValue(null);
+		await refreshBackgroundImage();
 		// Code sets style.backgroundImage = null; jsdom coerces to ''
 		expect(document.body.style.backgroundImage).toBe('');
 		// Our plain-object mock keeps the null
-		expect(harness.backgroundFake.style.backgroundImage).toBeNull();
+		expect(uiRefs.backgroundFake.style.backgroundImage).toBeNull();
 	});
 
 	it('disables remove button when no background', async () => {
-		(globalThis as any).Background.getBackground.mockResolvedValue(null);
-		await harness.refreshBackgroundImage();
-		expect(harness.removeBackgroundButton.disabled).toBe(true);
-		expect(harness.removeBackgroundButton.blur).toHaveBeenCalled();
+		(Background.getBackground as any).mockResolvedValue(null);
+		await refreshBackgroundImage();
+		expect(uiRefs.removeBackgroundButton.disabled).toBe(true);
+		expect(uiRefs.removeBackgroundButton.blur).toHaveBeenCalled();
 	});
 
 	it('enables remove button when background exists', async () => {
-		harness.removeBackgroundButton.disabled = true;
+		uiRefs.removeBackgroundButton.disabled = true;
 		const blob = new Blob(['img']);
 		globalThis.URL.createObjectURL = vi.fn(() => 'blob:bg');
-		(globalThis as any).Background.getBackground.mockResolvedValue(blob);
-		await harness.refreshBackgroundImage();
-		expect(harness.removeBackgroundButton.disabled).toBe(false);
+		(Background.getBackground as any).mockResolvedValue(blob);
+		await refreshBackgroundImage();
+		expect(uiRefs.removeBackgroundButton.disabled).toBe(false);
 	});
 });
 

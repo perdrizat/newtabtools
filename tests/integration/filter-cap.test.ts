@@ -31,6 +31,7 @@ import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { Tiles } from '../../webextension/lib/tiles-store.js';
 import { _resetForTests } from '../../webextension/lib/db.js';
+import { uiRefs } from '../../webextension/ui-refs.js';
 // Aliased: the file's other describe block ("Filter cap UI") relies on the
 // BARE `Filters`/`Prefs`/`Blocked` identifiers resolving to its own
 // per-describe `globalThis.X = {...}` stand-ins (via the ambient `declare
@@ -77,8 +78,18 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 		globalThis.Tiles = { putTile: vi.fn().mockResolvedValue(1), getTile: vi.fn() };
 		globalThis.Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
 		globalThis.Grid = { cells: [{ index: 0, containsPinnedSite: () => false }] };
+		// chrome-prep C4d (CHROME_PREP.md): `fillFilterUI` moved to
+		// filters-ui.js — `optionsOnClick`'s extracted body now calls it as a
+		// bare identifier, so it's exposed on the shared `globalThis` (the
+		// `isValidURL`/`el` pattern) instead of a harness `this.X` stub;
+		// tests below assert against this stub directly rather than
+		// `harness.fillFilterUI`. Its `historytiles-filter` case also reads
+		// `uiRefs.optionsFilter` (ui-refs.js) as a bare `uiRefs` identifier
+		// now (formerly `this.optionsFilter`) — exposed the same way.
+		(globalThis as any).fillFilterUI = vi.fn();
+		(globalThis as any).uiRefs = uiRefs;
 
-		const code = `var newTabTools = { ${optionsOnClick}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {}, getString(k) { return k; } };`;
+		const code = `var newTabTools = { ${optionsOnClick}, hideOptions() {}, showOptionsExtra() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {}, getString(k) { return k; } };`;
 		vm.runInThisContext(code, { filename: 'filter-ui-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -135,9 +146,8 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 
 	it('options-filter-set calls fillFilterUI with highlighted host', () => {
 		harness.optionsFilterHost.value = 'test.com';
-		harness.fillFilterUI = vi.fn();
 		harness.optionsOnClick({ target: { id: 'options-filter-set', disabled: false, classList: { contains: vi.fn(() => false) } } });
-		expect(harness.fillFilterUI).toHaveBeenCalledWith('test.com');
+		expect((globalThis as any).fillFilterUI).toHaveBeenCalledWith('test.com');
 	});
 
 	it('plus-button increments filter count and calls setFilter', () => {
@@ -272,7 +282,6 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 	});
 
 	it('ntt-filter-remove deletes the filter (setFilter host, -1) and refreshes', () => {
-		harness.fillFilterUI = vi.fn();
 		const row = { cells: [{ textContent: 'www.linkedin.com' }] };
 		const event = {
 			target: {
@@ -285,23 +294,22 @@ describe('Filter cap UI — newTab.js (Phase 1 slot 13)', () => {
 		harness.optionsOnClick(event);
 		expect(Filters.setFilter).toHaveBeenCalledWith('www.linkedin.com', -1);
 		expect(Updater.updateGrid).toHaveBeenCalled();
-		expect(harness.fillFilterUI).toHaveBeenCalled();
+		expect((globalThis as any).fillFilterUI).toHaveBeenCalled();
 	});
 
 	it('historytiles-filter toggles the panel open/closed and fills only on open', () => {
-		harness.fillFilterUI = vi.fn();
-		harness.optionsFilter = { hidden: true };
+		uiRefs.optionsFilter = { hidden: true } as any;
 		const btn = { id: 'historytiles-filter', disabled: false, classList: { contains: vi.fn(() => false) }, setAttribute: vi.fn() };
 		// first click → opens + fills
 		harness.optionsOnClick({ target: btn });
-		expect(harness.optionsFilter.hidden).toBe(false);
+		expect(uiRefs.optionsFilter.hidden).toBe(false);
 		expect(btn.setAttribute).toHaveBeenCalledWith('aria-expanded', 'true');
-		expect(harness.fillFilterUI).toHaveBeenCalledTimes(1);
+		expect((globalThis as any).fillFilterUI).toHaveBeenCalledTimes(1);
 		// second click → closes, no re-fill
 		harness.optionsOnClick({ target: btn });
-		expect(harness.optionsFilter.hidden).toBe(true);
+		expect(uiRefs.optionsFilter.hidden).toBe(true);
 		expect(btn.setAttribute).toHaveBeenCalledWith('aria-expanded', 'false');
-		expect(harness.fillFilterUI).toHaveBeenCalledTimes(1);
+		expect((globalThis as any).fillFilterUI).toHaveBeenCalledTimes(1);
 	});
 });
 

@@ -158,8 +158,20 @@ describe('Drawer Appearance tab — updateUI reflects active theme card (Phase 3
 			},
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
+		// chrome-prep C4d (CHROME_PREP.md): `updateThemeColours`/
+		// `refreshBackgroundImage`/`refreshRecent`/`fillNeverCaptureUI` moved to
+		// theme.js/wallpaper.js/titlebar.js/filters-ui.js — `updateUI`'s extracted
+		// body now calls them as bare identifiers (real module-level function
+		// references, not `this.X` methods), so they must be exposed on the
+		// shared `globalThis` the same way `isValidURL`/`el` are elsewhere,
+		// rather than declared as harness object-literal methods (which a bare
+		// identifier call can no longer reach).
+		(globalThis as any).updateThemeColours = vi.fn();
+		(globalThis as any).refreshBackgroundImage = vi.fn();
+		(globalThis as any).refreshRecent = vi.fn();
+		(globalThis as any).fillNeverCaptureUI = vi.fn();
 
-		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
+		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, resizeOptionsThumbnail() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'appearance-updateUI-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

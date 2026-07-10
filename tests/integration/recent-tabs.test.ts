@@ -5,34 +5,43 @@
 /**
  * Integration test: recently-closed-tabs card strip + one-click restore.
  *
- * Extracts `refreshRecent`, `trimRecent`, `isValidURL`, and `_formatAge`
- * from the real `newTab.js` via `vm.runInThisContext` and exercises the
- * recently-closed tabs logic with mocked `chrome.sessions` and DOM.
+ * chrome-prep C4d (CHROME_PREP.md): `refreshRecent` is a real titlebar.js
+ * export now (moved verbatim out of newTab.js) — imported directly instead
+ * of vm-extracted from newTab.js source (C4a/b/c "import from the new
+ * specifier" precedent). titlebar.js imports `isValidURL` (common.js) and
+ * `Grid` (grid.js) itself, as real ESM bindings — no more free-identifier
+ * exposure via `globalThis` needed for `isValidURL`/`el`. `Grid.sites` is a
+ * derived getter on the real singleton
+ * (no setter), so this suite mocks grid.js wholesale to get a plain,
+ * test-settable `sites` array; `Prefs.recent` keeps its real getter/setter
+ * pair (prefs.js) and is set directly, no mock needed. The card cap
+ * (formerly a stubbed `_layoutTitlebar()` override) is now driven through
+ * `setCardCap()`, which sizes a real `#ntt-titlebar-recent` measurement
+ * element so titlebar.js's REAL `_layoutTitlebar`/`computeTitlebarSlots`
+ * derive the requested cap themselves.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-import { isValidURL } from '../../webextension/common.js';
-import { el } from '../../webextension/dom.js';
+import { refreshRecent } from '../../webextension/titlebar.js';
+import { uiRefs } from '../../webextension/ui-refs.js';
+import { Prefs } from '../../webextension/prefs.js';
+
+vi.mock('../../webextension/grid.js', () => ({ Grid: { sites: [] as any[] } }));
+import { Grid } from '../../webextension/grid.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?(?:get\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) {throw new Error(`${methodName} not found`);}
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') {depth++;}
-		else if (source[i] === '}') { depth--; if (depth === 0) {return source.substring(start, i + 1);} }
-	}
-	throw new Error('Unbalanced braces');
+// Sizes the real `#ntt-titlebar-recent` measurement element so titlebar.js's
+// real `_layoutTitlebar`/`computeTitlebarSlots` (gap 10, full 186 — the
+// mocked `getComputedStyle` below fixes the gap) derive the requested card
+// cap themselves, instead of stubbing `_layoutTitlebar` directly (no longer
+// possible — it's a real, non-overridable module function post-C4d).
+let recentMeasureEl: any;
+function setCardCap(n: number) {
+	recentMeasureEl.clientWidth = n <= 0 ? 0 : (n - 1) * 196 + 98;
 }
 
 function makeMockElement(): any {
@@ -50,47 +59,33 @@ function makeMockElement(): any {
 }
 
 describe('Recently-closed tabs — newTab.js', () => {
-	let harness: any;
 	let recentList: any;
 	let strip: any;
 	let appendedCards: any[];
 
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const refreshRecent = extractMethod(source, 'refreshRecent');
-		const trimRecent = extractMethod(source, 'trimRecent');
-		// `isValidURL` (newTab.js) is now a one-line delegate to common.js's
-		// real `isValidURL` export (P2-P5 review finding 1, revised
-		// remediation, 2026-07-10) — vm.runInThisContext shares this file's
-		// real globalThis, so the delegate's bare-identifier call resolves as
-		// long as the real function is exposed there first (below).
-		const isValidURLBody = extractMethod(source, 'isValidURL');
-		const _formatAge = extractMethod(source, '_formatAge');
-
-		globalThis.Prefs = { recent: true };
-		(globalThis as any).isValidURL = isValidURL;
-		// chrome-prep C2: `refreshRecent`'s card-building block now calls the
-		// page-side `el()` leaf (webextension/dom.js) as a bare identifier —
-		// same reason as the `isValidURL` exposure above: this harness
-		// vm.runInThisContext-extracts only the method body, not the real
-		// module's `import` statements, so the dependency has to be exposed on
-		// the shared globalThis instead.
-		(globalThis as any).el = el;
-
 		chrome.sessions = {
 			getRecentlyClosed: vi.fn(),
 			restore: vi.fn(),
 			onChanged: { addListener: vi.fn() },
 		} as any;
 
-		// `_layoutTitlebar` is the source of the card cap; stub it so these
-		// behavioural tests control how many cards refreshRecent may render
-		// (default 10, matching the old hard cap). The real slot-sizing math
-		// is covered by titlebar-slots.test.ts.
-		const code = `var newTabTools = { ${refreshRecent}, ${trimRecent}, ${isValidURLBody}, ${_formatAge}, recentList: null, _layoutResult: { cardCount: 10, slotWidth: 186, searchWidth: 186 }, _layoutTitlebar() { return this._layoutResult; } };`;
-		vm.runInThisContext(code, { filename: 'recent-tabs-harness.js' });
-		harness = (globalThis as any).newTabTools;
+		// Real measurement element `_layoutTitlebar` reads via
+		// `document.getElementById('ntt-titlebar-recent')` — built with the
+		// real `document.createElement` (before `beforeEach` below re-mocks
+		// it for card-building) so `setCardCap()` can drive the real
+		// slot-sizing math (titlebar-slots.test.ts covers that math itself).
+		const titlebarEl = document.createElement('div');
+		titlebarEl.id = 'ntt-titlebar';
+		document.body.appendChild(titlebarEl);
+		recentMeasureEl = document.createElement('div');
+		recentMeasureEl.id = 'ntt-titlebar-recent';
+		// jsdom's `clientWidth` is a getter-only prototype accessor (always
+		// 0, no layout engine) — shadow it with a writable own property so
+		// `setCardCap()` can drive it per test.
+		Object.defineProperty(recentMeasureEl, 'clientWidth', { value: 0, configurable: true, writable: true });
+		document.body.appendChild(recentMeasureEl);
+		(window as any).getComputedStyle = vi.fn(() => ({ gap: '10px', columnGap: '10px' }));
 	});
 
 	beforeEach(() => {
@@ -101,11 +96,14 @@ describe('Recently-closed tabs — newTab.js', () => {
 		// `typeof Grid !== 'undefined'` guard once PAGE_MODULES.md's P5
 		// import cycle made it provably unreachable) — tests that care about
 		// the tile-URL-skip behavior override this with real sites.
-		(globalThis as any).Grid = { sites: [] };
+		(Grid as any).sites = [];
 		appendedCards = [];
+		setCardCap(10);
 
 		// The recently-closed cards now render directly into the titlebar
-		// container (#ntt-titlebar-recent), so the strip *is* recentList.
+		// container (#ntt-titlebar-recent), so the strip *is* recentList
+		// (`uiRefs.recentList`, chrome-prep C4d — the shared ref titlebar.js
+		// reads instead of a former `this.recentList`).
 		recentList = {
 			hidden: false,
 			querySelectorAll: vi.fn(() => []),
@@ -113,13 +111,15 @@ describe('Recently-closed tabs — newTab.js', () => {
 			appendChild: vi.fn((el: any) => { appendedCards.push(el); return el; }),
 		};
 		strip = recentList;
-		harness.recentList = recentList;
-		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
+		uiRefs.recentList = recentList;
 
 		// `refreshRecent` builds 'img' elements via one shape and everything else
 		// (the 'a'/'span' card structure) via `makeMockElement`'s generic shape —
 		// both now go through `document.createElement` (no more createElementNS
-		// namespace split), so the mock dispatches on the tag name.
+		// namespace split), so the mock dispatches on the tag name. This
+		// override doesn't disturb `recentMeasureEl`/`titlebarEl` above — those
+		// were built with the real implementation in `beforeAll`, before this
+		// override is installed.
 		document.createElement = vi.fn((tag: string) =>
 			tag === 'img'
 				? { classList: { add: vi.fn() }, onerror: null, src: '', remove: vi.fn() }
@@ -133,7 +133,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 
 	it('hides recent list when Prefs.recent is false', () => {
 		Prefs.recent = false;
-		harness.refreshRecent();
+		refreshRecent();
 		// The container is no longer display:none'd — it stays laid out as the
 		// empty greedy spacer that pins the masthead to the right edge; it just
 		// holds no cards when recent is off.
@@ -142,7 +142,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 	});
 
 	it('calls chrome.sessions.getRecentlyClosed when Prefs.recent is true', () => {
-		harness.refreshRecent();
+		refreshRecent();
 		expect(chrome.sessions.getRecentlyClosed).toHaveBeenCalledWith(expect.any(Function));
 	});
 
@@ -152,7 +152,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 		const existingCard = { className: 'ntt-recent-card' };
 		strip.querySelectorAll.mockReturnValue([existingCard]);
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb([]));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(strip.removeChild).toHaveBeenCalledWith(existingCard);
 	});
 
@@ -163,7 +163,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 120 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(strip.appendChild).toHaveBeenCalledTimes(1);
 		const card = appendedCards[0];
 		expect(card.className).toBe('ntt-recent-card');
@@ -175,7 +175,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
 
@@ -184,7 +184,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 120 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const card = appendedCards[0];
 		expect(card.appendChild).toHaveBeenCalledTimes(3);
 		const [fav, text, age] = card._children;
@@ -198,7 +198,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com/page', title: 'My Page', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const text = appendedCards[0]._children[1];
 		expect(text.appendChild).toHaveBeenCalledTimes(2);
 		const [nameEl, urlEl] = text._children;
@@ -211,7 +211,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com/page', title: 'My Page', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const text = appendedCards[0]._children[1];
 		const [nameEl, urlEl] = text._children;
 		const nameText = nameEl._children[0];
@@ -225,7 +225,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://www.theverge.com/tech', title: 'The Verge', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const urlEl = appendedCards[0]._children[1]._children[1];
 		expect(urlEl._children[0].textContent).toBe('theverge.com');
 	});
@@ -235,7 +235,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards[0].title).toBe('Example\nhttps://example.com');
 	});
 
@@ -244,7 +244,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'https://example.com', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards[0].title).toBe('https://example.com');
 	});
 
@@ -253,7 +253,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: '', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards[0].title).toBe('');
 	});
 
@@ -264,7 +264,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://private.com', title: 'Private', sessionId: 's1', favIconUrl: null, incognito: true } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(strip.appendChild).not.toHaveBeenCalled();
 	});
 
@@ -273,7 +273,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ window: { sessionId: 'w1' } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(strip.appendChild).not.toHaveBeenCalled();
 	});
 
@@ -283,7 +283,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(1);
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
@@ -296,7 +296,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(1);
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
@@ -307,7 +307,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(1);
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
@@ -319,7 +319,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'ftp://files.example/', title: 'F', sessionId: 's3', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(3);
 	});
 
@@ -330,7 +330,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'https://example.com/favicon.ico', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const card = appendedCards[0];
 		const fav = card._children[0];
 		expect(fav.className).toBe('ntt-recent-favicon');
@@ -343,7 +343,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const fav = appendedCards[0]._children[0];
 		const glyph = fav._children[0];
 		expect(glyph.textContent).toBe('E');
@@ -354,7 +354,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'javascript:alert(1)', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const fav = appendedCards[0]._children[0];
 		expect(fav._children[0].textContent).toBe('E');
 	});
@@ -364,7 +364,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: 'data:image/png;base64,abc', incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const fav = appendedCards[0]._children[0];
 		expect(fav._children[0].textContent).toBe('E');
 	});
@@ -374,7 +374,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const fav = appendedCards[0]._children[0];
 		expect(fav.style.backgroundColor).toMatch(/^hsl\(\d+, 50%, 40%\)$/);
 	});
@@ -383,7 +383,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 
 	it('hides recent list when no items added', () => {
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb([]));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(recentList.hidden).toBe(true);
 	});
 
@@ -393,7 +393,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(recentList.hidden).toBe(false);
 	});
 
@@ -404,7 +404,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 'abc123', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const card = appendedCards[0];
 		const result = card.onclick.call(card);
 		expect(chrome.sessions.restore).toHaveBeenCalledWith('abc123');
@@ -420,7 +420,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://c.com', title: 'C', sessionId: 's3', favIconUrl: null, incognito: true } }, // skipped
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(2);
 	});
 
@@ -431,7 +431,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: '', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const text = appendedCards[0]._children[1];
 		const nameEl = text._children[0];
 		expect(nameEl._children[0].textContent).toBe('https://example.com');
@@ -444,7 +444,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: undefined } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const card = appendedCards[0];
 		expect(card.appendChild).toHaveBeenCalledTimes(2);
 	});
@@ -454,7 +454,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 30 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const age = appendedCards[0]._children[2];
 		expect(age._children[0].textContent).toMatch(/^\d+s$/);
 	});
@@ -464,7 +464,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 300 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const age = appendedCards[0]._children[2];
 		expect(age._children[0].textContent).toBe('5m');
 	});
@@ -474,7 +474,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 7200 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const age = appendedCards[0]._children[2];
 		expect(age._children[0].textContent).toBe('2h');
 	});
@@ -484,7 +484,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 172800 } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		const age = appendedCards[0]._children[2];
 		expect(age._children[0].textContent).toBe('2d');
 	});
@@ -492,32 +492,32 @@ describe('Recently-closed tabs — newTab.js', () => {
 	// ==================== card cap from _layoutTitlebar ====================
 
 	it('renders at most _layoutTitlebar().cardCount cards', () => {
-		harness._layoutResult = { cardCount: 10, slotWidth: 186, searchWidth: 186 };
+		setCardCap(10);
 		const items = Array.from({ length: 15 }, (_, i) => ({
 			tab: { url: `https://site${i}.com`, title: `Site ${i}`, sessionId: `s${i}`, favIconUrl: null, incognito: false },
 		}));
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(10);
 	});
 
 	it('shrinks the card count to the titlebar cap on a narrower window', () => {
-		harness._layoutResult = { cardCount: 3, slotWidth: 150, searchWidth: 150 };
+		setCardCap(3);
 		const items = Array.from({ length: 15 }, (_, i) => ({
 			tab: { url: `https://site${i}.com`, title: `Site ${i}`, sessionId: `s${i}`, favIconUrl: null, incognito: false },
 		}));
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(3);
 	});
 
 	it('renders no cards and stays hidden when the cap is 0 (narrow window)', () => {
-		harness._layoutResult = { cardCount: 0, slotWidth: 140, searchWidth: 400 };
+		setCardCap(0);
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(0);
 		// Container stays laid out as the empty greedy spacer (pins masthead right).
 		expect(recentList.hidden).toBe(false);
@@ -528,22 +528,20 @@ describe('Recently-closed tabs — newTab.js', () => {
 	// ==================== skip URLs already in tiles ====================
 
 	it('skips tabs whose URL matches a visible tile', () => {
-		(globalThis as any).Grid = {
-			sites: [
-				{ url: 'https://already-pinned.com' },
-				null,
-				{ url: 'https://another-tile.com' },
-			],
-		};
+		(Grid as any).sites = [
+			{ url: 'https://already-pinned.com' },
+			null,
+			{ url: 'https://another-tile.com' },
+		] as any;
 		const items = [
 			{ tab: { url: 'https://already-pinned.com', title: 'Pinned', sessionId: 's1', favIconUrl: null, incognito: false } },
 			{ tab: { url: 'https://unique.com', title: 'Unique', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(1);
 		expect(appendedCards[0].href).toBe('https://unique.com');
-		delete (globalThis as any).Grid;
+		(Grid as any).sites = [];
 	});
 
 	// ==================== deduplication ====================
@@ -555,7 +553,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://other.com/page', title: 'News', sessionId: 's3', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(2);
 		expect(appendedCards[0].href).toBe('https://example.com/page1');
 		expect(appendedCards[1].href).toBe('https://other.com/page');
@@ -567,7 +565,7 @@ describe('Recently-closed tabs — newTab.js', () => {
 			{ tab: { url: 'https://example.com/page2', title: 'Article B', sessionId: 's2', favIconUrl: null, incognito: false } },
 		];
 		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
-		harness.refreshRecent();
+		refreshRecent();
 		expect(appendedCards).toHaveLength(2);
 	});
 });

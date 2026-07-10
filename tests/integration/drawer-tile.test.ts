@@ -67,12 +67,6 @@ function harnessShell() {
 	// setter — keep this as a plain object so we can attach `parentNode`.
 	t.setBgColourDisplay = { style: { backgroundColor: null }, parentNode: { disabled: false } };
 	t.getString = () => '';
-	// Object-URL hygiene (audit §4.3): the selectedSiteIndex setter routes
-	// thumbnail URLs through these; revocation itself is covered behaviorally
-	// in objecturl-revoke.test.ts, so plain stubs suffice here.
-	t._objectURLs = {};
-	t._freshObjectURL = () => 'blob:stub';
-	t._dropObjectURL = () => {};
 	return t;
 }
 
@@ -83,6 +77,16 @@ describe('Tile tab empty state + selection (Phase 3-2)', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const accessor = extractAccessor(source, 'selectedSiteIndex');
+
+		// Object-URL hygiene (audit §4.3): the selectedSiteIndex setter routes
+		// thumbnail URLs through object-urls.js's `_freshObjectURL`/
+		// `_dropObjectURL` now (chrome-prep C4d) — called as bare identifiers
+		// (real module-level function references), so exposed on the shared
+		// `globalThis` (the `isValidURL`/`el` pattern) rather than as harness
+		// `this.X` stubs. Revocation itself is covered behaviorally in
+		// objecturl-revoke.test.ts; plain stubs suffice here.
+		(globalThis as any)._freshObjectURL = () => 'blob:stub';
+		(globalThis as any)._dropObjectURL = () => {};
 
 		// Build the harness inside the VM so accessor descriptors are
 		// preserved (Object.assign would collapse `get`/`set` to data

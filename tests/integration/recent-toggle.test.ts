@@ -97,8 +97,18 @@ describe('updateUI — recent reflected onto the toggle (not a segmented control
 		// chrome-prep C3d dropped the `'Grid' in window` sniffs that made it
 		// optional in this vm harness (C3a guard-removal fallout pattern).
 		(globalThis as any).Grid = { sites: [] };
+		// chrome-prep C4d (CHROME_PREP.md): `updateThemeColours`/
+		// `refreshBackgroundImage`/`refreshRecent`/`fillNeverCaptureUI` moved to
+		// theme.js/wallpaper.js/titlebar.js/filters-ui.js — `updateUI`'s extracted
+		// body now calls them as bare identifiers, so they must be exposed on
+		// the shared `globalThis` (the `isValidURL`/`el` pattern) rather than
+		// declared as harness object-literal methods.
+		(globalThis as any).updateThemeColours = vi.fn();
+		(globalThis as any).refreshBackgroundImage = vi.fn();
+		(globalThis as any).refreshRecent = vi.fn();
+		(globalThis as any).fillNeverCaptureUI = vi.fn();
 
-		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
+		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, resizeOptionsThumbnail() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'recent-toggle-updateUI-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

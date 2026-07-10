@@ -53,7 +53,6 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const updateUI = extractMethod(source, 'updateUI');
 		const optionsOnChange = extractMethod(source, 'optionsOnChange');
-		const getThemedImageURL = extractMethod(source, 'getThemedImageURL');
 		const syncSeg = extractMethod(source, '_syncDrawerSegmented');
 		const syncToggle = extractMethod(source, '_syncDrawerToggle');
 		const syncSlider = extractMethod(source, '_syncDrawerSlider');
@@ -81,7 +80,23 @@ describe('Layout features — newTab.js (Phase 1 slot 11)', () => {
 			extension: { getURL: vi.fn((p: string) => `moz-extension://fake/${p}`) },
 		};
 
-		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${getThemedImageURL}, ${syncSeg}, ${syncToggle}, ${syncSlider}, updateThemeColours() {}, resizeOptionsThumbnail() {}, refreshRecent() {}, applyTileAspect() {}, refreshBackgroundImage() {}, _updateThemeToggleIcon() {}, _updateStatusBar() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
+		// chrome-prep C4d (CHROME_PREP.md): `getThemedImageURL` moved to
+		// theme.js (no longer extractable from newTab.js source — it was
+		// vestigial here anyway: `updateThemeColours` is a full no-op stub
+		// below, so no code path in this harness ever reached it).
+		// `updateThemeColours`/`refreshBackgroundImage`/`refreshRecent`
+		// (also moved, to theme.js/wallpaper.js/titlebar.js) are called as
+		// bare identifiers by the extracted `updateUI` body now — exposed on
+		// `globalThis` (the `isValidURL`/`el` pattern) since only
+		// `updateUI(null)` below (the full-refresh case) actually reaches
+		// them; the harness object literal's `this.X` stubs can't intercept
+		// a bare-identifier call.
+		(globalThis as any).updateThemeColours = vi.fn();
+		(globalThis as any).refreshBackgroundImage = vi.fn();
+		(globalThis as any).refreshRecent = vi.fn();
+		(globalThis as any).fillNeverCaptureUI = vi.fn();
+
+		const code = `var newTabTools = { ${updateUI}, ${optionsOnChange}, ${syncSeg}, ${syncToggle}, ${syncSlider}, resizeOptionsThumbnail() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, _theme: null };`;
 		vm.runInThisContext(code, { filename: 'layout-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

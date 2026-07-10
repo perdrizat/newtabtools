@@ -99,14 +99,19 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 		let resolveRefresh!: () => void;
 		const refresh = vi.fn(() => new Promise<void>(res => { resolveRefresh = res; }));
 		const updateGrid = vi.fn();
-		const newTabTools = { refreshBackgroundImage: vi.fn(), getThumbnails: vi.fn() };
+		const newTabTools = { getThumbnails: vi.fn() };
+		// chrome-prep C4d (CHROME_PREP.md): `refreshBackgroundImage` moved to
+		// wallpaper.js — `pageMessageHandler`'s extracted body now calls it as
+		// a bare identifier, so it's supplied at the top level of the vm
+		// sandbox instead of nested under `newTabTools`.
+		const refreshBackgroundImage = vi.fn();
 		const sendResponse = vi.fn();
-		const { listener } = loadHandler({ Grid: { refresh }, Updater: { updateGrid }, newTabTools });
+		const { listener } = loadHandler({ Grid: { refresh }, Updater: { updateGrid }, newTabTools, refreshBackgroundImage });
 
 		const result = listener({ name: 'Page.restoreComplete' }, sender, sendResponse);
 
 		expect(result).toBeFalsy();
-		expect(newTabTools.refreshBackgroundImage).toHaveBeenCalledTimes(1);
+		expect(refreshBackgroundImage).toHaveBeenCalledTimes(1);
 		expect(refresh).toHaveBeenCalledTimes(1);
 		// Regression (formerly pinned by backup-restore-refresh.test.ts): the
 		// post-restore path must NOT use Updater.updateGrid — it reuses Site
@@ -123,9 +128,10 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 	it('leaves page→background messages (e.g. \'Tiles.putTile\') untouched', () => {
 		const updateGrid = vi.fn();
 		const refresh = vi.fn();
-		const newTabTools = { refreshBackgroundImage: vi.fn(), getThumbnails: vi.fn() };
+		const newTabTools = { getThumbnails: vi.fn() };
+		const refreshBackgroundImage = vi.fn();
 		const sendResponse = vi.fn();
-		const { listener } = loadHandler({ Updater: { updateGrid }, Grid: { refresh }, newTabTools });
+		const { listener } = loadHandler({ Updater: { updateGrid }, Grid: { refresh }, newTabTools, refreshBackgroundImage });
 
 		const result = listener(
 			{ name: 'Tiles.putTile', tile: { url: 'https://example.com' } },
@@ -138,7 +144,7 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 		expect(sendResponse).not.toHaveBeenCalled();
 		expect(updateGrid).not.toHaveBeenCalled();
 		expect(refresh).not.toHaveBeenCalled();
-		expect(newTabTools.refreshBackgroundImage).not.toHaveBeenCalled();
+		expect(refreshBackgroundImage).not.toHaveBeenCalled();
 		expect(newTabTools.getThumbnails).not.toHaveBeenCalled();
 	});
 
@@ -177,12 +183,13 @@ describe('newTab.js — page-side runtime.onMessage listener (Slice A)', () => {
 
 		it('\'Page.restoreComplete\' calls refreshBackgroundImage + Grid.refresh immediately — no queue, no replay step needed', () => {
 			const refresh = vi.fn(() => Promise.resolve());
-			const newTabTools = { refreshBackgroundImage: vi.fn(), getThumbnails: vi.fn() };
-			const { listener } = loadHandler({ Grid: { refresh }, newTabTools });
+			const newTabTools = { getThumbnails: vi.fn() };
+			const refreshBackgroundImage = vi.fn();
+			const { listener } = loadHandler({ Grid: { refresh }, newTabTools, refreshBackgroundImage });
 
 			listener({ name: 'Page.restoreComplete' }, sender, vi.fn());
 
-			expect(newTabTools.refreshBackgroundImage).toHaveBeenCalledTimes(1);
+			expect(refreshBackgroundImage).toHaveBeenCalledTimes(1);
 			expect(refresh).toHaveBeenCalledTimes(1);
 		});
 	});

@@ -9,55 +9,38 @@
  * Settings, displays them in a category-grouped grid, and persists the
  * selection as a `backgroundUrl` pref (CDN URL string).
  *
- * Fetch logic is tested behaviorally by extracting `fetchFirefoxWallpapers`
- * from the real newTab.js and running it with a mocked `fetch`.
+ * chrome-prep C4d (CHROME_PREP.md): `fetchFirefoxWallpapers` is a real
+ * wallpaper.js export now (moved verbatim out of newTab.js) — imported
+ * directly instead of vm-extracted from newTab.js source (C4a/b/c "import
+ * from the new specifier" precedent). `_wallpaperCache` is wallpaper.js's
+ * own module-private state (no longer a resettable `harness._wallpaperCache`
+ * field) — `vi.resetModules()` + a fresh dynamic `import()` per test gives
+ * each test its own module instance instead, the same effect the old
+ * per-`beforeAll` harness object had.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import vm from 'node:vm';
 import { readNewTabHtml } from './_helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
 const MOZILLA_CDN_BASE = 'https://firefox-settings-attachments.cdn.mozilla.net/';
 
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) {throw new Error(`${methodName} not found`);}
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') {depth++;}
-		else if (source[i] === '}') { depth--; if (depth === 0) {return source.substring(start, i + 1);} }
-	}
-	throw new Error('Unbalanced braces');
-}
-
 // ===========================================================================
-// Wallpaper fetch logic — behavioral (vm.runInThisContext)
+// Wallpaper fetch logic — behavioral
 // ===========================================================================
 
 describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
-	let harness: { fetchFirefoxWallpapers: () => Promise<any[]>; _wallpaperCache: any };
+	let fetchFirefoxWallpapers: () => Promise<any[]>;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const method = extractMethod(source, 'fetchFirefoxWallpapers');
-
-		const code = `var newTabTools = { ${method}, _wallpaperCache: null };`;
-		vm.runInThisContext(code, { filename: 'wallpaper-harness.js' });
-		harness = (globalThis as any).newTabTools;
-	});
-
-	beforeEach(() => {
-		harness._wallpaperCache = null;
+	beforeEach(async () => {
+		// Fresh module instance per test — `_wallpaperCache` starts `undefined`
+		// each time (see this file's header comment).
+		vi.resetModules();
+		({ fetchFirefoxWallpapers } = await import('../../webextension/wallpaper.js'));
 	});
 
 	it('returns wallpapers with imageUrl assembled from CDN base + attachment.location', async () => {
@@ -75,7 +58,7 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 			}),
 		});
 
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
 		// New shape (Phase 4-5 follow-up): `backgroundPosition` is always
 		// present, defaulting to `center center` when the upstream record
@@ -110,7 +93,7 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 			}),
 		});
 
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
 		expect(result[0].title).toBe('Mountain');
 	});
@@ -130,7 +113,7 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 			}),
 		});
 
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
 		expect(result[0].title).toBe('Valid');
 	});
@@ -155,7 +138,7 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 			}),
 		});
 
-		const result = await harness.fetchFirefoxWallpapers();
+		const result = await fetchFirefoxWallpapers();
 		expect(result).toHaveLength(1);
 		expect(result[0].title).toBe('Has Location');
 	});
@@ -174,8 +157,8 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 			}),
 		});
 
-		const first = await harness.fetchFirefoxWallpapers();
-		const second = await harness.fetchFirefoxWallpapers();
+		const first = await fetchFirefoxWallpapers();
+		const second = await fetchFirefoxWallpapers();
 		expect(first).toBe(second); // same reference
 		expect((globalThis as any).fetch).toHaveBeenCalledTimes(1); // only one fetch
 	});

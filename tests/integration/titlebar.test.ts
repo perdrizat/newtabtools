@@ -21,51 +21,41 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
 import { readNewTabHtml } from './_helpers';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?(?:get\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) { throw new Error(`${methodName} not found`); }
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') { depth++; }
-		else if (source[i] === '}') { depth--; if (depth === 0) { return source.substring(start, i + 1); } }
-	}
-	throw new Error('Unbalanced braces');
-}
+// titlebar.js imports `Grid` from grid.js, which in turn imports newTab.js
+// (the pre-existing newTab.js<->grid.js<->site.js cycle) — whose own top
+// level runs a boot IIFE that touches real newTab.html DOM ids. Mocking
+// grid.js wholesale (recent-tabs.test.ts's precedent) severs that edge so
+// importing titlebar.js here doesn't transitively evaluate newTab.js at
+// all; `_layoutTitlebar` itself never reads `Grid`, so the mock's shape is
+// irrelevant.
+vi.mock('../../webextension/grid.js', () => ({ Grid: { sites: [] } }));
+// chrome-prep C4d (CHROME_PREP.md): `_layoutTitlebar`/`computeTitlebarSlots`
+// are real titlebar.js exports now (moved verbatim out of newTab.js) —
+// imported directly instead of vm-extracted from newTab.js source (C4a/b/c
+// "import from the new specifier" precedent).
+import { _layoutTitlebar } from '../../webextension/titlebar.js';
+// `_layoutTitlebar` reads the REAL `Prefs` singleton (prefs.js) now — a
+// `(globalThis as any).Prefs = {...}` stand-in no longer reaches it (same
+// "second-order fallout" class _helpers.ts's `ensureSiteEnv` documents).
+// Before `Prefs.init()` runs (deliberately not called here — booting in
+// jsdom is out of scope), `recent`/etc. are plain, getter-less own-data
+// properties, so a direct assignment is read back synchronously with no
+// storage round-trip (`ensureSiteEnv`'s `Prefs.statType = 'none'` precedent).
+import { Prefs } from '../../webextension/prefs.js';
 
 describe('_layoutTitlebar — measures the card container and sets the slot width', () => {
-	let harness: any;
 	let setProps: Record<string, string>;
 	let recent: { clientWidth: number; hidden: boolean };
 	let realGetComputedStyle: typeof window.getComputedStyle;
 	let realGetById: typeof document.getElementById;
 
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const computeTitlebarSlots = extractMethod(source, 'computeTitlebarSlots');
-		const _layoutTitlebar = extractMethod(source, '_layoutTitlebar');
-		const code = `var _tbHarness = { ${computeTitlebarSlots}, ${_layoutTitlebar} };`;
-		vm.runInThisContext(code, { filename: 'layout-titlebar-harness.js' });
-		harness = (globalThis as any)._tbHarness;
-	});
-
 	beforeEach(() => {
 		setProps = {};
 		realGetComputedStyle = window.getComputedStyle;
 		realGetById = document.getElementById;
-		(globalThis as any).Prefs = { recent: true, titleBarSearch: true };
+		Prefs.recent = true;
+		Prefs.titleBarSearch = true;
 
 		const titlebar = {
 			style: { setProperty: (k: string, v: string) => { setProps[k] = v; } },
@@ -87,50 +77,47 @@ describe('_layoutTitlebar — measures the card container and sets the slot widt
 	afterEach(() => {
 		window.getComputedStyle = realGetComputedStyle;
 		document.getElementById = realGetById;
-		delete (globalThis as any).Prefs;
 	});
 
 	it('sets --ntt-slot-w (px) on the titlebar', () => {
-		harness._layoutTitlebar();
+		_layoutTitlebar();
 		expect(setProps['--ntt-slot-w']).toMatch(/^\d+px$/);
 	});
 
 	it('no longer sets the retired --ntt-search-w variable (search is fixed-width)', () => {
-		harness._layoutTitlebar();
+		_layoutTitlebar();
 		expect(setProps['--ntt-search-w']).toBeUndefined();
 	});
 
 	it('un-hides the container so it can be measured and pin the masthead right', () => {
 		recent.hidden = true;
-		harness._layoutTitlebar();
+		_layoutTitlebar();
 		expect(recent.hidden).toBe(false);
 	});
 
 	it('fits a positive card count into a wide container (730px)', () => {
 		// computeTitlebarSlots(730, 10): ceil(740/196) = 4 cards, shrunk to fill.
-		const slots = harness._layoutTitlebar();
+		const slots = _layoutTitlebar();
 		expect(slots.cardCount).toBe(4);
-		expect(harness._recentCardCount).toBe(4);
 		expect(slots.slotWidth).toBeLessThanOrEqual(186);
 	});
 
 	it('fits fewer cards into a narrower container (360px)', () => {
 		recent.clientWidth = 360;
-		const slots = harness._layoutTitlebar();
+		const slots = _layoutTitlebar();
 		expect(slots.cardCount).toBeLessThan(4);
 		expect(slots.cardCount).toBeGreaterThanOrEqual(1);
 	});
 
 	it('forces 0 cards when the recent pref is off (empty spacer remains)', () => {
-		(globalThis as any).Prefs = { recent: false };
-		const slots = harness._layoutTitlebar();
+		Prefs.recent = false;
+		const slots = _layoutTitlebar();
 		expect(slots.cardCount).toBe(0);
-		expect(harness._recentCardCount).toBe(0);
 	});
 
 	it('degrades to 0 cards when the titlebar / container is absent', () => {
 		document.getElementById = vi.fn(() => null) as any;
-		const slots = harness._layoutTitlebar();
+		const slots = _layoutTitlebar();
 		expect(slots.cardCount).toBe(0);
 	});
 });

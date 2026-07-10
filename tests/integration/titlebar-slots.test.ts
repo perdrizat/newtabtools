@@ -22,43 +22,22 @@
  * resize / drawer open-close / search toggle in the E2E tier (titlebar-reflow).
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import vm from 'node:vm';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-
-function extractMethod(source: string, methodName: string): string {
-	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
-	const match = source.match(sigPattern);
-	if (!match || match.index === undefined) { throw new Error(`${methodName} not found`); }
-	let depth = 0;
-	const start = match.index;
-	let i = source.indexOf('{', start);
-	for (; i < source.length; i++) {
-		if (source[i] === '{') { depth++; }
-		else if (source[i] === '}') { depth--; if (depth === 0) { return source.substring(start, i + 1); } }
-	}
-	throw new Error('Unbalanced braces');
-}
-
-interface Slots { cardCount: number; slotWidth: number; }
+import { describe, it, expect, vi } from 'vitest';
+// titlebar.js imports `Grid` from grid.js, which in turn imports newTab.js
+// (the pre-existing newTab.js<->grid.js<->site.js cycle) — whose own top
+// level runs a boot IIFE that touches real newTab.html DOM ids. Mocking
+// grid.js wholesale (recent-tabs.test.ts's precedent) severs that edge so
+// importing titlebar.js here doesn't transitively evaluate newTab.js at all;
+// `computeTitlebarSlots` itself never reads `Grid`, so the mock's shape is
+// irrelevant.
+vi.mock('../../webextension/grid.js', () => ({ Grid: { sites: [] } }));
+// chrome-prep C4d (CHROME_PREP.md): `computeTitlebarSlots` is a real
+// titlebar.js export now (moved verbatim out of newTab.js) — imported
+// directly instead of vm-extracted from newTab.js source (C4a/b/c
+// "import from the new specifier" precedent).
+import { computeTitlebarSlots as compute } from '../../webextension/titlebar.js';
 
 describe('computeTitlebarSlots — shrink-to-fill card sizing', () => {
-	let compute: (cardSpace: number, gap: number, full?: number) => Slots;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading helper for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const fn = extractMethod(source, 'computeTitlebarSlots');
-		const code = `var newTabTools = { ${fn} };`;
-		vm.runInThisContext(code, { filename: 'titlebar-slots-harness.js' });
-		compute = (globalThis as any).newTabTools.computeTitlebarSlots;
-	});
-
 	it('returns 0 cards for an empty / non-positive container', () => {
 		expect(compute(0, 10).cardCount).toBe(0);
 		expect(compute(-50, 10).cardCount).toBe(0);

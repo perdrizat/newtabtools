@@ -13,11 +13,27 @@
  *      change ticks the indicator's `_autoSavedAt`.
  */
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
+// chrome-prep C4d (CHROME_PREP.md): `formatRelativeTime`/
+// `_renderAutoSavedIndicator`/`_markAutoSaved`/`_initAutoSaveIndicator` are
+// real autosave-indicator.js exports now (moved verbatim out of newTab.js)
+// — imported directly instead of vm-extracted from newTab.js source (C4a/
+// b/c "import from the new specifier" precedent). `getString` (common.js)
+// is imported for real by autosave-indicator.js too, so its bare-key mock
+// (`tests/setup.js`: `chrome.i18n.getMessage = (key) => key`, dropping the
+// substitution argument) replaces the old harness's `getString(name,
+// ...args) { return name + ':' + args[0]; }` stub — assertions below check
+// for the bare message key, not a `key:value` string.
+import {
+	formatRelativeTime,
+	_renderAutoSavedIndicator,
+	_markAutoSaved,
+	_initAutoSaveIndicator,
+} from '../../webextension/autosave-indicator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -138,82 +154,98 @@ describe('resetAllSettings — destructive factory reset', () => {
 });
 
 describe('formatRelativeTime — auto-save indicator labels', () => {
-	let harness: any;
+	let realGetMessage: typeof chrome.i18n.getMessage;
+
 	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const body = extractMethod(source, 'formatRelativeTime');
-		const code = `var _relHarness = { ${body}, getString(name, ...args) { return name + ':' + (args[0] || ''); } };`;
-		vm.runInThisContext(code, { filename: 'rel-harness.js' });
-		harness = (globalThis as any)._relHarness;
+		// The shared `chrome.i18n.getMessage` mock (tests/setup.js) returns
+		// the bare key, dropping substitutions — too coarse to prove the
+		// minutes/hours VALUE reaches `getString`. Override it locally
+		// (restoring after) to reproduce the original stub's `key:value`
+		// shape instead, so the assertions below stay exactly as precise as
+		// the old vm-harness's own `getString` stub. Defensive against the
+		// earlier `resetAllSettings` describe's `(globalThis as any).chrome =
+		// {...}` wholesale replacement (unrelated to chrome-prep C4d, not
+		// this file's to fix) — reinstate `chrome.i18n` first if that
+		// clobbered it.
+		(globalThis as any).chrome = (globalThis as any).chrome || {};
+		(globalThis as any).chrome.i18n = (globalThis as any).chrome.i18n || {};
+		realGetMessage = chrome.i18n.getMessage;
+		(chrome.i18n as any).getMessage = (name: string, substitutions?: string[]) =>
+			name + ':' + ((substitutions && substitutions[0]) || '');
+	});
+
+	afterAll(() => {
+		chrome.i18n.getMessage = realGetMessage;
 	});
 
 	it('elapsed < 60s → "just now" key', () => {
-		expect(harness.formatRelativeTime(0)).toBe('autosaved_relative_now:');
-		expect(harness.formatRelativeTime(59999)).toBe('autosaved_relative_now:');
+		expect(formatRelativeTime(0)).toBe('autosaved_relative_now:');
+		expect(formatRelativeTime(59999)).toBe('autosaved_relative_now:');
 	});
 
 	it('elapsed 60s-1h → "Nm ago" key with the minutes value', () => {
-		expect(harness.formatRelativeTime(60000)).toBe('autosaved_relative_minutes:1');
-		expect(harness.formatRelativeTime(120000)).toBe('autosaved_relative_minutes:2');
-		expect(harness.formatRelativeTime(59 * 60000)).toBe('autosaved_relative_minutes:59');
+		expect(formatRelativeTime(60000)).toBe('autosaved_relative_minutes:1');
+		expect(formatRelativeTime(120000)).toBe('autosaved_relative_minutes:2');
+		expect(formatRelativeTime(59 * 60000)).toBe('autosaved_relative_minutes:59');
 	});
 
 	it('elapsed >= 1h → "Nh ago" key with the hours value', () => {
-		expect(harness.formatRelativeTime(60 * 60000)).toBe('autosaved_relative_hours:1');
-		expect(harness.formatRelativeTime(3 * 60 * 60000)).toBe('autosaved_relative_hours:3');
+		expect(formatRelativeTime(60 * 60000)).toBe('autosaved_relative_hours:1');
+		expect(formatRelativeTime(3 * 60 * 60000)).toBe('autosaved_relative_hours:3');
 	});
 });
 
 describe('Auto-save indicator — hidden until the first real save', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		const render = extractMethod(source, '_renderAutoSavedIndicator');
-		const mark = extractMethod(source, '_markAutoSaved');
-		const format = extractMethod(source, 'formatRelativeTime');
-		const init = extractMethod(source, '_initAutoSaveIndicator');
-		const code = `var _saveHarness = { ${render}, ${mark}, ${format}, ${init}, getString(name) { return name; }, _autoSavedAt: null };`;
-		vm.runInThisContext(code, { filename: 'autosave-harness.js' });
-		harness = (globalThis as any)._saveHarness;
+	// `_autoSaveTickInterval` is autosave-indicator.js's own module-private
+	// state now (chrome-prep C4d) — there's no `harness._autoSaveTickInterval`
+	// left to `clearInterval()` between tests. Fake timers sidestep the
+	// question entirely: `_initAutoSaveIndicator`'s `setInterval` call never
+	// creates a real OS timer, so there's nothing to leak regardless of
+	// which test ran last.
+	beforeEach(() => {
+		vi.useFakeTimers();
+		document.body.innerHTML = '<div id="ntt-drawer-footer-msg"></div>';
+		// Defensive against the earlier `resetAllSettings` describe's
+		// `(globalThis as any).chrome = {...}` wholesale replacement
+		// (unrelated to chrome-prep C4d) — reinstate the bare-key
+		// `chrome.i18n.getMessage` mock (tests/setup.js) if that clobbered it.
+		(globalThis as any).chrome = (globalThis as any).chrome || {};
+		(globalThis as any).chrome.i18n = (globalThis as any).chrome.i18n || {};
+		if (typeof (globalThis as any).chrome.i18n.getMessage !== 'function') {
+			(globalThis as any).chrome.i18n.getMessage = (key: string) => key;
+		}
 	});
 
-	beforeEach(() => {
-		document.body.innerHTML = '<div id="ntt-drawer-footer-msg"></div>';
-		harness._autoSavedAt = null;
-		harness._autoSaveTickInterval = null;
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('on init, the indicator is hidden and shows no text (no save has happened yet)', () => {
-		harness._initAutoSaveIndicator();
+		_initAutoSaveIndicator();
 		const el = document.getElementById('ntt-drawer-footer-msg') as HTMLElement;
 		expect(el.hidden).toBe(true);
 		expect(el.textContent).toBe('');
-		clearInterval(harness._autoSaveTickInterval);
 	});
 
 	it('after `_markAutoSaved` the indicator becomes visible with localised "just now"', () => {
-		harness._initAutoSaveIndicator();
-		harness._markAutoSaved();
+		_initAutoSaveIndicator();
+		_markAutoSaved();
 		const el = document.getElementById('ntt-drawer-footer-msg') as HTMLElement;
 		expect(el.hidden).toBe(false);
-		// `options_autosaved · just now` (getString stub returns the key).
+		// `options_autosaved · just now` (the shared `chrome.i18n.getMessage`
+		// mock returns the bare key).
 		expect(el.textContent).toContain('options_autosaved');
 		expect(el.textContent).toContain('autosaved_relative_now');
-		clearInterval(harness._autoSaveTickInterval);
 	});
 
 	it('opening the drawer alone does NOT cause the indicator to appear', () => {
 		// Simulated by just calling _renderAutoSavedIndicator twice with no
 		// intervening _markAutoSaved. The element must stay hidden.
-		harness._initAutoSaveIndicator();
-		harness._renderAutoSavedIndicator();
-		harness._renderAutoSavedIndicator();
+		_initAutoSaveIndicator();
+		_renderAutoSavedIndicator();
+		_renderAutoSavedIndicator();
 		const el = document.getElementById('ntt-drawer-footer-msg') as HTMLElement;
 		expect(el.hidden).toBe(true);
-		clearInterval(harness._autoSaveTickInterval);
 	});
 });
 
@@ -229,8 +261,12 @@ describe('page-main.js\'s Prefs.onChange seam calls _markAutoSaved on the newTab
 	// unrelated to the seam (it's `newTabTools.startup()`'s own `Prefs.init()
 	// .then(...)` call, in newTab.js).
 	it('`_initAutoSaveIndicator` is called during Prefs.init().then(...) startup', () => {
+		// chrome-prep C4d (CHROME_PREP.md): `_initAutoSaveIndicator` moved to
+		// autosave-indicator.js; newTab.js's `startup()` now calls it as a
+		// bare identifier (the imported function reference), not
+		// `newTabTools._initAutoSaveIndicator()`.
 		// eslint-disable-next-line ntt/no-source-grep -- wiring check
 		const newtab = fs.readFileSync(NEWTAB_PATH, 'utf8');
-		expect(newtab).toMatch(/newTabTools\._initAutoSaveIndicator\(\)/);
+		expect(newtab).toContain('_initAutoSaveIndicator();');
 	});
 });

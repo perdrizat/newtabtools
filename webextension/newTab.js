@@ -10,16 +10,30 @@
 // import this file, finish before this file's top level runs — see
 // PAGE_MODULES.md's P5 checklist note) never matters. `Updater` (updater.js,
 // chrome-prep C4a, CHROME_PREP.md) is imported directly below too.
+//
+// chrome-prep C4d (CHROME_PREP.md): seven leaf modules split out of this
+// file's former body (theme.js, wallpaper.js, titlebar.js,
+// autosave-indicator.js, filters-ui.js, object-urls.js, ui-refs.js) — this
+// residual controller now calls their exported functions directly instead
+// of the former `this.X` methods; none of the seven ever imports this file
+// back (fan-out only), so this import list grows without adding a new
+// cycle edge of its own (titlebar.js/filters-ui.js each import grid.js,
+// which already cycles back to this file — see their own header comments).
 import { AwesomeBar } from './awesomebar.js';
 import { Background, Tiles } from './tiles-shim.js';
-import { NttIcons } from './icons.js';
 import { TileStats } from './stats.js';
 import { Blocked, Filters, NeverCapture, Prefs } from './prefs.js';
-import { compareVersions, getString, isValidURL } from './common.js';
+import { getString, isValidURL } from './common.js';
 import { Grid } from './grid.js';
 import { Page } from './page.js';
 import { Updater } from './updater.js';
-import { el } from './dom.js';
+import { getThemedImageURL, updateThemeColours } from './theme.js';
+import { refreshBackgroundImage, openWallpaperPicker, closeWallpaperPicker, resetWallpaper } from './wallpaper.js';
+import { _initTitlebar, refreshRecent } from './titlebar.js';
+import { _initAutoSaveIndicator } from './autosave-indicator.js';
+import { fillFilterUI, fillNeverCaptureUI } from './filters-ui.js';
+import { uiRefs, populateUiRefs } from './ui-refs.js';
+import { _freshObjectURL, _dropObjectURL } from './object-urls.js';
 
 /**
  * Runtime-added UI-element refs read from OUTSIDE this file (grid.js's and
@@ -86,41 +100,11 @@ import { el } from './dom.js';
  * @typedef {import('./site.js').SiteNode} SiteNode
  */
 
-/**
- * A normalized Firefox new-tab wallpaper record — `fetchFirefoxWallpapers`'s
- * output shape (parsed from `RawWallpaperRecord`), consumed by
- * `renderWallpaperGrid`/`selectWallpaper`/`_wallpaperCache`.
- * @typedef {Object} WallpaperRecord
- * @property {string} title
- * @property {string} [theme]
- * @property {string} category
- * @property {string} [attribution]
- * @property {string} backgroundPosition
- * @property {string} [imageUrl]
- * @property {string} [solidColor]
- */
-
-/**
- * One entry of the raw Firefox Remote Settings wallpaper collection JSON
- * (`fetchFirefoxWallpapers`'s fetch response, `json.data`) — untyped over
- * the wire, so this typedef documents only the fields that function reads.
- * @typedef {Object} RawWallpaperRecord
- * @property {string} category
- * @property {string} title
- * @property {string} [theme]
- * @property {string} [attribution]
- * @property {string} [background_position]
- * @property {{location?: string}} [attachment]
- * @property {string} [solid_color]
- */
-
-/**
- * `browser.tabs.Tab` really does carry a `lastModified` timestamp when
- * obtained via the `sessions` API (`browser.sessions.Session.tab`) — real at
- * runtime, missing from `@types/firefox-webext-browser`'s `Tab` interface (a
- * gap in the third-party package). Used by `refreshRecent`'s destructure.
- * @typedef {browser.tabs.Tab & {lastModified?: number}} SessionTab
- */
+// chrome-prep C4d (CHROME_PREP.md): the `WallpaperRecord`/`RawWallpaperRecord`
+// typedefs (fetchFirefoxWallpapers/renderWallpaperGrid/selectWallpaper) and
+// `SessionTab` (refreshRecent's destructure) moved WITH their owning
+// functions to wallpaper.js/titlebar.js respectively (types travel with
+// their dominant consumer, the C4a precedent) — no longer declared here.
 
 /**
  * A delegated click/change event's `event.target`, before we know which
@@ -138,50 +122,14 @@ const NewTabToolsObject = {
 	// declared as literal keys up front (the Cell.prototype `position`/`_grid`
 	// precedent, cell.js). None of these are read by grid.js/site.js, so
 	// they stay off `NewTabToolsPageRefs` — internal to this file only.
+	// chrome-prep C4d (CHROME_PREP.md): `_wallpaperCache`/`_theme`/
+	// `_titlebarResizeObserver`/`_recentCardCount`/`_recentFaviconURLs`/
+	// `_autoSavedAt`/`_autoSaveTickInterval`/`_objectURLs` all moved WITH
+	// their owning functions to wallpaper.js/theme.js/titlebar.js/
+	// autosave-indicator.js/object-urls.js as explicit module state — no
+	// longer declared on this object.
 	/** @type {number | null} */
 	_selectedSiteIndex: null,
-	/**
-	 * Cached Firefox wallpaper catalogue (memoized by fetchFirefoxWallpapers).
-	 * @type {WallpaperRecord[] | undefined}
-	 */
-	_wallpaperCache: undefined,
-	/**
-	 * Cached `browser.theme.getCurrent()`/`onUpdated` payload (updateThemeColours).
-	 * @type {browser._manifest.ThemeType | null | undefined}
-	 */
-	_theme: undefined,
-	/**
-	 * Titlebar recently-closed-row ResizeObserver (_initTitlebar).
-	 * @type {ResizeObserver | undefined}
-	 */
-	_titlebarResizeObserver: undefined,
-	/**
-	 * Cached recent-card capacity from the last _layoutTitlebar() call.
-	 * @type {number | undefined}
-	 */
-	_recentCardCount: undefined,
-	/**
-	 * Object URLs created for recently-closed-tab favicon fallbacks
-	 * (refreshRecent) — revoked before the next render (§4.3).
-	 * @type {string[] | undefined}
-	 */
-	_recentFaviconURLs: undefined,
-	/**
-	 * Timestamp of the last auto-save (_markAutoSaved/_renderAutoSavedIndicator).
-	 * @type {number | null}
-	 */
-	_autoSavedAt: null,
-	/**
-	 * Interval id for the auto-saved-indicator relative-time tick
-	 * (_initAutoSaveIndicator). `ReturnType<typeof setInterval>` rather than
-	 * `number`: this program's `types` array includes `"node"` alongside
-	 * `"dom"` (for the test-side vitest/Node surface), so ambient
-	 * `setInterval` resolves to Node's `Timeout`-returning overload here even
-	 * though this file runs in the browser page, where it's really a
-	 * `number` — deriving the type sidesteps the conflict either way.
-	 * @type {ReturnType<typeof setInterval> | undefined}
-	 */
-	_autoSaveTickInterval: undefined,
 
 	// Runtime-added UI-element refs (the `uiElements` id → `document.
 	// getElementById` lookup loop in the post-literal IIFE at the bottom of
@@ -196,10 +144,17 @@ const NewTabToolsObject = {
 	// type-check — neither type sufficiently overlaps the other); this is the
 	// file's placeholder-value idiom (see site.js's `refreshThumbnail`/
 	// `Transformation.intersect` casts for the same double-cast shape).
+	//
+	// chrome-prep C4d (CHROME_PREP.md): `backgroundFake`/
+	// `removeBackgroundButton`/`recentList`/`optionsFilter`/
+	// `optionsFilterHostAutocomplete`/`optionsNeverCaptureList` moved OFF this
+	// literal (and off the `uiElements` table below) onto ui-refs.js's
+	// `uiRefs` object instead — the six ids an extracted leaf module
+	// actually reads (ui-refs.js's own header comment has the full
+	// rationale + the uiElements-vs-uiRefs choice this arc made). This
+	// object keeps every OTHER ref (residual-only) exactly as before.
 	/** @type {HTMLLinkElement} */
 	darkIcons: /** @type {HTMLLinkElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLElement} */
-	backgroundFake: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLButtonElement} */
 	optionsToggleButton: /** @type {HTMLButtonElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLElement} */
@@ -236,18 +191,10 @@ const NewTabToolsObject = {
 	setTitleInput: /** @type {HTMLInputElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLButtonElement} */
 	setTitleButton: /** @type {HTMLButtonElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLButtonElement} */
-	removeBackgroundButton: /** @type {HTMLButtonElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLElement} */
-	recentList: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLElement} */
 	drawerEl: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLElement} */
-	optionsFilter: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLInputElement} */
 	optionsFilterHost: /** @type {HTMLInputElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLElement} */
-	optionsFilterHostAutocomplete: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLInputElement} */
 	optionsFilterCount: /** @type {HTMLInputElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLButtonElement} */
@@ -258,8 +205,6 @@ const NewTabToolsObject = {
 	optionsNeverCaptureHost: /** @type {HTMLInputElement} */ (/** @type {unknown} */ (null)),
 	/** @type {HTMLButtonElement} */
 	optionsNeverCaptureAdd: /** @type {HTMLButtonElement} */ (/** @type {unknown} */ (null)),
-	/** @type {HTMLElement} */
-	optionsNeverCaptureList: /** @type {HTMLElement} */ (/** @type {unknown} */ (null)),
 
 	// P2-P5 review finding 1 (revised remediation, 2026-07-10): the bodies
 	// moved to common.js's `getString`/`isValidURL` (shared page-side leaf
@@ -402,7 +347,7 @@ const NewTabToolsObject = {
 				this.pinURLAutocomplete.appendChild(option);
 			}
 
-			this.getThemedImageURL(type, 'dark').then(url => {
+			getThemedImageURL(type, 'dark').then(url => {
 				/** @type {HTMLElement} */ (option.querySelector('.autocomplete-icon')).style.backgroundImage = /** @type {string} */ (url ? `url(${url})` : null);
 			});
 			urls.push(item.url);
@@ -651,19 +596,19 @@ const NewTabToolsObject = {
 			break;
 		}
 		case 'options-wallpaper-btn':
-			this.openWallpaperPicker();
+			openWallpaperPicker();
 			break;
 		case 'options-bg-remove':
-			this.resetWallpaper();
+			resetWallpaper();
 			break;
 		case 'historytiles-filter': {
 			// Toggle the filter panel (it starts hidden); only (re)populate when
 			// opening so a second click cleanly collapses it.
-			let opening = this.optionsFilter.hidden;
-			this.optionsFilter.hidden = !opening;
+			let opening = uiRefs.optionsFilter.hidden;
+			uiRefs.optionsFilter.hidden = !opening;
 			target.setAttribute('aria-expanded', String(opening));
 			if (opening) {
-				this.fillFilterUI();
+				fillFilterUI();
 			}
 			return;
 		}
@@ -678,7 +623,7 @@ const NewTabToolsObject = {
 			}
 			Filters.setFilter(host, count);
 			Updater.updateGrid();
-			this.fillFilterUI(host);
+			fillFilterUI(host);
 			this.optionsFilterHost.value = '';
 			this.optionsFilterCount.value = '';
 			this.optionsFilterHost.focus();
@@ -697,7 +642,7 @@ const NewTabToolsObject = {
 					Grid.refresh().then(() => this.getThumbnails());
 				});
 				this.optionsNeverCaptureHost.value = '';
-				this.fillNeverCaptureUI();
+				fillNeverCaptureUI();
 			});
 			return;
 		}
@@ -740,7 +685,7 @@ const NewTabToolsObject = {
 			let row = /** @type {HTMLTableRowElement} */ (target.closest('tr'));
 			Filters.setFilter(/** @type {string} */ (row.cells[0].textContent), -1);
 			Updater.updateGrid();
-			this.fillFilterUI();
+			fillFilterUI();
 			return;
 		}
 
@@ -749,7 +694,7 @@ const NewTabToolsObject = {
 			// only un-suppressing auto-capture, not deleting existing screenshots).
 			let entry = target.dataset.entry || '';
 			NeverCapture.remove(entry).then(() => {
-				this.fillNeverCaptureUI();
+				fillNeverCaptureUI();
 			});
 			return;
 		}
@@ -917,7 +862,7 @@ const NewTabToolsObject = {
 				delete link.imageIsThumbnail;
 				site.refreshThumbnail();
 
-				let thumbnailURL = newTabTools._freshObjectURL('editorThumb', /** @type {Blob} */ (link.image));
+				let thumbnailURL = _freshObjectURL('editorThumb', /** @type {Blob} */ (link.image));
 				newTabTools.siteThumbnail.style.backgroundImage = 'url("' + thumbnailURL + '")';
 				newTabTools.siteThumbnail.classList.add('custom-thumbnail');
 				newTabTools.saveCurrentThumbButton.disabled = true;
@@ -945,399 +890,14 @@ const NewTabToolsObject = {
 
 		Tiles.putTile(link);
 	},
-	// Object-URL hygiene (audit 2026-06-10 §4.3): blob URLs are only freed on
-	// document unload, so repeated-render sites revoke their prior URL before
-	// creating a replacement (site.js's refreshThumbnail pattern).
-	// Each key names one owner surface (e.g. 'background', 'editorThumb') —
-	// never stash a URL another surface still displays.
-	/** @type {Record<string, string>} */
-	_objectURLs: {},
-	/**
-	 * @param {string} key
-	 * @param {Blob} blob
-	 * @returns {string}
-	 */
-	_freshObjectURL(key, blob) {
-		this._dropObjectURL(key);
-		let url = URL.createObjectURL(blob);
-		this._objectURLs[key] = url;
-		return url;
-	},
-	/** @param {string} key */
-	_dropObjectURL(key) {
-		if (this._objectURLs[key]) {
-			URL.revokeObjectURL(this._objectURLs[key]);
-			delete this._objectURLs[key];
-		}
-	},
-	refreshBackgroundImage() {
-		// CDN wallpaper takes priority over IDB blob. Apply the
-		// `background_position` Firefox publishes alongside each record so
-		// e.g. "top left" wallpapers anchor at the corner the photographer
-		// composed for. Solid-colour records fill the page instead.
-		document.body.style.backgroundPosition =
-			this.backgroundFake.style.backgroundPosition = Prefs.backgroundPosition || 'center center';
-		document.body.style.backgroundColor = Prefs.backgroundColor || '';
-		if (Prefs.backgroundUrl) {
-			document.body.style.backgroundImage =
-				this.backgroundFake.style.backgroundImage = 'url("' + Prefs.backgroundUrl + '")';
-			this._dropObjectURL('background');
-			this.removeBackgroundButton.disabled = false;
-			return Promise.resolve();
-		}
-		if (Prefs.backgroundColor) {
-			document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = '';
-			this._dropObjectURL('background');
-			this.removeBackgroundButton.disabled = false;
-			return Promise.resolve();
-		}
-
-		return Background.getBackground().then(background => {
-			if (!background) {
-				document.body.style.backgroundImage = this.backgroundFake.style.backgroundImage = /** @type {string} */ (/** @type {unknown} */ (null));
-				this._dropObjectURL('background');
-				this.removeBackgroundButton.disabled = true;
-				this.removeBackgroundButton.blur();
-				return;
-			}
-
-			document.body.style.backgroundImage =
-				this.backgroundFake.style.backgroundImage = 'url("' + this._freshObjectURL('background', /** @type {Blob} */ (background)) + '")';
-			this.removeBackgroundButton.disabled = false;
-		});
-	},
-	async fetchFirefoxWallpapers() {
-		if (this._wallpaperCache) {
-			return this._wallpaperCache;
-		}
-		let response = await fetch('https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/newtab-wallpapers-v2/records');
-		let json = await response.json();
-		let cdnBase = 'https://firefox-settings-attachments.cdn.mozilla.net/';
-		let wallpapers = json.data
-			.filter(/** @param {RawWallpaperRecord} item */ function(item) {
-				if (item.category === 'firefox') { return false; }
-				// Image record (has attachment) OR solid-colour record (has solid_color).
-				return (item.attachment && item.attachment.location) || item.solid_color;
-			})
-			.map(/** @param {RawWallpaperRecord} item */ function(item) {
-				let record = /** @type {WallpaperRecord} */ ({
-					title: item.title,
-					theme: item.theme,
-					category: item.category,
-					attribution: item.attribution,
-					// Firefox publishes `background_position` on ~1/3 of
-					// records; the rest fall back to centre.
-					backgroundPosition: item.background_position || 'center center',
-				});
-				if (item.attachment && item.attachment.location) {
-					record.imageUrl = cdnBase + item.attachment.location;
-				}
-				if (item.solid_color) {
-					record.solidColor = item.solid_color;
-				}
-				return record;
-			});
-		this._wallpaperCache = wallpapers;
-		return wallpapers;
-	},
-	openWallpaperPicker() {
-		// No null-check on either lookup below (existing assumption: both
-		// ids are always present in newTab.html) — cast, not a fix.
-		let picker = /** @type {HTMLElement} */ (document.getElementById('wallpaper-picker'));
-		picker.hidden = false;
-		this.fetchFirefoxWallpapers().then(wallpapers => {
-			this.renderWallpaperGrid(wallpapers);
-		}).catch(() => {
-			let grid = /** @type {HTMLElement} */ (document.getElementById('wallpaper-grid'));
-			grid.textContent = this.getString('wallpaper_error');
-		});
-	},
-	closeWallpaperPicker() {
-		/** @type {HTMLElement} */ (document.getElementById('wallpaper-picker')).hidden = true;
-	},
-	/** @param {WallpaperRecord[]} wallpapers */
-	renderWallpaperGrid(wallpapers) {
-		let grid = /** @type {HTMLElement} */ (document.getElementById('wallpaper-grid'));
-		grid.textContent = '';
-
-		/** @type {Record<string, WallpaperRecord[]>} */
-		let categories = {};
-		for (let wp of wallpapers) {
-			if (!categories[wp.category]) {
-				categories[wp.category] = [];
-			}
-			categories[wp.category].push(wp);
-		}
-
-		for (let [category, items] of Object.entries(categories)) {
-			let heading = el('h3', 'wallpaper-category', category.replace(/-/g, ' '));
-			grid.appendChild(heading);
-
-			let row = el('div', 'wallpaper-row');
-			for (let wp of items) {
-				/** @type {HTMLImageElement | HTMLDivElement | undefined} */
-				let thumb;
-				if (wp.imageUrl) {
-					thumb = document.createElement('img');
-					// tsc doesn't narrow `thumb` from the assignment above
-					// across this `HTMLImageElement | HTMLDivElement` union
-					// (a lib.dom.d.ts narrowing limit, reproduced in
-					// isolation) — cast instead of relying on it.
-					/** @type {HTMLImageElement} */ (thumb).src = wp.imageUrl;
-					thumb.dataset.url = wp.imageUrl;
-				} else if (wp.solidColor) {
-					// Solid-colour record — render a swatch instead of an <img>
-					// since there's no image to load.
-					thumb = document.createElement('div');
-					thumb.style.backgroundColor = wp.solidColor;
-					thumb.dataset.solidColor = wp.solidColor;
-				} else {
-					continue;
-				}
-				thumb.className = 'wallpaper-thumb';
-				// `.alt` is meaningless on the solid-colour `<div>` branch
-				// (harmless no-op expando write, same today as before this
-				// slice) — cast, reported not fixed (chrome-prep C3c).
-				/** @type {HTMLImageElement} */ (thumb).alt = wp.title;
-				if ((wp.imageUrl && Prefs.backgroundUrl === wp.imageUrl)
-					|| (wp.solidColor && Prefs.backgroundColor === wp.solidColor)) {
-					thumb.setAttribute('selected', '');
-				}
-				thumb.addEventListener('click', () => {
-					this.selectWallpaper(wp);
-				});
-				row.appendChild(thumb);
-			}
-			grid.appendChild(row);
-		}
-	},
-	/** @param {WallpaperRecord | string} wallpaperOrUrl */
-	selectWallpaper(wallpaperOrUrl) {
-		// Accept either a wallpaper record `{imageUrl, backgroundPosition,
-		// solidColor}` (current call site) or a bare URL string
-		// (back-compat). Solid-colour records take a different rendering
-		// path — clear the image URL and write the colour instead.
-		let wp = typeof wallpaperOrUrl === 'string'
-			? { imageUrl: wallpaperOrUrl, backgroundPosition: 'center center' }
-			: wallpaperOrUrl;
-		let url = wp.imageUrl || '';
-		let position = wp.backgroundPosition || 'center center';
-		let solidColor = /** @type {WallpaperRecord} */ (wp).solidColor || '';
-
-		return Background.setBackground().then(() => {
-			Prefs.backgroundUrl = url;
-			Prefs.backgroundPosition = position;
-			Prefs.backgroundColor = solidColor;
-			document.body.style.backgroundPosition =
-				this.backgroundFake.style.backgroundPosition = position;
-			if (solidColor) {
-				document.body.style.backgroundColor = solidColor;
-				document.body.style.backgroundImage =
-					this.backgroundFake.style.backgroundImage = '';
-			} else {
-				document.body.style.backgroundColor = '';
-				document.body.style.backgroundImage =
-					this.backgroundFake.style.backgroundImage = 'url("' + url + '")';
-			}
-			this.removeBackgroundButton.disabled = false;
-
-			// Update selected state in grid
-			let thumbs = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.wallpaper-thumb'));
-			for (let t of thumbs) {
-				if (t.dataset.url === url) {
-					t.setAttribute('selected', '');
-				} else {
-					t.removeAttribute('selected');
-				}
-			}
-		});
-	},
-	resetWallpaper() {
-		Prefs.backgroundUrl = '';
-		Prefs.backgroundPosition = 'center center';
-		Prefs.backgroundColor = '';
-		Background.setBackground().then(() => {
-			this.refreshBackgroundImage();
-			let thumbs = document.querySelectorAll('.wallpaper-thumb');
-			for (let t of thumbs) {
-				t.removeAttribute('selected');
-			}
-		});
-	},
-	/**
-	 * @param {string} str
-	 * @returns {{r: number, g: number, b: number} | null}
-	 */
-	parseColour(str) {
-		let parts = /^(hsl|rgb)a?\((\d+),\s*([\d.]+%?),\s*([\d.]+%?)/.exec(str);
-		if (parts && parts[1] == 'rgb') {
-			return {
-				r: parseInt(parts[2], 10),
-				g: parseInt(parts[3], 10),
-				b: parseInt(parts[4], 10),
-			};
-		}
-
-		if (parts && parts[1] == 'hsl') {
-			let h = parseFloat(parts[2]) / 360;
-			let s = parseFloat(parts[3]) / 100;
-			let l = parseFloat(parts[4]) / 100;
-			let r, g, b;
-
-			if (s == 0){
-				r = g = b = l;
-			} else {
-				/**
-				 * @param {number} p
-				 * @param {number} q
-				 * @param {number} t
-				 * @returns {number}
-				 */
-				function hue2rgb(p, q, t) {
-					if (t < 0) {
-						t += 1;
-					}
-					if (t > 1) {
-						t -= 1;
-					}
-					if (t < 1/6) {
-						return p + (q - p) * 6 * t;
-					}
-					if (t < 1/2) {
-						return q;
-					}
-					if (t < 2/3) {
-						return p + (q - p) * (2/3 - t) * 6;
-					}
-					return p;
-				}
-
-				let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-				let p = 2 * l - q;
-				r = hue2rgb(p, q, h + 1/3);
-				g = hue2rgb(p, q, h);
-				b = hue2rgb(p, q, h - 1/3);
-			}
-
-			return {
-				r: Math.round(r * 255),
-				g: Math.round(g * 255),
-				b: Math.round(b * 255),
-			};
-		}
-
-		parts = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(str);
-		if (parts) {
-			return {
-				r: parseInt(parts[1], 16),
-				g: parseInt(parts[2], 16),
-				b: parseInt(parts[3], 16),
-			};
-		}
-
-		parts = /^#([0-9a-f])([0-9a-f])([0-9a-f])([0-9a-f])?$/i.exec(str);
-		if (parts) {
-			return {
-				r: parseInt(parts[1].repeat(2), 16),
-				g: parseInt(parts[2].repeat(2), 16),
-				b: parseInt(parts[3].repeat(2), 16),
-			};
-		}
-
-		return null;
-	},
-	/** @param {browser.theme.ThemeUpdateInfo} [updateInfo] */
-	async updateThemeColours(updateInfo) {
-		/** @type {Record<string, string | null>} */
-		let properties = {
-			'--back-opaque': null,
-			'--contrast-opaque': null,
-			'--contrast-transp': null,
-			'--fore-opaque': null,
-			'--fore-trans1': null,
-			'--fore-transp': null,
-			'--page-background': null,
-		};
-
-		if (Prefs.theme === 'system') {
-			try {
-				this._theme = updateInfo ? /** @type {browser._manifest.ThemeType} */ (updateInfo.theme) : await browser.theme.getCurrent();
-			} catch (ex) {
-				console.debug(ex);
-				this._theme = null;
-			}
-			// Firefox's default theme (and wallpaper-only themes) return colors:
-			// null or omit the key entirely. Treat both as "no palette to apply"
-			// and fall through to the designed NTT palette in tokens.css.
-			let colors = this._theme && this._theme.colors;
-			if (colors) {
-				// `ThemeColor` can also be an RGB(A) tuple (legacy format);
-				// `parseColour` only handles strings and this never guarded
-				// against the tuple case — cast, reported not fixed
-				// (chrome-prep C3c).
-				let back = this.parseColour(/** @type {string} */ (colors.ntp_background || colors.toolbar));
-				let fore = this.parseColour(/** @type {string} */ (colors.ntp_text || colors.toolbar_text));
-
-				if (back && fore) {
-					properties['--back-opaque'] = `rgb(${back.r}, ${back.g}, ${back.b})`;
-					properties['--fore-opaque'] = `rgb(${fore.r}, ${fore.g}, ${fore.b})`;
-					properties['--fore-trans1'] = `rgba(${fore.r}, ${fore.g}, ${fore.b}, 0.1)`;
-					properties['--fore-transp'] = `rgba(${fore.r}, ${fore.g}, ${fore.b}, var(--opacity))`;
-					properties['--page-background'] = `rgb(${back.r}, ${back.g}, ${back.b})`;
-
-					let brightness = 0.299 * fore.r + 0.587 * fore.g + 0.114 * fore.b;
-					if (brightness < 144) {
-						properties['--contrast-opaque'] = 'rgb(255, 255, 255)';
-						properties['--contrast-transp'] = 'rgba(255, 255, 255, var(--opacity))';
-					} else {
-						properties['--contrast-opaque'] = 'rgb(0, 0, 0)';
-						properties['--contrast-transp'] = 'rgba(0, 0, 0, var(--opacity))';
-					}
-				}
-			}
-		} else {
-			this._theme = null;
-		}
-
-		for (let [key, value] of Object.entries(properties)) {
-			document.documentElement.style.setProperty(key, value);
-		}
-
-		for (let [selector, name] of Object.entries({
-			'.close-button': 'close',
-			'button.arrow': 'arrow',
-		})) {
-			let url = await this.getThemedImageURL(name);
-			for (let element of document.querySelectorAll(selector)) {
-				/** @type {HTMLElement} */ (element).style.backgroundImage = /** @type {string} */ (url ? `url(${url})` : null);
-			}
-		}
-	},
-	/**
-	 * @param {string} name
-	 * @param {string} [theme]
-	 * @returns {Promise<string | null>}
-	 */
-	async getThemedImageURL(name, theme = Prefs.theme) {
-		let effectiveTheme = theme === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
-		let fore = document.documentElement.style.getPropertyValue('--fore-opaque');
-		let back = document.documentElement.style.getPropertyValue('--back-opaque');
-
-		if (!fore) {
-			return null;
-		}
-
-		try {
-			let request = await fetch(browser.runtime.getURL(`images/${name}-${effectiveTheme}.svg`));
-			let content = await request.text();
-			content = content.replaceAll('#fff', fore);
-			content = content.replaceAll('#1f364c', back);
-			return 'data:image/svg+xml;base64,' + btoa(content);
-		} catch (ex) {
-			console.debug(ex);
-			return null;
-		}
-	},
+	// chrome-prep C4d (CHROME_PREP.md): `_objectURLs`/`_freshObjectURL`/
+	// `_dropObjectURL` moved to object-urls.js; `refreshBackgroundImage`/
+	// `fetchFirefoxWallpapers`/`openWallpaperPicker`/`closeWallpaperPicker`/
+	// `renderWallpaperGrid`/`selectWallpaper`/`resetWallpaper` moved to
+	// wallpaper.js; `parseColour`/`updateThemeColours`/`getThemedImageURL`
+	// moved to theme.js. This residual controller imports their exported
+	// functions (top of file) and calls them directly at every former
+	// `this.X`/`newTabTools.X` call site below.
 	/** @param {string[]} [keys] */
 	updateUI(keys) {
 		/**
@@ -1376,11 +936,11 @@ const NewTabToolsObject = {
 			document.documentElement.setAttribute('theme', effectiveTheme);
 			this.darkIcons.disabled = effectiveTheme == 'light';
 			this._syncDrawerSegmented('theme', theme);
-			this.updateThemeColours();
+			updateThemeColours();
 			if (theme === 'system') {
-				browser.theme.onUpdated.addListener(this.updateThemeColours);
+				browser.theme.onUpdated.addListener(updateThemeColours);
 			} else {
-				browser.theme.onUpdated.removeListener(this.updateThemeColours);
+				browser.theme.onUpdated.removeListener(updateThemeColours);
 			}
 		}
 
@@ -1468,7 +1028,7 @@ const NewTabToolsObject = {
 		// the wallpaper unapplied until a manual page reload.
 		if (!keys || keys.includes('backgroundUrl') || keys.includes('backgroundColor')
 			|| keys.includes('backgroundPosition')) {
-			this.refreshBackgroundImage();
+			refreshBackgroundImage();
 		}
 
 		if (!keys || keys.includes('opacity')) {
@@ -1491,7 +1051,7 @@ const NewTabToolsObject = {
 			let el = /** @type {HTMLInputElement | null} */ (document.querySelector('[name="recent"]'));
 			if (el) { el.checked = recent; }
 			this._syncDrawerToggle('recent', recent);
-			this.refreshRecent();
+			refreshRecent();
 		}
 
 		if (!keys || keys.includes('titleBarSearch')) {
@@ -1504,7 +1064,7 @@ const NewTabToolsObject = {
 		// changes which slots are present — both re-flow the recent row.
 		if (!keys || keys.includes('spacing') || keys.includes('margin')
 			|| keys.includes('titleBarSearch')) {
-			this.refreshRecent();
+			refreshRecent();
 		}
 
 		// chrome-prep C3d: the `'Grid' in window` sniff that used to guard this
@@ -1533,8 +1093,8 @@ const NewTabToolsObject = {
 		if (keys && keys.includes('neverCaptureHosts')) {
 			// Re-populate the never-capture drawer panel when the stored list changes
 			// (e.g. the per-tile toggle on the grid flips an entry).
-			if (this.optionsNeverCaptureList) {
-				this.fillNeverCaptureUI();
+			if (uiRefs.optionsNeverCaptureList) {
+				fillNeverCaptureUI();
 			}
 			// Refresh each rendered tile's never-capture button state.
 			if (Grid.sites) {
@@ -1546,305 +1106,10 @@ const NewTabToolsObject = {
 			}
 		}
 	},
-	_initTitlebar() {
-		let searchEl = document.getElementById('ntt-search');
-		if (searchEl) {
-			let icon = NttIcons.create('search', 14);
-			// `create` returns `null` only for an unknown icon name — 'search'
-			// is always valid, but the existing code never guarded this.
-			// Cast, not a fix.
-			searchEl.insertBefore(/** @type {Element} */ (icon), searchEl.firstChild);
-		}
-		this._layoutTitlebar();
-		// Re-flow the recently-closed row whenever the space available to it
-		// actually changes — window resize, spacing / outer-padding changes,
-		// the search toggle (hiding the search box widens the row), and the
-		// config-drawer push-layout (which animates over ~220ms). The recent
-		// container is a greedy flex child, so observing ITS size captures all
-		// of those in one signal. A ResizeObserver tracks the settled width
-		// continuously, which is far more robust than a one-shot post-transition
-		// timer: that timer could fire mid-animation, cap the card count against
-		// a transient narrow width, and then never recover once the width
-		// settled (the reported "drawer collapses the row and closing it doesn't
-		// restore" bug). Re-flowing only changes the cards' width, not the
-		// container's, so this never feeds back into itself.
-		let recent = document.getElementById('ntt-titlebar-recent');
-		if (recent && typeof ResizeObserver !== 'undefined') {
-			let scheduled = false;
-			this._titlebarResizeObserver = new ResizeObserver(() => {
-				if (scheduled) {
-					return;
-				}
-				scheduled = true;
-				requestAnimationFrame(() => {
-					scheduled = false;
-					this.refreshRecent();
-				});
-			});
-			this._titlebarResizeObserver.observe(recent);
-		}
-		// A web-font swap changes the masthead's width and thus the room left
-		// for cards; re-flow once fonts settle so the first paint isn't off by
-		// a card.
-		if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
-			document.fonts.ready.then(() => this.refreshRecent());
-		}
-	},
-	/**
-	 * Measure the greedy recently-closed card container and set `--ntt-slot-w`
-	 * so the cards shrink to fill it edge-to-edge (see computeTitlebarSlots).
-	 * Stashes the recent-card cap on `this._recentCardCount` for refreshRecent.
-	 * Returns the slot descriptor so callers can chain.
-	 */
-	_layoutTitlebar() {
-		let titlebar = document.getElementById('ntt-titlebar');
-		let recent = document.getElementById('ntt-titlebar-recent');
-		if (!titlebar || !recent) {
-			this._recentCardCount = 0;
-			return { cardCount: 0, slotWidth: 186 };
-		}
-		// The recent-cards container is a greedy flex child, so the browser has
-		// already sized it to exactly the room left after the fixed search box
-		// and the content-width masthead — whether the search box is shown,
-		// whether the config drawer is open, and at any window width. We just
-		// read that settled width. It must be laid out (not display:none) to
-		// report a real width AND to keep pinning the masthead right, so the
-		// container is always visible — when there are no cards it is simply an
-		// empty spacer.
-		recent.hidden = false;
-		let cs = window.getComputedStyle(titlebar);
-		let gap = parseFloat(cs.columnGap || cs.gap) || 10;
-		let cardSpace = recent.clientWidth;
-		if (!cardSpace || cardSpace < 0) {
-			cardSpace = 0;
-		}
-		let slots = this.computeTitlebarSlots(cardSpace, gap, 186);
-		// `recent` pref off → never show cards (the empty greedy container still
-		// acts as the spacer that pins the masthead right).
-		if (!Prefs.recent) {
-			slots.cardCount = 0;
-		}
-		titlebar.style.setProperty('--ntt-slot-w', slots.slotWidth + 'px');
-		this._recentCardCount = slots.cardCount;
-		return slots;
-	},
-	/**
-	 * @param {number | undefined} lastModified
-	 * @returns {string}
-	 */
-	_formatAge(lastModified) {
-		if (!lastModified) {
-			return '';
-		}
-		let seconds = Math.floor(Date.now() / 1000) - lastModified;
-		if (seconds < 60) {
-			return seconds + 's';
-		}
-		let minutes = Math.floor(seconds / 60);
-		if (minutes < 60) {
-			return minutes + 'm';
-		}
-		let hours = Math.floor(minutes / 60);
-		if (hours < 24) {
-			return hours + 'h';
-		}
-		let days = Math.floor(hours / 24);
-		return days + 'd';
-	},
-	refreshRecent() {
-		// Re-flow the titlebar slots first so `_recentCardCount` reflects the
-		// current width before we decide how many cards to render.
-		let slots = this._layoutTitlebar();
-		let cap = slots ? slots.cardCount : 0;
-		let strip = this.recentList;
-		if (!strip) {
-			return;
-		}
-
-		if (!Prefs.recent || cap <= 0) {
-			// No cards to show, but keep the (empty) container laid out: it is
-			// the greedy spacer that pins the masthead to the right edge.
-			for (let element of strip.querySelectorAll('.ntt-recent-card')) {
-				strip.removeChild(element);
-			}
-			return;
-		}
-
-		chrome.sessions.getRecentlyClosed(/** @param {browser.sessions.Session[]} undoItems */ undoItems => {
-			let added = 0;
-
-			for (let element of strip.querySelectorAll('.ntt-recent-card')) {
-				strip.removeChild(element);
-			}
-
-			// The cards are rebuilt from scratch — revoke the prior render's
-			// favicon blob URLs before this render creates new ones (§4.3).
-			for (let staleURL of newTabTools._recentFaviconURLs || []) {
-				URL.revokeObjectURL(staleURL);
-			}
-			newTabTools._recentFaviconURLs = [];
-
-			// `this` is typed `GlobalEventHandlers` (matching `onclick`'s
-			// declared handler signature, which this function is assigned
-			// to below) rather than `HTMLElement` — cast at the one member
-			// access that needs it.
-			/** @this {GlobalEventHandlers} */
-			function card_onclick() {
-				chrome.sessions.restore(/** @type {HTMLElement} */ (this).dataset.sessionId);
-				return false;
-			}
-
-			let tileURLs = new Set();
-			if (Grid.sites) {
-				for (let site of Grid.sites) {
-					if (site && site.url) {
-						tileURLs.add(site.url);
-					}
-				}
-			}
-			let seen = new Set();
-			/** @type {Array<{host: string, fav: HTMLElement}>} */
-			let needFavicon = [];
-
-			for (let item of undoItems) {
-				if (added >= cap) {
-					break;
-				}
-				if (!item.tab || item.tab.incognito) {
-					continue;
-				}
-				if (item.tab.url && item.tab.url.startsWith('moz-extension://')) {
-					continue;
-				}
-				// Validate the tab URL's protocol before it becomes `card.href`.
-				// Middle-click / Ctrl+click bypass the onclick restore handler and
-				// navigate the href directly, so a `javascript:`/`data:` session
-				// URL must be filtered at this data boundary (mirrors the
-				// favIconUrl validation below).
-				if (!newTabTools.isValidURL(/** @type {string} */ (item.tab.url))) {
-					continue;
-				}
-				if (tileURLs.has(item.tab.url)) {
-					continue;
-				}
-
-				// `url` is cast non-optional: the guards above already
-				// require a valid, present `item.tab.url` — a fresh
-				// destructured binding doesn't inherit that narrowing.
-				// `SessionTab` adds `lastModified` (real at runtime — a
-				// `browser.sessions`-obtained tab — but missing from
-				// `@types/firefox-webext-browser`'s plain `Tab`).
-				let {url, title, sessionId, favIconUrl, lastModified} = /** @type {SessionTab & {url: string}} */ (item.tab);
-				let displayTitle = title || url;
-				let domain;
-				try {
-					// Registrable-ish domain: drop a leading `www.` so the chip
-					// reads `theverge.com`, not `www.theverge.com` (§4).
-					domain = new URL(url).hostname.replace(/^www\./, '');
-				} catch (e) {
-					domain = url;
-				}
-
-				let dedup = (title || '') + '\n' + domain;
-				if (seen.has(dedup)) {
-					continue;
-				}
-				seen.add(dedup);
-
-				let card = document.createElement('a');
-				card.href = url;
-				card.className = 'ntt-recent-card';
-				// `title` may be `undefined` (Tab.title is optional) — no
-				// guard here before this slice either. Cast, not a fix.
-				card.title = /** @type {string} */ (!title || title == url ? title : title + '\n' + url);
-				card.dataset.sessionId = /** @type {string} */ (sessionId);
-				card.onclick = card_onclick;
-
-				let fav = el('span', 'ntt-recent-favicon');
-				// Letter fallback from the registrable domain (same logic as the
-				// tiles), not the page title — `H` for heise.de, not the headline.
-				let glyph = (domain.charAt(0) || displayTitle.charAt(0) || '?').toUpperCase();
-				let hue = (url.length * 7 + glyph.charCodeAt(0) * 13) % 360;
-				fav.style.backgroundColor = 'hsl(' + hue + ', 50%, 40%)';
-				if (favIconUrl && newTabTools.isValidURL(favIconUrl)) {
-					let img = document.createElement('img');
-					img.onerror = function() { this.remove(); };
-					img.src = favIconUrl;
-					fav.appendChild(img);
-				} else {
-					fav.appendChild(document.createTextNode(glyph));
-					// No favicon in the session record — try the extension's stored
-					// favicon once the row is built. Favicons are per-site, but a
-					// recently-closed tab is usually a deep article URL that won't
-					// exact-match a stored tile/homepage URL, so match by host.
-					needFavicon.push({ host: domain, fav });
-				}
-				card.appendChild(fav);
-
-				let text = el('span', 'ntt-recent-text');
-				let nameEl = el('span', 'ntt-recent-name');
-				nameEl.appendChild(document.createTextNode(displayTitle));
-				text.appendChild(nameEl);
-				let urlEl = el('span', 'ntt-recent-url');
-				urlEl.appendChild(document.createTextNode(domain));
-				text.appendChild(urlEl);
-				card.appendChild(text);
-
-				let age = newTabTools._formatAge(lastModified);
-				if (age) {
-					let ageEl = el('span', 'ntt-recent-age');
-					ageEl.appendChild(document.createTextNode(age));
-					card.appendChild(ageEl);
-				}
-
-				strip.appendChild(card);
-				added++;
-			}
-			strip.hidden = !added;
-
-			// §3c: cards that fell back to the letter glyph use the extension's
-			// stored favicon (collected during tile capture) when one exists —
-			// closed-tab session data often carries no favIconUrl. Match by host
-			// (favicons are per-site) so a deep article URL reuses the site's
-			// stored favicon.
-			if (needFavicon.length) {
-				let hosts = [...new Set(needFavicon.map(n => n.host).filter(Boolean))];
-				chrome.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, /** @param {Map<string, Blob | string> | undefined} favicons */ favicons => {
-					if (!favicons || typeof favicons.get !== 'function') {
-						return;
-					}
-					for (let { host, fav } of needFavicon) {
-						let favicon = host && favicons.get(host);
-						/** @type {string | null} */
-						let src = null;
-						if (favicon instanceof Blob) {
-							src = URL.createObjectURL(favicon);
-							// `_recentFaviconURLs` was just reset to `[]` above
-							// in the enclosing `getRecentlyClosed` callback, but
-							// that's a different closure boundary from this
-							// nested `sendMessage` callback, so tsc can't carry
-							// the narrowing through — cast, not a fix.
-							/** @type {string[]} */ (newTabTools._recentFaviconURLs).push(src);
-						} else if (typeof favicon === 'string' && newTabTools.isValidURL(favicon)) {
-							src = favicon;
-						}
-						if (!src) {
-							continue;
-						}
-						let img = document.createElement('img');
-						img.onerror = function() { this.remove(); };
-						img.src = src;
-						for (let node of [...fav.childNodes]) {
-							if (node.nodeType === Node.TEXT_NODE) {
-								node.remove();
-							}
-						}
-						fav.appendChild(img);
-					}
-				});
-			}
-		});
-	},
+	// chrome-prep C4d (CHROME_PREP.md): `_initTitlebar`/`_layoutTitlebar`/
+	// `_formatAge`/`refreshRecent` + `computeTitlebarSlots` moved to
+	// titlebar.js (imported at top of file); called directly at every
+	// former `this.X`/`newTabTools.X` call site below.
 	trimRecent() {
 	},
 	/** @param {string} rowId */
@@ -1889,58 +1154,13 @@ const NewTabToolsObject = {
 		// known-clean start.
 		location.reload();
 	},
-	/**
-	 * @param {number} elapsedMs
-	 * @returns {string}
-	 */
-	formatRelativeTime(elapsedMs) {
-		// Used by the drawer's auto-save indicator. Returns the localised
-		// "just now" / "Nm ago" / "Nh ago" string for the elapsed time.
-		if (elapsedMs < 60000) {
-			return this.getString('autosaved_relative_now');
-		}
-		if (elapsedMs < 3600000) {
-			let minutes = Math.floor(elapsedMs / 60000);
-			return this.getString('autosaved_relative_minutes', String(minutes));
-		}
-		let hours = Math.floor(elapsedMs / 3600000);
-		return this.getString('autosaved_relative_hours', String(hours));
-	},
-	_renderAutoSavedIndicator() {
-		let el = document.getElementById('ntt-drawer-footer-msg');
-		if (!el) {
-			return;
-		}
-		if (!this._autoSavedAt) {
-			// No real save has happened yet — hide the indicator instead
-			// of showing a misleading "just now" on a fresh page.
-			el.hidden = true;
-			el.textContent = '';
-			return;
-		}
-		el.hidden = false;
-		let elapsed = Date.now() - this._autoSavedAt;
-		el.textContent = `${this.getString('options_autosaved')} · ${this.formatRelativeTime(elapsed)}`;
-	},
-	_markAutoSaved() {
-		this._autoSavedAt = Date.now();
-		this._renderAutoSavedIndicator();
-	},
-	_initAutoSaveIndicator() {
-		// Don't seed `_autoSavedAt` on init — wait for the first real
-		// prefs change. The indicator stays hidden until then.
-		this._autoSavedAt = null;
-		this._renderAutoSavedIndicator();
-		if (this._autoSaveTickInterval) {
-			clearInterval(this._autoSaveTickInterval);
-		}
-		// Tick once a minute so the relative timestamp advances without
-		// needing further pref activity.
-		this._autoSaveTickInterval = setInterval(
-			() => this._renderAutoSavedIndicator(),
-			60000
-		);
-	},
+	// chrome-prep C4d (CHROME_PREP.md): `formatRelativeTime`/
+	// `_renderAutoSavedIndicator`/`_markAutoSaved`/`_initAutoSaveIndicator`
+	// moved to autosave-indicator.js. `_initAutoSaveIndicator` is imported
+	// at top of file (called once from startup() below); `_markAutoSaved`
+	// is no longer a `newTabTools` method at all — page-main.js's `Prefs.
+	// onChange` listener now imports it directly from autosave-indicator.js
+	// (see page-main.js's own updated import).
 	get selectedSiteIndex() {
 		return this._selectedSiteIndex;
 	},
@@ -1978,7 +1198,7 @@ const NewTabToolsObject = {
 			/** @type {HTMLButtonElement} */ (this.setBgColourDisplay.parentNode).disabled = disabled;
 
 		if (disabled) {
-			this._dropObjectURL('editorThumb');
+			_dropObjectURL('editorThumb');
 			this.siteThumbnail.style.backgroundImage =
 				this.siteThumbnail.style.backgroundColor =
 				this.setBgColourDisplay.style.backgroundColor = /** @type {string} */ (/** @type {unknown} */ (null));
@@ -1998,7 +1218,7 @@ const NewTabToolsObject = {
 		let confirmedSite = /** @type {Site} */ (site);
 
 		if (confirmedSite.link.image) {
-			let thumbnailURL = this._freshObjectURL('editorThumb', confirmedSite.link.image);
+			let thumbnailURL = _freshObjectURL('editorThumb', confirmedSite.link.image);
 			this.siteThumbnail.style.backgroundImage = 'url("' + thumbnailURL + '")';
 			if (confirmedSite.link.imageIsThumbnail) {
 				this.siteThumbnail.classList.remove('custom-thumbnail');
@@ -2010,7 +1230,7 @@ const NewTabToolsObject = {
 		} else {
 			// Borrowed URL: the tile owns it (s._thumbnailObjectURL) — the
 			// editor only drops its own stale preview URL here (§4.3).
-			this._dropObjectURL('editorThumb');
+			_dropObjectURL('editorThumb');
 			this.siteThumbnail.style.backgroundImage = confirmedSite.thumbnail.style.backgroundImage;
 			this.siteThumbnail.classList.remove('custom-thumbnail');
 			this.saveCurrentThumbButton.disabled = !this.siteThumbnail.style.backgroundImage;
@@ -2237,7 +1457,7 @@ const NewTabToolsObject = {
 			if (typeof Grid.cacheCellPositions === 'function') {
 				Grid.cacheCellPositions();
 			}
-			this.refreshRecent();
+			refreshRecent();
 		}, 240);
 	},
 	toggleDrawer() {
@@ -2263,8 +1483,8 @@ const NewTabToolsObject = {
 		if (name === 'tile') {
 			this._autoSelectFirstTileIfNeeded();
 		}
-		if (name === 'advanced' && typeof this.fillNeverCaptureUI === 'function') {
-			this.fillNeverCaptureUI();
+		if (name === 'advanced' && typeof fillNeverCaptureUI === 'function') {
+			fillNeverCaptureUI();
 		}
 	},
 	_autoSelectFirstTileIfNeeded() {
@@ -2301,42 +1521,9 @@ const NewTabToolsObject = {
 			this.siteThumbnail.style.height = '120px';
 		}
 	},
-	/**
-	 * @param {number} cardSpace
-	 * @param {number} gap
-	 * @param {number} [full]
-	 * @returns {{cardCount: number, slotWidth: number}}
-	 */
-	computeTitlebarSlots(cardSpace, gap, full = 186) {
-		// `cardSpace` is the measured inner width of the recently-closed cards'
-		// flex container (a greedy `flex: 1 1 0` child). It already excludes the
-		// fixed search box, the content-width masthead and their gaps, so the
-		// only job here is: how many cards fit, and how wide is each?
-		//
-		// Pick the SMALLEST card count whose common width — when the cards are
-		// stretched to fill `cardSpace` with their internal gaps — stays at or
-		// below `full`, then shrink that width down so the row fills the
-		// container edge-to-edge (never grown above `full`). Reading a settled
-		// integer `clientWidth` is far more stable than the old approach of
-		// hand-subtracting a `getBoundingClientRect()` masthead measurement,
-		// which jittered mid drawer-transition and left the row stuck at one
-		// card until a reload.
-		if (!cardSpace || cardSpace <= 0) {
-			return { cardCount: 0, slotWidth: full };
-		}
-		let cardCount = Math.ceil((cardSpace + gap) / (full + gap));
-		if (cardCount < 1) {
-			cardCount = 1;
-		}
-		let slotWidth = Math.floor((cardSpace - (cardCount - 1) * gap) / cardCount);
-		if (slotWidth > full) {
-			slotWidth = full;
-		}
-		if (slotWidth < 1) {
-			slotWidth = 1;
-		}
-		return { cardCount, slotWidth };
-	},
+	// chrome-prep C4d (CHROME_PREP.md): `computeTitlebarSlots` moved to
+	// titlebar.js alongside `_layoutTitlebar` (its only caller) — no
+	// residual call site references it directly.
 	/**
 	 * @param {number} gridWidth
 	 * @param {number} gridHeight
@@ -2391,103 +1578,10 @@ const NewTabToolsObject = {
 		grid.style.setProperty('--cell-width', dims.cellWidth + 'px');
 		grid.style.setProperty('--cell-height', dims.cellHeight + 'px');
 	},
-	/** @param {string} [highlightHost] */
-	async fillFilterUI(highlightHost) {
-		// `s` is guaranteed non-null by the `.filter()` predicate, but a
-		// predicate without a `s is Site` type guard doesn't narrow the
-		// downstream `.reduce()`'s element type — cast, not a fix.
-		let pinned = Grid.sites.filter(s => s && 'position' in s.link).reduce((carry, s) => {
-			let host = new URL(/** @type {Site} */ (s).url).host;
-			if (!(host in carry)) {
-				carry[host] = 0;
-			}
-			carry[host]++;
-			return carry;
-		}, Object.create(null));
-		let filters = Filters.getList();
-
-		// No null-check on any of the three lookups below (existing
-		// assumption: the filter table/template are always present in
-		// newTab.html) — cast, not a fix.
-		let table = /** @type {HTMLTableElement} */ (newTabTools.optionsFilter.querySelector('table'));
-		while (table.tBodies[0].rows.length) {
-			table.tBodies[0].rows[0].remove();
-		}
-
-		let template = /** @type {HTMLTemplateElement} */ (table.querySelector('template'));
-		let last = null;
-		for (let k of Object.keys(pinned).concat(Object.keys(filters)).sort()) {
-			if (k == last) {
-				continue;
-			}
-			last = k;
-
-			let row = /** @type {HTMLTableRowElement} */ (/** @type {Element} */ (template.content.firstElementChild).cloneNode(true));
-			row.cells[0].textContent = k;
-			row.cells[1].textContent = pinned[k] || 0;
-			/** @type {HTMLElement} */ (row.cells[2].querySelector('span')).textContent = k in filters ? filters[k] : this.getString('filter_unlimited');
-			// An explicit remove (✕) on real filter rows only — appended into the
-			// limit cell so it doesn't add a column that would overflow the drawer.
-			// Pinned-only rows (a pinned tile with no limit) have no filter to
-			// remove; those are managed by unpinning on the board.
-			if (k in filters) {
-				/** @type {HTMLButtonElement} */ (row.querySelector('.minus-button')).disabled = false;
-				let removeBtn = el('button', 'ntt-filter-remove', '✕');
-				removeBtn.title = this.getString('filter_remove');
-				row.cells[2].append(removeBtn);
-			}
-			table.tBodies[0].append(row);
-			if (highlightHost && k == highlightHost) {
-				row.animate([
-					{'backgroundColor': '#f0ff'},
-					{'backgroundColor': '#f0f0'}
-				], {duration: 500, fill: 'both'});
-			}
-		}
-
-		if (this.optionsFilterHostAutocomplete.childElementCount === 0) {
-			let {version} = await browser.runtime.getBrowserInfo();
-			let options;
-			if (compareVersions(version, '63.0a1') >= 0) {
-				options = { limit: 100, onePerDomain: false, includeBlocked: true };
-			} else {
-				options = { providers: ['places'] };
-			}
-			chrome.topSites.get(options, /** @param {browser.topSites.MostVisitedURL[]} sites */ sites => {
-				for (let s of sites.reduce((carry, site) => {
-					let {protocol, host} = new URL(site.url);
-					if (host && ['http:', 'https:', 'ftp:'].includes(protocol) && !carry.includes(host)) {
-						carry.push(host);
-					}
-					return carry;
-				}, /** @type {string[]} */ ([])).sort()) {
-					let option = el('option', undefined, s);
-					this.optionsFilterHostAutocomplete.appendChild(option);
-				}
-			});
-		}
-	},
-	fillNeverCaptureUI() {
-		// Render the never-capture host list — mirrors fillFilterUI's style but
-		// uses a flat div list instead of a table (no pinned-count column needed).
-		let container = this.optionsNeverCaptureList;
-		if (!container) {
-			return;
-		}
-		while (container.firstChild) {
-			container.firstChild.remove();
-		}
-		for (let entry of NeverCapture.getList()) {
-			let row = el('div', 'ntt-nevercapture-row');
-			let text = el('span', undefined, entry);  // textContent only — no innerHTML
-			let removeBtn = el('button', 'ntt-nevercapture-remove', '✕');
-			removeBtn.title = this.getString('nevercapture_remove');
-			removeBtn.dataset.entry = entry;
-			row.appendChild(text);
-			row.appendChild(removeBtn);
-			container.appendChild(row);
-		}
-	},
+	// chrome-prep C4d (CHROME_PREP.md): `fillFilterUI`/`fillNeverCaptureUI`
+	// moved to filters-ui.js (imported at top of file); called directly at
+	// every former `this.X`/`newTabTools.X` call site (optionsOnClick/
+	// updateUI/switchDrawerTab above).
 	startup() {
 		if (!window.chrome) {
 			// The page couldn't be loaded properly because WebExtensions is too slow. Sad.
@@ -2515,14 +1609,14 @@ const NewTabToolsObject = {
 		Prefs.init().then(() => {
 			// Everything is loaded. Initialize the New Tab Page.
 			Page.init();
-			newTabTools._initTitlebar();
+			_initTitlebar();
 			AwesomeBar.init({ tilesSource: () => Grid.sites });
-			newTabTools._initAutoSaveIndicator();
+			_initAutoSaveIndicator();
 			newTabTools.updateUI();
-			newTabTools.refreshBackgroundImage();
+			refreshBackgroundImage();
 
 			chrome.sessions.onChanged.addListener(function() {
-				newTabTools.refreshRecent();
+				refreshRecent();
 			});
 
 			window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -2663,7 +1757,7 @@ export function pageMessageHandler(message) {
 		// picks up the newly-restored links — and finally pull thumbnails for
 		// the rebuilt tiles (`Grid.refresh()` doesn't read the Thumbnails IDB
 		// store on its own).
-		newTabTools.refreshBackgroundImage();
+		refreshBackgroundImage();
 		Grid.refresh().then(() => newTabTools.getThumbnails());
 		break;
 	}
@@ -2673,10 +1767,22 @@ export function pageMessageHandler(message) {
 browser.runtime.onMessage.addListener(pageMessageHandler);
 
 (function() {
-	newTabTools.updateThemeColours = newTabTools.updateThemeColours.bind(newTabTools);
+	// chrome-prep C4d (CHROME_PREP.md): `updateThemeColours` is now a plain
+	// theme.js function with no `this` — the former `.bind(newTabTools)`
+	// rebind is gone (it's imported directly and used as-is below/in
+	// updateUI). `populateUiRefs` fills the six ids ui-refs.js's leaf
+	// modules read (moved OFF the `uiElements` table below — see ui-refs.js's
+	// own header comment).
+	populateUiRefs({
+		backgroundFake: 'background-fake',
+		removeBackgroundButton: 'options-bg-remove',
+		recentList: 'ntt-titlebar-recent',
+		optionsFilter: 'options-filter',
+		optionsFilterHostAutocomplete: 'host-autocomplete',
+		optionsNeverCaptureList: 'options-nevercapture-list',
+	});
 	let uiElements = {
 		'darkIcons': 'dark-icons',
-		'backgroundFake': 'background-fake',
 		'page': 'newtab-scrollbox', // used in grid.js
 		'optionsToggleButton': 'options-toggle',
 		'pinURLBlocked': 'options-pinURL-blocked',
@@ -2696,18 +1802,13 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		'editSiteTitleRow': 'options-edit-title',
 		'setTitleInput': 'options-title-input',
 		'setTitleButton': 'options-title-set',
-		'removeBackgroundButton': 'options-bg-remove',
-		'recentList': 'ntt-titlebar-recent',
 		'drawerEl': 'ntt-drawer',
-		'optionsFilter': 'options-filter',
 		'optionsFilterHost': 'options-filter-host',
-		'optionsFilterHostAutocomplete': 'host-autocomplete',
 		'optionsFilterCount': 'options-filter-count',
 		'optionsFilterSet': 'options-filter-set',
 		'optionsNeverCapture': 'options-nevercapture',
 		'optionsNeverCaptureHost': 'options-nevercapture-host',
 		'optionsNeverCaptureAdd': 'options-nevercapture-add',
-		'optionsNeverCaptureList': 'options-nevercapture-list',
 		'databaseError': 'database-error'
 	};
 	for (let key in uiElements) {
@@ -2793,10 +1894,10 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 	// No null-check on any of the three lookups below (existing assumption:
 	// all three ids are always present in newTab.html) — cast, not a fix.
 	/** @type {HTMLElement} */ (document.getElementById('wallpaper-close')).addEventListener('click', function() {
-		newTabTools.closeWallpaperPicker();
+		closeWallpaperPicker();
 	});
 	/** @type {HTMLElement} */ (document.getElementById('wallpaper-reset')).addEventListener('click', function() {
-		newTabTools.resetWallpaper();
+		resetWallpaper();
 	});
 	/** @type {HTMLInputElement} */ (document.getElementById('wallpaper-upload')).addEventListener('change', /** @this {HTMLInputElement} */ function() {
 		// `.files` is `FileList | null` (null only for non-file inputs —
@@ -2806,8 +1907,8 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 			let file = files[0];
 			Prefs.backgroundUrl = '';
 			Background.setBackground(file).then(() => {
-				newTabTools.refreshBackgroundImage();
-				newTabTools.closeWallpaperPicker();
+				refreshBackgroundImage();
+				closeWallpaperPicker();
 			});
 		}
 	});
@@ -2820,7 +1921,7 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 			// No null-check (existing assumption: always present in
 			// newTab.html) — cast, not a fix.
 			if (!/** @type {HTMLElement} */ (document.getElementById('wallpaper-picker')).hidden) {
-				newTabTools.closeWallpaperPicker();
+				closeWallpaperPicker();
 			} else if (!newTabTools.pinURLAutocomplete.hidden) {
 				newTabTools.pinURLAutocomplete.hidden = true;
 			} else if (document.documentElement.hasAttribute('drawer-open')) {
@@ -2883,7 +1984,7 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		event.stopPropagation();
 	}, true);
 	window.addEventListener('resize', function() {
-		newTabTools.refreshRecent();
+		refreshRecent();
 		newTabTools.applyTileAspect();
 	});
 })();
