@@ -85,6 +85,35 @@ export function compareVersions(a, b) {
 }
 
 /**
+ * `topSites.get()`'s options shape, shared by `lib/tiles-store.js` (the
+ * background read path) and `filters-ui.js` (the page read path) — chrome-prep
+ * C5b (CHROME_PREP.md, `audit/2026-07-11-chrome-api-divergence.md` #6). Both
+ * call sites used to duplicate this same version-gated branch (one `await`-
+ * style, one callback-style — namespace-normalized in C5a but not aligned,
+ * per that slice's own note). `runtime.getBrowserInfo` is Firefox-only — a
+ * verbatim port would throw on Chrome — so this short-circuits to the modern
+ * options object whenever it's absent (Chrome-dormant path) rather than
+ * calling it. When it IS present (Firefox, both callers' actual runtime),
+ * this keeps the exact pre-existing version-gated branch: the caller's own
+ * `api` is passed in rather than imported here, since the two scopes have
+ * separate namespace leaves (background's `lib/platform.js`, page's
+ * `api.js`) that this dual-scope file cannot import without picking one.
+ * @param {any} api The caller's own namespace leaf (`lib/platform.js`'s or
+ *   `api.js`'s `api` export).
+ * @returns {Promise<{limit: number, onePerDomain: boolean, includeBlocked: boolean}|{providers: string[]}>}
+ */
+export async function topSitesOptions(api) {
+	if (!('getBrowserInfo' in api.runtime)) {
+		return { limit: 100, onePerDomain: false, includeBlocked: true };
+	}
+	let {version} = await api.runtime.getBrowserInfo();
+	if (compareVersions(version, '63.0a1') >= 0) {
+		return { limit: 100, onePerDomain: false, includeBlocked: true };
+	}
+	return { providers: ['places'] };
+}
+
+/**
  * Look up a localized string from `_locales/<lang>/messages.json`, with
  * optional positional `$1`/`$2`/… substitutions. Extracted from newTab.js's
  * `newTabTools` object (P2-P5 review finding 1, revised remediation,

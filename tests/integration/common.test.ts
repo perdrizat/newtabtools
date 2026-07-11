@@ -14,8 +14,8 @@
  * extracted implementations' own behavior.
  */
 
-import { describe, it, expect } from 'vitest';
-import { getString, isValidURL } from '../../webextension/common.js';
+import { describe, it, expect, vi } from 'vitest';
+import { getString, isValidURL, topSitesOptions } from '../../webextension/common.js';
 
 describe('getString', () => {
 	it('delegates to chrome.i18n.getMessage, collecting substitutions into an array', () => {
@@ -46,6 +46,27 @@ describe('getString', () => {
 		} finally {
 			(globalThis as any).chrome.i18n.getMessage = original;
 		}
+	});
+});
+
+describe('topSitesOptions (chrome-prep C5b: shared getBrowserInfo short-circuit, audit #6)', () => {
+	it('returns the modern options object when runtime.getBrowserInfo is present and reports a post-63.0a1 version (Firefox path, unchanged)', async () => {
+		const api = {
+			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '128.0' }) },
+		};
+		await expect(topSitesOptions(api)).resolves.toEqual({ limit: 100, onePerDomain: false, includeBlocked: true });
+	});
+
+	it('returns the legacy providers option when getBrowserInfo reports a pre-63.0a1 version (Firefox path, unchanged)', async () => {
+		const api = {
+			runtime: { getBrowserInfo: vi.fn().mockResolvedValue({ version: '60.0' }) },
+		};
+		await expect(topSitesOptions(api)).resolves.toEqual({ providers: ['places'] });
+	});
+
+	it('returns the modern options object without calling getBrowserInfo when runtime.getBrowserInfo is absent (Chrome-dormant path)', async () => {
+		const api = { runtime: {} };
+		await expect(topSitesOptions(api)).resolves.toEqual({ limit: 100, onePerDomain: false, includeBlocked: true });
 	});
 });
 

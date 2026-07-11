@@ -442,6 +442,9 @@ const NewTabToolsObject = {
 		let {id, classList} = target;
 		switch (id) {
 		case 'options-pinURL-permissions':
+			// Chrome enforces the user-gesture rule strictly for permissions.request
+			// — this call must stay synchronous inside the click handler; don't
+			// defer it behind an `await` (audit §traps).
 			api.permissions.request({permissions: ['bookmarks', 'history']}, /** @param {boolean} succeeded */ (succeeded) => {
 				if (succeeded) {
 					this.pinURLBlocked.hidden = true;
@@ -648,6 +651,9 @@ const NewTabToolsObject = {
 			return;
 		}
 		case 'options-backup':
+			// Chrome enforces the user-gesture rule strictly for permissions.request
+			// — this call must stay synchronous inside the click handler; don't
+			// defer it behind an `await` (audit §traps).
 			api.permissions.request({permissions: ['downloads']}, function() {
 				api.runtime.sendMessage({name: 'Export:backup'});
 			});
@@ -1399,7 +1405,9 @@ const NewTabToolsObject = {
 		// Firefox loses the user-gesture context across async callbacks, so
 		// we must call `request` synchronously from the click handler. The
 		// request itself short-circuits when the permission is already
-		// granted (`accepted` will be true with no prompt shown).
+		// granted (`accepted` will be true with no prompt shown). Chrome
+		// enforces this same user-gesture rule strictly too (audit §traps) —
+		// don't defer this call behind an `await` on either platform.
 		api.permissions.request({ permissions: ['history'] }, /** @param {boolean} accepted */ accepted => {
 			if (!accepted) {
 				return;
@@ -1914,8 +1922,16 @@ api.runtime.onMessage.addListener(pageMessageHandler);
 		}
 	});
 
-	api.menus.onShown.addListener(newTabTools.contextMenuShowing);
-	api.menus.onClicked.addListener(newTabTools.contextMenuOnClick);
+	// chrome-prep C5b (CHROME_PREP.md, Decision 1 / audit §5): Chrome has no
+	// `menus` namespace — gate the registration (and, transitively,
+	// `contextMenuShowing`/`contextMenuOnClick`, which can only ever run via
+	// these listeners) so a Chrome build registers nothing instead of
+	// throwing here. Firefox always has `menus`, so this still registers
+	// exactly as before this slice on the real gate.
+	if ('menus' in api) {
+		api.menus.onShown.addListener(newTabTools.contextMenuShowing);
+		api.menus.onClicked.addListener(newTabTools.contextMenuOnClick);
+	}
 
 	window.addEventListener('keydown', function(event) {
 		if (event.key == 'Escape') {

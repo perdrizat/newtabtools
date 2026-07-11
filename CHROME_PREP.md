@@ -29,7 +29,7 @@ by maintainer).
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
-| C5 — capability-seam completion (divergence audit, targeted wrappers) | in progress (C5a done) | — |
+| C5 — capability-seam completion (divergence audit, targeted wrappers) | in progress (C5a+C5b done; UAT spot-run owed) | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
 
@@ -653,12 +653,29 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       surface has no overload for). The duplicated topSites-options logic
       (tiles-store.js await vs filters-ui.js callback) is namespace-normalized
       but NOT aligned — deferred to C5b per its own note below.
-- [ ] **C5b** — the six wrappers, homed per the audit; menus/theme express
-      Decisions 1–2 (presence-gated, absent on Chrome). Latent-care items from
-      the audit §traps addressed (storage.session note, permissions.request
-      gesture rule, webRequest no-blocking comment).
-- [ ] Gates + FULL E2E per sub-slice + UAT spot-run (drawer 20–23 for theme,
-      11 for the menu/action-row path).
+- [x] **C5b** — the six wrappers, homed per the audit: `lib/platform.js` gains
+      `sessionGet`/`sessionSet` (storage.session), `isCaptureAvailableViaPermission`
+      (Chrome-dormant fork of `isCaptureAvailable` — kept separate from the
+      Firefox `typeof` probe per the 2026-07-09 MV3 code review's
+      independent-defense-in-depth finding, not collapsed), and
+      `syncActionIconWithTheme` (Chrome-dormant no-op stub); `webextension/api.js`
+      gains `searchWeb` (selects on `'search' in api.search`, NOT `'query' in
+      api.search` — verified Firefox 94+ ships both `search.search` and
+      `search.query`, so presence-on-`query` would misroute Firefox); menus
+      registration in `lib/background-main.js` and `newTab.js` is presence-gated
+      on `api.menus` (Decision 1); `webextension/common.js` gains
+      `topSitesOptions(api)`, the shared `getBrowserInfo` short-circuit
+      replacing `lib/tiles-store.js`/`filters-ui.js`'s C5a-deferred duplicate.
+      Audit §traps comments added (storage.session divergence, `permissions.request`
+      gesture-rule ×3, `webRequest` no-blocking ×1) — comment-only, no behavior
+      change. Theme presence-gating stays deferred (not one of the six; Decision
+      2's own arc).
+- [x] Gates: fast 1330/1330 (16 new), lint/typecheck/lint:webext clean,
+      tripwire (`raw-module-eval.test.ts`) green; targeted E2E (loads-cleanly,
+      event-page-lifecycle, auto-thumbnail, awesomebar, tile-redesign,
+      settings-panel) 33/33. UAT spot-run (drawer 20–23 for theme, 11 for the
+      menu/action-row path) still owed before the C gate — out of scope for
+      this slice's requested gates.
 
 ### C6 — two-target manifest authoring
 - [ ] `manifest.base.json` + per-browser overlays merged by a

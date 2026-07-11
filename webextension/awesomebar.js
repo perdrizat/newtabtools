@@ -6,7 +6,7 @@ import { getString, isValidURL } from './common.js';
 import { NttIcons } from './icons.js';
 import { Prefs } from './prefs.js';
 import { el } from './dom.js';
-import { api } from './api.js';
+import { api, searchWeb } from './api.js';
 
 /**
  * Awesome bar (Phase 4-3). Wires the titlebar search box into a dropdown that
@@ -427,10 +427,7 @@ export const AwesomeBar = {
 	_activate(result, newTab) {
 		if (result.type === 'search') {
 			try {
-				api.search.search({
-					query: /** @type {string} */ (result.query),
-					disposition: newTab ? 'NEW_TAB' : 'CURRENT_TAB',
-				});
+				searchWeb({ query: /** @type {string} */ (result.query), newTab });
 			} catch (e) {
 				// Fallback: hand the query to the address bar's default engine
 				// by navigating the current tab to a search URL is not possible

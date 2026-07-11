@@ -44,3 +44,43 @@ export const api = new Proxy(/** @type {any} */ ({}), {
 		return prop in (globalThis.browser ?? globalThis.chrome);
 	},
 });
+
+// ---------------------------------------------------------------------------
+// Capability wrappers
+// ---------------------------------------------------------------------------
+//
+// Co-located with `api` in this one file rather than a separate
+// `capabilities.js` sibling (chrome-prep C5b, CHROME_PREP.md, audit §seam-
+// homes): `lib/platform.js` — the background twin this page leaf mirrors —
+// already holds its namespace Proxy AND its capability wrappers together in
+// one file, and the page side's wrapper surface (just `searchWeb` below) is
+// far too small to justify a second file splitting that precedent. If the
+// page-side wrapper surface grows substantially (e.g. the deferred theme
+// presence-gating), revisit as a real capabilities.js split then.
+
+/**
+ * Web-search dispatch (audit #3): Chrome's equivalent of Firefox's
+ * `search.search({query, disposition})` is the renamed `search.query({text,
+ * disposition})` — no `engine` param, `text` instead of `query`. This is
+ * NOT presence-selected on `'query' in api.search`: Firefox has shipped BOTH
+ * `search.search` AND `search.query` since Firefox 94 (MDN), so a naive
+ * presence check on `query` would pick the Chrome-shaped call on Firefox too
+ * — a real behavior change this slice must not make. Selecting on `'search'
+ * in api.search` instead keeps Firefox on its own, currently-shipping
+ * `search.search` call unconditionally (true on every Firefox that has ever
+ * run this code, whether or not it also has `query`); Chrome — which has no
+ * `search.search` at all — falls through to the `query` shape, written but
+ * never exercised while `search.search` exists.
+ * @param {{query: string, newTab: boolean}} args
+ * @returns {void}
+ */
+export function searchWeb({query, newTab}) {
+	let disposition = newTab ? 'NEW_TAB' : 'CURRENT_TAB';
+	if ('search' in api.search) {
+		api.search.search({query, disposition});
+		return;
+	}
+	// Chrome-dormant path (written but unreachable while `search.search`
+	// exists — see doc comment above).
+	api.search.query({text: query, disposition});
+}

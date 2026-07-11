@@ -9,15 +9,18 @@
 // `this.optionsNeverCaptureList` reads (ui-refs.js) — the first and third
 // are also read by newTab.js's own residual code (optionsOnClick/updateUI),
 // which now reads the same `uiRefs` object instead of a second, duplicate
-// ref. `getString`/`compareVersions` are imported directly from common.js
-// instead of via `newTabTools`/`this`. `Grid.sites` is read call-time only
+// ref. `getString` is imported directly from common.js instead of via
+// `newTabTools`/`this`; `topSitesOptions` (chrome-prep C5b) replaces this
+// file's own former `compareVersions`-based `topSites.get()` options branch,
+// shared with lib/tiles-store.js's identical (formerly duplicated) logic.
+// `Grid.sites` is read call-time only
 // (inside fillFilterUI), extending the existing newTab.js<->grid.js<->
 // site.js cycle (grid.js imports newTab.js) with one more call-time-only
 // edge — this
 // file itself never imports newTab.js and never calls updateUI.
 import { Grid } from './grid.js';
 import { Filters, NeverCapture } from './prefs.js';
-import { getString, compareVersions } from './common.js';
+import { getString, topSitesOptions } from './common.js';
 import { el } from './dom.js';
 import { uiRefs } from './ui-refs.js';
 import { api } from './api.js';
@@ -85,13 +88,7 @@ export async function fillFilterUI(highlightHost) {
 	}
 
 	if (uiRefs.optionsFilterHostAutocomplete.childElementCount === 0) {
-		let {version} = await api.runtime.getBrowserInfo();
-		let options;
-		if (compareVersions(version, '63.0a1') >= 0) {
-			options = { limit: 100, onePerDomain: false, includeBlocked: true };
-		} else {
-			options = { providers: ['places'] };
-		}
+		let options = await topSitesOptions(api);
 		api.topSites.get(options, /** @param {browser.topSites.MostVisitedURL[]} sites */ sites => {
 			for (let s of sites.reduce((carry, site) => {
 				let {protocol, host} = new URL(site.url);

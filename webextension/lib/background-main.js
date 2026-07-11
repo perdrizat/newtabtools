@@ -63,6 +63,8 @@ import {
 	disableAction,
 	getMessage,
 	createMenuTolerant,
+	sessionGet,
+	sessionSet,
 } from './platform.js';
 
 const NEW_TAB_URL = api.runtime.getURL(NEW_TAB_PAGE);
@@ -91,6 +93,9 @@ Prefs.init().then(async function() {
 // Network idle monitor.
 // ---------------------------------------------------------------------------
 
+// Safe as written (non-blocking, no `extraInfoSpec`) on both engines — flag
+// so no one adds `'blocking'` expecting Chrome MV3 support: Chrome dropped
+// the blocking variant of webRequest for MV3 (audit §traps).
 api.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 api.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 api.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
@@ -247,12 +252,12 @@ api.runtime.onStartup.addListener(seedActionSweep);
 // session (flag already set) costs a single storage.session.get() and
 // nothing else.
 // ---------------------------------------------------------------------------
-api.storage.session.get('actionSeeded').then(/** @param {{actionSeeded?: boolean}} result */ function(result) {
+sessionGet('actionSeeded').then(/** @param {{actionSeeded?: boolean}} result */ function(result) {
 	if (result.actionSeeded) {
 		return;
 	}
 	return seedActionSweep().then(function() {
-		return api.storage.session.set({actionSeeded: true});
+		return sessionSet({actionSeeded: true});
 	});
 }).catch(console.error);
 
@@ -260,39 +265,47 @@ api.storage.session.get('actionSeeded').then(/** @param {{actionSeeded?: boolean
 // Context menus
 // ---------------------------------------------------------------------------
 
-createMenuTolerant({
-	id: 'edit',
-	title: getMessage('contextmenu_edit'),
-	contexts: ['link'],
-});
-createMenuTolerant({
-	id: 'pin',
-	title: getMessage('contextmenu_pin'),
-	contexts: ['link'],
-});
-createMenuTolerant({
-	id: 'unpin',
-	title: getMessage('contextmenu_unpin'),
-	contexts: ['link'],
-});
-createMenuTolerant({
-	id: 'block',
-	title: getMessage('contextmenu_block'),
-	contexts: ['link'],
-});
-createMenuTolerant({
-	id: 'options',
-	title: getMessage('contextmenu_options'),
-	contexts: ['page'],
-});
+// chrome-prep C5b (CHROME_PREP.md, Decision 1 / audit §5): Chrome has no
+// `menus` namespace at all — presence-gated as a single block (not per-call)
+// so a Chrome build registers nothing here rather than throwing on the first
+// `createMenuTolerant()`/`api.menus.onShown` reference. Firefox always has
+// `menus`, so every registration below still runs exactly as before this
+// slice on the real gate.
+if ('menus' in api) {
+	createMenuTolerant({
+		id: 'edit',
+		title: getMessage('contextmenu_edit'),
+		contexts: ['link'],
+	});
+	createMenuTolerant({
+		id: 'pin',
+		title: getMessage('contextmenu_pin'),
+		contexts: ['link'],
+	});
+	createMenuTolerant({
+		id: 'unpin',
+		title: getMessage('contextmenu_unpin'),
+		contexts: ['link'],
+	});
+	createMenuTolerant({
+		id: 'block',
+		title: getMessage('contextmenu_block'),
+		contexts: ['link'],
+	});
+	createMenuTolerant({
+		id: 'options',
+		title: getMessage('contextmenu_options'),
+		contexts: ['page'],
+	});
 
-api.menus.onShown.addListener(/** @param {browser.menus._OnShownInfo} info */ info => {
-	let visible = /** @type {string} */ (info.pageUrl).startsWith(NEW_TAB_URL);
-	for (let id of info.menuIds) {
-		api.menus.update(id, { visible });
-	}
-	api.menus.refresh();
-});
+	api.menus.onShown.addListener(/** @param {browser.menus._OnShownInfo} info */ info => {
+		let visible = /** @type {string} */ (info.pageUrl).startsWith(NEW_TAB_URL);
+		for (let id of info.menuIds) {
+			api.menus.update(id, { visible });
+		}
+		api.menus.refresh();
+	});
+}
 
 // ---------------------------------------------------------------------------
 // Idle cleanup

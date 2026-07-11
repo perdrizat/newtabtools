@@ -41,7 +41,7 @@ import { withStore, withObjectStore } from './db.js';
 import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
 import { getTZDateString } from './constants.js';
 import { NeverCapture } from '../prefs.js';
-import { api, hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
+import { api, hasAllUrlsPermission, isCaptureAvailable, sessionGet, sessionSet } from './platform.js';
 
 // ---------------------------------------------------------------------------
 // Network idle monitor
@@ -460,10 +460,10 @@ let pendingWriteChain = Promise.resolve();
  */
 function enqueuePendingCapturesWrite(mutate) {
 	let result = pendingWriteChain.then(async function() {
-		let {pendingCaptures} = await api.storage.session.get('pendingCaptures');
+		let {pendingCaptures} = await sessionGet('pendingCaptures');
 		pendingCaptures = pendingCaptures || {};
 		let returnValue = mutate(pendingCaptures);
-		await api.storage.session.set({pendingCaptures});
+		await sessionSet({pendingCaptures});
 		return returnValue;
 	});
 	// Keep the chain alive even if this write failed, so a later caller still

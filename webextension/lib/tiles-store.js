@@ -8,18 +8,20 @@
  * through `withStore()` (lib/db.js) — no raw `db`/transaction identifier
  * exists in this file at all.
  *
- * `Prefs`/`Blocked`/`Filters` (prefs.js) and `compareVersions` (common.js)
+ * `Prefs`/`Blocked`/`Filters` (prefs.js) and `topSitesOptions` (common.js)
  * are dual-scope bridge files (MODERNIZATION.md Decision 2, PAGE_MODULES.md
  * Decision 6) — real `export`s now, imported directly below. Their
  * `globalThis.X = …` bridge assignments are gone as of chrome-prep C3d: the
  * page imports both files for real too, so nothing reads either off
- * `globalThis` anymore.
+ * `globalThis` anymore. `topSitesOptions` (chrome-prep C5b) replaces this
+ * file's own `compareVersions`-based `topSites.get()` options branch —
+ * shared with filters-ui.js's identical (formerly duplicated) logic.
  */
 
 import { withObjectStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
 import { Blocked, Filters, Prefs } from '../prefs.js';
-import { compareVersions } from '../common.js';
+import { topSitesOptions } from '../common.js';
 import { api } from './platform.js';
 
 /**
@@ -125,13 +127,7 @@ export const Tiles = {
 					return;
 				}
 
-				let {version} = await api.runtime.getBrowserInfo();
-				let options;
-				if (compareVersions(version, '63.0a1') >= 0) {
-					options = { limit: 100, onePerDomain: false, includeBlocked: true };
-				} else {
-					options = { providers: ['places'] };
-				}
+				let options = await topSitesOptions(api);
 				/** @type {browser.topSites.MostVisitedURL[]} */
 				let r = await api.topSites.get(options);
 				let urls = this._list.slice();
