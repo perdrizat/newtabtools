@@ -29,7 +29,7 @@ by maintainer).
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
-| C5 — capability-seam completion (divergence audit, targeted wrappers) | in progress (C5a+C5b done; UAT spot-run owed) | — |
+| C5 — capability-seam completion (divergence audit, targeted wrappers) | done (E2E 127/127, UAT 5/5: 11+20–23) | `f8569b9`+`539ebf8`+`956c8c8` |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
 
