@@ -25,17 +25,30 @@ describe('Version sync — package.json ⇄ webextension/manifest.json', () => {
 		expect(manifest.version).toBe(pkg.version);
 	});
 
-	it('sync-version.mjs script exists and uses package.json as the source', () => {
+	it('sync-version.mjs script exists and regenerates the manifest from package.json (chrome-prep C6)', () => {
 		const scriptPath = path.join(ROOT, 'scripts/sync-version.mjs');
 		expect(fs.existsSync(scriptPath)).toBe(true);
 		const src = fs.readFileSync(scriptPath, 'utf8');
-		expect(src).toContain('package.json');
 		expect(src).toContain('webextension/manifest.json');
-		expect(src).toMatch(/manifest\.version\s*=\s*pkg\.version/);
+		// chrome-prep C6: the version-injection logic itself lives in
+		// build-manifest.mjs's mergeManifest() (base.json/overlays carry no
+		// "version" field at all) — sync-version.mjs delegates to it rather
+		// than patching manifest.version directly.
+		expect(src).toContain('from \'./build-manifest.mjs\'');
+		expect(src).toMatch(/writeFirefoxManifest\(\)/);
 	});
 
-	it('package.json build script runs sync-version as a prebuild step', () => {
+	it('build-manifest.mjs injects the version from package.json (single source of truth)', () => {
+		const scriptPath = path.join(ROOT, 'scripts/build-manifest.mjs');
+		const src = fs.readFileSync(scriptPath, 'utf8');
+		expect(src).toContain('package.json');
+		expect(src).toMatch(/version:\s*pkg\.version/);
+	});
+
+	it('package.json build script delegates to build.mjs, which runs sync-version as a prebuild step (chrome-prep C6)', () => {
 		const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-		expect(pkg.scripts.build).toContain('sync-version');
+		expect(pkg.scripts.build).toBe('node scripts/build.mjs');
+		const buildSrc = fs.readFileSync(path.join(ROOT, 'scripts/build.mjs'), 'utf8');
+		expect(buildSrc).toContain('sync-version');
 	});
 });

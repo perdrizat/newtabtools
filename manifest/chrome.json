@@ -1,0 +1,21 @@
+{
+	"background": {
+		"service_worker": "lib/background-main.js",
+		"type": "module"
+	},
+	"action": {
+		"default_icon": "images/tools-light.svg",
+		"default_popup": "action.html",
+		"default_title": "__MSG_extensionName__"
+	},
+	"permissions": [
+		"idle",
+		"search",
+		"sessions",
+		"storage",
+		"tabs",
+		"topSites",
+		"webNavigation",
+		"webRequest"
+	]
+}

@@ -1,0 +1,42 @@
+{
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "newtabtools@symlink.ch",
+			"strict_min_version": "152.0",
+			"data_collection_permissions": {
+				"required": [
+					"none"
+				]
+			}
+		}
+	},
+	"background": {
+		"scripts": [
+			"lib/background-main.js"
+		],
+		"type": "module"
+	},
+	"action": {
+		"default_icon": "images/tools-light.svg",
+		"theme_icons": [
+			{
+				"dark": "images/tools-light.svg",
+				"light": "images/tools-dark.svg",
+				"size": 16
+			}
+		],
+		"default_popup": "action.html",
+		"default_title": "__MSG_extensionName__"
+	},
+	"permissions": [
+		"idle",
+		"menus",
+		"search",
+		"sessions",
+		"storage",
+		"tabs",
+		"topSites",
+		"webNavigation",
+		"webRequest"
+	]
+}

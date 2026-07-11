@@ -30,7 +30,7 @@ by maintainer).
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | done (E2E 127/127, UAT 5/5: 11+20–23) | `f8569b9`+`539ebf8`+`956c8c8` |
-| C6 — two-target manifest authoring | pending | — |
+| C6 — two-target manifest authoring | done (uncommitted) | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
 
 ## Decisions of record
@@ -678,11 +678,81 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       this slice's requested gates.
 
 ### C6 — two-target manifest authoring
-- [ ] `manifest.base.json` + per-browser overlays merged by a
-      `scripts/build-manifest.mjs` sibling of `sync-version.mjs`; emitted
-      `manifest.json` per target; `pnpm build` grows a target arg. No bundler;
-      source == shipped holds for both targets.
-- [ ] Gates + targeted E2E (loads-cleanly + lifecycle).
+- [x] `manifest/base.json` (shared: `name`/`description`/`icons`/
+      `chrome_url_overrides`/`host_permissions`/`optional_permissions`/
+      `default_locale`/`manifest_version`/`content_security_policy`) +
+      `manifest/firefox.json` (the live target: `browser_specific_settings`,
+      `background` in event-page `scripts` form, `action` WITH
+      `theme_icons`, `permissions` WITH `menus`) + `manifest/chrome.json`
+      (dormant: `background.service_worker` module-worker form, `action`
+      with no `theme_icons`, no `browser_specific_settings`, `permissions`
+      without `menus` — deriving each split straight from Decisions 1/2 and
+      C5's already-established Chrome-dormant patterns) merged by
+      `scripts/build-manifest.mjs` (a `sync-version.mjs` sibling): shallow,
+      top-level-key-only (`{...base, ...overlay}` — no deep merge, so a
+      nested divergence like `action.theme_icons` forces the WHOLE `action`
+      key to live fully in each diverging overlay, documented as the
+      duplication/no-spooky-action trade-off); output key order is a fixed
+      `CANONICAL_KEY_ORDER` (not source-file order) so regeneration is
+      diff-clean regardless of how the JSON is authored.
+      **Version choice:** neither `base.json` nor any overlay carries a
+      `"version"` field — `mergeManifest()` reads `package.json` directly at
+      merge time and injects it, keeping the manifest sources themselves
+      stateless with respect to versioning (the cleaner of the two options
+      the arc posed). `scripts/sync-version.mjs` is rewritten to delegate to
+      `writeFirefoxManifest()` instead of patching `manifest.version` in
+      place — same call sites (`pnpm version`, `pnpm build` prebuild step),
+      same "always exit 0, idempotent" contract; regenerating produced a
+      byte-identical `webextension/manifest.json` (`git diff` empty)
+      confirming the merge reproduces the pre-C6 hand-authored file exactly.
+      `pnpm build` grows a target arg via new `scripts/build.mjs`: `firefox`
+      (default) is byte-identical to the pre-C6 build (regenerate manifest,
+      `web-ext build --source-dir webextension/`, then the existing UAT
+      staging build — no bundler, no staging copy, source == shipped);
+      `chrome` stages a copy of `webextension/` under `dist/chrome-build/`,
+      overwrites its manifest with the merged Chrome overlay, zips via
+      `web-ext build`, then removes the staging dir — a dormant artifact,
+      unvalidated beyond "the build succeeds" (documented in
+      `manifest/README.md`). Guard test `tests/unit/manifest-authoring.test.ts`
+      (red-first — written against the not-yet-existing `build-manifest.mjs`,
+      confirmed failing to resolve the import before any implementation
+      landed): (a) `mergeManifest('firefox')` deep-equals the committed
+      manifest, (b) the merge is deterministic (repeated calls, both
+      targets), (c) an unknown target throws, (d) the Chrome overlay is a
+      structurally honest MV3 manifest (`manifest_version: 3`,
+      `background.service_worker`/`type: "module"`, no
+      `browser_specific_settings`, no `theme_icons`, no `menus` permission,
+      same `version` as the Firefox target). Fallout: two pre-existing
+      `tests/integration/sync-version.test.ts` assertions hard-coded the old
+      "patch `manifest.version` in place" implementation detail
+      (`manifest.version = pkg.version` source match; `pkg.scripts.build`
+      containing the literal string `sync-version`) — updated to assert the
+      new delegation (`sync-version.mjs` imports `build-manifest.mjs` and
+      calls `writeFirefoxManifest()`; `pkg.scripts.build` is
+      `"node scripts/build.mjs"`, which itself still runs `sync-version.mjs`
+      as its first step) rather than the retired implementation shape.
+- [x] Gates: fast 1340/1340 (10 new: the manifest-authoring guard suite +
+      2 rewritten sync-version assertions), lint/typecheck/lint:webext clean
+      (typecheck fallout: `scripts/build-manifest.mjs` is pulled into the
+      checked program transitively — the guard test imports it — so it
+      needed real JSDoc: `mergeManifest(target)` takes a plain `string`, not
+      a `'firefox'|'chrome'` literal union, since membership is validated at
+      RUNTIME against `TARGETS` — the real gate for a tooling script fed by
+      `process.argv`/test input, not one of the typed production monoliths;
+      return type `Record<string, any>` rather than `Record<string,
+      unknown>`, matching how the rest of the repo treats `JSON.parse`
+      output, so downstream property reads in the test don't need casts).
+      Verified `pnpm build` (firefox) produces a byte-identical
+      `webextension/manifest.json` (`git diff` empty) + the `.xpi`/UAT zips;
+      verified `pnpm build chrome` stages, merges, zips
+      (`dist/newtab_powertools-chrome.zip`) and cleans up
+      `dist/chrome-build/` without error, spot-checked the zip's manifest
+      contents match the design. Targeted E2E (one runner-lock invocation:
+      loads-cleanly + boot-timing + event-page-lifecycle): 6/6 — this arc's
+      E2E surface is limited to Firefox `webextension/` output, which the
+      byte-identical manifest regeneration already proves unchanged; these
+      three files are the load/boot/suspend-resume smoke set confirming the
+      real extension still installs and runs.
 
 ### C gate
 - [ ] Full `pnpm test`, full UAT, `pnpm audit --audit-level=high`,
