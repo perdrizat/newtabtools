@@ -63,14 +63,24 @@ describe('AwesomeBar — DOM wiring', () => {
 		tabsUpdate = vi.fn();
 		tabsCreate = vi.fn();
 		searchSearch = vi.fn();
-		(globalThis as any).chrome = {
+		// chrome-prep C5a (CHROME_PREP.md): awesomebar.js now routes every call
+		// through a single `api = globalThis.browser ?? chrome` namespace leaf,
+		// so the mock must present one unified surface on whichever object
+		// wins that precedence (`browser`) — a split mock (most of the surface
+		// on `chrome`, `search` on `browser`) would leave e.g. `api.tabs`
+		// undefined. `chrome` mirrors the same object so either name still
+		// resolves it, matching jest-webextension-mock's own baseline
+		// invariant (`browser`/`chrome` are aliases of one object).
+		const mock = {
 			i18n: { getMessage: (key: string) => key },
 			tabs: { update: tabsUpdate, create: tabsCreate },
 			bookmarks: { search: (_q: string, cb: (r: unknown[]) => void) => cb([]) },
 			history: { search: (_o: unknown, cb: (r: unknown[]) => void) => cb([]) },
 			permissions: { contains: (_p: unknown, cb: (g: boolean) => void) => cb(true) },
+			search: { search: searchSearch },
 		};
-		(globalThis as any).browser = { search: { search: searchSearch } };
+		(globalThis as any).chrome = mock;
+		(globalThis as any).browser = mock;
 
 		// Reset module instance state between tests.
 		(AwesomeBar as any).dropdown = undefined;

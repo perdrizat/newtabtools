@@ -170,8 +170,13 @@ describe('getThumbnails — per-site stash, revoked on replace', () => {
 
 	beforeAll(() => {
 		const getThumbnails = extractMethod(source, 'getThumbnails');
+		// chrome-prep C5a (CHROME_PREP.md): `getThumbnails` now reads the
+		// module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so the `globalThis.chrome` override
+		// below still takes effect at call time.
 		vm.runInThisContext(
-			`var _thumbHarness = { ${getThumbnails} };`,
+			`var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _thumbHarness = { ${getThumbnails} };`,
 			{ filename: 'thumbs-harness.js' },
 		);
 		harness = (globalThis as any)._thumbHarness;
@@ -193,6 +198,7 @@ describe('getThumbnails — per-site stash, revoked on replace', () => {
 		(globalThis as any).chrome = {
 			runtime: { sendMessage: vi.fn((_msg: unknown, cb: (m: Map<string, Blob>) => void) => cb(thumbsMap)) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 	});
 
 	it('stashes the created URL on the site (shared with site.js refreshThumbnail)', () => {
@@ -263,6 +269,7 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 				}),
 			},
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		// `refreshRecent` builds 'img' elements via one shape and everything else
 		// (the 'a'/'span' card structure) via `makeMockElement`'s generic shape —
 		// both now go through `document.createElement` (no more createElementNS

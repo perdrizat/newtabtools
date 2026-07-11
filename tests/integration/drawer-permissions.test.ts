@@ -47,7 +47,12 @@ describe('History permission auto-request — gesture-safe path', () => {
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const ensure = extractMethod(source, '_ensureHistoryPermission');
 
-		const code = `var _permHarness = { ${ensure} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `_ensureHistoryPermission` now reads
+		// the module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so each test's `globalThis.chrome`
+		// override below still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _permHarness = { ${ensure} };`;
 		vm.runInThisContext(code, { filename: 'perm-harness.js' });
 		harness = (globalThis as any)._permHarness;
 	});
@@ -64,9 +69,14 @@ describe('History permission auto-request — gesture-safe path', () => {
 		// async callback and Firefox rejects it without showing a dialog.
 		const requestSpy = vi.fn((_args, cb) => cb(false));
 		const containsSpy = vi.fn();
+		// chrome-prep C5a (CHROME_PREP.md): `api` resolves `globalThis.browser ??
+		// chrome` — `browser` must mirror this test's `chrome` override (not the
+		// untouched baseline jest-webextension-mock object) or `api.permissions`
+		// would resolve to the wrong mock.
 		(globalThis as any).chrome = {
 			permissions: { request: requestSpy, contains: containsSpy },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		harness._ensureHistoryPermission();
 		expect(requestSpy).toHaveBeenCalledTimes(1);
 		expect(containsSpy).not.toHaveBeenCalled();
@@ -82,6 +92,7 @@ describe('History permission auto-request — gesture-safe path', () => {
 		(globalThis as any).chrome = {
 			permissions: { request: (_args: any, cb: any) => cb(true) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		harness._ensureHistoryPermission();
 		expect((globalThis as any).TileStats._hasHistoryPermission).toBe(true);
 		expect(renderSpy).toHaveBeenCalledTimes(2);
@@ -93,6 +104,7 @@ describe('History permission auto-request — gesture-safe path', () => {
 		(globalThis as any).chrome = {
 			permissions: { request: (_args: any, cb: any) => cb(false) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		harness._ensureHistoryPermission();
 		expect((globalThis as any).TileStats._hasHistoryPermission).toBe(false);
 		expect(renderSpy).not.toHaveBeenCalled();
@@ -100,6 +112,7 @@ describe('History permission auto-request — gesture-safe path', () => {
 
 	it('no-op when chrome.permissions is unavailable (does not throw)', () => {
 		(globalThis as any).chrome = {};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		expect(() => harness._ensureHistoryPermission()).not.toThrow();
 	});
 });

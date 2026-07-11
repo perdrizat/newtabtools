@@ -38,7 +38,10 @@ import vm from 'node:vm';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
 
-const REGISTRATION = 'browser.runtime.onMessage.addListener(pageMessageHandler);';
+// chrome-prep C5a (CHROME_PREP.md): the top-level registration now goes
+// through the module-level `api` namespace leaf instead of a bare
+// `browser.*` reference.
+const REGISTRATION = 'api.runtime.onMessage.addListener(pageMessageHandler);';
 
 type MessageListener = (message: any, sender: any, sendResponse: any) => unknown;
 
@@ -63,8 +66,14 @@ function loadHandler(sandbox: Record<string, unknown>) {
 	const code = source.slice(start, regIndex + REGISTRATION.length);
 
 	const addListener = vi.fn();
+	// `api` (chrome-prep C5a) is supplied directly here rather than via a
+	// live-resolving Proxy (the pattern used elsewhere for vm.runInThisContext
+	// harnesses that share the outer globalThis): this is a fully isolated
+	// `vm.createContext` sandbox, so a plain object with the one namespace
+	// this code path touches is simpler and sufficient.
 	const ctx = vm.createContext({
 		browser: { runtime: { onMessage: { addListener } } },
+		api: { runtime: { onMessage: { addListener } } },
 		console,
 		...sandbox,
 	});

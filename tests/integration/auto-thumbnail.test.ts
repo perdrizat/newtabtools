@@ -988,7 +988,14 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 
 		globalThis.Grid = { sites: [] };
 
-		const code = `var newTabTools = { ${getThumbnails}, getFavicons() {}, selectedSite: null, siteThumbnail: { style: {} }, saveCurrentThumbButton: { disabled: true } };`;
+		// chrome-prep C5a (CHROME_PREP.md): the extracted method now reads the
+		// module-level `api` namespace leaf (`import { api } from './api.js'`)
+		// instead of a bare `chrome.*` reference — vm.runInThisContext has no
+		// module scope to supply that binding, so it's declared here as a
+		// live-resolving stand-in (mirrors webextension/api.js's own Proxy) so
+		// per-test `globalThis.chrome`/`globalThis.browser` overrides below
+		// still take effect at call time, exactly as the bare reference did.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${getThumbnails}, getFavicons() {}, selectedSite: null, siteThumbnail: { style: {} }, saveCurrentThumbButton: { disabled: true } };`;
 		vm.runInThisContext(code, { filename: 'thumbnail-display-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

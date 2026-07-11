@@ -41,7 +41,7 @@ import { withStore, withObjectStore } from './db.js';
 import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
 import { getTZDateString } from './constants.js';
 import { NeverCapture } from '../prefs.js';
-import { hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
+import { api, hasAllUrlsPermission, isCaptureAvailable } from './platform.js';
 
 // ---------------------------------------------------------------------------
 // Network idle monitor
@@ -133,7 +133,7 @@ export async function captureTab(tabId, windowId) {
 	}
 	let tab;
 	try {
-		tab = await browser.tabs.get(tabId);
+		tab = await api.tabs.get(tabId);
 	} catch (ex) {
 		// Tab is gone — same as the old callback's `runtime.lastError` check.
 		return {dataURL: null, favIconUrl: null};
@@ -146,7 +146,7 @@ export async function captureTab(tabId, windowId) {
 	let favIconUrl = tab.favIconUrl || null;
 	let dataURL;
 	try {
-		dataURL = await browser.tabs.captureVisibleTab(windowId, {format: 'png'});
+		dataURL = await api.tabs.captureVisibleTab(windowId, {format: 'png'});
 	} catch (ex) {
 		return {dataURL: null, favIconUrl};
 	}
@@ -409,7 +409,7 @@ function pickAndStore(tabId) {
 
 		let best = captures[bestIndex];
 
-		let prefs = await browser.storage.local.get({'thumbnailSize': 600});
+		let prefs = await api.storage.local.get({'thumbnailSize': 600});
 		let blob = await resizeThumbnail(best.dataURL, prefs.thumbnailSize);
 		let today = getTZDateString();
 		/**
@@ -460,10 +460,10 @@ let pendingWriteChain = Promise.resolve();
  */
 function enqueuePendingCapturesWrite(mutate) {
 	let result = pendingWriteChain.then(async function() {
-		let {pendingCaptures} = await browser.storage.session.get('pendingCaptures');
+		let {pendingCaptures} = await api.storage.session.get('pendingCaptures');
 		pendingCaptures = pendingCaptures || {};
 		let returnValue = mutate(pendingCaptures);
-		await browser.storage.session.set({pendingCaptures});
+		await api.storage.session.set({pendingCaptures});
 		return returnValue;
 	});
 	// Keep the chain alive even if this write failed, so a later caller still

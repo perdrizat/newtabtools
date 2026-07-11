@@ -110,7 +110,12 @@ describe('newTabTools.getFavicons', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'getFavicons');
-		const code = `var _favHarness = { ${body} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `getFavicons` now reads the
+		// module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so each test's `globalThis.chrome`
+		// override below still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _favHarness = { ${body} };`;
 		vm.runInThisContext(code, { filename: 'get-favicons-harness.js' });
 		harness = (globalThis as any)._favHarness;
 	});
@@ -118,6 +123,7 @@ describe('newTabTools.getFavicons', () => {
 	beforeEach(() => {
 		(globalThis as any).Grid = undefined;
 		(globalThis as any).chrome = undefined;
+		(globalThis as any).browser = undefined;
 	});
 
 	function makeBadgelessSite(url: string) {
@@ -157,6 +163,7 @@ describe('newTabTools.getFavicons', () => {
 		(globalThis as any).Grid = { sites: [a, b, c, null] };
 		const sendMessage = vi.fn();
 		(globalThis as any).chrome = { runtime: { sendMessage } };
+		(globalThis as any).browser = (globalThis as any).chrome;
 
 		harness.getFavicons();
 
@@ -171,6 +178,7 @@ describe('newTabTools.getFavicons', () => {
 		(globalThis as any).Grid = { sites: [a, null] };
 		const sendMessage = vi.fn();
 		(globalThis as any).chrome = { runtime: { sendMessage } };
+		(globalThis as any).browser = (globalThis as any).chrome;
 
 		harness.getFavicons();
 
@@ -190,6 +198,7 @@ describe('newTabTools.getFavicons', () => {
 		(globalThis as any).chrome = {
 			runtime: { sendMessage: (_msg: any, cb: any) => cb(responseMap) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 
 		harness.getFavicons();
 
@@ -203,6 +212,7 @@ describe('newTabTools.getFavicons', () => {
 		(globalThis as any).chrome = {
 			runtime: { sendMessage: (_msg: any, cb: any) => cb(null) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		expect(() => harness.getFavicons()).not.toThrow();
 		expect(a.applyFavicon).not.toHaveBeenCalled();
 	});

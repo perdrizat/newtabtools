@@ -171,7 +171,12 @@ describe('Drawer Appearance tab — updateUI reflects active theme card (Phase 3
 		(globalThis as any).refreshRecent = vi.fn();
 		(globalThis as any).fillNeverCaptureUI = vi.fn();
 
-		const code = `var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, resizeOptionsThumbnail() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
+		// chrome-prep C5a (CHROME_PREP.md): `updateUI`'s extracted body now reads
+		// the module-level `api` namespace leaf instead of a bare `browser.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so the `globalThis.browser` mock
+		// above still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, resizeOptionsThumbnail() {}, applyTileAspect() {}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} } };`;
 		vm.runInThisContext(code, { filename: 'appearance-updateUI-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

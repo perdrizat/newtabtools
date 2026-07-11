@@ -48,7 +48,12 @@ describe('historyTitleFor — resilient against missing history permission', () 
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'historyTitleFor');
-		const code = `var _historyHarness = { ${body} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `historyTitleFor` now reads the
+		// module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so each test's `globalThis.chrome`
+		// override below still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _historyHarness = { ${body} };`;
 		vm.runInThisContext(code, { filename: 'history-title-harness.js' });
 		harness = (globalThis as any)._historyHarness;
 	});
@@ -61,6 +66,7 @@ describe('historyTitleFor — resilient against missing history permission', () 
 				])),
 			},
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		const title = await harness.historyTitleFor('https://example.com/');
 		expect(title).toBe('Example Domain');
 	});
@@ -69,6 +75,7 @@ describe('historyTitleFor — resilient against missing history permission', () 
 		(globalThis as any).chrome = {
 			history: { search: vi.fn((_q: any, cb: any) => cb([])) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		expect(await harness.historyTitleFor('https://example.com/')).toBeNull();
 	});
 
@@ -76,6 +83,7 @@ describe('historyTitleFor — resilient against missing history permission', () 
 		(globalThis as any).chrome = {
 			history: { search: () => { throw new Error('no permission'); } },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 		expect(await harness.historyTitleFor('https://example.com/')).toBeNull();
 	});
 });
@@ -104,9 +112,14 @@ describe('Set Title (options-title-set) marks titleIsUserSet', () => {
 		(globalThis as any).Background = { setBackground: vi.fn().mockResolvedValue(undefined) };
 		(globalThis as any).Grid = { cells: [{ index: 0, containsPinnedSite: () => false }] };
 		(globalThis as any).chrome = { history: { search: (_q: any, cb: any) => cb([]) } };
+		(globalThis as any).browser = (globalThis as any).chrome;
 		(globalThis as any).isValidURL = isValidURL;
 
-		const code = `var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `optionsOnClick`/`historyTitleFor`'s
+		// extracted bodies now read the module-level `api` namespace leaf
+		// instead of a bare `chrome.*` reference — declared here as a
+		// live-resolving stand-in (mirrors webextension/api.js's own Proxy).
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
 		vm.runInThisContext(code, { filename: 'title-set-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -148,7 +161,13 @@ describe('Set URL clears title, calls historyTitleFor, applies fresh title', () 
 		(globalThis as any).Prefs = { rows: 3, columns: 3 };
 		(globalThis as any).isValidURL = isValidURL;
 
-		const code = `var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `optionsOnClick`/`historyTitleFor`'s
+		// extracted bodies now read the module-level `api` namespace leaf
+		// instead of a bare `chrome.*` reference — declared here as a
+		// live-resolving stand-in (mirrors webextension/api.js's own Proxy) so
+		// each test's `globalThis.chrome` override below still takes effect at
+		// call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${body}, ${normalize}, ${isValid}, ${historyTitleFor}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {} };`;
 		vm.runInThisContext(code, { filename: 'url-set-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -170,6 +189,7 @@ describe('Set URL clears title, calls historyTitleFor, applies fresh title', () 
 				{ url: 'https://new.example/', title: 'Fresh History Title' },
 			])) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 
 		harness.optionsOnClick({ target: { id: 'options-url-set', disabled: false, classList: { contains: () => false } } });
 		// Flush the historyTitleFor microtask + cb chain.
@@ -185,6 +205,7 @@ describe('Set URL clears title, calls historyTitleFor, applies fresh title', () 
 		(globalThis as any).chrome = {
 			history: { search: vi.fn((_q: any, cb: any) => cb([])) },
 		};
+		(globalThis as any).browser = (globalThis as any).chrome;
 
 		harness.optionsOnClick({ target: { id: 'options-url-set', disabled: false, classList: { contains: () => false } } });
 		await new Promise(r => setTimeout(r, 0));

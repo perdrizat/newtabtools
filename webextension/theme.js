@@ -9,6 +9,7 @@
 // `_theme` (newTab.js's former `this._theme`) becomes explicit module state.
 // A leaf module: never imports newTab.js, never calls updateUI.
 import { Prefs } from './prefs.js';
+import { api } from './api.js';
 
 /**
  * Cached `browser.theme.getCurrent()`/`onUpdated` payload (updateThemeColours).
@@ -114,7 +115,7 @@ export async function updateThemeColours(updateInfo) {
 
 	if (Prefs.theme === 'system') {
 		try {
-			_theme = updateInfo ? /** @type {browser._manifest.ThemeType} */ (updateInfo.theme) : await browser.theme.getCurrent();
+			_theme = updateInfo ? /** @type {browser._manifest.ThemeType} */ (updateInfo.theme) : await api.theme.getCurrent();
 		} catch (ex) {
 			console.debug(ex);
 			_theme = null;
@@ -182,7 +183,7 @@ export async function getThemedImageURL(name, theme = Prefs.theme) {
 	}
 
 	try {
-		let request = await fetch(browser.runtime.getURL(`images/${name}-${effectiveTheme}.svg`));
+		let request = await fetch(api.runtime.getURL(`images/${name}-${effectiveTheme}.svg`));
 		let content = await request.text();
 		content = content.replaceAll('#fff', fore);
 		content = content.replaceAll('#1f364c', back);

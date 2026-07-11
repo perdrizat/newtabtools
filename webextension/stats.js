@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { api } from './api.js';
+
 export const TileStats = {
 	/** @type {boolean | null} */
 	_hasHistoryPermission: null,
@@ -9,7 +11,7 @@ export const TileStats = {
 	async _checkHistoryPermission() {
 		if (this._hasHistoryPermission === null) {
 			try {
-				this._hasHistoryPermission = await browser.permissions.contains({ permissions: ['history'] });
+				this._hasHistoryPermission = await api.permissions.contains({ permissions: ['history'] });
 			} catch (e) {
 				this._hasHistoryPermission = false;
 			}
@@ -61,9 +63,10 @@ export const TileStats = {
 			return null;
 		}
 
+		/** @type {browser.history.VisitItem[]} */
 		let visits;
 		try {
-			visits = await browser.history.getVisits({ url });
+			visits = await api.history.getVisits({ url });
 		} catch (e) {
 			return null;
 		}

@@ -19,6 +19,7 @@ import { NttIcons } from './icons.js';
 import { isValidURL } from './common.js';
 import { el } from './dom.js';
 import { uiRefs } from './ui-refs.js';
+import { api } from './api.js';
 
 /**
  * Titlebar recently-closed-row ResizeObserver (_initTitlebar).
@@ -179,7 +180,7 @@ export function refreshRecent() {
 		return;
 	}
 
-	chrome.sessions.getRecentlyClosed(/** @param {browser.sessions.Session[]} undoItems */ undoItems => {
+	api.sessions.getRecentlyClosed(/** @param {browser.sessions.Session[]} undoItems */ undoItems => {
 		let added = 0;
 
 		for (let element of strip.querySelectorAll('.ntt-recent-card')) {
@@ -199,7 +200,7 @@ export function refreshRecent() {
 		// access that needs it.
 		/** @this {GlobalEventHandlers} */
 		function card_onclick() {
-			chrome.sessions.restore(/** @type {HTMLElement} */ (this).dataset.sessionId);
+			api.sessions.restore(/** @type {HTMLElement} */ (this).dataset.sessionId);
 			return false;
 		}
 
@@ -318,7 +319,7 @@ export function refreshRecent() {
 		// stored favicon.
 		if (needFavicon.length) {
 			let hosts = [...new Set(needFavicon.map(n => n.host).filter(Boolean))];
-			chrome.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, /** @param {Map<string, Blob | string> | undefined} favicons */ favicons => {
+			api.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, /** @param {Map<string, Blob | string> | undefined} favicons */ favicons => {
 				if (!favicons || typeof favicons.get !== 'function') {
 					return;
 				}

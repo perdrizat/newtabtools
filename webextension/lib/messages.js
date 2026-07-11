@@ -40,7 +40,7 @@ import { Tiles, Background } from './tiles-store.js';
 import { getTZDateString } from './constants.js';
 import { startCaptureSession, purgeNeverCaptureHost } from './capture.js';
 import { NeverCapture } from '../prefs.js';
-import { broadcastToPages } from './platform.js';
+import { api, broadcastToPages } from './platform.js';
 
 /**
  * The runtime.onMessage listener — dispatch table for the 19 frozen wire
@@ -60,7 +60,7 @@ export function handleMessage(message, sender, sendResponse) {
 	// Anything else — including a content script in a hostile page reached
 	// via `<all_urls>` — gets dropped here. See §2.4 of
 	// audit/2026-05-04-security-review.md.
-	if (!sender || sender.id !== browser.runtime.id) {
+	if (!sender || sender.id !== api.runtime.id) {
 		return false;
 	}
 
@@ -310,5 +310,5 @@ export function handleMessage(message, sender, sendResponse) {
  * @returns {void}
  */
 export function registerMessageHandler() {
-	browser.runtime.onMessage.addListener(handleMessage);
+	api.runtime.onMessage.addListener(handleMessage);
 }

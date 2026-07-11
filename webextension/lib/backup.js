@@ -31,7 +31,7 @@ import * as zip from './zip/zip-core.js';
 import { Tiles, Background } from './tiles-store.js';
 import { purgeNeverCaptureHost } from './capture.js';
 import { Filters } from '../prefs.js';
-import { broadcastToPages } from './platform.js';
+import { api, broadcastToPages } from './platform.js';
 
 zip.configure({ useWebWorkers: false });
 
@@ -43,7 +43,7 @@ export async function makeZip() {
 		await writer.add('background', new zip.BlobReader(background));
 	}
 
-	let prefs = await browser.storage.local.get();
+	let prefs = await api.storage.local.get();
 	for (let k of ['thumbnailSize', 'version']) {
 		delete prefs[k];
 	}
@@ -85,15 +85,15 @@ export async function makeZip() {
 		}
 		if (['complete', 'interrupted'].includes(/** @type {string} */ (delta.state.current))) {
 			URL.revokeObjectURL(url);
-			browser.downloads.onChanged.removeListener(onDownloadChanged);
+			api.downloads.onChanged.removeListener(onDownloadChanged);
 		}
 	}
-	if (browser.downloads && browser.downloads.onChanged) {
-		browser.downloads.onChanged.addListener(onDownloadChanged);
+	if (api.downloads && api.downloads.onChanged) {
+		api.downloads.onChanged.addListener(onDownloadChanged);
 	}
 
 	try {
-		downloadId = await browser.downloads.download({
+		downloadId = await api.downloads.download({
 			url,
 			filename: 'newtabtools.zip',
 			saveAs: true
@@ -101,8 +101,8 @@ export async function makeZip() {
 		return downloadId;
 	} catch (ex) {
 		URL.revokeObjectURL(url);
-		if (browser.downloads && browser.downloads.onChanged) {
-			browser.downloads.onChanged.removeListener(onDownloadChanged);
+		if (api.downloads && api.downloads.onChanged) {
+			api.downloads.onChanged.removeListener(onDownloadChanged);
 		}
 		throw ex;
 	}
@@ -229,7 +229,7 @@ export async function readZip(file) {
 				filtered.neverCaptureHosts = cleaned;
 			}
 		}
-		await chrome.storage.local.set(filtered);
+		await api.storage.local.set(filtered);
 		restoredNeverCaptureHosts = filtered.neverCaptureHosts || [];
 	}
 

@@ -13,6 +13,12 @@
  * holds capability WRAPPERS, not business logic (that stays in
  * lib/capture.js, lib/messages.js, lib/background-main.js, etc.).
  *
+ * chrome-prep C5a (CHROME_PREP.md, namespace normalization): every
+ * `browser.*`/`chrome.*` call below (and in every other lib/** module) is
+ * now `api.*`, `api` being this file's exported namespace leaf. See `api`'s
+ * own doc comment for why it's a live-resolving Proxy rather than a plain
+ * `const api = globalThis.browser ?? chrome`.
+ *
  * PAGE_MODULES.md P3 (the dual-scope endgame) retired the Decision-2 bridge
  * accessor this file used to hold: `getPrefs()`/`getBlocked()`/
  * `getFilters()`/`getNeverCapture()`/`getCompareVersions()` are gone. The
@@ -26,6 +32,52 @@
  */
 
 // ---------------------------------------------------------------------------
+// Normalized namespace
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalized namespace object: every extension API call in `lib/**` routes
+ * through this single identifier instead of a raw `chrome.*`/bare
+ * `browser.*` reference, so a future Chrome build (promise-capable
+ * `chrome.*` under MV3) needs zero call-site churn — only this leaf (and its
+ * page-side twin, `webextension/api.js`) forks.
+ *
+ * Implemented as a Proxy that re-resolves `globalThis.browser ?? chrome` on
+ * EVERY property access, rather than a plain `const api = globalThis.browser
+ * ?? chrome` captured once at import time. Firefox/Chrome runtimes never
+ * reassign either global after startup, so the two are behaviorally
+ * identical there — but the test suite widely reassigns
+ * `globalThis.chrome`/`globalThis.browser` per test case (e.g.
+ * tests/integration/drawer-permissions.test.ts, theme.test.ts) to inject a
+ * fresh spy object, expecting a call site to observe whatever is CURRENTLY
+ * global at call time — exactly how the bare `chrome.foo()`/`browser.foo()`
+ * calls this replaces always behaved. A frozen reference would keep
+ * pointing at whichever global existed at first import (typically the
+ * baseline jest-webextension-mock fixture), silently missing every later
+ * per-test override. The Proxy preserves that call-time semantics with zero
+ * behavior change on Firefox (the real gate) or in a genuine Chrome build.
+ *
+ * Typed `any`, not `typeof browser`: `@types/firefox-webext-browser` models
+ * only the promise-based `browser.*` surface, but this namespace still
+ * carries plenty of pre-existing callback-style calls (`chrome.x(msg, cb)`,
+ * unchanged call SHAPE per this slice's scope discipline — only the
+ * namespace object was swapped, not promisified). Every such call site was
+ * already untyped (`chrome` resolves to `any` via
+ * tests/integration/globals.d.ts); `typeof browser` would newly reject them
+ * all (no callback overload exists on the promise-only type), which is a
+ * type-only regression this refactor must not introduce.
+ * @type {any}
+ */
+export const api = new Proxy(/** @type {any} */ ({}), {
+	get(_target, prop, receiver) {
+		return Reflect.get(globalThis.browser ?? globalThis.chrome, prop, receiver);
+	},
+	has(_target, prop) {
+		return prop in (globalThis.browser ?? globalThis.chrome);
+	},
+});
+
+// ---------------------------------------------------------------------------
 // Capability wrappers
 // ---------------------------------------------------------------------------
 
@@ -37,7 +89,7 @@
  * @returns {Promise<boolean>}
  */
 export function hasAllUrlsPermission() {
-	return browser.permissions.contains({origins: ['<all_urls>']}).catch(() => false);
+	return api.permissions.contains({origins: ['<all_urls>']}).catch(() => false);
 }
 
 /**
@@ -47,7 +99,7 @@ export function hasAllUrlsPermission() {
  * @returns {boolean}
  */
 export function isCaptureAvailable() {
-	return typeof browser.tabs.captureVisibleTab === 'function';
+	return typeof api.tabs.captureVisibleTab === 'function';
 }
 
 /**
@@ -57,7 +109,7 @@ export function isCaptureAvailable() {
  * @returns {Promise<void>}
  */
 export function enableAction(tabId) {
-	return browser.action.enable(tabId).catch(console.error);
+	return api.action.enable(tabId).catch(console.error);
 }
 
 /**
@@ -65,7 +117,7 @@ export function enableAction(tabId) {
  * @returns {Promise<void>}
  */
 export function disableAction(tabId) {
-	return browser.action.disable(tabId).catch(console.error);
+	return api.action.disable(tabId).catch(console.error);
 }
 
 /**
@@ -74,7 +126,7 @@ export function disableAction(tabId) {
  * @returns {string}
  */
 export function getMessage(key, substitutions) {
-	return chrome.i18n.getMessage(key, substitutions);
+	return api.i18n.getMessage(key, substitutions);
 }
 
 /**
@@ -89,8 +141,8 @@ export function getMessage(key, substitutions) {
  * @returns {void}
  */
 export function createMenuTolerant(props) {
-	browser.menus.create(props, function() {
-		return browser.runtime.lastError;
+	api.menus.create(props, function() {
+		return api.runtime.lastError;
 	});
 }
 
@@ -103,5 +155,5 @@ export function createMenuTolerant(props) {
  * @returns {Promise<void>}
  */
 export function broadcastToPages(name) {
-	return browser.runtime.sendMessage({name}).catch(() => {});
+	return api.runtime.sendMessage({name}).catch(() => {});
 }

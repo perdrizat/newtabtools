@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { api } from './api.js';
+
 /**
  * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6): `compareVersions` is
  * a real `export`, consumed by real `import`s from `lib/tiles-store.js` (the
@@ -101,7 +103,7 @@ export function compareVersions(a, b) {
  * @returns {string}
  */
 export function getString(name, ...substitutions) {
-	return chrome.i18n.getMessage(name, substitutions);
+	return api.i18n.getMessage(name, substitutions);
 }
 
 /**

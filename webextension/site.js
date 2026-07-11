@@ -31,6 +31,7 @@ import { el } from './dom.js';
 import { TileStats } from './stats.js';
 import { Grid } from './grid.js';
 import { Drag } from './drag-drop.js';
+import { api } from './api.js';
 
 /**
  * The persisted tile/link shape a `Site` wraps. Reused from tiles-shim.js
@@ -619,7 +620,7 @@ Site.prototype = {
 					// No undo toast by design: purged screenshots must not be
 					// restorable; toggle-off does not recapture (next visit does).
 					NeverCapture.add(host);
-					chrome.runtime.sendMessage({ name: 'Thumbnails.purgeHost', host }, () => {
+					api.runtime.sendMessage({ name: 'Thumbnails.purgeHost', host }, () => {
 						Grid.refresh().then(() => newTabTools.getThumbnails());
 					});
 					this.updateNeverCaptureButton(true);

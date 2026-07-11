@@ -63,7 +63,12 @@ describe('resetAllSettings — destructive factory reset', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'resetAllSettings');
-		const code = `var _resetHarness = { ${body}, getString(name) { return name; } };`;
+		// chrome-prep C5a (CHROME_PREP.md): `resetAllSettings` now reads the
+		// module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so the `globalThis.chrome` override
+		// below still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _resetHarness = { ${body}, getString(name) { return name; } };`;
 		vm.runInThisContext(code, { filename: 'reset-harness.js' });
 		harness = (globalThis as any)._resetHarness;
 
@@ -94,6 +99,10 @@ describe('resetAllSettings — destructive factory reset', () => {
 				}),
 			},
 		};
+		// chrome-prep C5a (CHROME_PREP.md): `api` resolves `globalThis.browser ??
+		// chrome` — `browser` must mirror this override or `api.storage`/
+		// `api.runtime` would resolve to a stale, untouched mock.
+		(globalThis as any).browser = (globalThis as any).chrome;
 		(globalThis as any).Blocked = { _list: ['https://blocked.example/'], _saveList: vi.fn() };
 		(globalThis as any).Filters = { _list: { 'example.com': 2 }, _saveList: vi.fn() };
 		(globalThis as any).NeverCapture = {

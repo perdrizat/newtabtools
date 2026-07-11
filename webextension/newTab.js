@@ -34,6 +34,7 @@ import { _initAutoSaveIndicator } from './autosave-indicator.js';
 import { fillFilterUI, fillNeverCaptureUI } from './filters-ui.js';
 import { uiRefs, populateUiRefs } from './ui-refs.js';
 import { _freshObjectURL, _dropObjectURL } from './object-urls.js';
+import { api } from './api.js';
 
 /**
  * Runtime-added UI-element refs read from OUTSIDE this file (grid.js's and
@@ -248,7 +249,7 @@ const NewTabToolsObject = {
 		// `history` permission is not granted, this just returns null.
 		return new Promise(resolve => {
 			try {
-				chrome.history.search({ text: url, startTime: 0 }, /** @param {browser.history.HistoryItem[]} results */ results => {
+				api.history.search({ text: url, startTime: 0 }, /** @param {browser.history.HistoryItem[]} results */ results => {
 					let entry = (results || []).find(/** @param {browser.history.HistoryItem} r */ r => r.url === url);
 					resolve((entry && entry.title) || null);
 				});
@@ -353,7 +354,7 @@ const NewTabToolsObject = {
 			urls.push(item.url);
 		};
 
-		chrome.tabs.query({}, /** @param {browser.tabs.Tab[]} tabs */ tabs => {
+		api.tabs.query({}, /** @param {browser.tabs.Tab[]} tabs */ tabs => {
 			for (let t of tabs) {
 				maybeAddItem(/** @type {AutocompleteCandidate} */ (t), 'tab');
 			}
@@ -369,7 +370,7 @@ const NewTabToolsObject = {
 				return;
 			}
 
-			chrome.bookmarks.getTree(/** @param {browser.bookmarks.BookmarkTreeNode[]} tree */ tree => {
+			api.bookmarks.getTree(/** @param {browser.bookmarks.BookmarkTreeNode[]} tree */ tree => {
 				/** @param {browser.bookmarks.BookmarkTreeNode[]} children */
 				function traverse(children) {
 					for (let c of children) {
@@ -397,7 +398,7 @@ const NewTabToolsObject = {
 					return;
 				}
 
-				chrome.history.search({
+				api.history.search({
 					text: value,
 					startTime: 0
 				}, /** @param {browser.history.HistoryItem[]} result */ result => {
@@ -441,7 +442,7 @@ const NewTabToolsObject = {
 		let {id, classList} = target;
 		switch (id) {
 		case 'options-pinURL-permissions':
-			chrome.permissions.request({permissions: ['bookmarks', 'history']}, /** @param {boolean} succeeded */ (succeeded) => {
+			api.permissions.request({permissions: ['bookmarks', 'history']}, /** @param {boolean} succeeded */ (succeeded) => {
 				if (succeeded) {
 					this.pinURLBlocked.hidden = true;
 					this.pinURLInput.focus();
@@ -519,7 +520,7 @@ const NewTabToolsObject = {
 		case 'options-savethumb':
 			let link = /** @type {Site} */ (this.selectedSite).link;
 			let siteURL = link.url;
-			chrome.runtime.sendMessage({
+			api.runtime.sendMessage({
 				name: 'Thumbnails.get',
 				urls: [siteURL]
 			}, /** @param {Map<string, Blob>} thumbs */ thumbs => {
@@ -638,7 +639,7 @@ const NewTabToolsObject = {
 				return;
 			}
 			NeverCapture.add(host).then(() => {
-				chrome.runtime.sendMessage({name: 'Thumbnails.purgeHost', host}, () => {
+				api.runtime.sendMessage({name: 'Thumbnails.purgeHost', host}, () => {
 					Grid.refresh().then(() => this.getThumbnails());
 				});
 				this.optionsNeverCaptureHost.value = '';
@@ -647,8 +648,8 @@ const NewTabToolsObject = {
 			return;
 		}
 		case 'options-backup':
-			chrome.permissions.request({permissions: ['downloads']}, function() {
-				chrome.runtime.sendMessage({name: 'Export:backup'});
+			api.permissions.request({permissions: ['downloads']}, function() {
+				api.runtime.sendMessage({name: 'Export:backup'});
 			});
 			return;
 		case 'options-restore':
@@ -658,7 +659,7 @@ const NewTabToolsObject = {
 			return;
 		case 'options-restore-confirm': {
 			let input = /** @type {HTMLInputElement} */ (document.getElementById('options-restore-file'));
-			chrome.runtime.sendMessage({name: 'Import:restore', file: /** @type {FileList} */ (input.files)[0]});
+			api.runtime.sendMessage({name: 'Import:restore', file: /** @type {FileList} */ (input.files)[0]});
 			this._hideConfirm('options-restore-confirm-row');
 			return;
 		}
@@ -767,20 +768,20 @@ const NewTabToolsObject = {
 			// `SiteNode` (not just `Element`) since `site._newtabSite` is
 			// read below — no null/void guard in the existing code, cast
 			// rather than fix.
-			let target = /** @type {Element} */ (browser.menus.getTargetElement(/** @type {number} */ (info.targetElementId)));
+			let target = /** @type {Element} */ (api.menus.getTargetElement(/** @type {number} */ (info.targetElementId)));
 			let site = /** @type {SiteNode | null} */ (target.closest('.newtab-site'));
 			let pinned = site && /** @type {Site} */ (site._newtabSite).isPinned;
 
-			browser.menus.update('edit', { visible: !!site });
-			browser.menus.update('pin', { visible: !!site && !pinned });
-			browser.menus.update('unpin', { visible: /** @type {boolean | undefined} */ (!!site && pinned) });
-			browser.menus.update('block', { visible: !!site });
-			browser.menus.refresh();
+			api.menus.update('edit', { visible: !!site });
+			api.menus.update('pin', { visible: !!site && !pinned });
+			api.menus.update('unpin', { visible: /** @type {boolean | undefined} */ (!!site && pinned) });
+			api.menus.update('block', { visible: !!site });
+			api.menus.refresh();
 		}
 	},
 	/** @param {browser.menus.OnClickData} info */
 	contextMenuOnClick(info) {
-		let target = /** @type {Element} */ (browser.menus.getTargetElement(/** @type {number} */ (info.targetElementId)));
+		let target = /** @type {Element} */ (api.menus.getTargetElement(/** @type {number} */ (info.targetElementId)));
 		// No null guard on `.closest` below (existing assumption: the
 		// context menu only ever fires from inside a `.newtab-site`) —
 		// cast, not a fix.
@@ -938,9 +939,9 @@ const NewTabToolsObject = {
 			this._syncDrawerSegmented('theme', theme);
 			updateThemeColours();
 			if (theme === 'system') {
-				browser.theme.onUpdated.addListener(updateThemeColours);
+				api.theme.onUpdated.addListener(updateThemeColours);
 			} else {
-				browser.theme.onUpdated.removeListener(updateThemeColours);
+				api.theme.onUpdated.removeListener(updateThemeColours);
 			}
 		}
 
@@ -1135,13 +1136,13 @@ const NewTabToolsObject = {
 		// `new Promise(resolve => …)` needs a JSDoc hint to infer `resolve`
 		// as the argument-less `() => void` these callbacks call it as.
 		await /** @type {Promise<void>} */ (new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
+			api.runtime.sendMessage({ name: 'Tiles.clear' }, () => resolve());
 		}));
 		await /** @type {Promise<void>} */ (new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Thumbnails.clear' }, () => resolve());
+			api.runtime.sendMessage({ name: 'Thumbnails.clear' }, () => resolve());
 		}));
 		await /** @type {Promise<void>} */ (new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Background.setBackground', file: null }, () => resolve());
+			api.runtime.sendMessage({ name: 'Background.setBackground', file: null }, () => resolve());
 		}));
 		// Blocked + Filters + NeverCapture live inside chrome.storage.local, so
 		// clearing it wipes them along with prefs. We zero the in-memory copies
@@ -1149,7 +1150,7 @@ const NewTabToolsObject = {
 		Blocked._list = [];
 		Filters._list = Object.create(null);
 		NeverCapture.clear();
-		await new Promise(resolve => chrome.storage.local.clear(resolve));
+		await new Promise(resolve => api.storage.local.clear(resolve));
 		// Reload so every component picks up the cleared state from a
 		// known-clean start.
 		location.reload();
@@ -1392,14 +1393,14 @@ const NewTabToolsObject = {
 		}
 	},
 	_ensureHistoryPermission() {
-		if (typeof chrome === 'undefined' || !chrome.permissions) {
+		if (typeof api === 'undefined' || !api.permissions) {
 			return;
 		}
 		// Firefox loses the user-gesture context across async callbacks, so
 		// we must call `request` synchronously from the click handler. The
 		// request itself short-circuits when the permission is already
 		// granted (`accepted` will be true with no prompt shown).
-		chrome.permissions.request({ permissions: ['history'] }, /** @param {boolean} accepted */ accepted => {
+		api.permissions.request({ permissions: ['history'] }, /** @param {boolean} accepted */ accepted => {
 			if (!accepted) {
 				return;
 			}
@@ -1603,7 +1604,7 @@ const NewTabToolsObject = {
 			/** @type {Node} */ (n.parentNode).insertBefore(document.createTextNode(newTabTools.getString(/** @type {string} */ (/** @type {HTMLElement} */ (n).dataset.label))), n.nextSibling);
 		});
 		document.querySelectorAll('[data-version-slot]').forEach(n => {
-			n.textContent = chrome.runtime.getManifest().version;
+			n.textContent = api.runtime.getManifest().version;
 		});
 
 		Prefs.init().then(() => {
@@ -1615,7 +1616,7 @@ const NewTabToolsObject = {
 			newTabTools.updateUI();
 			refreshBackgroundImage();
 
-			chrome.sessions.onChanged.addListener(function() {
+			api.sessions.onChanged.addListener(function() {
 				refreshRecent();
 			});
 
@@ -1627,16 +1628,16 @@ const NewTabToolsObject = {
 
 			// Forget about visiting this page. It shouldn't be in the history.
 			// Maybe if bug 1322304 is ever fixed we could remove this.
-			chrome.permissions.contains({permissions: ['history']}, /** @param {boolean} contains */ contains => {
+			api.permissions.contains({permissions: ['history']}, /** @param {boolean} contains */ contains => {
 				if (contains) {
-					chrome.history.deleteUrl({ url: location.href });
+					api.history.deleteUrl({ url: location.href });
 					this.pinURLBlocked.hidden = true;
 				}
 			});
 		}).catch(console.error);
 	},
 	getThumbnails() {
-		chrome.runtime.sendMessage({
+		api.runtime.sendMessage({
 			name: 'Thumbnails.get',
 			// `s` is guaranteed non-null by the `.filter()` predicate above
 			// (no `s is Site` type guard, so `.map()` doesn't see the
@@ -1693,7 +1694,7 @@ const NewTabToolsObject = {
 		if (!urls.length) {
 			return;
 		}
-		chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, /** @param {Map<string, Blob | string> | undefined} favicons */ function(favicons) {
+		api.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, /** @param {Map<string, Blob | string> | undefined} favicons */ function(favicons) {
 			if (!favicons || typeof favicons.get !== 'function') {
 				return;
 			}
@@ -1764,7 +1765,7 @@ export function pageMessageHandler(message) {
 	return false;
 }
 
-browser.runtime.onMessage.addListener(pageMessageHandler);
+api.runtime.onMessage.addListener(pageMessageHandler);
 
 (function() {
 	// chrome-prep C4d (CHROME_PREP.md): `updateThemeColours` is now a plain
@@ -1913,8 +1914,8 @@ browser.runtime.onMessage.addListener(pageMessageHandler);
 		}
 	});
 
-	browser.menus.onShown.addListener(newTabTools.contextMenuShowing);
-	browser.menus.onClicked.addListener(newTabTools.contextMenuOnClick);
+	api.menus.onShown.addListener(newTabTools.contextMenuShowing);
+	api.menus.onClicked.addListener(newTabTools.contextMenuOnClick);
 
 	window.addEventListener('keydown', function(event) {
 		if (event.key == 'Escape') {

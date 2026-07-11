@@ -259,13 +259,18 @@ describe('statType pref — behavioral validation (§4.6)', () => {
 		(globalThis as any).browser = {
 			...(globalThis as any).browser,
 			// prefs.js's init() now calls the promise-based browser.storage.local.*
-			// (Slice C of the MV3 migration).
+			// (Slice C of the MV3 migration). chrome-prep C5a (CHROME_PREP.md):
+			// prefs.js routes every call through `api = globalThis.browser ??
+			// chrome`, which resolves to THIS object (browser wins precedence) —
+			// `onChanged` must live here too, not just on the `chrome` mock above,
+			// or `api.storage.onChanged.addListener` reads `undefined`.
 			storage: {
 				local: {
 					get: vi.fn().mockResolvedValue({}),
 					set: vi.fn().mockResolvedValue(undefined),
 					remove: vi.fn().mockResolvedValue(undefined),
 				},
+				onChanged: { addListener: vi.fn() },
 			},
 		};
 

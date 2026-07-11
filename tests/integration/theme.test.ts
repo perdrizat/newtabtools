@@ -104,7 +104,12 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).refreshBackgroundImage = vi.fn();
 		(globalThis as any).refreshRecent = vi.fn();
 		(globalThis as any).fillNeverCaptureUI = vi.fn();
-		const code = `var newTabTools = { ${optionsOnChange}, ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, resizeOptionsThumbnail() {}, applyTileAspect() {} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `updateUI`'s extracted body now reads
+		// the module-level `api` namespace leaf instead of a bare `browser.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so the `globalThis.browser` mock
+		// above still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${optionsOnChange}, ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, resizeOptionsThumbnail() {}, applyTileAspect() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

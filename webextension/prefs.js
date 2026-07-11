@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { api } from './api.js';
+
 /**
  * Dual-scope bridge file (PAGE_MODULES.md Decision 2/6): `Prefs`/`Blocked`/
  * `Filters`/`NeverCapture` are real `export`s, consumed by real `import`s
@@ -113,7 +115,7 @@ const PrefsObject = {
 		// linger in storage or ride along in backups. `parsePrefs` already
 		// ignores unknown keys, so this is housekeeping, not correctness.
 		// Fire-and-forget: failure is logged, never surfaced to callers.
-		browser.storage.local.remove(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']).catch(console.error);
+		api.storage.local.remove(['toolbarIcon', 'titleBarClock', 'titleBarWordmark', 'titleBarStatus']).catch(console.error);
 
 		let names = [
 			'theme',
@@ -150,7 +152,7 @@ const PrefsObject = {
 				let obj = {};
 				obj[n] = value;
 				// Fire-and-forget: failure is logged, never surfaced to callers.
-				browser.storage.local.set(obj).catch(console.error);
+				api.storage.local.set(obj).catch(console.error);
 			});
 		}
 
@@ -160,9 +162,9 @@ const PrefsObject = {
 		// synchronously at lib/background-main.js's top level, so this keeps
 		// every respawn's listener registration synchronous top-to-bottom
 		// (MV3 event-page respawn hygiene; see MV3_MIGRATION.md).
-		chrome.storage.onChanged.addListener(this.prefsChanged.bind(this));
+		api.storage.onChanged.addListener(this.prefsChanged.bind(this));
 
-		let prefs = await browser.storage.local.get();
+		let prefs = await api.storage.local.get();
 		this.parsePrefs(prefs);
 	},
 	/** @param {Record<string, any>} prefs */
@@ -299,7 +301,7 @@ export const Blocked = {
 	 * @returns {Promise<void>}
 	 */
 	_saveList() {
-		return browser.storage.local.set({ 'blocked': this._list }).catch(console.error);
+		return api.storage.local.set({ 'blocked': this._list }).catch(console.error);
 	},
 	/** @param {string} url */
 	block(url) {
@@ -328,7 +330,7 @@ export const Filters = {
 	_list: Object.create(null),
 	// Fire-and-forget: failure is logged, never surfaced to callers.
 	_saveList() {
-		browser.storage.local.set({ 'filters': this._list }).catch(console.error);
+		api.storage.local.set({ 'filters': this._list }).catch(console.error);
 	},
 	getList() {
 		let copy = Object.create(null);
@@ -397,7 +399,7 @@ export const NeverCapture = {
 	 * @returns {Promise<void>}
 	 */
 	_saveList() {
-		return browser.storage.local.set({ 'neverCaptureHosts': this._list }).catch(console.error);
+		return api.storage.local.set({ 'neverCaptureHosts': this._list }).catch(console.error);
 	},
 
 	/**

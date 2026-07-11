@@ -58,13 +58,14 @@ import {
 	removePendingCapture,
 } from './capture.js';
 import {
+	api,
 	enableAction,
 	disableAction,
 	getMessage,
 	createMenuTolerant,
 } from './platform.js';
 
-const NEW_TAB_URL = chrome.runtime.getURL(NEW_TAB_PAGE);
+const NEW_TAB_URL = api.runtime.getURL(NEW_TAB_PAGE);
 
 // ---------------------------------------------------------------------------
 // Message dispatch
@@ -78,7 +79,7 @@ registerMessageHandler();
 
 Prefs.init().then(async function() {
 	let previousVersion = Prefs.version;
-	let {version: currentVersion} = await browser.management.getSelf();
+	let {version: currentVersion} = await api.management.getSelf();
 	if (previousVersion != currentVersion) {
 		Prefs.version = currentVersion;
 	}
@@ -90,9 +91,9 @@ Prefs.init().then(async function() {
 // Network idle monitor.
 // ---------------------------------------------------------------------------
 
-chrome.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
-chrome.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
-chrome.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+api.webRequest.onBeforeRequest.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+api.webRequest.onCompleted.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
+api.webRequest.onErrorOccurred.addListener(resetNetworkIdleTimer, {urls: ['<all_urls>']});
 
 // ---------------------------------------------------------------------------
 // Navigation triggers
@@ -122,7 +123,7 @@ function onWebNavigationCompleted(details) {
 			if (NeverCapture.matches(details.url)) {
 				return;
 			}
-			let tab = await browser.tabs.get(details.tabId);
+			let tab = await api.tabs.get(details.tabId);
 			if (tab.incognito) {
 				return;
 			}
@@ -144,7 +145,7 @@ function onWebNavigationCompleted(details) {
 	}).catch(console.error);
 }
 
-chrome.webNavigation.onCompleted.addListener(onWebNavigationCompleted);
+api.webNavigation.onCompleted.addListener(onWebNavigationCompleted);
 
 /** @param {browser.tabs._OnActivatedActiveInfo} activeInfo */
 function onTabActivated(activeInfo) {
@@ -155,7 +156,7 @@ function onTabActivated(activeInfo) {
 	}).catch(console.error);
 }
 
-chrome.tabs.onActivated.addListener(onTabActivated);
+api.tabs.onActivated.addListener(onTabActivated);
 
 /** @param {number} tabId */
 function onTabRemoved(tabId) {
@@ -164,7 +165,7 @@ function onTabRemoved(tabId) {
 	disarmNetworkIdle(tabId);
 }
 
-chrome.tabs.onRemoved.addListener(onTabRemoved);
+api.tabs.onRemoved.addListener(onTabRemoved);
 
 // ---------------------------------------------------------------------------
 // §3.1 (MV3 review, folded into MODERNIZATION.md M5): action-button sweep.
@@ -189,7 +190,7 @@ chrome.tabs.onRemoved.addListener(onTabRemoved);
  * @returns {Promise<void>}
  */
 function seedActionSweep() {
-	return browser.tabs.query({}).then(function(tabs) {
+	return api.tabs.query({}).then(/** @param {browser.tabs.Tab[]} tabs */ function(tabs) {
 		for (let tab of tabs) {
 			if (tab.url == NEW_TAB_URL) {
 				continue;
@@ -216,11 +217,11 @@ function seedActionSweep() {
  * exactly once per install/update/browser-update, matching the original
  * (MV2, persistent-background) intent.
  */
-browser.runtime.onInstalled.addListener(function() {
-	browser.tabs.query({}).then(function(tabs) {
+api.runtime.onInstalled.addListener(function() {
+	api.tabs.query({}).then(/** @param {browser.tabs.Tab[]} tabs */ function(tabs) {
 		for (let tab of tabs) {
 			if (tab.url == NEW_TAB_URL) {
-				chrome.tabs.reload(/** @type {number} */ (tab.id));
+				api.tabs.reload(/** @type {number} */ (tab.id));
 			}
 		}
 	}).catch(console.error);
@@ -230,7 +231,7 @@ browser.runtime.onInstalled.addListener(function() {
 // `runtime.onStartup` fires once per browser launch (not per event-page
 // respawn) — the other half of §3.1's seed, covering the case where the
 // browser restarts without an install/update (so onInstalled never fires).
-browser.runtime.onStartup.addListener(seedActionSweep);
+api.runtime.onStartup.addListener(seedActionSweep);
 
 // ---------------------------------------------------------------------------
 // Session-seed (audit finding #1, 2026-07-09 code review): `onInstalled`/
@@ -246,12 +247,12 @@ browser.runtime.onStartup.addListener(seedActionSweep);
 // session (flag already set) costs a single storage.session.get() and
 // nothing else.
 // ---------------------------------------------------------------------------
-browser.storage.session.get('actionSeeded').then(function(result) {
+api.storage.session.get('actionSeeded').then(/** @param {{actionSeeded?: boolean}} result */ function(result) {
 	if (result.actionSeeded) {
 		return;
 	}
 	return seedActionSweep().then(function() {
-		return browser.storage.session.set({actionSeeded: true});
+		return api.storage.session.set({actionSeeded: true});
 	});
 }).catch(console.error);
 
@@ -285,12 +286,12 @@ createMenuTolerant({
 	contexts: ['page'],
 });
 
-browser.menus.onShown.addListener(info => {
+api.menus.onShown.addListener(/** @param {browser.menus._OnShownInfo} info */ info => {
 	let visible = /** @type {string} */ (info.pageUrl).startsWith(NEW_TAB_URL);
 	for (let id of info.menuIds) {
-		browser.menus.update(id, { visible });
+		api.menus.update(id, { visible });
 	}
-	browser.menus.refresh();
+	api.menus.refresh();
 });
 
 // ---------------------------------------------------------------------------
@@ -334,15 +335,15 @@ function cleanupThumbnails() {
  */
 function idleListener(state) {
 	if (state == 'idle') {
-		chrome.idle.onStateChanged.removeListener(idleListener);
+		api.idle.onStateChanged.removeListener(idleListener);
 		let today = getTZDateString();
-		browser.storage.local.get({thumbnailCleanupLastRun: null}).then(function(result) {
+		api.storage.local.get({thumbnailCleanupLastRun: null}).then(/** @param {{thumbnailCleanupLastRun: string | null}} result */ function(result) {
 			if (result.thumbnailCleanupLastRun !== today) {
 				cleanupThumbnails().catch(console.error);
-				browser.storage.local.set({thumbnailCleanupLastRun: today}).catch(console.error);
+				api.storage.local.set({thumbnailCleanupLastRun: today}).catch(console.error);
 			}
 		}).catch(console.error);
 	}
 }
 
-chrome.idle.onStateChanged.addListener(idleListener);
+api.idle.onStateChanged.addListener(idleListener);

@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { api } from './api.js';
+
 /**
  * The persisted tile/link shape (mirrors `lib/tiles-store.js`'s `Tile`
  * typedef — kept as a separate, page-side declaration rather than a
@@ -34,7 +36,7 @@ export const Tiles = {
 	/** @returns {Promise<Array<Tile | undefined>>} */
 	getAllTiles() { // NOTE: misleading name — mirrors the FROZEN wire message name 'Tiles.getAllTiles' (MODERNIZATION.md Decision 3); the background-side store method was renamed to getGridTiles in M2 (lib/tiles-store.js), but this page-side proxy keeps its own name since it's the wire name, not an internal one.
 		return new Promise((resolve, reject) => {
-			chrome.runtime.sendMessage({ name: 'Tiles.getAllTiles' }, /** @param {{tiles: Array<Tile | undefined>, list: string[]}|null} response */ response => {
+			api.runtime.sendMessage({ name: 'Tiles.getAllTiles' }, /** @param {{tiles: Array<Tile | undefined>, list: string[]}|null} response */ response => {
 				if (response === null) {
 					reject();
 					return;
@@ -51,7 +53,7 @@ export const Tiles = {
 	 */
 	getTile(url) {
 		return new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Tiles.getTile', url }, resolve);
+			api.runtime.sendMessage({ name: 'Tiles.getTile', url }, resolve);
 		});
 	},
 	/**
@@ -63,7 +65,7 @@ export const Tiles = {
 			this._list.push(tile.url);
 		}
 		return new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Tiles.putTile', tile }, /** @param {number} id */ function(id) {
+			api.runtime.sendMessage({ name: 'Tiles.putTile', tile }, /** @param {number} id */ function(id) {
 				tile.id = id;
 				resolve(id);
 			});
@@ -80,7 +82,7 @@ export const Tiles = {
 			index = this._list.indexOf(tile.url);
 		}
 		return new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Tiles.removeTile', tile }, resolve);
+			api.runtime.sendMessage({ name: 'Tiles.removeTile', tile }, resolve);
 		});
 	}
 };
@@ -88,7 +90,7 @@ export const Tiles = {
 export const Background = {
 	getBackground() {
 		return new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Background.getBackground' }, resolve);
+			api.runtime.sendMessage({ name: 'Background.getBackground' }, resolve);
 		});
 	},
 	/**
@@ -103,7 +105,7 @@ export const Background = {
 	 */
 	setBackground(file) {
 		return new Promise(resolve => {
-			chrome.runtime.sendMessage({ name: 'Background.setBackground', file }, resolve);
+			api.runtime.sendMessage({ name: 'Background.setBackground', file }, resolve);
 		});
 	},
 };

@@ -72,7 +72,12 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		(globalThis as any).chrome = (globalThis as any).chrome || {};
 		(globalThis as any).chrome.history = { search: vi.fn((_q: any, cb: any) => cb([])) };
 
-		const code = `var newTabTools = { ${body}, ${normalizePinURL}, ${isValidURLBody}, ${historyTitleFor}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `optionsOnClick`/`historyTitleFor`'s
+		// extracted bodies now read the module-level `api` namespace leaf
+		// instead of a bare `chrome.*` reference — declared here as a
+		// live-resolving stand-in (mirrors webextension/api.js's own Proxy) so
+		// the shared `globalThis.chrome` mock still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${body}, ${normalizePinURL}, ${isValidURLBody}, ${historyTitleFor}, hideOptions() {}, showOptionsExtra() {}, fillFilterUI() {}, refreshBackgroundImage() { return Promise.resolve(); }, setPinURLInputValue() {}, autocomplete() {} };`;
 		vm.runInThisContext(code, { filename: 'tile-editing-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});

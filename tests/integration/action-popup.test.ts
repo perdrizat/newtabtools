@@ -54,13 +54,21 @@ async function loadPopup(opts: { isPinned: boolean }) {
 		if (msg.name === 'Tiles.isPinned') { return Promise.resolve(opts.isPinned); }
 		return Promise.resolve();
 	});
-	(globalThis as any).chrome = {
+	// chrome-prep C5a (CHROME_PREP.md): action.js now routes every call through
+	// a single `api = globalThis.browser ?? chrome` namespace leaf instead of
+	// picking `chrome`/`browser` per call site, so the mock must present one
+	// unified surface on whichever object wins that precedence (`browser`) —
+	// a split mock (i18n on `chrome`, tabs/runtime on `browser`) would leave
+	// `api.i18n` undefined. `chrome` mirrors the same object so either name
+	// still resolves it, matching jest-webextension-mock's own baseline
+	// invariant (`browser`/`chrome` are aliases of one object).
+	const mock = {
 		i18n: { getMessage: vi.fn((k: string) => `i18n:${k}`) },
-	};
-	(globalThis as any).browser = {
 		tabs: { query: vi.fn().mockResolvedValue([TAB]) },
 		runtime: { sendMessage },
 	};
+	(globalThis as any).chrome = mock;
+	(globalThis as any).browser = mock;
 	const close = vi.fn();
 	window.close = close;
 

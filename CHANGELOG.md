@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `webextension/dom.js`: page-side `el(tag, className, text)` DOM-builder leaf + `tests/unit/dom.test.ts`; mechanically normalized 26 of the 37 `document.createElement` blocks across `newTab.js`/`fx-newTab.js`/`awesomebar.js` onto it (behavior-identical; CHROME_PREP.md C2).
 - `tests/unit/raw-module-eval.test.ts` + `tests/unit/_fixtures/raw-import-page-graph.mjs`: raw-Node (no vite transform) import of page-main.js asserting the failure class is a missing-browser-API ReferenceError, never SyntaxError or a TDZ `before initialization` — the permanent tripwire for the C3b TDZ incident class the fast tier cannot see.
 - `tests/e2e/run_esr_tests.sh` gains a `mkdir`-based concurrency lock (`tests/e2e/.runner-lock`, PID-checked, stale locks reclaimed) that refuses a second concurrent invocation instead of letting it clobber the first run's shared profile dir/port.
+- `webextension/lib/platform.js` (background) and new `webextension/api.js` (page) each export `api`, a normalized namespace leaf routing every `browser.*`/`chrome.*` call through one identifier (chrome-prep C5a, CHROME_PREP.md); `api` is a live-resolving Proxy over `globalThis.browser ?? chrome` (not a frozen `const`) so per-test global reassignment keeps working. Every raw call site under `webextension/` (page + `lib/**`, excluding vendored `lib/zip/**`) now reads `api.*` — namespace-only, no call-shape/argument changes; behavior-identical on Firefox (full `pnpm test` green, including the full E2E suite).
 
 ### Changed
 

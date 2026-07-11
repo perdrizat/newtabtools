@@ -29,7 +29,7 @@ by maintainer).
 | C2 — leaf utilities: `el()` builder + textContent normalization + color helper | done | `007f363` |
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
-| C5 — capability-seam completion (divergence audit, targeted wrappers) | pending | — |
+| C5 — capability-seam completion (divergence audit, targeted wrappers) | in progress (C5a done) | — |
 | C6 — two-target manifest authoring | pending | — |
 | C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
 
@@ -641,10 +641,18 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       menus/theme/search. **Firefox behavior must not change** — Chrome paths
       are written-but-dormant (no Chrome manifest until stage 3); full E2E +
       UAT are the "Firefox unchanged" proof.
-- [ ] **C5a** — namespace normalization: background `api` (platform.js) + page
-      `api` leaf; every raw `chrome.*`/bare `browser.*` site → `api.*`
-      (behavior-identical on Firefox). Align the duplicated topSites-options
-      logic while here.
+- [x] **C5a** — namespace normalization: background `api` (platform.js) + page
+      `api` leaf (`webextension/api.js`); every raw `chrome.*`/bare
+      `browser.*` site → `api.*` (behavior-identical on Firefox — full
+      `pnpm test` green, incl. full E2E). `api` is a live-resolving Proxy over
+      `globalThis.browser ?? chrome`, not a frozen `const` (a frozen
+      reference would silently miss the ~20 tests that reassign
+      `globalThis.chrome`/`browser` per test case) and is typed `any`, not
+      `typeof browser` (the namespace still carries pre-existing
+      callback-style calls `@types/firefox-webext-browser`'s promise-only
+      surface has no overload for). The duplicated topSites-options logic
+      (tiles-store.js await vs filters-ui.js callback) is namespace-normalized
+      but NOT aligned — deferred to C5b per its own note below.
 - [ ] **C5b** — the six wrappers, homed per the audit; menus/theme express
       Decisions 1–2 (presence-gated, absent on Chrome). Latent-care items from
       the audit §traps addressed (storage.session note, permissions.request

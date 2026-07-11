@@ -20,6 +20,7 @@ import { withObjectStore } from './db.js';
 import { SAFE_PROTOCOLS } from './constants.js';
 import { Blocked, Filters, Prefs } from '../prefs.js';
 import { compareVersions } from '../common.js';
+import { api } from './platform.js';
 
 /**
  * @typedef {Object} Tile
@@ -124,14 +125,15 @@ export const Tiles = {
 					return;
 				}
 
-				let {version} = await browser.runtime.getBrowserInfo();
+				let {version} = await api.runtime.getBrowserInfo();
 				let options;
 				if (compareVersions(version, '63.0a1') >= 0) {
 					options = { limit: 100, onePerDomain: false, includeBlocked: true };
 				} else {
 					options = { providers: ['places'] };
 				}
-				let r = await browser.topSites.get(options);
+				/** @type {browser.topSites.MostVisitedURL[]} */
+				let r = await api.topSites.get(options);
 				let urls = this._list.slice();
 				let filters = Filters.getList();
 				let dotFilters = Object.keys(filters).filter(f => f[0] == '.');

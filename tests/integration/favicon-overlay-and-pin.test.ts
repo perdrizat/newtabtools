@@ -162,7 +162,12 @@ describe('getFavicons — queries every tile that does not yet have a badge <img
 		// eslint-disable-next-line ntt/no-source-grep -- loading method for behavioral test
 		const source = fs.readFileSync(NEWTAB_PATH, 'utf8');
 		const body = extractMethod(source, 'getFavicons');
-		const code = `var _favHarness = { ${body} };`;
+		// chrome-prep C5a (CHROME_PREP.md): `getFavicons` now reads the
+		// module-level `api` namespace leaf instead of a bare `chrome.*`
+		// reference — declared here as a live-resolving stand-in (mirrors
+		// webextension/api.js's own Proxy) so each test's `globalThis.chrome`
+		// override below still takes effect at call time.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var _favHarness = { ${body} };`;
 		vm.runInThisContext(code, { filename: 'get-favicons-overlay-harness.js' });
 		harness = (globalThis as any)._favHarness;
 	});
@@ -170,6 +175,7 @@ describe('getFavicons — queries every tile that does not yet have a badge <img
 	beforeEach(() => {
 		(globalThis as any).Grid = undefined;
 		(globalThis as any).chrome = undefined;
+		(globalThis as any).browser = undefined;
 	});
 
 	function makeSite(url: string, opts: { hasFallback?: boolean; badgeHasImg?: boolean }) {
@@ -199,6 +205,7 @@ describe('getFavicons — queries every tile that does not yet have a badge <img
 		(globalThis as any).Grid = { sites: [screenshotSite] };
 		const sendMessage = vi.fn();
 		(globalThis as any).chrome = { runtime: { sendMessage } };
+		(globalThis as any).browser = (globalThis as any).chrome;
 		harness.getFavicons();
 		expect(sendMessage).toHaveBeenCalledTimes(1);
 		expect(sendMessage.mock.calls[0][0].urls).toEqual(['https://a.example/']);
@@ -210,6 +217,7 @@ describe('getFavicons — queries every tile that does not yet have a badge <img
 		(globalThis as any).Grid = { sites: [done, todo] };
 		const sendMessage = vi.fn();
 		(globalThis as any).chrome = { runtime: { sendMessage } };
+		(globalThis as any).browser = (globalThis as any).chrome;
 		harness.getFavicons();
 		expect(sendMessage.mock.calls[0][0].urls).toEqual(['https://b.example/']);
 	});

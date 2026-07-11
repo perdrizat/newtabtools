@@ -20,6 +20,7 @@ import { Filters, NeverCapture } from './prefs.js';
 import { getString, compareVersions } from './common.js';
 import { el } from './dom.js';
 import { uiRefs } from './ui-refs.js';
+import { api } from './api.js';
 
 /**
  * `Site`, the site.js constructor-function this file reads via
@@ -84,14 +85,14 @@ export async function fillFilterUI(highlightHost) {
 	}
 
 	if (uiRefs.optionsFilterHostAutocomplete.childElementCount === 0) {
-		let {version} = await browser.runtime.getBrowserInfo();
+		let {version} = await api.runtime.getBrowserInfo();
 		let options;
 		if (compareVersions(version, '63.0a1') >= 0) {
 			options = { limit: 100, onePerDomain: false, includeBlocked: true };
 		} else {
 			options = { providers: ['places'] };
 		}
-		chrome.topSites.get(options, /** @param {browser.topSites.MostVisitedURL[]} sites */ sites => {
+		api.topSites.get(options, /** @param {browser.topSites.MostVisitedURL[]} sites */ sites => {
 			for (let s of sites.reduce((carry, site) => {
 				let {protocol, host} = new URL(site.url);
 				if (host && ['http:', 'https:', 'ftp:'].includes(protocol) && !carry.includes(host)) {

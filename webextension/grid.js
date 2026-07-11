@@ -21,6 +21,7 @@ import { Tiles } from './tiles-shim.js';
 import { newTabTools } from './newTab.js';
 import { Cell } from './cell.js';
 import { Site } from './site.js';
+import { api } from './api.js';
 
 /**
  * `Link` stays owned by site.js (a `Site` wraps one; `Grid.createSite`'s own
@@ -190,7 +191,7 @@ export var Grid = {
 
 			let message = newTabTools.getString('database_error_cookies', '$1').split('$1');
 			let item = document.createElement('li');
-			let code = el('code', undefined, chrome.runtime.getURL(''));
+			let code = el('code', undefined, api.runtime.getURL(''));
 			item.appendChild(document.createTextNode(message[0]));
 			item.appendChild(code);
 			item.appendChild(document.createTextNode(message[1]));

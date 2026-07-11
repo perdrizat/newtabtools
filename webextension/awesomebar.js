@@ -6,6 +6,7 @@ import { getString, isValidURL } from './common.js';
 import { NttIcons } from './icons.js';
 import { Prefs } from './prefs.js';
 import { el } from './dom.js';
+import { api } from './api.js';
 
 /**
  * Awesome bar (Phase 4-3). Wires the titlebar search box into a dropdown that
@@ -208,7 +209,7 @@ export const AwesomeBar = {
 		}
 		this._permChecked = true;
 		try {
-			chrome.permissions.contains({ permissions: ['bookmarks', 'history'] }, (/** @type {boolean} */ granted) => {
+			api.permissions.contains({ permissions: ['bookmarks', 'history'] }, (/** @type {boolean} */ granted) => {
 				this._hasHistoryBookmarks = !!granted;
 			});
 		} catch (e) {
@@ -304,7 +305,7 @@ export const AwesomeBar = {
 	_bookmarks(q) {
 		return new Promise((/** @type {(value: SourceItem[]) => void} */ resolve) => {
 			try {
-				chrome.bookmarks.search(q, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
+				api.bookmarks.search(q, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
 					resolve((results || [])
 						.filter((/** @type {{url?: string}} */ b) => b.url)
 						.map((/** @type {{url?: string, title?: string}} */ b) => ({ url: /** @type {string} */ (b.url), title: b.title || /** @type {string} */ (b.url) })));
@@ -322,7 +323,7 @@ export const AwesomeBar = {
 	_history(q) {
 		return new Promise((/** @type {(value: SourceItem[]) => void} */ resolve) => {
 			try {
-				chrome.history.search({ text: q, startTime: 0, maxResults: 12 }, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
+				api.history.search({ text: q, startTime: 0, maxResults: 12 }, (/** @type {Array<{url?: string, title?: string}>} */ results) => {
 					resolve((results || [])
 						.filter((/** @type {{url?: string}} */ h) => h.url)
 						.map((/** @type {{url?: string, title?: string}} */ h) => ({ url: /** @type {string} */ (h.url), title: h.title || /** @type {string} */ (h.url) })));
@@ -426,7 +427,7 @@ export const AwesomeBar = {
 	_activate(result, newTab) {
 		if (result.type === 'search') {
 			try {
-				browser.search.search({
+				api.search.search({
 					query: /** @type {string} */ (result.query),
 					disposition: newTab ? 'NEW_TAB' : 'CURRENT_TAB',
 				});
@@ -445,9 +446,9 @@ export const AwesomeBar = {
 			return;
 		}
 		if (newTab) {
-			chrome.tabs.create({ url });
+			api.tabs.create({ url });
 		} else {
-			chrome.tabs.update({ url });
+			api.tabs.update({ url });
 		}
 		this.close();
 	},
