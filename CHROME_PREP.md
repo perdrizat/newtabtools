@@ -1,6 +1,11 @@
 # Chrome-Prep Program — Capability Seams, Typed Monoliths, Feature Modules
 
-**Status: IN PROGRESS** (authored 2026-07-10, maintainer-approved same day).
+**Status: PROGRAM COMPLETE, PENDING THE C GATE** (authored 2026-07-10,
+maintainer-approved same day). Arcs C0–C6 are all done (status board below);
+the one remaining checklist item is the C gate itself (full `pnpm test`, full
+UAT, `pnpm audit`, 2.5.0 bump, and the ROADMAP-dissolution docs sweep this
+sweep is part of) — the orchestrator finalizes and ticks those boxes once the
+in-flight full E2E + UAT run concludes.
 Ships as **2.5.0** when complete (maintainer decision: the full program precedes
 the 3.0.0 AMO release; 3.0.0 stays reserved for AMO after this program and its
 follow-up audit round). Successor to the page-modules arc (`PAGE_MODULES.md`,

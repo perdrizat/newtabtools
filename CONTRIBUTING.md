@@ -91,11 +91,41 @@ byte-identical to a plain `web-ext build --source-dir webextension/`; or
 `pnpm build chrome` — a dormant staged build with the Chrome manifest
 overlay, unvalidated beyond "it builds").
 
+### Releasing to AMO
+
+The first Mozilla Add-ons (AMO) submission is gated on the chrome-prep program
+(ships as 2.5.0) and its follow-up audit round — **AMO itself ships as
+3.0.0**, reserved for that release specifically. Notes for whoever runs it:
+
+- **Screenshots:** the marketing screenshots checklist and captions live in
+  [`docs/amo-listing.md`](docs/amo-listing.md) ("Screenshots checklist").
+  They're captured from a clean profile loaded with
+  `tests/uat/newtabtools_knowngood.zip` — the UAT browser daemon already
+  renders that fixture at Full HD and can reproduce them
+  (`node scripts/amo-screenshots.mjs`).
+- **New listing, not an ID transfer:** the add-on ships under a fresh
+  `newtabtools@symlink.ch` ID rather than taking over the original listing's
+  ID. Why: an ID transfer inherits every existing user's IndexedDB + prefs
+  as-is — possibly stale or tampered after years of an unmaintained listing.
+  A clean listing avoids inheriting that state.
+- **Listing state:** the AMO listing copy ([`docs/amo-listing.md`](docs/amo-listing.md)),
+  [`PRIVACY.md`](PRIVACY.md), `LICENSE`, and the reviewer notes
+  ([`docs/amo-submission-notes.md`](docs/amo-submission-notes.md)) are all
+  already in place — paste the reviewer notes into the AMO Developer Hub's
+  reviewer-notes field at submission time.
+
 ### Architecture
 
-- **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred (see [`ROADMAP.md`](ROADMAP.md)).
-- **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry — `page-main.js` imports the page's ten files (side-effect imports preserving the former tag order, named imports for `Prefs`, `newTabTools`/`pageMessageHandler`, and `Grid`/`UndoDialog`/`Updater`) and runs boot orchestration plus the `Prefs.onChange` page listener; `newTab.js` and `grid.js`/`page.js` form legal call-time-only ESM cycles (page-modules arc, see [`PAGE_MODULES.md`](PAGE_MODULES.md); the former single `fx-newTab.js` monolith those cycles used to run through was split into `grid.js`/`cell.js`/`site.js`/`page.js` in chrome-prep C4c, see [`CHROME_PREP.md`](CHROME_PREP.md)).
-- **Background Scripts:** A non-persistent **event page** (`background: {"scripts": ["lib/background-main.js"], "type": "module"}`, no service worker — full DOM/`window`/canvas/IndexedDB access), using promise-based `browser.*` throughout. `lib/background-main.js` is the single ES-module entry: it named-imports `common.js`/`prefs.js` (real `export`s now — both also load into the page's module graph via `page-main.js`; only TEST-ONLY `globalThis` assignments survive there, plus the awesomebar.js `Grid`/`newTabTools` exception — see [`PAGE_MODULES.md`](PAGE_MODULES.md)) and registers every listener directly (message dispatch via `lib/messages.js`, webRequest/webNavigation/tabs/menus/idle). The rest of the background is real ES modules under `webextension/lib/`: `lib/messages.js` (the `runtime.onMessage` dispatch table), `lib/platform.js` (the browser-capability seam a future Chrome port forks — permissions/action/menus/i18n wrappers), `lib/db.js` (IndexedDB), `lib/tiles-store.js` (the Tiles/Background models), `lib/capture.js` + `lib/thumbnail-image.js` (the auto-thumbnail pipeline), and `lib/backup.js` (export/import). The event page suspends after ~30s idle and respawns on events; the respawn-hygiene rules (duplicate-tolerant menus, IDB reconnect via `withStore`, `pendingCaptures` in `storage.session`, once-per-session action sweep) are enforced by `tests/integration/event-page-resilience.test.ts` / `db-wake-race.test.ts` and the `tests/e2e/event-page-lifecycle.test.ts` suspension tests; the arcs that established them are recorded in git history and `audit/`.
+- **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred to stage 3 — see the "Decisions of record" section below and the Chrome-port tracking issue.
+- **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry. Post-chrome-prep, the page is ~20 feature modules with no `globalThis` bridges anywhere — every cross-reference is a real `import`/`export`, including the E2E/UAT test harness (chrome-prep C3d):
+  - **Boot/controller:** `newTab.js` (the residual controller: startup, event-listener wiring, `updateUI` dispatch, tile-tab editing, drawer/context-menu chrome) + `page-main.js` (the single orchestrator: side-effect imports in load order, then boot calls plus the `Prefs.onChange` page listener).
+  - **Grid/site/cell/page:** `grid.js`/`site.js`/`cell.js`/`page.js` — the former `fx-newTab.js` monolith, split in chrome-prep C4c. `newTab.js` and `grid.js`/`page.js` form a legal call-time-only ESM cycle (no top-level cross-module calls — enforced by `tests/integration/page-module-scope.test.ts`).
+  - **Drag-drop/transformation/updater/undo-dialog:** `drag-drop.js`, `transformation.js`, `updater.js`, `undo-dialog.js` — separable singletons carved out of `fx-newTab.js` in chrome-prep C4a/C4b.
+  - **Theme/wallpaper/titlebar/autosave-indicator/filters-ui:** `theme.js`, `wallpaper.js`, `titlebar.js`, `autosave-indicator.js`, `filters-ui.js` — leaf modules carved out of `newTab.js` in chrome-prep C4d, wired through the shared `ui-refs.js` refs object (one-way: leaves never call back into `newTab.js`/`updateUI`).
+  - **Leaves:** `common.js`, `prefs.js`, `icons.js`, `stats.js`, `tiles-shim.js`, `dom.js` (the `el()` DOM-builder, chrome-prep C2), `api.js` (the page-side capability seam, see below), `ui-refs.js`, `object-urls.js`. Plus `awesomebar.js` (the awesome bar widget, page-modules P4) and `action.js` (the toolbar-button popup, its own small entry).
+- **The `api` capability seam (chrome-prep C5):** both scopes export an `api` namespace — `webextension/api.js` on the page side, `webextension/lib/platform.js` on the background side — a live-resolving `Proxy` over `globalThis.browser ?? chrome` (not a frozen `const`, so per-test global reassignment still works; in-house, no `webextension-polyfill` dependency per the zero-runtime-deps decision). Every raw `browser.*`/`chrome.*` call site routes through `api.*`. Six targeted wrappers cover the capabilities that genuinely diverge between Firefox and a future Chrome build (audit: `audit/2026-07-11-chrome-api-divergence.md`): `storage.session` access (`sessionGet`/`sessionSet`), capture-availability (`isCaptureAvailableViaPermission`, Chrome-dormant), the action/theme-icon sync (`syncActionIconWithTheme`, Chrome-dormant no-op), the search-shape wrapper (`searchWeb`), a `menus`-presence gate (Chrome ships no context-menu capability at all — Decision of record below), and a shared `getBrowserInfo` short-circuit (`topSitesOptions`). Firefox behavior is unchanged by any of this — the Chrome paths are written but dormant until a Chrome manifest exists.
+- **Manifest authoring:** `webextension/manifest.json` is **generated**, not hand-edited — see the Build section above and [`manifest/README.md`](manifest/README.md) for the merge semantics and the dormant Chrome overlay.
+- **Background Scripts:** A non-persistent **event page** (`background: {"scripts": ["lib/background-main.js"], "type": "module"}`, no service worker — full DOM/`window`/canvas/IndexedDB access), using promise-based `browser.*` throughout, routed through the `api` seam above. `lib/background-main.js` is the single ES-module entry: it named-imports `common.js`/`prefs.js` (real `export`s, no bridge) and registers every listener directly (message dispatch via `lib/messages.js`, webRequest/webNavigation/tabs/menus/idle). The rest of the background is real ES modules under `webextension/lib/`: `lib/messages.js` (the `runtime.onMessage` dispatch table), `lib/platform.js` (the background half of the `api` seam — the file a future Chrome port forks), `lib/db.js` (IndexedDB), `lib/tiles-store.js` (the Tiles/Background models), `lib/capture.js` + `lib/thumbnail-image.js` (the auto-thumbnail pipeline — `thumbnail-image.js` is the one file in `lib/` allowed to touch DOM/canvas, guarded by an ESLint rule elsewhere in `lib/**`), and `lib/backup.js` (export/import). The event page suspends after ~30s idle and respawns on events; the respawn-hygiene rules (duplicate-tolerant menus, IDB reconnect via `withStore`, `pendingCaptures` in `storage.session`, once-per-session action sweep) are enforced by `tests/integration/event-page-resilience.test.ts` / `db-wake-race.test.ts` and the `tests/e2e/event-page-lifecycle.test.ts` suspension tests; the arcs that established them are recorded in git history and `audit/`.
 
 ### Patterns & Conventions
 
@@ -107,12 +137,12 @@ overlay, unvalidated beyond "it builds").
 - **Production files in `webextension/`:** stay `.js`. Add JSDoc types to function signatures, exported objects, and `browser.*` callback parameters. `checkJs: true` checks every `.js` by default — no per-file `// @ts-check` needed.
 - **Test files in `tests/`:** all `.ts`. New tests must be TypeScript too.
 - **WebExtension API types** come from `@types/firefox-webext-browser`. (`@types/chrome` joins it if/when Chrome support arrives.)
-- **Modules:** `webextension/lib/` is the module home for background-only logic (`lib/background-main.js` + the files it imports). The page is fully modular too — a single `page-main.js` entry, no classic `<script>`-loaded exception remains (page-modules arc, [`PAGE_MODULES.md`](PAGE_MODULES.md)) — so all page code (`newTab.js`, `grid.js`, `cell.js`, `site.js`, `page.js`, `icons.js`, `awesomebar.js`, `stats.js`, `action.js`, `tiles-shim.js`, `common.js`, `prefs.js`, `transformation.js`, `updater.js`, `undo-dialog.js`, `drag-drop.js`) uses `import`/`export` directly, same as `lib/`. Every `globalThis` bridge assignment — including the TEST-ONLY E2E/UAT survivors — was retired in chrome-prep C3d (see [`CHROME_PREP.md`](CHROME_PREP.md)): every cross-reference, production and test, goes through a real `import` now.
+- **Modules:** `webextension/lib/` is the module home for background-only logic (`lib/background-main.js` + the files it imports). The page is fully modular too — a single `page-main.js` entry, no classic `<script>`-loaded exception remains — so all ~20 page feature modules (see the Architecture section above for the grouping) use `import`/`export` directly, same as `lib/`. Every `globalThis` bridge assignment — including the TEST-ONLY E2E/UAT survivors — was retired in chrome-prep C3d: every cross-reference, production and test, goes through a real `import` now (zero matches for `globalThis\.\w+\s*=` under `webextension/`).
 - **Don't introduce a build step.** If a feature seems to need TS-only ergonomics JSDoc can't express, simplify the design rather than adding a compiler.
 - **Don't suppress type errors** with `// @ts-ignore`. Fix the underlying JSDoc, or use `// @ts-expect-error` + a one-line reason (it preserves the signal once the issue is fixed).
 - **Don't add `.ts` files under `webextension/`.** The escape hatch (renaming `.js`→`.ts` later) is preserved by not using it now.
 
-MV3 has landed; the remaining forward-compat concern is **Chrome** (stage 3, deferred — see [`ROADMAP.md`](ROADMAP.md)). New code should still avoid assumptions that would break under a Chrome service worker (no persistent background-scope DOM state) and avoid widening `host_permissions` beyond the current `<all_urls>` grant.
+MV3 has landed; the remaining forward-compat concern is **Chrome** (stage 3, deferred — see the Chrome-port tracking issue). New code should still avoid assumptions that would break under a Chrome service worker (no persistent background-scope DOM state) and avoid widening `host_permissions` beyond the current `<all_urls>` grant.
 
 ### After Finishing Feature Work
 
@@ -161,14 +191,34 @@ Contributions generated with the help of AI are welcome but must follow the stan
 - **Attribution:** Mentioning AI assistance in commit messages is optional.
 - **Supply-chain guardrails:** When AI-assisted contributions touch `package.json`, `pnpm-lock.yaml`, or build/test scripts, the human submitter is specifically responsible for: pinned versions on new deps (no `^` / `~`); diffing the lockfile to spot unexpected new transitive deps and source-URL changes on existing ones; reading any `postinstall` scripts before installing; cross-checking new dep names against npm registry stats (download volume, last publish date, listed maintainers) to catch typo-squats. The `minimumReleaseAge: 10080` (7 days, in minutes) setting in `pnpm-workspace.yaml` — enforced by pnpm 11+ because the project pins pnpm via `packageManager` and rejects npm/yarn in `scripts/check-pnpm.js` — is the floor, not a substitute for review.
 
+### Decisions of record
+
+The load-bearing "why" behind rules that constrain new code, kept terse so nobody re-derives (or accidentally re-opens) a rejected alternative. Detail on several of these lives inline above; this is the compact index.
+
+- **The 19 `runtime.onMessage` wire names are frozen.** Internals may rename; the wire strings never do — enforced by `tests/integration/message-contract.test.ts`.
+- **Zero runtime dependencies; `idb` rejected, IndexedDB wrapper stays hand-rolled.** The shipped extension has no `dependencies` key at all (it vendors its own `zip.js`); `lib/db.js`'s `withStore` is ~50 lines and the reconnect semantics are ours either way.
+- **Minimum Firefox 152.0.** Empirically bisected: Firefox exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions only from 152.0. Consequence: the E2E/UAT tiers run on release-channel Firefox, not ESR, until a 152-based ESR ships.
+- **No build step.** JS + JSDoc, checked by `tsc --noEmit`, gets most of TypeScript's safety at zero compiler cost — see "Language" above.
+- **Event-page state placement.** `captureSessions`/`networkIdleWatchers` stay in-memory (short-lived, event-anchored, self-healing on loss); `pendingCaptures` lives in `storage.session` (must survive an event-page respawn while waiting on tab activation).
+- **Chrome via single-source / dual-build, not parallel branches.** A long-lived Chrome branch carries permanent merge cost; the manifest-overlay approach (see Architecture above) keeps one source tree.
+- **The restore validators stay independent.** `lib/backup.js`'s `safeHexColor`/`safeBackgroundUrl`/`safeProtocols` allow-list is the restore security boundary and is deliberately NOT deduplicated against other validation code elsewhere — defence-in-depth by design; see "Security-boundary changes" above.
+- **Language: JS + JSDoc on production, TypeScript on tests, no build step.** Re-escalatable to full TS later (a JSDoc `.js` is a rename away) — see "Language" above for the full rationale.
+
+### Where things live
+
+- **Work** (features, bugs, backlog) → GitHub issues.
+- **Decisions** (why something is built the way it is) → this file.
+- **History** (what shipped and when) → `CHANGELOG.md` + `audit/` + `git log`.
+
 ### Key Files
 
 - [`webextension/manifest.json`](webextension/manifest.json): The core extension manifest (MV3). **Generated** — see [`manifest/README.md`](manifest/README.md); edit `manifest/base.json`/`manifest/firefox.json` instead.
 - [`webextension/newTab.html`](webextension/newTab.html): The markup for the new tab page UI.
-- [`webextension/newTab.js`](webextension/newTab.js): The primary controller script for the UI.
+- [`webextension/newTab.js`](webextension/newTab.js): The residual page controller (boot, event-listener wiring, `updateUI` dispatch) — see Architecture above for the full module breakdown.
+- [`webextension/api.js`](webextension/api.js): The page-side half of the `api` capability seam (menus/theme/search wrappers) — see Architecture above.
 - [`webextension/lib/background-main.js`](webextension/lib/background-main.js): The background's single ES-module entry point — every listener registration lives here (message dispatch registration, webRequest/webNavigation/tabs/menus/idle).
 - [`webextension/lib/messages.js`](webextension/lib/messages.js): The `runtime.onMessage` dispatch table (the 19 frozen wire names — enforced by `tests/integration/message-contract.test.ts`).
-- [`webextension/lib/platform.js`](webextension/lib/platform.js): The browser-capability seam (permissions/action/menus/i18n wrappers) — the file a future Chrome port forks.
+- [`webextension/lib/platform.js`](webextension/lib/platform.js): The background-side half of the `api` capability seam — the file a future Chrome port forks.
+- [`manifest/README.md`](manifest/README.md): The two-target manifest merge semantics (`base.json` + `firefox.json`/`chrome.json`).
+- [`README.md`](README.md): Project overview, features, Scope section, quick start.
 - [`TESTING.md`](TESTING.md): The canonical guide for testing and workflow rules.
-- [`ROADMAP.md`](ROADMAP.md): Direction, scope/non-goals, backlog, and the load-bearing decisions of record.
-- [`PAGE_MODULES.md`](PAGE_MODULES.md): The page-modules arc's record (page scripts converted to real ES modules; ships as 2.4.0) — folds into git history/`audit/` once released.

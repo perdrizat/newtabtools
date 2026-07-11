@@ -33,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `lib/tiles-store.js` and `filters-ui.js`'s duplicated `topSites.get()` options branch (one `await`-style, one callback-style) both now call `common.js`'s shared `topSitesOptions(api)` (chrome-prep C5b, closing the C5a-deferred dedup).
 - `awesomebar.js`'s web-search dispatch now calls `api.js`'s `searchWeb` wrapper instead of `api.search.search` directly (chrome-prep C5b).
 - `permissions.request` call sites (`newTab.js`) and the network-idle `webRequest` listeners (`lib/background-main.js`) gain one-line comments flagging Chrome-specific gotchas (user-gesture strictness; no MV3 `'blocking'` support) — comment-only, no behavior change (chrome-prep C5b, audit §traps).
+- ROADMAP.md dissolution (C-gate docs sweep): AMO release process moved to `CONTRIBUTING.md` "Releasing to AMO"; code-constraining decisions of record moved to `CONTRIBUTING.md` "Decisions of record"; Scope & North Star / Non-goals moved to `README.md` "Scope"; remaining backlog items drafted as GitHub issues (Chrome extension stage 3, favicon cursor-walk dedup, UAT backlog scenarios, README troubleshooting, SARIF/JUnit result surfacing) rather than filed directly. `ROADMAP.md`/`PAGE_MODULES.md` flagged for deletion (pending orchestrator removal); every markdown cross-reference redirected to `CONTRIBUTING.md`, `README.md`, `CHANGELOG.md`, or `CHROME_PREP.md` as appropriate.
+- `CONTRIBUTING.md`'s Architecture section rewritten to describe the post-chrome-prep page (~20 feature modules grouped by concern) and the `api` capability-seam design; Key Files list updated (`fx-newTab.js` removed, `api.js`/`manifest/README.md`/`README.md` added).
+- `TESTING.md` gains the raw-module-eval tripwire note, the E2E runner concurrency lock, and the drag-test quarantine policy; stale `ROADMAP.md`/`PAGE_MODULES.md` links redirected.
+- `CHROME_PREP.md`'s status header updated to record all arcs (C0–C6) complete, pending the C gate.
 
 ### Fixed
 

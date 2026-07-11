@@ -16,14 +16,39 @@ A new tab page for Firefox, built around the sites you actually visit and laid o
 - **Never-capture list (privacy).** Exclude any site from auto-thumbnail capture — one click on a tile's ✕-camera button, or manage the list in the Advanced drawer (exact host, or `.example.com` to cover subdomains). Listed hosts are never screenshotted, and adding one deletes any captures already stored for it. Keep banking, webmail, and intranets out of your tile imagery and backups. Firefox's native page has no such control.
 - **Recovery and portability.** A row of recently closed tabs lives in the titlebar for one-click restore — Firefox's native "Recent activity" surfaces visited pages and bookmarks, but not closed-tab session restore. Export your tiles, thumbnails, and settings to a single backup file and restore on another machine, no Firefox Sync required.
 
+## Scope
+
+NTT replaces Firefox's new-tab page **entirely** via `chrome_url_overrides.newtab` —
+Firefox excludes `about:newtab` from extension injection, so the choice is binary:
+native or NTT. That sets the product rule:
+
+- **Parity features are the price of entry** — anything a typical user expects from
+  the default page (pin, custom tile image/title, drag-reorder, rows, wallpaper,
+  light/dark theme, hide-history, localization) must exist in NTT or installing it
+  feels like a downgrade. Match native; don't innovate beyond it.
+- **Differentiating features are the reason to install** — the things Firefox can't
+  do: auto-thumbnail capture of visited pages (the flagship), arbitrarily large
+  tiles via an unconstrained configurable grid, layout micro-tuning, lock-grid,
+  per-domain filter caps, per-tile background colour, recently-closed-tabs row,
+  add-shortcut autocomplete, local backup/restore. These get full investment and
+  full test depth.
+
+Firefox's own new-tab page (Activity Stream) is a chrome-privileged system add-on:
+its features can't be submitted upstream, and its code can't be ported into a
+WebExtension. NTT reimplements parity behaviour in WebExtension scope, using
+Activity Stream only as a behavioural reference.
+
+**Won't build** (native features out of scope by design — NTT's pitch is layout
+precision and personalization, not content surfaces): Pocket / Recommended Stories,
+sponsored shortcuts, the weather widget, and Mozilla's experimental Lists/Timer
+widgets. Users who want these stay on the native page.
+
 ## What's in this repo
 
-- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`); the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`).
-- [`PAGE_MODULES.md`](PAGE_MODULES.md) — the page-modules arc's record (page scripts converted to real ES modules; ships as 2.4.0). Completed-arc records (the MV3 migration, the background-modules + HTML5 modernization) live in git history and their reviews in [`audit/`](audit/).
+- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`) fanning out into ~20 feature modules; the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`). See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Architecture" for the module breakdown.
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against release-channel Firefox (>= 152) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
-- [`ROADMAP.md`](ROADMAP.md) — direction (Now / Next / Later), scope & non-goals, backlog, and the load-bearing decisions of record.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, AI-assisted contribution guardrails.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, decisions of record, AI-assisted contribution guardrails. Completed-arc working documents (the MV3 migration, background-modules + HTML5 modernization, the page-modules arc, the chrome-prep program) live in git history and their reviews in [`audit/`](audit/).
 
 ## For developers
  
