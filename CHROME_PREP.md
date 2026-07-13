@@ -764,6 +764,13 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       boot-timing re-check, 2.5.0 bump, CHANGELOG promotion, build, docs sweep
       (CONTRIBUTING/TESTING/README + this file), follow-up code review
       round adjudicated.
+      **Gate results so far (2026-07-11):** fast 1340/1340, full E2E 127/127,
+      audit clean, docs sweep + ROADMAP dissolution done (issues #16–#20).
+      **Boot-timing at the program gate:** firstTileSeen 95/95/95 (median
+      95) — IDENTICAL to the pre-page-modules 2.3.0 baseline (95): two full
+      architectural transformations at zero user-perceivable boot cost;
+      domInteractive median 13 (pre-arc 26), dcl 30, fcp 29. Full UAT +
+      review round + bump pending.
 - [ ] **Dissolve ROADMAP.md** (maintainer decision 2026-07-10): work items →
       GitHub issues (Chrome-port stage 3, favicon cursor-walk dedup, UAT
       backlog scenarios, README troubleshooting, SARIF/JUnit exploration) —

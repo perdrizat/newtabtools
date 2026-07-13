@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-07-13
+
 ### Added
 
 - ESLint guard (`no-restricted-globals` on `webextension/lib/**/*.js`, seam `lib/thumbnail-image.js` and vendored `lib/zip/**` excluded) forbidding `document`/`window`/`Image`/`OffscreenCanvas`/`DOMParser`/`XMLSerializer`/`localStorage` in the background scope, plus a regression test asserting the rule via ESLint's own config resolution (CHROME_PREP.md C1).
