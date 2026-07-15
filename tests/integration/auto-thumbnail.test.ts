@@ -787,6 +787,100 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		expect(storedObj.image).toBeInstanceOf(Blob);
 	});
 
+	// --- pickAndStore falls back to a favicon-only record (issue #10) ---
+
+	it('pickAndStore stores a favicon-only record when every capture attempt returns a null dataURL', async () => {
+		const originalCaptureVisibleTab = (globalThis as any).chrome.tabs.captureVisibleTab;
+		const originalTabsGet = (globalThis as any).chrome.tabs.get;
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(() => Promise.resolve(null));
+		(globalThis as any).chrome.tabs.get = vi.fn(() => Promise.resolve({
+			active: true, windowId: 1, incognito: false,
+			favIconUrl: 'data:image/png;base64,AAAA',
+		}));
+		// No pre-existing record for the URL.
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = { result: undefined };
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0); // A
+			await vi.advanceTimersByTimeAsync(2000); // hard deadline -> C -> pickAndStore
+
+			// Flush fetchFaviconBlob + withObjectStore microtasks.
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(thumbnailStore.put).toHaveBeenCalled();
+			const storedObj = thumbnailStore.put.mock.calls[0][0];
+			expect(storedObj.url).toBe('https://example.com');
+			expect(storedObj.image).toBeUndefined();
+			expect(storedObj.favicon).toBeInstanceOf(Blob);
+		} finally {
+			(globalThis as any).chrome.tabs.captureVisibleTab = originalCaptureVisibleTab;
+			(globalThis as any).chrome.tabs.get = originalTabsGet;
+		}
+	});
+
+	it('pickAndStore favicon-only fallback preserves an existing stored thumbnail (failed re-capture)', async () => {
+		const originalCaptureVisibleTab = (globalThis as any).chrome.tabs.captureVisibleTab;
+		const originalTabsGet = (globalThis as any).chrome.tabs.get;
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(() => Promise.resolve(null));
+		(globalThis as any).chrome.tabs.get = vi.fn(() => Promise.resolve({
+			active: true, windowId: 1, incognito: false,
+			favIconUrl: 'data:image/png;base64,AAAA',
+		}));
+		const existingImage = new Blob(['existing-thumbnail'], { type: 'image/png' });
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = { result: { url: 'https://example.com', image: existingImage, stored: '2026-07-01', used: '2026-07-01' } };
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0); // A
+			await vi.advanceTimersByTimeAsync(2000); // hard deadline -> C -> pickAndStore
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(thumbnailStore.put).toHaveBeenCalled();
+			const storedObj = thumbnailStore.put.mock.calls[0][0];
+			expect(storedObj.image).toBe(existingImage);
+			expect(storedObj.favicon).toBeInstanceOf(Blob);
+			expect(storedObj.stored).toBe('2026-07-01');
+		} finally {
+			(globalThis as any).chrome.tabs.captureVisibleTab = originalCaptureVisibleTab;
+			(globalThis as any).chrome.tabs.get = originalTabsGet;
+		}
+	});
+
+	it('pickAndStore stores nothing when every capture attempt fails and no favicon was observed', async () => {
+		const originalCaptureVisibleTab = (globalThis as any).chrome.tabs.captureVisibleTab;
+		const originalTabsGet = (globalThis as any).chrome.tabs.get;
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(() => Promise.resolve(null));
+		(globalThis as any).chrome.tabs.get = vi.fn(() => Promise.resolve({
+			active: true, windowId: 1, incognito: false,
+		}));
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(2000);
+			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(thumbnailStore.put).not.toHaveBeenCalled();
+		} finally {
+			(globalThis as any).chrome.tabs.captureVisibleTab = originalCaptureVisibleTab;
+			(globalThis as any).chrome.tabs.get = originalTabsGet;
+		}
+	});
+
 	// --- pickAndStore re-guards db after its awaits (audit §2.4) ---
 
 	it('pickAndStore re-guards the DB after the isBlank/favicon/resize awaits — a connection drop mid-chain does not raise an unhandled rejection, and the write retries after reconnect', async () => {

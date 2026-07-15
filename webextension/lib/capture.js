@@ -363,11 +363,20 @@ function _startCaptureSession(tabId, windowId, url) {
 /**
  * Select the best capture from the session and write it to IDB.
  * Picks the latest non-blank capture. If all are blank, keeps the latest.
+ *
+ * If every `captureTab` attempt in the session returned a null dataURL
+ * (screenshot failed, or the tab never became active long enough to
+ * capture — issue #10), there's no `image` to pick from, but a favicon may
+ * still have been observed along the way (`tab.favIconUrl` resolves
+ * independently of `captureVisibleTab`). Rather than discarding the whole
+ * session, this stores a favicon-only record — same store-write mechanics,
+ * just an omitted `image` field. Only bails outright when there's neither a
+ * capture nor a favicon to keep.
  * @param {number} tabId
  */
 function pickAndStore(tabId) {
 	let session = captureSessions.get(tabId);
-	if (!session || session.captures.length === 0) {
+	if (!session || (session.captures.length === 0 && !session.favIconUrl)) {
 		captureSessions.delete(tabId);
 		return;
 	}
@@ -397,31 +406,34 @@ function pickAndStore(tabId) {
 	]).then(async function(results) {
 		let blankResults = results[0];
 		let faviconBlob = results[1];
-
-		// Pick latest non-blank; fall back to latest overall.
-		let bestIndex = captures.length - 1; // default: latest
-		for (let i = captures.length - 1; i >= 0; i--) {
-			if (!blankResults[i]) {
-				bestIndex = i;
-				break;
-			}
-		}
-
-		let best = captures[bestIndex];
-
-		let prefs = await api.storage.local.get({'thumbnailSize': 600});
-		let blob = await resizeThumbnail(best.dataURL, prefs.thumbnailSize);
 		let today = getTZDateString();
 		/**
-		 * @type {{url: string, image: Blob, stored: string, used: string,
+		 * @type {{url: string, image?: Blob, stored: string, used: string,
 		 *   favicon?: Blob, faviconUrl?: string}}
 		 */
 		let record = {
 			url: url,
-			image: blob,
 			stored: today,
 			used: today,
 		};
+
+		if (captures.length > 0) {
+			// Pick latest non-blank; fall back to latest overall.
+			let bestIndex = captures.length - 1; // default: latest
+			for (let i = captures.length - 1; i >= 0; i--) {
+				if (!blankResults[i]) {
+					bestIndex = i;
+					break;
+				}
+			}
+			let best = captures[bestIndex];
+			let prefs = await api.storage.local.get({'thumbnailSize': 600});
+			record.image = await resizeThumbnail(best.dataURL, prefs.thumbnailSize);
+		}
+		// else: every captureTab attempt in this session returned a null
+		// dataURL — no `image` field, but the favicon below is still worth
+		// keeping (issue #10).
+
 		if (faviconBlob) {
 			// data: favicon, decoded + cached as a Blob (offline-capable).
 			record.favicon = faviconBlob;
@@ -435,7 +447,30 @@ function pickAndStore(tabId) {
 		// withStore() re-opens it if so, instead of throwing on a stale
 		// connection and losing the freshly-captured thumbnail silently.
 		await withObjectStore('thumbnails', 'readwrite', function(store) {
-			store.put(record);
+			if (record.image) {
+				store.put(record);
+				return;
+			}
+			// Favicon-only fallback (issue #10): merge into any existing
+			// record — a failed RE-capture must never clobber a previously
+			// stored thumbnail with an image-less record.
+			let request = store.get(url);
+			request.onsuccess = function() {
+				let existing = request.result;
+				if (existing) {
+					existing.used = record.used;
+					if (record.favicon) {
+						existing.favicon = record.favicon;
+						delete existing.faviconUrl;
+					} else if (record.faviconUrl) {
+						existing.faviconUrl = record.faviconUrl;
+						delete existing.favicon;
+					}
+					store.put(existing);
+				} else {
+					store.put(record);
+				}
+			};
 		});
 	}).catch(console.error);
 }
