@@ -135,30 +135,12 @@ describe('TileStats — behavioral', () => {
 		expect(result?.dir).toBe('up');
 	});
 
-	it('returns rank for "rank" stat type', async () => {
+	it('returns null for removed statType values ("rank", "fresh") — issue #13', async () => {
 		mockGetVisits.mockResolvedValue([
 			{ visitTime: Date.now() - 1000 },
-			{ visitTime: Date.now() - 2000 },
-			{ visitTime: Date.now() - 3000 },
 		]);
-		const result = await TileStats.compute('https://example.com', 'rank', 2);
-		expect(result).toEqual({ type: 'rank', value: '2' });
-	});
-
-	it('returns fresh dot for "fresh" stat type when recently visited', async () => {
-		mockGetVisits.mockResolvedValue([
-			{ visitTime: Date.now() - 30 * 60 * 1000 },
-		]);
-		const result = await TileStats.compute('https://example.com', 'fresh');
-		expect(result).toEqual({ type: 'fresh', value: '' });
-	});
-
-	it('returns null for "fresh" when not recently visited', async () => {
-		mockGetVisits.mockResolvedValue([
-			{ visitTime: Date.now() - 25 * 60 * 60 * 1000 },
-		]);
-		const result = await TileStats.compute('https://example.com', 'fresh');
-		expect(result).toBeNull();
+		expect(await TileStats.compute('https://example.com', 'rank')).toBeNull();
+		expect(await TileStats.compute('https://example.com', 'fresh')).toBeNull();
 	});
 
 	it('returns null when no visits found', async () => {
@@ -233,7 +215,11 @@ describe('statType pref — prefs.js', () => {
 	});
 
 	it('validates statType values against the allowed set', () => {
-		expect(prefsSource).toMatch(/\['none',\s*'visits',\s*'last',\s*'trend',\s*'rank',\s*'fresh'\]/);
+		expect(prefsSource).toMatch(/\['none',\s*'visits',\s*'last',\s*'trend'\]/);
+	});
+
+	it('no longer recognizes "rank"/"fresh" as valid statType values (issue #13)', () => {
+		expect(prefsSource).not.toMatch(/\['none',\s*'visits',\s*'last',\s*'trend',\s*'rank'/);
 	});
 });
 
@@ -288,5 +274,17 @@ describe('statType pref — behavioral validation (§4.6)', () => {
 		Prefs.parsePrefs({ statType: 'visits' });
 		expect(Prefs.statType).toBe('visits');
 		Prefs.parsePrefs({ statType: 'none' });
+	});
+
+	it('migration: a stored "rank" statType (valid pre-issue #13) falls back to the default', () => {
+		Prefs.parsePrefs({ statType: 'none' });
+		Prefs.parsePrefs({ statType: 'rank' });
+		expect(Prefs.statType).toBe('none');
+	});
+
+	it('migration: a stored "fresh" statType (valid pre-issue #13) falls back to the default', () => {
+		Prefs.parsePrefs({ statType: 'none' });
+		Prefs.parsePrefs({ statType: 'fresh' });
+		expect(Prefs.statType).toBe('none');
 	});
 });

@@ -1664,15 +1664,8 @@ svg {
 	box-sizing: border-box;
 	box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
 }
-.ntt-stat-chip:empty:not([data-stat-fresh]) {
+.ntt-stat-chip:empty {
 	display: none;
-}
-.ntt-stat-chip[data-stat-fresh] {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	padding: 0;
-	background: var(--ntt-accent, #c96442);
 }
 :root[theme="dark"] .ntt-stat-chip {
 	background: rgba(20,18,15,0.55);

@@ -319,28 +319,17 @@ describe('Tile redesign — stat chip + favicon glyph (behavioral, §3.2/§3.4)'
 		TileStats.compute = vi.fn().mockResolvedValue(null);
 	});
 
-	it('a fresh stat sets [data-stat-fresh] and shows no text', async () => {
-		const { site, cleanup } = await mountWithStat({ type: 'fresh' });
-		await tick();
-		const chip = site.node.querySelector('.ntt-stat-chip');
-		expect(chip.hasAttribute('data-stat-fresh')).toBe(true);
-		expect(chip.textContent).toBe('');
-		cleanup();
-	});
-
-	it('a non-fresh (trend) stat clears [data-stat-fresh] and shows the value', async () => {
+	it('a trend stat shows the directional value', async () => {
 		const { site, cleanup } = await mountWithStat({ type: 'trend', dir: 'up', value: 5 });
 		await tick();
 		const chip = site.node.querySelector('.ntt-stat-chip');
-		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
 		expect(chip.textContent).toBe('↑5');
 		cleanup();
 	});
 
-	it('statType none leaves the chip empty with no [data-stat-fresh]', async () => {
+	it('statType none leaves the chip empty', async () => {
 		const { site, cleanup } = await mountSite({ url: 'https://example.com/', title: 'Example' });
 		const chip = site.node.querySelector('.ntt-stat-chip');
-		expect(chip.hasAttribute('data-stat-fresh')).toBe(false);
 		expect(chip.textContent).toBe('');
 		cleanup();
 	});

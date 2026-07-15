@@ -213,12 +213,6 @@
 	"options_stat_trend": {
 		"message": "Trend"
 	},
-	"options_stat_rank": {
-		"message": "Rank"
-	},
-	"options_stat_fresh": {
-		"message": "Fresh"
-	},
 	"options_actionsize_header": {
 		"message": "Action icon size"
 	},

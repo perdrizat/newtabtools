@@ -88,12 +88,6 @@ describe('TileStats.compute', () => {
 		expect(await TileStats.compute('https://x.test/', 'none')).toBeNull();
 	});
 
-	it('"rank" returns the 1-based rank without touching history', async () => {
-		const browser = mockBrowser(true);
-		expect(await TileStats.compute('https://x.test/', 'rank', 3)).toEqual({ type: 'rank', value: '3' });
-		expect(browser.history.getVisits).not.toHaveBeenCalled();
-	});
-
 	it('no history permission → null', async () => {
 		mockBrowser(false, [{ visitTime: NOW }]);
 		expect(await TileStats.compute('https://x.test/', 'visits')).toBeNull();
@@ -115,17 +109,15 @@ describe('TileStats.compute', () => {
 		expect(await TileStats.compute('https://x.test/', 'last')).toEqual({ type: 'last', value: 'now' });
 	});
 
-	it('"fresh" within 24h → {type:fresh}; older → null', async () => {
-		mockBrowser(true, [{ visitTime: NOW - HOUR }]);
-		expect(await TileStats.compute('https://x.test/', 'fresh')).toEqual({ type: 'fresh', value: '' });
-		TileStats._hasHistoryPermission = null;
-		mockBrowser(true, [{ visitTime: NOW - 48 * HOUR }]);
-		expect(await TileStats.compute('https://x.test/', 'fresh')).toBeNull();
-	});
-
 	it('a rejected history query → null (no throw)', async () => {
 		const browser = mockBrowser(true);
 		browser.history.getVisits = vi.fn().mockRejectedValue(new Error('history unavailable'));
 		await expect(TileStats.compute('https://x.test/', 'visits')).resolves.toBeNull();
+	});
+
+	it('removed statType values ("rank", "fresh") fall through to null (issue #13)', async () => {
+		mockBrowser(true, [{ visitTime: NOW - HOUR }]);
+		expect(await TileStats.compute('https://x.test/', 'rank')).toBeNull();
+		expect(await TileStats.compute('https://x.test/', 'fresh')).toBeNull();
 	});
 });

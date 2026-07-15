@@ -350,27 +350,16 @@ Site.prototype = {
 		let statType = Prefs.statType;
 		if (statType === 'none') {
 			chip.textContent = '';
-			chip.removeAttribute('data-stat-fresh');
 			return;
 		}
-		let rank = this.cell ? this.cell.index + 1 : null;
-		TileStats.compute(this.url, statType, /** @type {number} */ (rank)).then((/** @type {{type: string, value: string, dir?: string} | null} */ stat) => {
+		TileStats.compute(this.url, statType).then((/** @type {{type: string, value: string, dir?: string} | null} */ stat) => {
 			if (!stat) {
 				chip.textContent = '';
-				chip.removeAttribute('data-stat-fresh');
 				return;
 			}
 			if (stat.type === 'trend') {
-				chip.removeAttribute('data-stat-fresh');
 				chip.textContent = (stat.dir === 'up' ? '↑' : '↓') + stat.value;
-			} else if (stat.type === 'rank') {
-				chip.removeAttribute('data-stat-fresh');
-				chip.textContent = '#' + stat.value;
-			} else if (stat.type === 'fresh') {
-				chip.textContent = '';
-				chip.setAttribute('data-stat-fresh', '');
 			} else {
-				chip.removeAttribute('data-stat-fresh');
 				chip.textContent = stat.value;
 			}
 		});

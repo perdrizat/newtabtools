@@ -48,15 +48,10 @@ export const TileStats = {
 	/**
 	 * @param {string} url
 	 * @param {string} statType
-	 * @param {number} [rank]
 	 */
-	async compute(url, statType, rank) {
+	async compute(url, statType) {
 		if (statType === 'none') {
 			return null;
-		}
-
-		if (statType === 'rank' && rank != null) {
-			return { type: 'rank', value: String(rank) };
 		}
 
 		if (!await this._checkHistoryPermission()) {
@@ -97,15 +92,6 @@ export const TileStats = {
 			let older = visits.filter(v => (v.visitTime ?? 0) < weekAgo).length;
 			let dir = recent >= older ? 'up' : 'down';
 			return { type: 'trend', dir, value: String(recent) };
-		}
-
-		case 'fresh': {
-			let latest = Math.max(...visits.map(v => v.visitTime ?? 0));
-			let hoursSince = (Date.now() - latest) / (60 * 60 * 1000);
-			if (hoursSince <= 24) {
-				return { type: 'fresh', value: '' };
-			}
-			return null;
 		}
 
 		default:

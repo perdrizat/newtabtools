@@ -1279,9 +1279,9 @@ const NewTabToolsObject = {
 			} else {
 				/** @type {Record<string, string>} */ (/** @type {unknown} */ (Prefs))[/** @type {string} */ (pref)] = /** @type {string} */ (raw);
 			}
-			// Stats other than `none` and `rank` need the optional `history`
-			// permission. Request it now (we are in a user-gesture handler).
-			if (pref === 'statType' && raw !== 'none' && raw !== 'rank') {
+			// Stats other than `none` need the optional `history` permission.
+			// Request it now (we are in a user-gesture handler).
+			if (pref === 'statType' && raw !== 'none') {
 				this._ensureHistoryPermission();
 			}
 			return;

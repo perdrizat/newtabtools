@@ -193,7 +193,7 @@ const PrefsObject = {
 		if (['fill', '16-9', '4-3', '1-1', '3-4'].includes(prefs.tileAspect)) {
 			this._tileAspect = prefs.tileAspect;
 		}
-		if (['none', 'visits', 'last', 'trend', 'rank', 'fresh'].includes(prefs.statType)) {
+		if (['none', 'visits', 'last', 'trend'].includes(prefs.statType)) {
 			this._statType = prefs.statType;
 		}
 		if ('titleBarSearch' in prefs) {

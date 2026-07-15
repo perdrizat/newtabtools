@@ -81,11 +81,9 @@ const PANEL_HTML = `
 		<div class="ntt-form-group">
 			<div class="ntt-segmented" role="radiogroup" data-pref="statType">
 				<button type="button" role="radio" data-value="none">None</button>
-				<button type="button" role="radio" data-value="visits">Visits</button>
 				<button type="button" role="radio" data-value="last">Last</button>
+				<button type="button" role="radio" data-value="visits">Visits</button>
 				<button type="button" role="radio" data-value="trend">Trend</button>
-				<button type="button" role="radio" data-value="rank">Rank</button>
-				<button type="button" role="radio" data-value="fresh">Fresh</button>
 			</div>
 		</div>
 		<div class="ntt-form-group">
@@ -196,18 +194,6 @@ describe('Drawer Layout tab — drawerOnClick (Phase 3-1)', () => {
 		const btn = document.querySelector('.ntt-segmented[data-pref="statType"] [data-value="visits"]') as HTMLElement;
 		harness.drawerOnClick({ target: btn });
 		expect(spy).toHaveBeenCalledTimes(1);
-		(harness as any)._ensureHistoryPermission = () => {};
-	});
-
-	it('regression: statType="rank" does NOT request history permission', () => {
-		// Rank needs no history access — its value comes from the tile's
-		// own index. Permission requests for rank would needlessly nag the
-		// user.
-		const spy = vi.fn();
-		(harness as any)._ensureHistoryPermission = spy;
-		const btn = document.querySelector('.ntt-segmented[data-pref="statType"] [data-value="rank"]') as HTMLElement;
-		harness.drawerOnClick({ target: btn });
-		expect(spy).not.toHaveBeenCalled();
 		(harness as any)._ensureHistoryPermission = () => {};
 	});
 

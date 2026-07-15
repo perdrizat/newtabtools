@@ -3,16 +3,16 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Integration test: history-permission auto-request and stat chip rank wiring.
+ * Integration test: history-permission auto-request.
  *
- * Covers two Phase 3-1 review regressions:
- *   1. `_ensureHistoryPermission` must call `chrome.permissions.request`
- *      synchronously from the click handler — Firefox loses the user-gesture
- *      context across async callbacks. The earlier `permissions.contains` →
- *      callback → `permissions.request` chain silently failed.
- *   2. `_renderStatChip` must pass the tile's index as `rank` so the rank
- *      stat type renders without requiring the optional `history`
- *      permission.
+ * Covers a Phase 3-1 review regression: `_ensureHistoryPermission` must call
+ * `chrome.permissions.request` synchronously from the click handler —
+ * Firefox loses the user-gesture context across async callbacks. The
+ * earlier `permissions.contains` → callback → `permissions.request` chain
+ * silently failed.
+ *
+ * (The stat-chip `rank`-wiring regression this file used to also cover was
+ * removed with the `rank`/`fresh` stat types themselves — issue #13.)
  */
 
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
@@ -23,7 +23,6 @@ import vm from 'node:vm';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
-const SITE_PATH = path.resolve(__dirname, '../../webextension/site.js');
 
 function extractMethod(source: string, methodName: string): string {
 	const sigPattern = new RegExp(`^\\t(?:async\\s+)?${methodName}[\\(\\s]`, 'm');
@@ -114,53 +113,5 @@ describe('History permission auto-request — gesture-safe path', () => {
 		(globalThis as any).chrome = {};
 		(globalThis as any).browser = (globalThis as any).chrome;
 		expect(() => harness._ensureHistoryPermission()).not.toThrow();
-	});
-});
-
-describe('Stat chip rank wiring — _renderStatChip', () => {
-	let harness: any;
-
-	beforeAll(() => {
-		// eslint-disable-next-line ntt/no-source-grep -- loading module for behavioral test
-		const source = fs.readFileSync(SITE_PATH, 'utf8');
-		const renderStatChip = extractMethod(source, '_renderStatChip');
-		const code = `var _renderHarness = { ${renderStatChip} };`;
-		vm.runInThisContext(code, { filename: 'render-harness.js' });
-		harness = (globalThis as any)._renderHarness;
-	});
-
-	function makeSite(opts: { url: string; cellIndex: number | null }): any {
-		const chip = document.createElement('span');
-		chip.className = 'ntt-stat-chip';
-		return {
-			url: opts.url,
-			cell: opts.cellIndex == null ? null : { index: opts.cellIndex },
-			node: document.createElement('div'),
-			_querySelector(sel: string): HTMLElement | null {
-				return sel === '.ntt-stat-chip' ? chip : null;
-			},
-		};
-	}
-
-	it('regression: passes the tile\'s cell index + 1 as `rank` to TileStats.compute', () => {
-		// Rank renders as the tile's 1-indexed position. Without passing
-		// `rank` to compute(), `statType === "rank"` falls through to the
-		// history-permission branch and returns null — so rank chips never
-		// appear even though the data is local.
-		const computeSpy = vi.fn().mockResolvedValue(null);
-		(globalThis as any).TileStats = { compute: computeSpy };
-		(globalThis as any).Prefs = { statType: 'rank' };
-
-		harness._renderStatChip.call(makeSite({ url: 'https://example.com/', cellIndex: 4 }));
-		expect(computeSpy).toHaveBeenCalledWith('https://example.com/', 'rank', 5);
-	});
-
-	it('passes null as rank when the site has no cell (e.g. detached during drag)', () => {
-		const computeSpy = vi.fn().mockResolvedValue(null);
-		(globalThis as any).TileStats = { compute: computeSpy };
-		(globalThis as any).Prefs = { statType: 'visits' };
-
-		harness._renderStatChip.call(makeSite({ url: 'https://example.com/', cellIndex: null }));
-		expect(computeSpy).toHaveBeenCalledWith('https://example.com/', 'visits', null);
 	});
 });
