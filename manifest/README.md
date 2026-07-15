@@ -15,14 +15,14 @@ just run `pnpm build`, which does it as a prebuild step).
   target: `browser_specific_settings` (AMO id/min-version/data-collection
   attestation), `background` in the event-page form
   (`scripts: ["lib/background-main.js"]` + `type: "module"`), `action` WITH
-  `theme_icons` (Firefox's `browser.theme`-driven icon switching — Decision 2
-  in [`CHROME_PREP.md`](../CHROME_PREP.md)), and `permissions` including
-  `menus` (Firefox's dynamic per-tile context menu — Decision 1).
+  `theme_icons` (Firefox's `browser.theme`-driven icon switching — the theme
+  decision of record in [`CONTRIBUTING.md`](../CONTRIBUTING.md)), and
+  `permissions` including `menus` (Firefox's dynamic per-tile context menu —
+  the menus decision of record, same place).
 - **`chrome.json`** — a **dormant** Chrome MV3 overlay. Nothing in this
-  project's test matrix (fast tests, E2E, UAT) exercises it — it exists so a
-  future Chrome port (see CHROME_PREP.md "What the Chrome port then reduces
-  to") only has to fork a handful of seam files, not invent a manifest from
-  scratch. It diverges from `firefox.json` in exactly the ways
+  project's test matrix (fast tests, E2E, UAT) exercises it — it exists so
+  the Chrome port (the active program: [`CHROME.md`](../CHROME.md)) only has
+  to fork a handful of seam files, not invent a manifest from scratch. It diverges from `firefox.json` in exactly the ways
   chrome-prep's C0/C5 decisions already called out: `background` uses the
   MV3 module `service_worker` form instead of the event-page `scripts` form;
   `action` has no `theme_icons` (Chrome gets `default_icon` only — no

@@ -2,7 +2,8 @@
 
 **Status: ADOPTED (authored + D0 decided with maintainer 2026-07-15).** No
 code has been written under this program yet. Successor to the chrome-prep
-program (`CHROME_PREP.md`, 2.5.0), which left the codebase Chrome-*ready*:
+program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
+history), which left the codebase Chrome-*ready*:
 `api` seam in place, six wrappers written (some dormant), two-target manifest
 authoring, `pnpm build chrome` producing an unvalidated zip. This program
 makes that artifact actually run, then testable, then shippable.
@@ -123,7 +124,7 @@ self-healing by design, `pendingCaptures` already round-trips
    intermediates.** 2.5.0 shipped to AMO (2026-07-15). The next release is
    3.0.0 at the D gate, shipped to BOTH AMO and the Chrome Web Store.
    Nothing ships in between except emergency fixes. (Supersedes
-   CHROME_PREP.md's "3.0.0 reserved for AMO after the audit round".)
+   chrome-prep's "3.0.0 reserved for AMO after the audit round".)
 8. **Single version stream.** CWS and AMO both ship X.Y.Z from
    `package.json` — subsumed by Decision 7's simultaneous dual-store
    release.
@@ -143,7 +144,7 @@ board updates per arc.
 
 ### D0 — decisions of record
 - [x] The open questions resolved with the maintainer 2026-07-15; recorded
-      as Decisions 1–9 above (CHROME_PREP.md precedent). Maintainer's own
+      as Decisions 1–9 above (chrome-prep precedent). Maintainer's own
       calls: #5 quite-modern Chrome floor, #6 UAT in scope at a late stage,
       #7 the 3.0.0 dual-store release plan; the rest adopted per
       recommendation.
@@ -179,7 +180,8 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       full Firefox E2E (backup/restore suites) since this touches a live
       Firefox path.
 - [ ] Theme presence-gate (`'theme' in api`) in `newTab.js` + `theme.js`
-      (Decision 2 of CHROME_PREP): base `prefers-color-scheme` both
+      (the theme decision of record, CONTRIBUTING.md): base
+      `prefers-color-scheme` both
       platforms, `browser.theme` layered only when present. Firefox
       unchanged (full E2E theme suite).
 - [ ] `titlebar.js:226`: `moz-extension://` literal → `api.runtime.getURL('')`

@@ -116,7 +116,7 @@ The first Mozilla Add-ons (AMO) submission is gated on the chrome-prep program
 
 ### Architecture
 
-- **Target:** Firefox-first, Firefox-only (Manifest V3, `strict_min_version` 152.0). Chrome support remains deferred to stage 3 — see the "Decisions of record" section below and the Chrome-port tracking issue.
+- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is in active development — [`CHROME.md`](CHROME.md) is the program plan; ships as 3.0.0 to both stores.
 - **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry. Post-chrome-prep, the page is ~20 feature modules with no `globalThis` bridges anywhere — every cross-reference is a real `import`/`export`, including the E2E/UAT test harness (chrome-prep C3d):
   - **Boot/controller:** `newTab.js` (the residual controller: startup, event-listener wiring, `updateUI` dispatch, tile-tab editing, drawer/context-menu chrome) + `page-main.js` (the single orchestrator: side-effect imports in load order, then boot calls plus the `Prefs.onChange` page listener).
   - **Grid/site/cell/page:** `grid.js`/`site.js`/`cell.js`/`page.js` — the former `fx-newTab.js` monolith, split in chrome-prep C4c. `newTab.js` and `grid.js`/`page.js` form a legal call-time-only ESM cycle (no top-level cross-module calls — enforced by `tests/integration/page-module-scope.test.ts`).
@@ -201,6 +201,8 @@ The load-bearing "why" behind rules that constrain new code, kept terse so nobod
 - **No build step.** JS + JSDoc, checked by `tsc --noEmit`, gets most of TypeScript's safety at zero compiler cost — see "Language" above.
 - **Event-page state placement.** `captureSessions`/`networkIdleWatchers` stay in-memory (short-lived, event-anchored, self-healing on loss); `pendingCaptures` lives in `storage.session` (must survive an event-page respawn while waiting on tab activation).
 - **Chrome via single-source / dual-build, not parallel branches.** A long-lived Chrome branch carries permanent merge cost; the manifest-overlay approach (see Architecture above) keeps one source tree.
+- **Chrome ships WITHOUT dynamic context menus.** The in-tile action row (edit / never-capture / pin / remove) carries the identical operations; Firefox's `menus.onShown`-based per-tile menu is progressive enhancement. The `menus` capability is optional-by-design — registered only when the platform provides it, and no page/background logic may assume it exists. Rejected: a degraded static Chrome menu (two UX surfaces for zero added capability). (chrome-prep Decision 1)
+- **Theme source: `prefers-color-scheme` is the base on both platforms; `browser.theme` is a Firefox-only bonus** layered on top when present. No code may assume `browser.theme` exists. (chrome-prep Decision 2)
 - **The restore validators stay independent.** `lib/backup.js`'s `safeHexColor`/`safeBackgroundUrl`/`safeProtocols` allow-list is the restore security boundary and is deliberately NOT deduplicated against other validation code elsewhere — defence-in-depth by design; see "Security-boundary changes" above.
 - **Language: JS + JSDoc on production, TypeScript on tests, no build step.** Re-escalatable to full TS later (a JSDoc `.js` is a rename away) — see "Language" above for the full rationale.
 

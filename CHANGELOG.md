@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
-- `CHROME_PREP.md` updated to record the C6/2.5.0 release commits, the C gate closed (full UAT ran pre-release, maintainer-confirmed), the ROADMAP-dissolution checkbox, and the follow-up audit round's fix.
+- `CHROME_PREP.md` deleted (no historical plans kept; C gate closed — full UAT ran pre-release, maintainer-confirmed): chrome-prep Decisions 1–2 (menus, theme) moved into `CONTRIBUTING.md` "Decisions of record"; live doc references redirected to `CONTRIBUTING.md`/`CHROME.md`/`CHANGELOG.md`; code doc-comment citations stay as historical markers (PAGE_MODULES precedent).
 
 ### Fixed
 
