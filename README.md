@@ -81,6 +81,24 @@ Because of the advent of AI coding assistants, **testing is mandatory** and we e
 - **[CLI Reference](TESTING.md#cli-reference):** Commands for dev, linting, and testing.
 - **[Testing Strategy](TESTING.md#the-testing-strategy):** Our tier-by-tier TDD workflow.
 
+### Troubleshooting
+
+Hit a failing `pnpm test:uat:preflight` or a broken E2E setup? Search this table for the exact text you saw. It covers the most common cases; the full preflight-check list lives in [`tests/uat/README.md`](tests/uat/README.md#troubleshooting-preflight-failures) and general environment setup in [`TESTING.md`](TESTING.md#environment-setup).
+
+| You see | Cause | Fix |
+|---|---|---|
+| `Firefox (release)` ... `not found` | No `firefox` binary on PATH | Install release Firefox — Mozilla APT repo, see `TESTING.md` — or set `$FIREFOX_BIN`. |
+| `is below the minimum required version (152)` | Firefox on PATH is older than 152 | MV3's `tabs.captureVisibleTab` needs Firefox >= 152; upgrade Firefox or point `$FIREFOX_BIN`/`$FIREFOX_ESR_BIN` at a newer build. |
+| `'$FIREFOX_BIN' not found on PATH` (from `run_esr_tests.sh`) | Same root cause, E2E's own guard | Same fix as above. |
+| `claude CLI` ... `not found on PATH` | Claude Code CLI isn't installed | Install per <https://docs.claude.com/claude-code>, then `claude /login`. |
+| A UAT scenario fails with an auth error even though `claude --version` works | CLI installed but not logged in, or the session expired | Run `claude /login` again. |
+| `Built .xpi` ... `not found in dist/` | `pnpm build` hasn't been run (or is stale) | `pnpm build`. |
+| `UAT fixture` ... `sha256 mismatch` | `newtabtools_knowngood.zip` was modified or corrupted | Restore it from git (unintentional change), or bump `fixtureVersion` (intentional regen) — see `tests/uat/README.md`. |
+| `UAT daemon port` ... `already in use` | Something else is already bound to port 9876 | Stop the other process, or set `$UAT_DAEMON_PORT`. |
+| `Firefox launch (geckodriver)` ... `Selenium could not start Firefox via geckodriver` | geckodriver missing, mismatched, or a snap-confined build shadowing it on PATH | Remove a snap-confined `geckodriver` from PATH so Selenium Manager can fetch a clean one, or run `pnpm install`. |
+| `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm wants to reinstall/prune `node_modules` but has no interactive TTY to confirm it | Run `pnpm install` yourself in an interactive shell. |
+| `[chrome-smoke] x no Chrome binary found` | The forward-looking Chrome tier (`pnpm chrome:smoke`, `tests/e2e-chrome/`) can't find a Chrome/Chromium binary | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`. |
+
 ## License
 
 [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/) — unchanged from the original project. All source files retain their MPL-2.0 headers. Source availability via this public repository satisfies the license's source-distribution clause.

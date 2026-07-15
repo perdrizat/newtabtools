@@ -29,6 +29,8 @@ Source-grep is acceptable for purely structural checks (template element presenc
 
 These tools must be present on your host machine to develop and test this extension.
 
+> Hit a failing `pnpm test:uat:preflight` or E2E setup step? See the README's [Troubleshooting](README.md#troubleshooting) section — it maps the literal failure text to cause + fix.
+
 | Tool | Version | Why | How to verify |
 |---|---|---|---|
 | **Node.js** | >= 24 (see `.node-version` / `engines.node`) | Runs Vitest, Puppeteer, web-ext | `node --version` |

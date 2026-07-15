@@ -9,15 +9,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - `CHROME.md`: the Chrome-port program plan (stage 3) — D0 decisions of record (maintainer-decided 2026-07-15, incl. the 3.0.0 dual-store release plan), arcs D1–D7 + D gate, live status board.
+- Chrome runtime tier (CHROME.md D1, `tests/e2e-chrome/`): `pnpm chrome:provision` (Chrome for Testing — branded Chrome ≥137 removed extension automation), `pnpm chrome:smoke` (Puppeteer/CDP first boot, GREEN 5/5: SW runs, grid renders; one page error = the D2 theme gate), `pnpm chrome:smoke:selenium` (Selenium path green — de-risks D6 UAT-on-Chrome); deterministic dev extension ID via committed public key.
+- README "Troubleshooting" section mapping literal preflight/E2E failure strings to cause + fix, cross-linked from TESTING.md.
 
 ### Changed
 
 - UAT runner pins scenario agents to Sonnet by default (`--model`, `$UAT_MODEL` overrides) — cheaper per-scenario `claude -p` runs.
 - `CHROME_PREP.md` deleted (no historical plans kept; C gate closed — full UAT ran pre-release, maintainer-confirmed): chrome-prep Decisions 1–2 (menus, theme) moved into `CONTRIBUTING.md` "Decisions of record"; live doc references redirected to `CONTRIBUTING.md`/`CHROME.md`/`CHANGELOG.md`; code doc-comment citations stay as historical markers (PAGE_MODULES precedent).
+- Tile stat radiogroup drops `Rank`/`Fresh` and reorders to None/Last/Visits/Trend (issue #13); `Prefs.parsePrefs`'s `statType` allow-list shrinks to match, so a previously-stored `rank`/`fresh` value now normalizes to the default (`none`) on read.
 
 ### Fixed
 
 - `webextension/site.js`'s `Site` instances leaked their `_thumbnailObjectURL`/`_faviconObjectURL` blob URLs when `Grid.refresh()` flushed the grid; new `Site.prototype.destroy()` (idempotent) revokes both, called by `Grid.refresh()` on every existing site before the flush — adjudicated `audit/2026-07-13-chrome-prep-audit.md` finding.
+- `lib/capture.js`'s `pickAndStore` no longer discards a session's favicon when every `captureTab` attempt returned a null dataURL — stores a favicon-only tile record instead (issue #10).
 
 ## [2.5.0] — 2026-07-13
 
