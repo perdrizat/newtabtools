@@ -288,3 +288,25 @@ describe('statType pref — behavioral validation (§4.6)', () => {
 		expect(Prefs.statType).toBe('none');
 	});
 });
+
+describe('stat chip — high-contrast theme override (issue #14)', () => {
+	let css: string;
+
+	beforeAll(() => {
+		// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS rule presence
+		css = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.css'), 'utf8');
+	});
+
+	it('the chip has no hardcoded text color at rest (it inherits the theme foreground)', () => {
+		const block = css.match(/(?<!\S)\.ntt-stat-chip\s*\{[^}]*\}/s);
+		expect(block).toBeTruthy();
+		expect(block![0]).not.toMatch(/[^-]color:/);
+	});
+
+	it('theme="contrast" overrides the chip to a solid dark background + light ink token', () => {
+		const block = css.match(/:root\[theme="contrast"\]\s+\.ntt-stat-chip\s*\{[^}]*\}/s);
+		expect(block).toBeTruthy();
+		expect(block![0]).toMatch(/background:\s*var\(--ntt-surface\)/);
+		expect(block![0]).toMatch(/color:\s*var\(--ntt-ink\)/);
+	});
+});

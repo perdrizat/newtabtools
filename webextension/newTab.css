@@ -1671,6 +1671,18 @@ svg {
 	background: rgba(20,18,15,0.55);
 	box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
 }
+/* High-contrast (issue #14): the chip has no explicit `color`, so it inherits
+   the theme's foreground text — white in both dark AND contrast. Dark pairs
+   that with a dark chip background above, but contrast had no matching
+   override, leaving the light frosted-glass default (rgba(255,255,255,0.78))
+   under white text: white-on-near-white. Swap to the HC surface/ink tokens
+   (solid black + white text) with the same white-ring `--ntt-float-shadow`
+   used elsewhere for pills that must read over any thumbnail. */
+:root[theme="contrast"] .ntt-stat-chip {
+	background: var(--ntt-surface);
+	color: var(--ntt-ink);
+	box-shadow: var(--ntt-float-shadow);
+}
 /* DRAG & DROP
  * This is just a temporary drag element used for dataTransfer.setDragImage()
  * so that we can use custom drag images and elements. It needs an opacity of
