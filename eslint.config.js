@@ -224,7 +224,7 @@ export default [
 		// `nttGlobals` allowlist that used to cover them was deleted.
 		// tests/unit/_fixtures/*.mjs are Node child-process fixtures (the
 		// raw-module-eval net, chrome-prep C3b) — same Node runtime profile.
-		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs', 'tests/uat/**/*.mjs', 'tests/unit/_fixtures/**/*.mjs', 'scripts/**/*.mjs'],
+		files: ['tests/e2e/**/*.js', 'tests/e2e/**/*.mjs', 'tests/e2e-chrome/**/*.mjs', 'tests/uat/**/*.mjs', 'tests/unit/_fixtures/**/*.mjs', 'scripts/**/*.mjs'],
 		languageOptions: {
 			ecmaVersion: 2022,
 			sourceType: 'module',

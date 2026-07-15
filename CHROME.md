@@ -35,7 +35,7 @@ reopening of that directive.
 | Arc | Status | Commit(s) |
 |---|---|---|
 | D0 — decisions of record | done 2026-07-15 (this file) | — |
-| D1 — Chrome runtime harness + first boot | pending | — |
+| D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | pending | — |
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | pending | — |
 | D4 — icons, action, manifest completeness | pending | — |
@@ -155,20 +155,38 @@ board updates per arc.
 *Rationale for running this arc FIRST: chrome-prep wrote Chrome paths blind
 (no Chrome runtime anywhere in the loop) and the sweep found gaps exactly
 there. Everything after D1 gets a red/green target on real Chrome.*
-- [ ] Chrome-for-Testing provisioning documented (not auto-installed; the
-      no-installs rule stands — preflight prints the command).
-- [ ] Deterministic extension ID: manifest `key` in a dev/test-only overlay
-      (NOT the store artifact), `chrome-extension://<id>/newTab.html`
-      reachable.
-- [ ] Minimal launcher: Puppeteer (already a devDep, CDP native) +
-      `--load-extension` of the staged `dist/chrome-build/` (or an
-      unpacked-stage variant of `scripts/build.mjs`), headless=new.
-- [ ] First smoke: extension loads, SW starts without an uncaught error,
-      new-tab page renders a grid. EXPECTED RED on arrival (the D2
-      blockers); the smoke is the program's red/green harness, so red here
-      is the deliverable, not a failure.
-- [ ] Per-API `minimum_chrome_version` verification; pin the floor
-      (Decision 5).
+- [x] **Chrome for Testing is the automation vehicle** (hard finding, not a
+      preference): branded Google Chrome >= 137 removed extension
+      automation — `--load-extension` is ignored AND the CDP install path
+      leaves the extension inert (verified against a minimal hello-world
+      MV3 extension, so it's the platform, not this codebase). Provisioning
+      is `pnpm chrome:provision` (`tests/e2e-chrome/_tools/provision-cft.mjs`,
+      via puppeteer-core's own `@puppeteer/browsers`, ~/.cache/puppeteer —
+      the Selenium-Manager binary-fetch precedent). Full harness record:
+      `tests/e2e-chrome/README.md`.
+- [x] Deterministic extension ID `lncefjbclhbbikhanecleanbbohpiclk` via a
+      committed PUBLIC dev key (`_tools/dev-key.json`, no private half
+      exists), injected only by the dev staging path (`stageDevBuild()` →
+      `dist/chrome-dev/`) — never by `pnpm build chrome` store artifacts.
+- [x] Launcher: Puppeteer `browser.installExtension()` over the pipe
+      transport + `--enable-unsafe-extension-debugging` +
+      `ignoreDefaultArgs: ['--disable-extensions']` (each omission
+      reproduces the same inert-extension signature; recorded in the tier
+      README). `pnpm chrome:smoke` = 5 checks.
+- [x] First smoke: **GREEN 5/5 on CfT 151** — the module SW registers and
+      runs, `newTab.html` renders a 9-cell grid. Exactly ONE page error:
+      the predicted un-gated `api.theme.onUpdated` (D2). The expected-RED
+      assumption was too pessimistic: the D2 "boot blockers"
+      (thumbnail-image DOM, backup blob URL) are call-time, not load-time —
+      they gate FEATURES (capture, backup), which D2/D3 still fix, with the
+      smoke suite growing feature checks to prove it.
+- [x] Selenium path green too (extended scope, de-risks D6 UAT-on-Chrome):
+      Selenium Manager auto-provisioned chromedriver 151, `--load-extension`
+      works on CfT under Selenium, grid renders (`pnpm chrome:smoke:selenium`).
+- [x] `minimum_chrome_version` pinned: **144** (CfT stable is 151 at pin
+      time; ~7 releases ≈ 7 months back — Decision 5's "months old, not
+      years"; every per-API floor is far older). Applied to
+      `manifest/chrome.json` in D4.
 
 ### D2 — service-worker boot blockers
 - [ ] `lib/thumbnail-image.js`: OffscreenCanvas/`createImageBitmap` path
