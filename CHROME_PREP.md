@@ -1,18 +1,19 @@
 # Chrome-Prep Program — Capability Seams, Typed Monoliths, Feature Modules
 
-**Status: PROGRAM COMPLETE, PENDING THE C GATE** (authored 2026-07-10,
-maintainer-approved same day). Arcs C0–C6 are all done (status board below);
-the one remaining checklist item is the C gate itself (full `pnpm test`, full
-UAT, `pnpm audit`, 2.5.0 bump, and the ROADMAP-dissolution docs sweep this
-sweep is part of) — the orchestrator finalizes and ticks those boxes once the
-in-flight full E2E + UAT run concludes.
-Ships as **2.5.0** when complete (maintainer decision: the full program precedes
-the 3.0.0 AMO release; 3.0.0 stays reserved for AMO after this program and its
-follow-up audit round). Successor to the page-modules arc (`PAGE_MODULES.md`,
-2.4.0). Origin: an auditor-volunteered phase plan, adjudicated 2026-07-10 —
-adopted with corrections recorded per-arc below (stale items dropped, one
-security-boundary trap excluded, one scope reduction, harness design decided
-by maintainer).
+**Status: COMPLETE — SHIPPED as 2.5.0** (2026-07-13). Arcs C0–C6 are all
+done (status board below) and the C gate is CLOSED: the full UAT run was
+executed separately by the maintainer before the 2.5.0 release (maintainer
+confirmation 2026-07-15). The follow-up review
+round this program's C gate called for also landed and was adjudicated:
+`audit/2026-07-13-chrome-prep-audit.md`'s one finding (a `site.js` blob-URL
+leak on `Grid.refresh()`) was ACCEPTED and fixed 2026-07-15, post-release.
+2.5.0 is this program's release (maintainer decision: the full program
+precedes the 3.0.0 AMO release; 3.0.0 stays reserved for AMO after this
+program and its follow-up audit round). Successor to the page-modules arc
+(`PAGE_MODULES.md`, 2.4.0). Origin: an auditor-volunteered phase plan,
+adjudicated 2026-07-10 — adopted with corrections recorded per-arc below
+(stale items dropped, one security-boundary trap excluded, one scope
+reduction, harness design decided by maintainer).
 
 **The maintainer's two binding directives (2026-07-10):**
 1. **Principled harness design for the typing arc (C3):** the E2E/UAT harness
@@ -35,8 +36,8 @@ by maintainer).
 | C3 — type the monoliths + principled harness + retire ALL bridges | done | `f9a5dfc`+`114473a`+`8bd1e12`+`8d8d656` |
 | C4 — split the monoliths into feature modules | done | `6a6ff20`+`1bdb418`+`df6a292`+`0c16178` |
 | C5 — capability-seam completion (divergence audit, targeted wrappers) | done (E2E 127/127, UAT 5/5: 11+20–23) | `f8569b9`+`539ebf8`+`956c8c8` |
-| C6 — two-target manifest authoring | done (uncommitted) | — |
-| C gate — full suite + full UAT + audit + 2.5.0 | pending | — |
+| C6 — two-target manifest authoring | done | `187454a` |
+| C gate — full suite + full UAT + audit + 2.5.0 | done | `073d08d`+`03ee4ed` |
 
 ## Decisions of record
 
@@ -760,7 +761,7 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       real extension still installs and runs.
 
 ### C gate
-- [ ] Full `pnpm test`, full UAT, `pnpm audit --audit-level=high`,
+- [x] Full `pnpm test`, full UAT, `pnpm audit --audit-level=high`,
       boot-timing re-check, 2.5.0 bump, CHANGELOG promotion, build, docs sweep
       (CONTRIBUTING/TESTING/README + this file), follow-up code review
       round adjudicated.
@@ -769,9 +770,20 @@ the only boot site. FULL E2E per slice; purity review per slice.*
       **Boot-timing at the program gate:** firstTileSeen 95/95/95 (median
       95) — IDENTICAL to the pre-page-modules 2.3.0 baseline (95): two full
       architectural transformations at zero user-perceivable boot cost;
-      domInteractive median 13 (pre-arc 26), dcl 30, fcp 29. Full UAT +
-      review round + bump pending.
-- [ ] **Dissolve ROADMAP.md** (maintainer decision 2026-07-10): work items →
+      domInteractive median 13 (pre-arc 26), dcl 30, fcp 29.
+      **Status (2026-07-15):** fast suite, full E2E, `pnpm audit`,
+      boot-timing re-check, docs sweep, the 2.5.0 bump (`073d08d`+`03ee4ed`,
+      2026-07-13), and the CHANGELOG promotion are all done. The follow-up
+      code review round also landed and was adjudicated:
+      `audit/2026-07-13-chrome-prep-audit.md` raised one finding — `site.js`
+      `Site` instances leaked their `_thumbnailObjectURL`/
+      `_faviconObjectURL` blob URLs when `Grid.refresh()` flushed the grid,
+      orphaning the `Site` without revoking them — ACCEPTED and fixed
+      2026-07-15 (`Site.prototype.destroy()`, called by `Grid.refresh()` on
+      every existing site before the flush). The full UAT run was executed
+      separately by the maintainer before the 2.5.0 release (confirmed
+      2026-07-15) — gate closed.
+- [x] **Dissolve ROADMAP.md** (maintainer decision 2026-07-10): work items →
       GitHub issues (Chrome-port stage 3, favicon cursor-walk dedup, UAT
       backlog scenarios, README troubleshooting, SARIF/JUnit exploration) —
       EXCEPT the AMO release process, which goes into CONTRIBUTING.md as a

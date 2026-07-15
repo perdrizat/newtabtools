@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- `CHROME.md`: the Chrome-port program plan (stage 3) — D0 decisions of record (maintainer-decided 2026-07-15, incl. the 3.0.0 dual-store release plan), arcs D1–D7 + D gate, live status board.
+
+### Changed
+
+- `CHROME_PREP.md` updated to record the C6/2.5.0 release commits, the C gate closed (full UAT ran pre-release, maintainer-confirmed), the ROADMAP-dissolution checkbox, and the follow-up audit round's fix.
+
+### Fixed
+
+- `webextension/site.js`'s `Site` instances leaked their `_thumbnailObjectURL`/`_faviconObjectURL` blob URLs when `Grid.refresh()` flushed the grid; new `Site.prototype.destroy()` (idempotent) revokes both, called by `Grid.refresh()` on every existing site before the flush — adjudicated `audit/2026-07-13-chrome-prep-audit.md` finding.
+
 ## [2.5.0] — 2026-07-13
 
 ### Added

@@ -89,6 +89,15 @@ export var Grid = {
 	   * @return {Promise<void>}
 	   */
 	refresh() {
+		// Revoke each site's cached blob URLs (site.js's `destroy`) before the
+		// flush below orphans the `Site` instance — otherwise they're never
+		// revoked and leak until the page unloads.
+		this.sites.forEach(function(site) {
+			if (site) {
+				site.destroy();
+			}
+		});
+
 		// Remove all sites.
 		this.cells.forEach(function(cell) {
 			let node = cell.node;

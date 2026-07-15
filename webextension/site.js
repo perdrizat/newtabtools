@@ -572,6 +572,27 @@ Site.prototype = {
 	},
 
 	/**
+	 * Revokes both cached blob URLs (`_thumbnailObjectURL`/
+	 * `_faviconObjectURL`, set by `refreshThumbnail`/`applyFavicon` above) and
+	 * nulls them. `Grid.refresh()` (grid.js) calls this on every existing site
+	 * before it flushes the grid's cells — without it, an orphaned `Site`
+	 * instance's blob URLs are never revoked (they're only otherwise freed on
+	 * document unload). Idempotent: safe to call more than once, including on
+	 * a site that never set either URL.
+	 * @this {Site}
+	 */
+	destroy() {
+		if (this._thumbnailObjectURL) {
+			URL.revokeObjectURL(this._thumbnailObjectURL);
+			this._thumbnailObjectURL = null;
+		}
+		if (this._faviconObjectURL) {
+			URL.revokeObjectURL(this._faviconObjectURL);
+			this._faviconObjectURL = null;
+		}
+	},
+
+	/**
 	   * Adds event handlers for the site and its buttons.
 	   */
 	_addEventHandlers() {
