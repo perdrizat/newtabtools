@@ -61,6 +61,11 @@ const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
 const BASE = `http://127.0.0.1:${PORT}`;
 const HEALTH_TIMEOUT_MS = 300000; // generous: history seed is slow on cold links
 
+// Scenario agents run on a mid-tier model by default (maintainer decision
+// 2026-07-15): visual judgment doesn't need the most expensive model, and a
+// full run spawns one `claude -p` per scenario. $UAT_MODEL overrides.
+const UAT_MODEL = process.env.UAT_MODEL || 'sonnet';
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Restricted allowedTools: only the MCP browser tools + Write (for the agent
@@ -304,7 +309,7 @@ try {
 		const start = Date.now();
 		const result = spawnSync(
 			'claude',
-			['-p', '--mcp-config', MCP_CONFIG, '--allowedTools', ALLOWED_TOOLS, '--max-turns', '60'],
+			['-p', '--model', UAT_MODEL, '--mcp-config', MCP_CONFIG, '--allowedTools', ALLOWED_TOOLS, '--max-turns', '60'],
 			{
 				input: prompt,
 				stdio: ['pipe', 'pipe', 'inherit'],

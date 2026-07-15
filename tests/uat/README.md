@@ -41,6 +41,10 @@ The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below)
 
 Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 21-restore`.
 
+Scenario agents run on **Sonnet** by default (`$UAT_MODEL` overrides) —
+visual judgment doesn't need the most expensive model, and a full run spawns
+one `claude -p` per scenario.
+
 Scenarios are numbered by category and run in filename order:
 
 - **00s — env / smoke:** `00-uat-init` (verify the seeded environment), `01-default-ui` (default layout/chrome/drawer + the first-run auto-thumbnail & favicon capture).
