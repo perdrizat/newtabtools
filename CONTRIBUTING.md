@@ -149,6 +149,15 @@ MV3 has landed; the remaining forward-compat concern is **Chrome** (stage 3, def
 - **Always run E2E tests** with `pnpm test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script (`run_esr_tests.sh`, name unchanged) handles the full Firefox lifecycle (launch, port wait, test run, cleanup) automatically — release-channel Firefox by default (no Firefox ESR ≥152 exists yet; `$FIREFOX_ESR_BIN` still overrides the binary).
 - **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
 
+### Running test tiers in parallel
+
+The tiers are port-disjoint by design, so **run them concurrently to save wall-clock** (maintainer practice, 2026-07-16):
+
+- **Firefox E2E** (port 9222) and the **Firefox UAT daemon** (port 9876, `$UAT_DAEMON_PORT`) launch separate Firefox instances with separate profiles — `pnpm test:e2e` and `pnpm test:uat …` can run side by side.
+- The **Chrome tier** (`pnpm chrome:smoke`, `pnpm chrome:smoke:selenium`, future `test:e2e:chrome`) uses the CDP pipe transport / ephemeral chromedriver ports — no fixed port at all — and runs alongside both Firefox tiers. If a fixed Chrome port ever becomes necessary, 9223 (debug) and 9877 (Chrome UAT daemon) are reserved — see [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md) "Port allocation".
+- Parallel means **across tiers, not within one**: a second concurrent `pnpm test:e2e` is refused by the runner lock (`tests/e2e/.runner-lock`), and one UAT daemon owns its port for the whole run.
+- **Timing caveat:** `tests/e2e/boot-timing.test.ts` asserts boot-latency medians, and the UAT daemon's environment-seeding phase is CPU-hungry. If a timing assertion fails during a parallel run, re-run that one file solo before treating it as a regression — everything else in both suites uses bounded polls and is contention-tolerant.
+
 ### Before Committing
 
 - **Run `pnpm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**

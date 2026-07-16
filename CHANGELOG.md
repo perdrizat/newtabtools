@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 
 - UAT runner pins scenario agents to Sonnet by default (`--model`, `$UAT_MODEL` overrides) — cheaper per-scenario `claude -p` runs.
+- CONTRIBUTING gains "Running test tiers in parallel" (port-disjoint E2E/UAT/Chrome tiers, 9223/9877 reservations, boot-timing contention caveat + re-run-solo procedure).
 - `CHROME_PREP.md` deleted (no historical plans kept; C gate closed — full UAT ran pre-release, maintainer-confirmed): chrome-prep Decisions 1–2 (menus, theme) moved into `CONTRIBUTING.md` "Decisions of record"; live doc references redirected to `CONTRIBUTING.md`/`CHROME.md`/`CHANGELOG.md`; code doc-comment citations stay as historical markers (PAGE_MODULES precedent).
 - Tile stat radiogroup drops `Rank`/`Fresh` and reorders to None/Last/Visits/Trend (issue #13); `Prefs.parsePrefs`'s `statType` allow-list shrinks to match, so a previously-stored `rank`/`fresh` value now normalizes to the default (`none`) on read.
 - `lib/messages.js`'s `Thumbnails.getFavicons`/`Thumbnails.getFaviconsByHost` now share one cursor-walk helper instead of two near-identical copies (issue #17); wire shapes unchanged.

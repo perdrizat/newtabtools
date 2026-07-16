@@ -33,6 +33,22 @@ and every `chrome-extension://` URL answers `net::ERR_BLOCKED_BY_CLIENT`:
 The Selenium path (chromedriver) still honors `--load-extension` on Chrome
 for Testing — that's what makes a D6 UAT-on-Chrome daemon feasible.
 
+## Port allocation (parallel-run safety)
+
+The Chrome tier is designed to run CONCURRENTLY with the Firefox tiers:
+
+| Consumer | Port |
+|---|---|
+| Firefox E2E (`run_esr_tests.sh`, BiDi) | 9222 |
+| Firefox UAT daemon (`browser-daemon.mjs`) | 9876 (`$UAT_DAEMON_PORT`) |
+| Chrome Puppeteer path (smokes, future `test:e2e:chrome`) | **none** — pipe transport, no debugging port |
+| Chrome Selenium path (smokes, future D6 UAT daemon) | chromedriver: ephemeral per session |
+| Reserved if a fixed Chrome debug port ever becomes necessary | 9223 |
+| Reserved for the future Chrome UAT daemon HTTP API (D6) | 9877 |
+
+Keep it this way: never hardcode 9222/9876 in this tier, and prefer
+pipe/ephemeral transports over fixed ports entirely.
+
 ## Deterministic extension ID
 
 `_tools/dev-key.json` is a committed PUBLIC key: Chrome derives the

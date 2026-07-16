@@ -6,7 +6,7 @@
 |---|---|---|
 | D0 — decisions of record | done 2026-07-15 (this file) | — |
 | D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
-| D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | in flight (backup slice + arc-close E2E/UAT batch remain) | — |
+| D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | pending | — |
 | D4 — icons, action, manifest completeness | pending | — |
 | D5 — Chrome E2E tier + CI | pending | — |
@@ -220,8 +220,13 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       extension schemes downstream) — fixed for the no-scheme-assumptions
       rule, not as a live bug.
 - [x] D1 smoke GREEN with ZERO page errors after the theme gate
-      (2026-07-16; was 5/5 with one error before). Full arc exit still
-      gated on the backup slice + Firefox E2E/UAT batch.
+      (2026-07-16; was 5/5 with one error before).
+- [x] Arc-close batch (2026-07-16, E2E and UAT run in PARALLEL per the new
+      CONTRIBUTING "Running test tiers in parallel" practice): full Firefox
+      E2E 125/126 — the one failure (titlebar-reflow settle count) was the
+      predicted CPU-contention class and passed green re-run solo; UAT 4/4
+      (20-config, 22-advanced-tab, 31-titlebar, 32-high-contrast) with 5
+      benign observations; Chrome smoke 5/5 zero page errors.
 
 ### D3 — capture pipeline on Chrome
 - [ ] Wire `isCaptureAvailableViaPermission` as the Chrome fork of
@@ -255,6 +260,11 @@ there. Everything after D1 gets a red/green target on real Chrome.*
 - [ ] `test:e2e:chrome` per Decision 3: the D1 launcher grows into a small
       suite (boot, grid, capture, backup, theme fallback, SW respawn);
       runner-lock discipline mirrored from `run_esr_tests.sh`.
+      **Parallel-run rule (maintainer 2026-07-16):** the Chrome tier must
+      be runnable concurrently with Firefox E2E (9222) and the UAT daemon
+      (9876) — keep the pipe/ephemeral transports (no fixed port); if one
+      ever becomes necessary, 9223 is reserved (see
+      `tests/e2e-chrome/README.md` "Port allocation").
 - [ ] Origin/install abstraction in a `_helpers` seam only as far as the
       smoke tier needs — full-parity porting is explicitly out of scope
       (future arc, own program if warranted).
@@ -267,6 +277,9 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       analogue), deterministic ID via the dev `key`, environment seed
       reused (history/consent seeding is browser-agnostic Selenium
       driving; `chrome-extension://` origin threaded through `urls.mjs`).
+      HTTP API port: **9877** (≠ Firefox UAT's 9876) so both daemons can
+      run in parallel (maintainer 2026-07-16; see `tests/e2e-chrome/README.md`
+      "Port allocation").
 - [ ] Scenario pass on Chrome: run the existing scenario set against the
       Chrome daemon; triage per-scenario (some assert Firefox-specific
       chrome — theme following, menus — and need Chrome variants or
