@@ -11,7 +11,8 @@ Skip the restore preamble. `browser_navigate` to the new-tab page and take a
 `00-initial` screenshot, then work through the parts below.
 
 Capture is triggered with `browser_capture_tiles` (it opens the tile URLs and
-returns you to the new-tab page) — you stay on `moz-extension://` throughout.
+returns you to the new-tab page) — you stay on the extension origin throughout
+(`moz-extension://` on Firefox, `chrome-extension://` on Chrome).
 
 ## Part A — default layout and chrome (structural, `browser_evaluate`)
 

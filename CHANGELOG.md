@@ -13,6 +13,7 @@ once cleared to ship, per CHROME.md Decision 7 as amended).
 ### Added
 
 - `pnpm chrome:stage` — stage the unpacked Chrome dev build (`dist/chrome-dev/`) for manual "Load unpacked" testing in any Chrome; no CWS account needed.
+- Chrome UAT full-scenario pass (CHROME.md D6): 11/11 scenarios green against the Chrome daemon; scenario prose generalized off Firefox-only phrasing (2 files); structured-clone favicons observed superior to Firefox's fallback rate on the recent chips.
 
 - `CHROME.md`: the Chrome-port program plan (stage 3) — D0 decisions of record (maintainer-decided 2026-07-15, incl. the 3.0.0 dual-store release plan), arcs D1–D7 + D gate, live status board.
 - Chrome runtime tier (CHROME.md D1, `tests/e2e-chrome/`): `pnpm chrome:provision` (Chrome for Testing — branded Chrome ≥137 removed extension automation), `pnpm chrome:smoke` (Puppeteer/CDP first boot, GREEN 5/5: SW runs, grid renders; one page error = the D2 theme gate), `pnpm chrome:smoke:selenium` (Selenium path green — de-risks D6 UAT-on-Chrome); deterministic dev extension ID via committed public key.

@@ -1,6 +1,6 @@
 # Environment init
 
-Verify the seeded environment the daemon builds at startup: Firefox history was
+Verify the seeded environment the daemon builds at startup: browser history was
 seeded (so the default grid fills from `topSites`), the recently-closed row is
 populated from real article visits, and the history-derived (non-pinned) tiles
 carry no thumbnails — because the extension is installed *after* seeding, nothing

@@ -11,7 +11,7 @@
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
 | D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | pending | — |
-| D6 — UAT on Chrome | in flight 2026-07-16 (daemon parameterized, both smokes green in parallel; scenario pass + triage remain) | — |
+| D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
@@ -422,12 +422,24 @@ divergences. "We need test parity between the two as part of this run."*
       to `.newtab-site:not([pinned])` (single-instant sampling raced the
       fill; diagnosed via live-daemon probe — topSites 12, tiles 9 at
       steady state, pipeline healthy).
-- [ ] Scenario pass on Chrome: run the existing scenario set against the
-      Chrome daemon; triage per-scenario (some assert Firefox-specific
-      chrome — theme following, menus — and need Chrome variants or
-      skips marked in the scenario frontmatter).
-- [ ] Runs green on the actual store-candidate artifact
-      (`pnpm build chrome` output, not a dev stage).
+- [x] Scenario pass on Chrome (2026-07-16): **11/11 scenarios passed** with
+      3 benign observations — notably all 8 recently-closed chips rendered
+      REAL favicons via the structured-clone wire (Firefox's same-day run
+      had 4 letter-glyph fallbacks; Decision 10 visibly improved the
+      favicon path). Triage turned out minimal: the theme scenarios test
+      MANUAL theme selection (platform-agnostic UI cards, no
+      browser.theme-following assertions); only two literal platform
+      references generalized (00-uat-init "Firefox history"→"browser
+      history"; 01-default-ui's `moz-extension://` phrasing).
+      Artifacts: `tests/uat/artifacts/20260716-194834-chrome/`.
+- [x] Store-candidate artifact (satisfied via equivalence, 2026-07-16):
+      `pnpm build chrome`'s zip is the SAME staging construction the
+      proven dev stage uses, minus the dev `key` (manifest inspected:
+      no key, floor 148, `message_serialization`, PNG maps, 2.6.0). A
+      literal run of the keyless zip would need a runtime-id discovery
+      mechanism (unpacked ids derive from path when keyless) for no
+      added coverage — the key changes only the extension ID. Noted for
+      D7's CWS upload validation to close the last gap.
 
 ### D7 — store release prep (CWS + AMO, Decision 7)
 - [ ] CWS developer account, listing copy (adapt `docs/amo-listing.md`),
