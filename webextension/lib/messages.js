@@ -43,6 +43,46 @@ import { NeverCapture } from '../prefs.js';
 import { api, broadcastToPages } from './platform.js';
 
 /**
+ * Shared cursor walk backing both `Thumbnails.getFavicons` and
+ * `Thumbnails.getFaviconsByHost` (issue #17 — the two were near-identical
+ * copies). Walks the thumbnails store once, and for every row asks
+ * `keyFor(row)` whether/how it should be recorded: a truthy return value is
+ * the map key to record the row's favicon under, a falsy one skips the row.
+ * First match wins per key — a no-op for `getFavicons` (one row per exact
+ * URL, the store's keyPath) but load-bearing for `getFaviconsByHost` (several
+ * URLs can share a host; the first one walked keeps it). Mutates `map`
+ * in place (rather than returning a fresh one) so a caller's `.catch` can
+ * still respond with whatever was collected before a failure, matching the
+ * original per-handler behavior.
+ * @param {Map<string, any>} map
+ * @param {(row: any) => string|null|undefined} keyFor
+ * @returns {Promise<void>}
+ */
+function walkFaviconsInto(map, keyFor) {
+	return withObjectStore('thumbnails', 'readonly', function(store) {
+		return new Promise(function(resolve) {
+			store.openCursor().onsuccess = function() {
+				let cursor = this.result;
+				if (cursor) {
+					let row = cursor.value;
+					let key = keyFor(row);
+					if (key && !map.has(key)) {
+						if (row.favicon) {
+							map.set(key, row.favicon);
+						} else if (row.faviconUrl) {
+							map.set(key, row.faviconUrl);
+						}
+					}
+					cursor.continue();
+				} else {
+					resolve(undefined);
+				}
+			};
+		});
+	});
+}
+
+/**
  * The runtime.onMessage listener — dispatch table for the 19 frozen wire
  * names. `sender`/`sendResponse` are typed loosely (matching how this
  * dispatcher has always treated them) since the real contract is enforced by
@@ -184,25 +224,8 @@ export function handleMessage(message, sender, sendResponse) {
 		// favicon comes back as its `faviconUrl` string for the page to render
 		// live via <img>. The page-side handler distinguishes the two.
 		let faviconMap = new Map();
-		withObjectStore('thumbnails', 'readonly', function(store) {
-			return new Promise(function(resolve) {
-				store.openCursor().onsuccess = function() {
-					let cursor = this.result;
-					if (cursor) {
-						let row = cursor.value;
-						if (message.urls.includes(row.url)) {
-							if (row.favicon) {
-								faviconMap.set(row.url, row.favicon);
-							} else if (row.faviconUrl) {
-								faviconMap.set(row.url, row.faviconUrl);
-							}
-						}
-						cursor.continue();
-					} else {
-						resolve(undefined);
-					}
-				};
-			});
+		walkFaviconsInto(faviconMap, function(row) {
+			return message.urls.includes(row.url) ? row.url : null;
 		}).then(function() {
 			sendResponse(faviconMap);
 		}).catch(function(event) {
@@ -218,27 +241,10 @@ export function handleMessage(message, sender, sendResponse) {
 		// page on the same site. Returns a `host -> (Blob | string)` map.
 		let faviconsByHost = new Map();
 		let wantedHosts = new Set(message.hosts || []);
-		withObjectStore('thumbnails', 'readonly', function(store) {
-			return new Promise(function(resolve) {
-				store.openCursor().onsuccess = function() {
-					let cursor = this.result;
-					if (cursor) {
-						let row = cursor.value;
-						let host = null;
-						try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
-						if (host && wantedHosts.has(host) && !faviconsByHost.has(host)) {
-							if (row.favicon) {
-								faviconsByHost.set(host, row.favicon);
-							} else if (row.faviconUrl) {
-								faviconsByHost.set(host, row.faviconUrl);
-							}
-						}
-						cursor.continue();
-					} else {
-						resolve(undefined);
-					}
-				};
-			});
+		walkFaviconsInto(faviconsByHost, function(row) {
+			let host = null;
+			try { host = new URL(row.url).hostname.replace(/^www\./, ''); } catch (e) { /* skip unparseable */ }
+			return host && wantedHosts.has(host) ? host : null;
 		}).then(function() {
 			sendResponse(faviconsByHost);
 		}).catch(function(event) {
@@ -248,8 +254,22 @@ export function handleMessage(message, sender, sendResponse) {
 		return true;
 
 	case 'Thumbnails.delete':
+		// Keep the favicon (issue #9): a screencapture delete should only
+		// drop the `image` field, not the cached favicon/faviconUrl. Get the
+		// record first; if it still has a favicon worth keeping, strip
+		// `image` and put it back. Otherwise there is nothing left worth
+		// keeping, so fall back to the existing wholesale delete.
 		withObjectStore('thumbnails', 'readwrite', function(store) {
-			store.delete(message.url);
+			let request = store.get(message.url);
+			request.onsuccess = function() {
+				let existing = request.result;
+				if (existing && (existing.favicon || existing.faviconUrl)) {
+					delete existing.image;
+					store.put(existing);
+				} else {
+					store.delete(message.url);
+				}
+			};
 		}).catch(console.error);
 		return false;
 

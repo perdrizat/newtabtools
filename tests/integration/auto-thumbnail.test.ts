@@ -737,7 +737,14 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 
 	// --- Thumbnails.delete message handler ---
 
-	it('Thumbnails.delete removes entry from IDB', async () => {
+	it('Thumbnails.delete removes entry from IDB when there is no favicon to keep', async () => {
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = {
+				result: { url: 'https://example.com', image: new Blob(['img']), stored: '2026-07-01', used: '2026-07-01' },
+			};
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
 		const sender = { id: EXTENSION_ID };
 		onMessageListener(
 			{ name: 'Thumbnails.delete', url: 'https://example.com' },
@@ -748,10 +755,44 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		// readiness before opening the transaction — no longer synchronous
 		// (this was background.js's one previously-UNGUARDED raw db.transaction
 		// call site; withStore closes that gap as a side effect, at the cost of
-		// one microtask of latency here).
-		await vi.advanceTimersByTimeAsync(0);
+		// one microtask of latency here). The handler's own store.get()
+		// round-trip adds a further, uncounted number of microtask hops (its
+		// completion isn't chained onto withObjectStore's returned promise —
+		// same fire-and-forget shape pickAndStore's favicon-merge branch
+		// already has) — flush generously rather than guessing an exact tick
+		// count.
+		for (let i = 0; i < 6; i++) {
+			await vi.advanceTimersByTimeAsync(0);
+		}
 		expect(mockDB.transaction).toHaveBeenCalledWith('thumbnails', 'readwrite');
 		expect(thumbnailStore.delete).toHaveBeenCalledWith('https://example.com');
+		expect(thumbnailStore.put).not.toHaveBeenCalled();
+	});
+
+	// Issue #9: deleting a screencapture must keep the cached favicon.
+	it('Thumbnails.delete keeps the favicon and only clears the image', async () => {
+		const favicon = new Blob(['fav']);
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = {
+				result: { url: 'https://example.com', image: new Blob(['img']), favicon, stored: '2026-07-01', used: '2026-07-01' },
+			};
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
+		const sender = { id: EXTENSION_ID };
+		onMessageListener(
+			{ name: 'Thumbnails.delete', url: 'https://example.com' },
+			sender,
+			vi.fn()
+		);
+		for (let i = 0; i < 6; i++) {
+			await vi.advanceTimersByTimeAsync(0);
+		}
+		expect(thumbnailStore.delete).not.toHaveBeenCalled();
+		expect(thumbnailStore.put).toHaveBeenCalled();
+		const putRow = thumbnailStore.put.mock.calls[0][0];
+		expect(putRow.image).toBeUndefined();
+		expect(putRow.favicon).toBe(favicon);
 	});
 
 	// --- Thumbnails.capture message handler ---

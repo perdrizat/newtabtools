@@ -584,7 +584,10 @@ export function purgeNeverCaptureHost(pattern) {
 			let thumbCount = 0;
 			let tileCount = 0;
 
-			// Pass 1: thumbnails store — delete matching records.
+			// Pass 1: thumbnails store — delete matching records. Keeps the
+			// favicon (issue #9): when a matching record still has a
+			// favicon/faviconUrl worth keeping, strip just `image` and update
+			// the record in place instead of deleting it outright.
 			tx.objectStore('thumbnails').openCursor().onsuccess = function() {
 				let cursor = this.result;
 				if (cursor) {
@@ -592,7 +595,12 @@ export function purgeNeverCaptureHost(pattern) {
 					let host = null;
 					try { host = new URL(row.url).hostname; } catch (e) { /* skip unparseable */ }
 					if (host && NeverCapture.hostMatchesPattern(host, pattern)) {
-						cursor.delete();
+						if (row.favicon || row.faviconUrl) {
+							delete row.image;
+							cursor.update(row);
+						} else {
+							cursor.delete();
+						}
 						thumbCount++;
 					}
 					cursor.continue();

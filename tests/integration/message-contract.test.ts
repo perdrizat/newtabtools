@@ -92,7 +92,14 @@ describe('lib/messages.js — frozen message contract (MODERNIZATION.md Decision
 			transaction: vi.fn(() => ({
 				objectStore: vi.fn(() => ({
 					put: vi.fn(),
-					get: vi.fn(),
+					get: vi.fn(() => {
+						const req: Record<string, unknown> = {};
+						Object.defineProperty(req, 'onsuccess', {
+							set(cb: Function) { Promise.resolve().then(() => cb.call({ result: null })); },
+							configurable: true,
+						});
+						return req;
+					}),
 					getAll: vi.fn(),
 					delete: vi.fn(),
 					clear: vi.fn(() => ({ onsuccess: null })),

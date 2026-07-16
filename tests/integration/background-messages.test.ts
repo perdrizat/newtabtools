@@ -437,6 +437,151 @@ describe('lib/messages.js — runtime.onMessage boundary (Phase 1 slot 1)', () =
 		});
 	});
 
+	// ======================== THUMBNAILS.GETFAVICONS ========================
+
+	describe('Thumbnails.getFavicons', () => {
+		beforeEach(() => {
+			thumbnailStore.openCursor.mockClear();
+		});
+
+		it('returns a favicon Blob for a matching url with a cached favicon', async () => {
+			const favicon = new Blob(['fav']);
+			const entries = [
+				{ url: 'https://match.com', favicon },
+				{ url: 'https://other.com', favicon: new Blob(['other']) },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			const result = handleMessage(
+				{ name: 'Thumbnails.getFavicons', urls: ['https://match.com'] },
+				validSender, sendResponse,
+			);
+			expect(result).toBe(true);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('https://match.com')).toBe(favicon);
+			expect(map.has('https://other.com')).toBe(false);
+		});
+
+		it('returns the faviconUrl string when there is no cached favicon Blob', async () => {
+			const entries = [
+				{ url: 'https://remote.com', faviconUrl: 'https://remote.com/favicon.ico' },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFavicons', urls: ['https://remote.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('https://remote.com')).toBe('https://remote.com/favicon.ico');
+		});
+
+		it('prefers a cached favicon Blob over faviconUrl when a record has both', async () => {
+			const favicon = new Blob(['fav']);
+			const entries = [
+				{ url: 'https://both.com', favicon, faviconUrl: 'https://both.com/favicon.ico' },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFavicons', urls: ['https://both.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('https://both.com')).toBe(favicon);
+		});
+
+		it('omits a matching record with neither favicon nor faviconUrl', async () => {
+			const entries = [{ url: 'https://bare.com' }];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFavicons', urls: ['https://bare.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.has('https://bare.com')).toBe(false);
+		});
+	});
+
+	// ======================== THUMBNAILS.GETFAVICONSBYHOST ========================
+
+	describe('Thumbnails.getFaviconsByHost', () => {
+		beforeEach(() => {
+			thumbnailStore.openCursor.mockClear();
+		});
+
+		it('matches by hostname and strips a leading www.', async () => {
+			const favicon = new Blob(['fav']);
+			const entries = [
+				{ url: 'https://www.example.com/page', favicon },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFaviconsByHost', hosts: ['example.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('example.com')).toBe(favicon);
+		});
+
+		it('first matching record for a host wins; a later record for the same host is ignored', async () => {
+			const firstFavicon = new Blob(['first']);
+			const secondFavicon = new Blob(['second']);
+			const entries = [
+				{ url: 'https://example.com/a', favicon: firstFavicon },
+				{ url: 'https://example.com/b', favicon: secondFavicon },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFaviconsByHost', hosts: ['example.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('example.com')).toBe(firstFavicon);
+		});
+
+		it('skips a record with an unparseable url instead of throwing', async () => {
+			const entries = [
+				{ url: 'not a url', favicon: new Blob(['bad']) },
+				{ url: 'https://example.com/x', favicon: new Blob(['good']) },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			expect(() => handleMessage(
+				{ name: 'Thumbnails.getFaviconsByHost', hosts: ['example.com'] },
+				validSender, sendResponse,
+			)).not.toThrow();
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.get('example.com')).toBeInstanceOf(Blob);
+			expect(map.size).toBe(1);
+		});
+
+		it('omits hosts not in the requested set', async () => {
+			const entries = [
+				{ url: 'https://notwanted.com/x', favicon: new Blob(['x']) },
+			];
+			thumbnailStore.openCursor.mockReturnValueOnce(mockCursorIteration(entries));
+
+			handleMessage(
+				{ name: 'Thumbnails.getFaviconsByHost', hosts: ['example.com'] },
+				validSender, sendResponse,
+			);
+			await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+			const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+			expect(map.size).toBe(0);
+		});
+	});
+
 	// ======================== EXPORT / IMPORT HANDLERS ========================
 
 	describe('Export/Import handlers', () => {
