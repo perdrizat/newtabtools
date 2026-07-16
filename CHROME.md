@@ -5,17 +5,19 @@
 | Arc | Status | Commit(s) |
 |---|---|---|
 | D0 — decisions of record | done 2026-07-15 (this file) | — |
-| D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
+| D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | `e32e128` |
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
-| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | — |
-| D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+ |
-| D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | — |
+| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | `eea8565` |
+| D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
+| D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
 | D6 — UAT on Chrome | pending | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
 
-**Status: IN EXECUTION (adopted + D0 decided with maintainer 2026-07-15).**
-Successor to the chrome-prep
+**Status: D0–D5 COMPLETE (2026-07-16) — D6 (UAT on Chrome) is next, then
+D7 (store prep) and the D gate.** The Chrome build boots, captures,
+renders thumbnails, backs up, and survives SW kills — smoke 11/11 on CfT
+151. Successor to the chrome-prep
 program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
 history), which left the codebase Chrome-*ready*:
 `api` seam in place, six wrappers written (some dormant), two-target manifest
@@ -34,8 +36,9 @@ into the arcs below.
 **Inherited constraints (decisions of record, not relitigated here):**
 zero runtime deps (no polyfill — the in-house `api` Proxy is the seam);
 no build step for the Firefox target (source == shipped); single source
-tree, Chrome via manifest-overlay dual-build, never a branch; the 19 wire
-names frozen; restore validators independent; Firefox behavior MUST NOT
+tree, Chrome via manifest-overlay dual-build, never a branch; the frozen
+wire names (20 since 2026-07-16 — additions allowed, renames/drops never);
+restore validators independent; Firefox behavior MUST NOT
 change — every Firefox path in this program stays byte-identical or is
 proven unchanged by full E2E; Decisions 1–2 (no Chrome menus; theme =
 `prefers-color-scheme` base, `browser.theme` a Firefox bonus). The MV3
@@ -278,23 +281,20 @@ failing smoke checks live, and closed the arc.)*
       cross-platform `lib/db.js` race (`onupgradeneeded` exposed the
       connection before the upgrade transaction committed →
       `InvalidStateError` for concurrent `withStore()` callers).
-- [ ] **Tracked gap (page rendering, deliberately out of D3):** thumbnails/
-      favicons cross the wire as `Map`s of `Blob`s — Chrome's JSON
-      messaging degrades a `Map` to `{}` and can't carry a `Blob` at all,
-      so tiles will not RENDER stored thumbnails on Chrome yet (capture +
-      storage proven working). Dual-shape reads landed at 4 page call
-      sites as groundwork. Design decision needed (page reads IDB directly
-      — likely simplest, both platforms share the origin — vs base64 over
-      the wire per the D2 backup precedent). Moved to D5 pre-work below.
-- [ ] **Tracked gap:** `filters-ui.js`'s callback-style
-      `topSites.get(options, cb)` — Chrome rejects any 2-arg call shape
-      outright ("No matching signature"); needs an argument-count-aware
-      branch at that call site. Moved to D5 pre-work below.
+- [x] ~~Tracked gap (page rendering)~~ — RESOLVED by Decision 10
+      (structured-clone messaging); see D5 pre-work (a).
+- [x] ~~Tracked gap (filters-ui call shape)~~ — RESOLVED; see D5
+      pre-work (b).
 
 ### D4 — icons, action, manifest completeness
-- [ ] PNG icon set per Decision 4 (16/32/48/128 + action icons); chrome
-      overlay's `icons`/`action.default_icon` re-pointed; Firefox manifest
-      untouched (keeps SVG + `theme_icons`).
+- [x] PNG icon set per Decision 4 (2026-07-16, `178a773`):
+      `scripts/rasterize-icons.mjs` (puppeteer-core + CfT, zero new deps)
+      → `assets/chrome-icons/` (icon 16/32/48/128, tools-light 16/32;
+      tools-dark 16/32 added with the action-icon wiring); chrome
+      overlay's `icons`/`action.default_icon` re-pointed to PNG size maps;
+      `scripts/build.mjs` chrome target + `stageDevBuild()` copy the PNGs
+      into the staged `images/`; Firefox manifest untouched (keeps SVG +
+      `theme_icons`), artifact verified byte-identical.
 - [x] `syncActionIconWithTheme` WIRED (descope proposal rejected by
       maintainer 2026-07-16 — "do the action icons even if it's a bigger
       change"): a Chrome MV3 SW cannot read `prefers-color-scheme`, so the
@@ -311,10 +311,13 @@ failing smoke checks live, and closed the arc.)*
       per browser session (default_icon until then). VISUAL CHECK owed in
       D6's Chrome UAT: confirm the mapping isn't inverted on a real
       toolbar (a one-line swap if so).
-- [ ] `manifest/chrome.json`: `minimum_chrome_version` (Decision 5),
-      `incognito` policy stated explicitly.
-- [ ] CSP review for the Chrome target (the Mozilla-CDN `connect-src` is
-      wallpaper-catalog plumbing — decide keep/drop for Chrome).
+- [x] `manifest/chrome.json`: `minimum_chrome_version` (144 at `178a773`,
+      raised to 148 by Decision 10), explicit `incognito: "spanning"`
+      (rationale in `manifest/README.md` — JSON carries no comments),
+      `message_serialization: "structured_clone"` (Decision 10).
+- [x] CSP review for the Chrome target: the Mozilla-CDN `connect-src`
+      (wallpaper catalog) is a plain fetch, identical on Chrome — KEPT,
+      not forked per-target (recorded in `manifest/README.md`).
 
 ### D5 — Chrome E2E tier + CI
 - [x] ~~Pre-work (a)~~: thumbnail/favicon rendering on Chrome — **RESOLVED
