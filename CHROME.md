@@ -1,7 +1,21 @@
 # Chrome Port Program — Stage 3: a Real Chrome Build
 
-**Status: ADOPTED (authored + D0 decided with maintainer 2026-07-15).** No
-code has been written under this program yet. Successor to the chrome-prep
+## Status board (live)
+
+| Arc | Status | Commit(s) |
+|---|---|---|
+| D0 — decisions of record | done 2026-07-15 (this file) | — |
+| D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
+| D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | in flight (backup slice + arc-close E2E/UAT batch remain) | — |
+| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | pending | — |
+| D4 — icons, action, manifest completeness | pending | — |
+| D5 — Chrome E2E tier + CI | pending | — |
+| D6 — UAT on Chrome | pending | — |
+| D7 — store release prep (CWS + AMO) | pending | — |
+| D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
+
+**Status: IN EXECUTION (adopted + D0 decided with maintainer 2026-07-15).**
+Successor to the chrome-prep
 program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
 history), which left the codebase Chrome-*ready*:
 `api` seam in place, six wrappers written (some dormant), two-target manifest
@@ -29,20 +43,6 @@ migration directive "no OffscreenCanvas" was scoped to the *Firefox* event
 page (which keeps DOM); the Chrome service worker path uses OffscreenCanvas
 *behind the existing seam* without touching the Firefox path — not a
 reopening of that directive.
-
-## Status board (live)
-
-| Arc | Status | Commit(s) |
-|---|---|---|
-| D0 — decisions of record | done 2026-07-15 (this file) | — |
-| D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
-| D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | pending | — |
-| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | pending | — |
-| D4 — icons, action, manifest completeness | pending | — |
-| D5 — Chrome E2E tier + CI | pending | — |
-| D6 — UAT on Chrome | pending | — |
-| D7 — store release prep (CWS + AMO) | pending | — |
-| D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
 
 ## What the 2026-07-15 sweep found (the concrete gap list)
 
@@ -189,23 +189,39 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       `manifest/chrome.json` in D4.
 
 ### D2 — service-worker boot blockers
-- [ ] `lib/thumbnail-image.js`: OffscreenCanvas/`createImageBitmap` path
-      per Decision 1; same three exports; Firefox path untouched (or
-      textually untouched under runtime detect). Unit tests for both paths
-      (Node has OffscreenCanvas; the Image-path tests already exist).
-- [ ] `lib/backup.js` blob-URL home per Decision 2; ESLint guard extended
-      (D0) so the class can't come back. Red/green at the fast tier +
-      full Firefox E2E (backup/restore suites) since this touches a live
-      Firefox path.
-- [ ] Theme presence-gate (`'theme' in api`) in `newTab.js` + `theme.js`
-      (the theme decision of record, CONTRIBUTING.md): base
-      `prefers-color-scheme` both
-      platforms, `browser.theme` layered only when present. Firefox
-      unchanged (full E2E theme suite).
-- [ ] `titlebar.js:226`: `moz-extension://` literal → `api.runtime.getURL('')`
-      prefix (works on both platforms; fast-tier test).
-- [ ] D1 smoke goes GREEN at the end of this arc — the arc's exit
-      criterion.
+- [x] `lib/thumbnail-image.js`: OffscreenCanvas/`createImageBitmap` path per
+      Decision 1 (`_isServiceWorkerScope()` probe; shared
+      pixel-analysis helper; `_resizeThumbnailOffscreen`/`_isBlankOffscreen`
+      as `_`-prefixed testable exports, the titlebar.js `_layoutTitlebar`
+      convention); Firefox DOM path verbatim (renamed `_*DOM`). 20 new
+      tests, mock-driven (correction to this plan's earlier claim: Node/jsdom
+      have NO real OffscreenCanvas — the real proof is D3's Chrome
+      round-trip).
+- [x] `lib/backup.js` blob-URL home per Decision 2a: `makeZip` returns
+      `{data (base64), filename}` (chunked `btoa`, SW-safe; Chrome messaging
+      is JSON-only — a Blob doesn't survive `runtime.sendMessage` there);
+      new page leaf `backup-download.js` decodes → object URL →
+      `downloads.download` → revoke-on-terminal (former background logic
+      moved verbatim; `object-urls.js` deliberately NOT reused — its
+      keyed revoke-on-replace model would revoke an in-flight first export
+      when a second starts). `Export:backup` wire NAME unchanged (response
+      payload shape changed; contract test asserts names, not that shape).
+      Restore side untouched. ESLint `no-restricted-properties` guard for
+      `URL.create/revokeObjectURL` in `lib/**` (Decision 9), red-first via
+      background-dom-guard.test.ts. 12 new page-side tests + rewritten
+      backup-side assertions; fast 1390/1390.
+- [x] Theme presence-gate (`'theme' in api`) in `newTab.js` (~:936, the
+      menus-gate pattern) + `theme.js` (~:116 explicit absent→`_theme=null`
+      branch). Red-first against the exact Chrome-observed TypeError.
+      Firefox path unchanged (E2E theme suite in the arc-close batch).
+- [x] `titlebar.js:226`: `moz-extension://` literal →
+      `api.runtime.getURL('')` prefix. Finding recorded: the old literal was
+      functionally redundant (common.js `isValidURL` already filtered
+      extension schemes downstream) — fixed for the no-scheme-assumptions
+      rule, not as a live bug.
+- [x] D1 smoke GREEN with ZERO page errors after the theme gate
+      (2026-07-16; was 5/5 with one error before). Full arc exit still
+      gated on the backup slice + Firefox E2E/UAT batch.
 
 ### D3 — capture pipeline on Chrome
 - [ ] Wire `isCaptureAvailableViaPermission` as the Chrome fork of

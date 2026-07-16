@@ -35,6 +35,17 @@ import { api, broadcastToPages } from './platform.js';
 
 zip.configure({ useWebWorkers: false });
 
+/**
+ * Build the backup zip and return it as wire-safe bytes (CHROME.md D2,
+ * Decision 2a). No blob URL and no download happens here: a Chrome MV3
+ * service worker has no `URL.createObjectURL`, and Chrome JSON-serializes
+ * `runtime.sendMessage` responses so a Blob/ArrayBuffer would not survive
+ * the wire either — base64 is the one payload shape that works on both
+ * platforms. The page side (backup-download.js) decodes the payload,
+ * creates the object URL, triggers the download, and revokes the URL — the
+ * per-download lifecycle that used to live here.
+ * @returns {Promise<{data: string, filename: string}>}
+ */
 export async function makeZip() {
 	let writer = new zip.ZipWriter(new zip.BlobWriter());
 
@@ -59,53 +70,25 @@ export async function makeZip() {
 	await writer.add('tiles.json', new zip.TextReader(JSON.stringify(tiles, null, '\t')));
 
 	let blob = await writer.close();
-	// `downloads` is an optional permission (see manifest.json); if it hasn't
-	// been granted, `browser.downloads` is undefined and this throws — same
-	// as the old callback-style `chrome.downloads.download(...)` call did
-	// with no guard of its own.
-	let url = URL.createObjectURL(blob);
+	return { data: await blobToBase64(blob), filename: 'newtabtools.zip' };
+}
 
-	// Revoke the blob URL once this specific download reaches a terminal
-	// state — previously never revoked (leaked one blob per export until the
-	// event page happened to suspend). Scoped to `downloadId` via the closure
-	// below so unrelated downloads.onChanged events (any other download the
-	// user has running) are ignored.
-	//
-	// Event-page note: this listener lives only as long as the event page's
-	// in-memory JS context does. If the page suspends mid-download, the
-	// listener — and its closure over `url` — die with the document, but so
-	// does the document's own object-URL registry (blob URLs are
-	// document-scoped), so there is nothing left to revoke either way.
-	/** @type {number|undefined} */
-	let downloadId;
-	/** @param {browser.downloads._OnChangedDownloadDelta} delta */
-	function onDownloadChanged(delta) {
-		if (delta.id !== downloadId || !delta.state) {
-			return;
-		}
-		if (['complete', 'interrupted'].includes(/** @type {string} */ (delta.state.current))) {
-			URL.revokeObjectURL(url);
-			api.downloads.onChanged.removeListener(onDownloadChanged);
-		}
+/**
+ * Base64-encode a Blob's bytes. `btoa` wants a binary string; it's built in
+ * 32 KiB slices because a single `String.fromCharCode(...allBytes)` call
+ * would blow the engine's argument-count limit on a multi-MB backup.
+ * @param {Blob} blob
+ * @returns {Promise<string>}
+ */
+async function blobToBase64(blob) {
+	let bytes = new Uint8Array(await blob.arrayBuffer());
+	const SLICE_SIZE = 0x8000;
+	/** @type {string[]} */
+	let parts = [];
+	for (let i = 0; i < bytes.length; i += SLICE_SIZE) {
+		parts.push(String.fromCharCode(...bytes.subarray(i, i + SLICE_SIZE)));
 	}
-	if (api.downloads && api.downloads.onChanged) {
-		api.downloads.onChanged.addListener(onDownloadChanged);
-	}
-
-	try {
-		downloadId = await api.downloads.download({
-			url,
-			filename: 'newtabtools.zip',
-			saveAs: true
-		});
-		return downloadId;
-	} catch (ex) {
-		URL.revokeObjectURL(url);
-		if (api.downloads && api.downloads.onChanged) {
-			api.downloads.onChanged.removeListener(onDownloadChanged);
-		}
-		throw ex;
-	}
+	return btoa(parts.join(''));
 }
 
 /**

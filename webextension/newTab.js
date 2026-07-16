@@ -34,6 +34,7 @@ import { _initAutoSaveIndicator } from './autosave-indicator.js';
 import { fillFilterUI, fillNeverCaptureUI } from './filters-ui.js';
 import { uiRefs, populateUiRefs } from './ui-refs.js';
 import { _freshObjectURL, _dropObjectURL } from './object-urls.js';
+import { requestBackup } from './backup-download.js';
 import { api } from './api.js';
 
 /**
@@ -655,7 +656,10 @@ const NewTabToolsObject = {
 			// — this call must stay synchronous inside the click handler; don't
 			// defer it behind an `await` (audit §traps).
 			api.permissions.request({permissions: ['downloads']}, function() {
-				api.runtime.sendMessage({name: 'Export:backup'});
+				// The background returns the zip bytes; the page creates the blob
+				// URL and triggers the download (backup-download.js, CHROME.md D2
+				// Decision 2a).
+				requestBackup();
 			});
 			return;
 		case 'options-restore':

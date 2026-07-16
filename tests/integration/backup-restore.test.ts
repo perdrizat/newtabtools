@@ -37,11 +37,16 @@
  *     unexpected pref keys (§2.5), HTML in tile titles
  *   - readZip edge cases: missing entries, empty zip
  *
- * E2E note: deferred for this slot. makeZip uses chrome.downloads.download
- * with saveAs:true (system dialog Puppeteer can't easily automate) and
- * readZip requires file-input injection. The Integration tests cover the
- * security-critical logic paths. A dedicated backup/restore E2E can be
- * added once the UI stabilizes in Phase 2.
+ * CHROME.md D2 (Decision 2a): makeZip no longer downloads anything itself —
+ * `URL.createObjectURL` does not exist in a Chrome MV3 service worker, and a
+ * Blob would not survive Chrome's JSON-serialized `runtime.sendMessage`
+ * response. It returns the zip as base64 bytes + filename; the page side
+ * (backup-download.js, tests/integration/backup-download.test.ts) decodes,
+ * creates the blob URL, and triggers the download.
+ *
+ * E2E note: deferred for this slot. The export ends in a saveAs:true system
+ * dialog Puppeteer can't easily automate and readZip requires file-input
+ * injection. The Integration tests cover the security-critical logic paths.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -63,6 +68,7 @@ type MockZipEntry = { filename: string; getData: ReturnType<typeof vi.fn> };
 const zipState = vi.hoisted(() => ({
 	writtenEntries: [] as WrittenEntry[],
 	readerEntries: [] as MockZipEntry[],
+	closeBlob: null as Blob | null,
 }));
 
 const mockBackground = vi.hoisted(() => ({
@@ -90,7 +96,7 @@ vi.mock('../../webextension/lib/zip/zip-core.js', () => ({
 			const content = 'text' in reader ? reader.text : reader.blob;
 			zipState.writtenEntries.push({ filename, content });
 		});
-		close = vi.fn(async () => new Blob(['mock-zip']));
+		close = vi.fn(async () => zipState.closeBlob ?? new Blob(['mock-zip']));
 		constructor() { zipState.writtenEntries.length = 0; }
 	},
 
@@ -166,6 +172,7 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 	beforeEach(() => {
 		zipState.writtenEntries.length = 0;
 		zipState.readerEntries = [];
+		zipState.closeBlob = null;
 		mockBackground.getBackground.mockClear();
 		mockBackground.setBackground.mockClear();
 		mockTiles.getAll.mockClear();
@@ -256,18 +263,18 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(zipState.writtenEntries.find(e => e.filename === 'background')).toBeUndefined();
 		});
 
-		it('triggers browser.downloads.download', async () => {
-			await makeZip();
+		it('returns the zip as base64 bytes + filename instead of downloading', async () => {
+			const result = await makeZip();
 
-			expect(mockDownloads.download).toHaveBeenCalledWith(
-				expect.objectContaining({ filename: 'newtabtools.zip', saveAs: true }),
-			);
+			expect(result.filename).toBe('newtabtools.zip');
+			expect(atob(result.data)).toBe('mock-zip');
+			expect(mockDownloads.download).not.toHaveBeenCalled();
 		});
 	});
 
-	// ======================== makeZip — object URL revocation (post-MV3 backlog item 1a) ========================
+	// ======================== makeZip — no blob-URL/download machinery (CHROME.md D2, Decision 2a) ========================
 
-	describe('makeZip — object URL revocation', () => {
+	describe('makeZip — background stays free of blob URLs and downloads', () => {
 		let createSpy: ReturnType<typeof vi.fn>;
 		let revokeSpy: ReturnType<typeof vi.fn>;
 
@@ -278,77 +285,39 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			(URL as any).revokeObjectURL = revokeSpy;
 		});
 
-		it('registers a downloads.onChanged listener scoped to the created download id', async () => {
-			mockDownloads.download.mockResolvedValueOnce(101);
-
+		it('never calls URL.createObjectURL or URL.revokeObjectURL', async () => {
 			await makeZip();
 
-			expect(mockDownloads.onChanged!.addListener).toHaveBeenCalledTimes(1);
+			expect(createSpy).not.toHaveBeenCalled();
 			expect(revokeSpy).not.toHaveBeenCalled();
 		});
 
-		it('revokes the object URL when the download reaches "complete"', async () => {
-			mockDownloads.download.mockResolvedValueOnce(101);
-
+		it('never touches the downloads API (no download, no onChanged listener)', async () => {
 			await makeZip();
-			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
 
-			onChangedListener({ id: 101, state: { current: 'complete' } });
-
-			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
-			expect(mockDownloads.onChanged!.removeListener).toHaveBeenCalledWith(onChangedListener);
+			expect(mockDownloads.download).not.toHaveBeenCalled();
+			expect(mockDownloads.onChanged!.addListener).not.toHaveBeenCalled();
 		});
 
-		it('revokes the object URL when the download reaches "interrupted"', async () => {
-			mockDownloads.download.mockResolvedValueOnce(102);
+		it('base64-encodes a multi-chunk (>32 KiB) zip losslessly', async () => {
+			const bytes = new Uint8Array(100_000);
+			for (let i = 0; i < bytes.length; i++) {
+				bytes[i] = i % 256;
+			}
+			zipState.closeBlob = new Blob([bytes]);
 
-			await makeZip();
-			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
+			const { data } = await makeZip();
 
-			onChangedListener({ id: 102, state: { current: 'interrupted' } });
-
-			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
-		});
-
-		it('ignores onChanged events for a different download id', async () => {
-			mockDownloads.download.mockResolvedValueOnce(103);
-
-			await makeZip();
-			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-
-			onChangedListener({ id: 999, state: { current: 'complete' } });
-
-			expect(revokeSpy).not.toHaveBeenCalled();
-		});
-
-		it('ignores a non-terminal state change (e.g. "in_progress") for the same download id', async () => {
-			mockDownloads.download.mockResolvedValueOnce(104);
-
-			await makeZip();
-			const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-
-			onChangedListener({ id: 104, state: { current: 'in_progress' } });
-
-			expect(revokeSpy).not.toHaveBeenCalled();
-		});
-
-		it('revokes immediately and rethrows when browser.downloads.download rejects', async () => {
-			mockDownloads.download.mockRejectedValueOnce(new Error('download failed'));
-
-			await expect(makeZip()).rejects.toThrow('download failed');
-
-			expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
-		});
-
-		it('does not throw when browser.downloads.onChanged is absent (defensive guard)', async () => {
-			const saved = mockDownloads.onChanged;
-			mockDownloads.onChanged = undefined;
-			(globalThis as any).chrome.downloads = mockDownloads;
-
-			await expect(makeZip()).resolves.toBeDefined();
-
-			mockDownloads.onChanged = saved;
-			(globalThis as any).chrome.downloads = mockDownloads;
+			const binary = atob(data);
+			expect(binary.length).toBe(bytes.length);
+			let firstMismatch = -1;
+			for (let i = 0; i < bytes.length; i++) {
+				if (binary.charCodeAt(i) !== bytes[i]) {
+					firstMismatch = i;
+					break;
+				}
+			}
+			expect(firstMismatch).toBe(-1);
 		});
 	});
 

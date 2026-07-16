@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `CHROME_PREP.md` deleted (no historical plans kept; C gate closed — full UAT ran pre-release, maintainer-confirmed): chrome-prep Decisions 1–2 (menus, theme) moved into `CONTRIBUTING.md` "Decisions of record"; live doc references redirected to `CONTRIBUTING.md`/`CHROME.md`/`CHANGELOG.md`; code doc-comment citations stay as historical markers (PAGE_MODULES precedent).
 - Tile stat radiogroup drops `Rank`/`Fresh` and reorders to None/Last/Visits/Trend (issue #13); `Prefs.parsePrefs`'s `statType` allow-list shrinks to match, so a previously-stored `rank`/`fresh` value now normalizes to the default (`none`) on read.
 - `lib/messages.js`'s `Thumbnails.getFavicons`/`Thumbnails.getFaviconsByHost` now share one cursor-walk helper instead of two near-identical copies (issue #17); wire shapes unchanged.
+- Backup download unified for both platforms (CHROME.md D2 Decision 2a): `makeZip` returns base64 zip bytes + filename over the wire; new page-side `backup-download.js` decodes, creates/revokes the blob URL, and triggers the download (no `URL.createObjectURL` in the background — now also ESLint-guarded via `no-restricted-properties` on `lib/**`, Decision 9). Same filename/saveAs UX on Firefox.
 
 ### Fixed
 

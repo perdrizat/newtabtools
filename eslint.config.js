@@ -212,6 +212,15 @@ export default [
 				{ name: 'XMLSerializer', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
 				{ name: 'localStorage', message: 'DOM/canvas work belongs in lib/thumbnail-image.js — CHROME_PREP.md C1.' },
 			],
+			// CHROME.md D2 Decision 9: `no-restricted-globals` can't see method
+			// calls on an allowed global — `URL.createObjectURL` slipped through
+			// it in lib/backup.js. Blob URLs don't exist in a Chrome MV3 service
+			// worker; their home is the page (backup-download.js for the backup
+			// download, object-urls.js for keyed render surfaces).
+			'no-restricted-properties': [2,
+				{ object: 'URL', property: 'createObjectURL', message: 'No blob URLs in the background (Chrome MV3 SW has none) — create them on the page (backup-download.js / object-urls.js). CHROME.md D2 Decision 9.' },
+				{ object: 'URL', property: 'revokeObjectURL', message: 'No blob URLs in the background (Chrome MV3 SW has none) — revoke them on the page (backup-download.js / object-urls.js). CHROME.md D2 Decision 9.' },
+			],
 		},
 	},
 	{

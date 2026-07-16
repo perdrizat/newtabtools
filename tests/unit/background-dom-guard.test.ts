@@ -78,3 +78,48 @@ describe('background DOM guard (eslint.config.js, CHROME_PREP.md C1)', () => {
 		expect(config.rules?.['no-restricted-globals']?.[0]).toBe(2);
 	});
 });
+
+/**
+ * CHROME.md D2 Decision 9: `no-restricted-globals` can't see method calls on
+ * an allowed global — `URL.createObjectURL` slipped through it in
+ * lib/backup.js. The same lib/** guard block also carries
+ * `no-restricted-properties` entries for `URL.createObjectURL` and
+ * `URL.revokeObjectURL` (blob URLs don't exist in a Chrome MV3 service
+ * worker; their home is the page — backup-download.js / object-urls.js).
+ */
+describe('background blob-URL guard (eslint.config.js, CHROME.md D2 Decision 9)', () => {
+	let eslint: ESLint;
+
+	beforeAll(() => {
+		eslint = new ESLint({ cwd: process.cwd() });
+	});
+
+	it('restricts URL.createObjectURL and URL.revokeObjectURL in an ordinary lib/** file', async () => {
+		const config = await eslint.calculateConfigForFile('webextension/lib/db.js');
+		const rule = config.rules?.['no-restricted-properties'];
+
+		expect(rule).toBeDefined();
+		expect(rule[0]).toBe(2); // error, not warn
+
+		for (const property of ['createObjectURL', 'revokeObjectURL']) {
+			const entry = rule.slice(1).find(
+				(e: { object?: string; property?: string }) => e.object === 'URL' && e.property === property,
+			);
+			expect(entry).toBeDefined();
+			// The message must point at the page-side home so a violation is
+			// actionable.
+			expect(entry.message).toMatch(/backup-download\.js/);
+		}
+	});
+
+	it('exempts the vendored lib/zip/** bundle', async () => {
+		const config = await eslint.calculateConfigForFile('webextension/lib/zip/zip-core-base.js');
+		expect(config?.rules?.['no-restricted-properties']).toBeUndefined();
+	});
+
+	it('lib/backup.js itself lints clean of blob-URL calls', async () => {
+		const results = await eslint.lintFiles(['webextension/lib/backup.js']);
+		const violations = results[0].messages.filter(m => m.ruleId === 'no-restricted-properties');
+		expect(violations).toEqual([]);
+	});
+});
