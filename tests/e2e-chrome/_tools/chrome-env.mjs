@@ -32,6 +32,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const DEV_KEY = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'dev-key.json'), 'utf8'));
 
 /**
+ * The committed dev build's deterministic Chrome extension id, read straight
+ * off `dev-key.json` (no staging side effect) — for callers that just need
+ * the id to build a `chrome-extension://` URL (e.g. the UAT runner's
+ * prologue) without paying for `stageDevBuild()`'s copy.
+ */
+export const CHROME_DEV_EXTENSION_ID = DEV_KEY.id;
+
+/**
  * Chrome-for-Testing binaries in the standard Puppeteer cache, newest first.
  * Branded Google Chrome >= 137 removed extension automation (both
  * --load-extension and the CDP install path produce a never-activated

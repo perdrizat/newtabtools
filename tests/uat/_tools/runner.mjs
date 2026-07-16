@@ -35,6 +35,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { newTabURL } from './urls.mjs';
+import { CHROME_DEV_EXTENSION_ID } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -42,12 +44,25 @@ const SCENARIOS_DIR = path.join(ROOT, 'tests/uat/scenarios');
 const ARTIFACTS_ROOT = path.join(ROOT, 'tests/uat/artifacts');
 const FIXTURE = path.join(ROOT, 'tests/uat/newtabtools_knowngood.zip');
 
+// chrome-prep D6: one parameterized runner drives either browser daemon.
+// $UAT_BROWSER selects `firefox` (default) or `chrome`; everything below
+// (preflight, daemon spawn, scenario loop, MCP env) is shared — only the
+// port default, the artifacts-dir suffix, and the newtab origin threaded into
+// the scenario prologue differ.
+const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
+const FIREFOX_UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
+const NEWTAB_URL = UAT_BROWSER === 'chrome'
+	? newTabURL(CHROME_DEV_EXTENSION_ID, 'chrome')
+	: newTabURL(FIREFOX_UUID, 'firefox');
+
 // Each run writes into its own YYYYMMDD-HHMMSS directory so successive runs
 // never overwrite each other's screenshots/reports. Screenshots are prefixed
 // with the same stamp + scenario label so opening the first and paging through
 // browses them in capture order (e.g. 20260603-071342-restore-dogfood-01-grid.png).
+// A Chrome run's directory carries a `-chrome` suffix so the two tiers' runs
+// never get confused for one another when browsing tests/uat/artifacts/.
 const RUN_STAMP = runStamp();
-const RUN_DIR = path.join(ARTIFACTS_ROOT, RUN_STAMP);
+const RUN_DIR = path.join(ARTIFACTS_ROOT, UAT_BROWSER === 'chrome' ? `${RUN_STAMP}-chrome` : RUN_STAMP);
 const MCP_CONFIG = path.join(__dirname, 'mcp-config.json');
 
 function runStamp(d = new Date()) {
@@ -57,9 +72,14 @@ function runStamp(d = new Date()) {
 const PREFLIGHT = path.join(__dirname, 'preflight.mjs');
 const DAEMON = path.join(__dirname, 'browser-daemon.mjs');
 
-const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
+const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876;
+const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
 const BASE = `http://127.0.0.1:${PORT}`;
-const HEALTH_TIMEOUT_MS = 300000; // generous: history seed is slow on cold links
+// generous: history seed is slow on cold links; Chrome's `--headless=new` does
+// fuller rendering (JS/ads/trackers) than Firefox's classic `-headless`, so the
+// same seed measurably takes longer per site — verified timing difference, not
+// a hang (see daemon-smoke.mjs). Give Chrome double the budget.
+const HEALTH_TIMEOUT_MS = UAT_BROWSER === 'chrome' ? 600000 : 300000;
 
 // Scenario agents run on a mid-tier model by default (maintainer decision
 // 2026-07-15): visual judgment doesn't need the most expensive model, and a
@@ -194,6 +214,8 @@ function ensureSkillSymlink() {
 	console.log(`runner: linked .claude/skills/uat-scenario.md -> ${target}`);
 }
 
+console.log(`runner: browser=${UAT_BROWSER}, newtab origin=${NEWTAB_URL}`);
+
 // ─── 1. preflight ─────────────────────────────────────────────────────────────
 
 console.log('\n=== UAT runner: preflight ===\n');
@@ -239,10 +261,10 @@ console.log(`runner: artifacts for this run -> ${RUN_DIR}/`);
 
 // ─── 3. start the browser daemon ──────────────────────────────────────────────
 
-console.log(`\n=== UAT runner: starting browser daemon (port ${PORT}) ===\n`);
+console.log(`\n=== UAT runner: starting ${UAT_BROWSER} browser daemon (port ${PORT}) ===\n`);
 const daemon = spawn('node', [DAEMON], {
 	stdio: ['ignore', 'inherit', 'inherit'],
-	env: { ...process.env, UAT_DAEMON_PORT: String(PORT), ARTIFACTS_DIR: RUN_DIR },
+	env: { ...process.env, UAT_BROWSER, UAT_DAEMON_PORT: String(PORT), ARTIFACTS_DIR: RUN_DIR },
 });
 
 // Record an early exit so waitHealthy can fail fast instead of polling a corpse.
@@ -293,6 +315,8 @@ try {
 			'# Runner context (injected — not part of the scenario source)',
 			'',
 			`- Scenario slug: \`${slug}\``,
+			`- Browser under test: \`${UAT_BROWSER}\``,
+			`- New-tab origin for this run (navigate here, not \`about:newtab\`): \`${NEWTAB_URL}\``,
 			`- Fixture zip (absolute path): \`${FIXTURE}\``,
 			'- Use the `uat-scenario` skill (if available) to interpret what follows.',
 			`- Write your report (JSON) to exactly this path: \`${interimReport}\``,
@@ -315,6 +339,7 @@ try {
 				stdio: ['pipe', 'pipe', 'inherit'],
 				env: {
 					...process.env,
+					UAT_BROWSER,
 					UAT_DAEMON_PORT: String(PORT),
 					ARTIFACTS_DIR: RUN_DIR,
 					UAT_SCENARIO_LABEL: slug,

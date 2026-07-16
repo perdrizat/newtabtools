@@ -5,13 +5,13 @@
 
 // NTT UAT — browser daemon.
 //
-// A LONG-LIVED process that owns exactly ONE Selenium + release-Firefox session
-// for the whole UAT run, and exposes it over a localhost HTTP API. The MCP
+// A LONG-LIVED process that owns exactly ONE Selenium + browser session for
+// the whole UAT run, and exposes it over a localhost HTTP API. The MCP
 // server (mcp-server.mjs) is a thin client that forwards each browser_* tool
 // call here; the runner spawns this once, polls /health, runs every scenario
 // against the same warm browser, then SIGTERMs it.
 //
-// Why a daemon (vs. launching Firefox inside each `claude -p` session):
+// Why a daemon (vs. launching a browser inside each `claude -p` session):
 //   - Launch + history-seed + extension-install cost is paid ONCE per run, not
 //     once per scenario.
 //   - History is seeded by real navigation BEFORE the extension is installed, so
@@ -20,8 +20,32 @@
 //   - Established split (browserless / Playwright launch-server / Selenium Grid):
 //     browser runtime is separate from the agent's MCP context.
 //
-// PORT: 9876 by default, $UAT_DAEMON_PORT overrides. Deliberately != E2E's 9222
-// (tests/e2e/run_esr_tests.sh) so UAT and E2E never collide. preflight.mjs
+// Browser: $UAT_BROWSER selects `firefox` (default) or `chrome` (chrome-prep
+// D6) — one parameterized daemon, not a forked implementation, per the
+// manifest-overlay philosophy (single source tree, not parallel branches).
+// The two browsers diverge in exactly one structural way — WHEN the extension
+// is installed:
+//   - Firefox: seedEnvironment() runs first (real navigation, no extension
+//     loaded → no auto-thumbnail capture), THEN installExtension() calls
+//     `driver.installAddon(xpi, true)` — an authentic new-user first render.
+//   - Chrome: there is no mid-session unpacked-install equivalent to
+//     geckodriver's `installAddon` (the CDP install route needs a pipe
+//     transport Selenium doesn't expose), so the staged dev build is loaded
+//     via `--load-extension` at LAUNCH — present from the first navigation.
+//     installExtension() is a no-op on this path. The first-render
+//     authenticity approximation still holds even so: during seeding nothing
+//     is pinned yet and the tile cache is empty, so no captures fire — the
+//     first NEW TAB render still shows a history-filled grid with no
+//     thumbnails, it's just that the extension was technically resident a few
+//     minutes earlier than on Firefox. Everything downstream (pin/capture/
+//     reset) is wire/DOM-driven through `chrome.runtime.sendMessage` (Firefox
+//     also answers to the `chrome.*` alias) and Selenium's browser-agnostic
+//     API, so it needs no per-browser branching.
+//
+// PORT: 9876 by default for Firefox, 9877 for Chrome (chrome-prep D6, so both
+// daemons can run in parallel — see tests/e2e-chrome/README.md "Port
+// allocation"); $UAT_DAEMON_PORT overrides either. Firefox's default is
+// deliberately != E2E's 9222 (tests/e2e/run_esr_tests.sh). preflight.mjs
 // enforces the port is free before the runner starts.
 //
 // Endpoints (all JSON):
@@ -38,12 +62,14 @@
 //   POST /close_other_tabs                      -> { ok, closed }   (→ recently-closed)
 //   POST /dismiss_consent                       -> { ok, clicked }  (accept cookies)
 //
-// Env: FIREFOX_BIN, XPI_DIR/EXTENSION_XPI, ARTIFACTS_DIR, UAT_DAEMON_PORT,
-//      UAT_WINDOW=WxH (viewport), UAT_VIEWPORT=WxH (exact inner size),
-//      UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS + UAT_NEWS_URLS (environment seed).
+// Env: UAT_BROWSER=firefox|chrome, FIREFOX_BIN, CHROME_BIN, XPI_DIR/EXTENSION_XPI
+//      (Firefox only), ARTIFACTS_DIR, UAT_DAEMON_PORT, UAT_WINDOW=WxH (viewport),
+//      UAT_VIEWPORT=WxH (exact inner size), UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS
+//      + UAT_NEWS_URLS (environment seed).
 //
 // Run standalone (after `pnpm build`):
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-daemon.mjs
+//   UAT_BROWSER=chrome node tests/uat/_tools/browser-daemon.mjs
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -51,17 +77,26 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
+import chromeWebdriver from 'selenium-webdriver/chrome.js';
 import { newTabURL } from './urls.mjs';
+import { resolveChromeBinary, stageDevBuild, chromeArgs } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
 
-const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
+const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
+const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876;
+const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
 const XPI_DIR = process.env.XPI_DIR || path.resolve(ROOT, 'dist');
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const ADDON_ID = 'newtabtools@symlink.ch';
-const NEWTAB_URL = newTabURL(UUID);
+// Set once makeDriver() resolves the per-browser id (Firefox UUID / Chrome
+// extension id) — every later use (isMain flow, HTTP handlers) runs strictly
+// after makeDriver() has returned, so the assignment always lands first.
+let NEWTAB_URL;
+// { dir, extensionId } from stageDevBuild() — chrome-only, set in makeDriver().
+let chromeStage = null;
 
 // Window size for the Firefox viewport. Default Full HD; override with
 // $UAT_WINDOW=WxH (e.g. 2560x1600 to supersample marketing screenshots).
@@ -160,21 +195,13 @@ function resolveXpi() {
 	return uatBundle || files[0];
 }
 
-async function makeDriver() {
-	const opts = new firefox.Options();
-	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
-	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
-	opts.addArguments('-headless');
-	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
-	// viewport. Screenshots are saved at full resolution by default (see SHOT_SCALE)
-	// so the agent judges a representative FHD layout.
-	opts.addArguments(`--width=${WIN_W}`, `--height=${WIN_H}`);
-	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+// $UAT_VIEWPORT=WxH: size the window so the *inner* viewport (what the
+// screenshot captures) is exactly WxH — the outer window is larger by the
+// chrome offset, so a naive setRect undershoots. One measure-and-correct pass
+// lands it on the dot (used for native 1280×800 marketing screenshots). Shared
+// across both browsers — Selenium's window-management API is browser-agnostic.
+async function applyWindowSize(driver) {
 	await driver.manage().window().setRect({ x: 0, y: 0, width: WIN_W, height: WIN_H });
-	// $UAT_VIEWPORT=WxH: size the window so the *inner* viewport (what the
-	// screenshot captures) is exactly WxH — the outer window is larger by the
-	// chrome offset, so a naive setRect undershoots. One measure-and-correct pass
-	// lands it on the dot (used for native 1280×800 marketing screenshots).
 	const vp = /^(\d+)x(\d+)$/.exec(process.env.UAT_VIEWPORT || '');
 	if (vp) {
 		const targetW = parseInt(vp[1], 10), targetH = parseInt(vp[2], 10);
@@ -187,6 +214,50 @@ async function makeDriver() {
 			height: targetH + (rect.height - inner[1]),
 		});
 	}
+}
+
+async function makeDriver() {
+	if (UAT_BROWSER === 'chrome') {
+		const found = resolveChromeBinary();
+		if (!found) {
+			throw new Error('no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`.');
+		}
+		// Stage the unpacked dev build (merged Chrome manifest + committed dev
+		// key) so `--load-extension` gets a deterministic extension id — see
+		// tests/e2e-chrome/_tools/chrome-env.mjs. Unlike Firefox's installAddon,
+		// this MUST happen at launch (see the module header divergence note), so
+		// NEWTAB_URL is resolved here rather than at module scope.
+		chromeStage = stageDevBuild();
+		NEWTAB_URL = newTabURL(chromeStage.extensionId, 'chrome');
+		const opts = new chromeWebdriver.Options();
+		opts.setChromeBinaryPath(found.bin);
+		opts.addArguments('--headless=new', ...chromeArgs(chromeStage.dir));
+		// Chrome's `--headless=new` renders ad-heavy seed sites much closer to
+		// real Chrome (full JS/trackers/ads) than Firefox's classic `-headless`,
+		// so some sites' `document.readyState` never settles to `complete` within
+		// any reasonable bound — the default 'normal' pageLoadStrategy then hangs
+		// `driver.get()` well past the daemon's own pageLoad timeout (observed
+		// empirically on the full site list, chrome-prep D6). 'eager' returns once
+		// DOMContentLoaded fires, which is enough for history/frecency seeding and
+		// consent-banner dismissal. Firefox is unaffected (default strategy kept).
+		opts.setPageLoadStrategy('eager');
+		const driver = await new Builder().forBrowser('chrome').setChromeOptions(opts).build();
+		await applyWindowSize(driver);
+		log(`chrome extension id: ${chromeStage.extensionId} (${found.version}, ${found.bin})`);
+		return driver;
+	}
+
+	NEWTAB_URL = newTabURL(UUID, 'firefox');
+	const opts = new firefox.Options();
+	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
+	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
+	opts.addArguments('-headless');
+	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
+	// viewport. Screenshots are saved at full resolution by default (see SHOT_SCALE)
+	// so the agent judges a representative FHD layout.
+	opts.addArguments(`--width=${WIN_W}`, `--height=${WIN_H}`);
+	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+	await applyWindowSize(driver);
 	// NB: the extension is NOT installed here. The daemon seeds history first
 	// (no extension loaded → no auto-thumbnail capture), then installs it, so the
 	// first new-tab render is an authentic new-user state: history-filled grid
@@ -194,6 +265,14 @@ async function makeDriver() {
 	return driver;
 }
 async function installExtension(d) {
+	if (UAT_BROWSER === 'chrome') {
+		// Chrome cannot install unpacked mid-session (no CDP pipe transport in
+		// Selenium) — the staged dev build was already loaded via
+		// `--load-extension` at launch time (see makeDriver). No-op here; kept
+		// as a call site so the isMain flow reads identically for both browsers.
+		log(`extension already loaded via --load-extension (chrome extension id: ${chromeStage.extensionId})`);
+		return;
+	}
 	const xpi = resolveXpi();
 	await d.installAddon(xpi, true); // temporary = unsigned OK on release
 	log(`extension installed: ${path.basename(xpi)}`);
@@ -289,11 +368,11 @@ async function seedRecentlyClosed(d) {
 		let articles = [];
 		try {
 			await d.switchTo().newWindow('tab');
-			try { await d.get(home); } catch { /* slow */ }
+			try { await withTimeout(d.get(home), 12000, `recently-closed get ${home}`); } catch { /* slow */ }
 			await sleep(2500);
-			try { await dismissConsent(d); } catch { /* best effort */ }
+			try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${home}`); } catch { /* best effort */ }
 			await sleep(1000);
-			try { await dismissConsent(d); } catch { /* best effort */ }
+			try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${home}`); } catch { /* best effort */ }
 			articles = await d.executeScript(`
 				const origin = location.origin, seen = new Set(), out = [];
 				for (const a of document.querySelectorAll('a[href]')) {
@@ -312,7 +391,7 @@ async function seedRecentlyClosed(d) {
 		for (const article of (articles || [])) {
 			try {
 				await d.switchTo().newWindow('tab');
-				try { await d.get(article); } catch { /* slow */ }
+				try { await withTimeout(d.get(article), 12000, `recently-closed get ${article}`); } catch { /* slow */ }
 				await sleep(1000);
 				await d.close();
 				await d.switchTo().window(main);
@@ -330,18 +409,18 @@ async function seedRecentlyClosed(d) {
 async function seedEnvironment(d) {
 	await d.manage().setTimeouts({ pageLoad: SEED_PAGELOAD_TIMEOUT_MS });
 	for (const url of SEED_URLS) {
-		try { await d.get(url); } catch { /* timeout harmless — URL still hit history */ }
+		try { await withTimeout(d.get(url), 12000, `seed get ${url}`); } catch { /* timeout harmless — URL still hit history */ }
 		// Settle before dismissing: consent platforms (e.g. Sourcepoint, used by
 		// BBC) render their Accept control in an async cross-origin iframe a few
 		// seconds after load. Accepting here sets a cookie that persists for the
 		// run, so the site is banner-free on every later visit (incl. captures).
 		await sleep(2500);
-		try { await dismissConsent(d); } catch { /* best effort */ }
+		try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
 		await sleep(1000);
-		try { await dismissConsent(d); } catch { /* best effort */ }
+		try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
 	}
 	for (const url of SEED_URLS) {
-		try { await d.get(url); } catch { /* timeout harmless */ }
+		try { await withTimeout(d.get(url), 12000, `seed get ${url}`); } catch { /* timeout harmless */ }
 		await sleep(500);
 	}
 	await seedRecentlyClosed(d);
@@ -350,6 +429,32 @@ async function seedEnvironment(d) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Race a Selenium call against a hard deadline — defensive against a rare
+// per-site hang in the environment seed (e.g. a pathological cross-origin
+// iframe defeating dismissConsent()'s frame-switch walk faster than the
+// browser's own pageLoad timeout can catch it; observed empirically under
+// chromedriver on the full site list, chrome-prep D6). Callers already treat
+// a rejected seed step as best-effort (catch-and-continue), so a timeout just
+// looks like any other unreachable/slow site — the seed moves on instead of
+// stalling the whole daemon startup indefinitely.
+function withTimeout(promise, ms, label) {
+	// CHROME-ONLY guard (chrome-prep D6 regression fix, 2026-07-16): on
+	// Firefox this is an identity passthrough. Racing past a pending
+	// `driver.get()` leaves geckodriver's serialized command queue holding the
+	// abandoned navigation, and the seed's subsequent commands then fail to
+	// register visits — reproduced as topSites staying EMPTY (daemon-smoke
+	// `tiles: 0`) even on a solo run. Firefox keeps its original design: the
+	// browser's own pageLoad timeout governs, and a timed-out `get()` still
+	// counts as a visit ("URL still hit history"). Chromedriver tolerates the
+	// race (verified by the green Chrome daemon-smoke) and needs it — see the
+	// hang note above.
+	if (UAT_BROWSER !== 'chrome') { return promise; }
+	return Promise.race([
+		promise,
+		new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+	]);
+}
 
 // Screenshots render at Full HD. By default they are saved at full resolution
 // (scale 1). To reduce the agent's image-token cost, they can be downscaled
@@ -507,7 +612,7 @@ if (isMain) {
 	await driver.get(NEWTAB_URL);
 	await pinDefaultTiles();
 	await captureDefaultPins();
-	log('initial newTab.html loaded (extension installed post-seed; default tiles pinned + imagery captured)');
+	log(`initial newTab.html loaded [browser=${UAT_BROWSER}] (extension ${UAT_BROWSER === 'chrome' ? 'loaded pre-seed via --load-extension' : 'installed post-seed'}; default tiles pinned + imagery captured)`);
 }
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
@@ -639,7 +744,7 @@ server.on('error', (e) => {
 
 if (isMain) {
 	server.listen(PORT, '127.0.0.1', () => {
-		log(`ready on http://127.0.0.1:${PORT}`);
+		log(`ready on http://127.0.0.1:${PORT} [browser=${UAT_BROWSER}]`);
 	});
 }
 

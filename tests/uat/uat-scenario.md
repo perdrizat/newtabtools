@@ -1,6 +1,6 @@
 ---
 name: uat-scenario
-description: Execute a NewTab PowerTools UAT scenario against a live release-Firefox session (held by the browser-daemon and reached via the ntt-uat MCP server). Produce a structured report.json plus a natural-language summary.md.
+description: Execute a NewTab PowerTools UAT scenario against a live browser session (Firefox or Chrome, held by the browser-daemon and reached via the ntt-uat MCP server). Produce a structured report.json plus a natural-language summary.md.
 allowed-tools:
   - mcp__ntt-uat__browser_navigate
   - mcp__ntt-uat__browser_click
@@ -13,7 +13,7 @@ allowed-tools:
   - Write
 ---
 
-You are running a UAT scenario for the NewTab PowerTools Firefox extension. The runner has given you a scenario markdown file. A runner-injected prologue at the top of the prompt tells you the **scenario slug**, the **fixture zip path**, and the **exact absolute paths** to write your report (JSON) and summary (markdown) to. Your job:
+You are running a UAT scenario for the NewTab PowerTools extension (Firefox or Chrome — the prologue tells you which). The runner has given you a scenario markdown file. A runner-injected prologue at the top of the prompt tells you the **scenario slug**, the **browser under test**, the **new-tab origin for this run**, the **fixture zip path**, and the **exact absolute paths** to write your report (JSON) and summary (markdown) to. Your job:
 
 1. Run the standard preamble (below) unless the scenario opts out.
 2. Walk the scenario's Setup → Verify → Visual judgment sections.
@@ -23,11 +23,11 @@ All scenarios of a run share one flat artifacts directory, so the runner gives y
 
 ## Preamble
 
-The browser daemon has already launched Firefox, seeded its history (so the default grid fills from `topSites`), seeded the recently-closed row from real article visits, accepted cookie banners, and installed the extension. You don't repeat any of that. The extension was installed *after* the history seed, so the first new-tab render is an authentic new-user state: a history-filled grid with **no thumbnails yet**.
+The browser daemon has already launched the browser named in the prologue (Firefox or Chrome), seeded its history (so the default grid fills from `topSites`), seeded the recently-closed row from real article visits, accepted cookie banners, and made sure the extension is loaded. You don't repeat any of that. On Firefox the extension is installed *after* the history seed (an authentic new-user first render: history-filled grid, no thumbnails yet); on Chrome it is loaded from launch via `--load-extension` (no mid-session unpacked-install path exists), but the same no-thumbnails-yet state holds because nothing was pinned or captured during seeding either way.
 
 Most scenarios start from this default state. Unless the scenario directs otherwise:
 
-1. `mcp__ntt-uat__browser_navigate` to the extension's `newTab.html` (a stable starting frame).
+1. `mcp__ntt-uat__browser_navigate` to the **extension origin given in the runner prologue** (a stable starting frame — e.g. `moz-extension://<uuid>/newTab.html` on Firefox, `chrome-extension://<id>/newTab.html` on Chrome).
 2. **Capture the starting state:** `browser_take_screenshot` named `00-initial`, before you touch anything.
 
 Then walk the scenario's own Verify / Visual sections.
@@ -36,7 +36,7 @@ Then walk the scenario's own Verify / Visual sections.
 
 Some scenarios restore the known-good fixture via the UI. When directed:
 
-1. `browser_navigate` to `newTab.html`; `browser_take_screenshot` named `00-initial`.
+1. `browser_navigate` to the extension origin from the prologue; `browser_take_screenshot` named `00-initial`.
 2. Click `#options-toggle` (open drawer), then `[data-drawer-tab="advanced"]`.
 3. `mcp__ntt-uat__browser_file_upload` the fixture into `#options-restore-file`. The fixture's absolute path is in the runner prologue ("Fixture zip (absolute path)") — use it verbatim.
 4. Click `#options-restore`, then click `#options-restore-confirm` in the inline confirmation row that appears. (Restore overwrites the whole setup, so §7 gates it behind an inline Confirm/Cancel row — clicking Restore only *reveals* the prompt; the restore runs on Confirm.)
@@ -55,7 +55,9 @@ If any restore step fails (selector missing, file input rejects the zip, count n
 These are intended designs (DESIGNv2_REVIEW), not bugs:
 
 - **Opening the drawer IS Edit mode (§2).** Whenever the drawer is open, the board behind it is in edit mode: pinned tiles show a dashed copper outline + a centred drag handle + a persistent top-right action row; auto (non-pinned) tiles fade and show a centred "+ Add tile"; the titlebar button reads `Done`. This is correct — don't report it as unexpected clutter or occlusion.
-- **Reach the page by its `moz-extension://<uuid>/newTab.html` URL** (the runner prologue / preamble give it). `about:newtab` returns an empty non-extension document in this harness — that is not a defect.
+- **Reach the page by the extension origin given in the runner prologue** — `moz-extension://<uuid>/newTab.html` on Firefox, `chrome-extension://<id>/newTab.html` on Chrome. `about:newtab` returns an empty non-extension document in this harness — that is not a defect.
+- **Chrome has no dynamic context menu (by design, not a bug).** Firefox's per-tile `menus.onShown` context menu is progressive enhancement on top of the identical in-tile hover action row (edit / never-capture / pin / remove); Chrome ships the action row only. Don't flag the missing right-click menu on Chrome.
+- **Chrome's theme follows `prefers-color-scheme` only.** `browser.theme` (and its live-update event) is a Firefox-only bonus layered on the shared baseline; on Chrome the board still responds correctly to the OS/browser light-dark setting, just not to an in-browser theme add-on. Don't flag the absence of `browser.theme` following on Chrome.
 - **Key selectors:** the drawer is `#ntt-drawer`; the single titlebar action button is `#options-toggle` (reads `Edit`, or `Done` while open); there is no wordmark, padlock, or cogwheel (Board A §1).
 - **Recently-closed chips render the letter-block fallback favicon** in the seeded environment (closed-tab session data carries no favicon). §4 permits the fallback at the same size/radius — don't flag the absence of real favicons.
 - **Disabled-looking Restore button** when no backup file is selected is the expected resting state.
@@ -138,7 +140,7 @@ Avoid generic "looks fine." Be specific even when nothing's wrong: "Grid renders
 ## Constraints
 
 - Use only the allowed tools listed in the frontmatter above. No `Bash`, no `Read`, no `Edit`.
-- Stay on the extension's `moz-extension://` origin. To trigger auto-thumbnail capture, use `browser_capture_tiles` (it opens the tile URLs with a short timeout and returns you to the new-tab page) — don't navigate to external sites yourself.
+- Stay on the extension origin given in the runner prologue. To trigger auto-thumbnail capture, use `browser_capture_tiles` (it opens the tile URLs with a short timeout and returns you to the new-tab page) — don't navigate to external sites yourself.
 - Do NOT call `browser_read_screenshot` on evidence-only screenshots.
 - `Write` requires absolute paths. Use the exact report/summary paths from the runner prologue verbatim.
 - In a restore scenario, stop early if the restore preamble fails — there's no point continuing if restore is broken.

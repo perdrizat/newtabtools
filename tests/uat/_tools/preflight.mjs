@@ -20,10 +20,18 @@ import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { resolveChromeBinary } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
+
+// chrome-prep D6: the same preflight covers both UAT targets. $UAT_BROWSER
+// selects which browser-specific checks run (Firefox binary/geckodriver/.xpi
+// vs. Chrome for Testing) — everything else (node/pnpm/claude CLI/fixture/SDK)
+// is shared, since the runner + daemon are one parameterized implementation,
+// not a fork.
+const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
 
 // SHA-256 of tests/uat/newtabtools_knowngood.zip — bump when fixtureVersion
 // changes. Source of truth: tests/uat/README.md "fixtureVersion" section.
@@ -74,7 +82,12 @@ console.log();
 //    (e.g. Ubuntu's snap shim with xdg-utils missing → "xdg-settings: not found")
 //    makes geckodriver reject it as "binary is not a Firefox executable". We catch
 //    that here with an actionable message instead of a daemon-startup stack trace.
-{
+//
+// Firefox-only (checks 3, 3b, 4) — the Chrome tier's equivalent is the single
+// check right after this block: it needs no geckodriver-equivalent handshake
+// or a pre-built .xpi, since stageDevBuild() stages the unpacked dev build
+// fresh at daemon start (chrome-prep D6).
+if (UAT_BROWSER !== 'chrome') {
 	const envBin = process.env.FIREFOX_BIN;
 	let bin = null;
 	if (envBin) {
@@ -121,18 +134,16 @@ console.log();
 			}
 		}
 	}
-}
 
-// 3b. Real geckodriver+Firefox launch handshake — the EXACT path the daemon uses
-//     (`new Builder().forBrowser('firefox').build()`). A passing `firefox
-//     --version` does NOT guarantee this works: geckodriver applies stricter
-//     binary validation AND is a second dependency check #3 never touches. The
-//     classic trap is a snap-confined geckodriver (on PATH as
-//     /snap/bin/geckodriver) that cannot launch a Firefox outside its sandbox
-//     and rejects it as "binary is not a Firefox executable". Launch headless →
-//     about:blank → quit, so this failure class surfaces here in seconds instead
-//     of as a 300s daemon-startup timeout.
-{
+	// 3b. Real geckodriver+Firefox launch handshake — the EXACT path the daemon uses
+	//     (`new Builder().forBrowser('firefox').build()`). A passing `firefox
+	//     --version` does NOT guarantee this works: geckodriver applies stricter
+	//     binary validation AND is a second dependency check #3 never touches. The
+	//     classic trap is a snap-confined geckodriver (on PATH as
+	//     /snap/bin/geckodriver) that cannot launch a Firefox outside its sandbox
+	//     and rejects it as "binary is not a Firefox executable". Launch headless →
+	//     about:blank → quit, so this failure class surfaces here in seconds instead
+	//     of as a 300s daemon-startup timeout.
 	let driver = null;
 	try {
 		const { Builder } = await import('selenium-webdriver');
@@ -157,10 +168,8 @@ console.log();
 	} finally {
 		if (driver) { try { await driver.quit(); } catch { /* already down */ } }
 	}
-}
 
-// 4. .xpi built for current manifest version
-{
+	// 4. .xpi built for current manifest version
 	const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 	const xpiPath = path.join(ROOT, `dist/newtab_powertools-${pkg.version}.zip`);
 	const xpiName = path.basename(xpiPath);
@@ -174,6 +183,23 @@ console.log();
 		} else {
 			ok('Built .xpi', xpiName);
 		}
+	}
+} else {
+	// Chrome tier (chrome-prep D6): no geckodriver-equivalent handshake and no
+	// pre-built .xpi to check — stageDevBuild() stages the unpacked dev build
+	// fresh every time the daemon starts. Just confirm a Chrome for Testing
+	// binary is reachable; branded Chrome >= 137 cannot run extension
+	// automation at all (tests/e2e-chrome/README.md), so this is a warning
+	// (not a hard fail) pointing at the provisioning command — the daemon
+	// itself fails fast and loudly if launch is attempted with nothing found.
+	const found = resolveChromeBinary();
+	if (found) {
+		ok('Chrome for Testing', `${found.version} (${found.bin})${found.branded ? ' — WARNING: branded Chrome cannot run extension automation' : ''}`);
+		if (found.branded) {
+			warn('Chrome for Testing', 'resolved binary is branded Google Chrome — run `pnpm chrome:provision` to fetch Chrome for Testing instead');
+		}
+	} else {
+		warn('Chrome for Testing', 'no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`');
 	}
 }
 
@@ -217,7 +243,8 @@ console.log();
 // 8. browser-daemon port is free (and not colliding with E2E's 9222)
 {
 	const E2E_PORT = 9222; // tests/e2e/run_esr_tests.sh
-	const port = parseInt(process.env.UAT_DAEMON_PORT, 10) || 9876;
+	const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876; // chrome-prep D6: 9877 so both daemons can run in parallel
+	const port = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
 	if (port === E2E_PORT) {
 		fail('UAT daemon port', `${port} collides with E2E's port ${E2E_PORT} — pick another via $UAT_DAEMON_PORT`);
 	} else {

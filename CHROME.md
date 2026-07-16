@@ -11,7 +11,7 @@
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
 | D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | pending | — |
-| D6 — UAT on Chrome | in flight 2026-07-16 (daemon parameterization + scenario triage running) | — |
+| D6 — UAT on Chrome | in flight 2026-07-16 (daemon parameterized, both smokes green in parallel; scenario pass + triage remain) | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
@@ -405,14 +405,23 @@ divergences. "We need test parity between the two as part of this run."*
       target ≥90% of Firefox test cases executing identically on Chrome.
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
-- [ ] `browser-daemon.mjs` Chrome variant: Selenium `.forBrowser('chrome')`
-      + `--load-extension` (geckodriver's `installAddon` has no Chrome
-      analogue), deterministic ID via the dev `key`, environment seed
-      reused (history/consent seeding is browser-agnostic Selenium
-      driving; `chrome-extension://` origin threaded through `urls.mjs`).
-      HTTP API port: **9877** (≠ Firefox UAT's 9876) so both daemons can
-      run in parallel (maintainer 2026-07-16; see `tests/e2e-chrome/README.md`
-      "Port allocation").
+- [x] `browser-daemon.mjs` parameterized (2026-07-16, ONE implementation,
+      `$UAT_BROWSER`): Chrome = CfT + `--load-extension` of `stageDevBuild()`
+      at LAUNCH (no mid-session unpacked install exists in Selenium; the
+      documented install-order divergence — first-render authenticity holds,
+      empirically: the daemon smoke shows 0 thumbnails on non-pinned tiles),
+      deterministic dev-key id, port **9877**; Firefox path byte-equivalent
+      (`installAddon` post-seed, 9876). `pnpm test:uat:chrome` +
+      `test:uat:smoke`/`:chrome`; preflight/urls/skill parameterized.
+      **Both daemon smokes GREEN, run in PARALLEL** (the dual-port design
+      proven live). Two orchestrator regression-fixes during acceptance:
+      (a) the agent's `withTimeout` seed-guard scoped to Chrome only —
+      racing past `driver.get()` derails geckodriver's serialized queue
+      (Firefox `tiles: 0`, reproduced solo); (b) the smoke's env check now
+      POLLS for the async grid fill and scopes the no-thumbnails assertion
+      to `.newtab-site:not([pinned])` (single-instant sampling raced the
+      fill; diagnosed via live-daemon probe — topSites 12, tiles 9 at
+      steady state, pipeline healthy).
 - [ ] Scenario pass on Chrome: run the existing scenario set against the
       Chrome daemon; triage per-scenario (some assert Firefox-specific
       chrome — theme following, menus — and need Chrome variants or

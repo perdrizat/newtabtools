@@ -3,16 +3,42 @@
 LLM-driven user-acceptance testing. Design + rationale: [`../../TESTING.md`](../../TESTING.md) "UAT tests" section. This file is the tooling/operational guide.
 
 **Browser:** a long-lived daemon (`_tools/browser-daemon.mjs`) holds one Selenium
-+ geckodriver session driving **release-channel Firefox** for the whole run, with
-the `moz-extension://` UUID pinned via a pre-seeded pref. At startup it **seeds the
-environment** by real navigation — two passes over a merged US/global + Swiss URL
-set (frecency needs ~2 visits before a site enters `topSites`, which fills the
-default grid), accepting cookie banners as it goes, then opening a top article per
-news site and closing the tab to seed the recently-closed row. Only **after** that
-does it install the unsigned extension temporarily (`installAddon(xpi, true)`), so
-the first new-tab render is an authentic new-user state (history-filled grid, no
-thumbnails yet). It exposes a localhost HTTP API on port **9876** (`$UAT_DAEMON_PORT`;
-≠ E2E's 9222). (E2E is unrelated — it stays on Firefox ESR + Puppeteer-BiDi.)
+session for the whole run — **release-channel Firefox** by default, or **Chrome
+for Testing** when `$UAT_BROWSER=chrome` (chrome-prep D6) — one parameterized
+implementation, not a fork (the manifest-overlay philosophy: single source
+tree). At startup it **seeds the environment** by real navigation — two passes
+over a merged US/global + Swiss URL set (frecency needs ~2 visits before a site
+enters `topSites`, which fills the default grid), accepting cookie banners as it
+goes, then opening a top article per news site and closing the tab to seed the
+recently-closed row. This seeding step is identical Selenium-driven navigation on
+both browsers.
+
+The two browsers diverge in exactly one structural way — **when** the extension
+becomes present:
+
+- **Firefox:** the `moz-extension://` UUID is pinned via a pre-seeded pref, and
+  only **after** the environment seed does the daemon install the unsigned
+  extension temporarily (`installAddon(xpi, true)`) — an authentic new-user
+  first render (history-filled grid, no thumbnails yet).
+- **Chrome:** there is no mid-session unpacked-install equivalent to
+  geckodriver's `installAddon` (the CDP install route needs a pipe transport
+  Selenium doesn't expose), so the staged dev build (`stageDevBuild()`, a
+  deterministic id from the committed dev key) is loaded via `--load-extension`
+  at **launch**, before the environment seed even starts. The first-render
+  authenticity approximation still holds: nothing is pinned and no tile cache
+  exists yet during seeding, so no auto-thumbnail captures fire — the first new
+  tab still renders a history-filled grid with no thumbnails, just with the
+  extension technically resident a few minutes earlier than on Firefox.
+
+Everything downstream of "extension present" — pin-default-favourites,
+`/capture_tiles`, `/reset_extension` — is wire/DOM-driven through
+`chrome.runtime.sendMessage` (Firefox answers to the `chrome.*` alias too) and
+Selenium's browser-agnostic API, so none of it is browser-specific code.
+
+The daemon exposes a localhost HTTP API on port **9876** for Firefox / **9877**
+for Chrome by default (`$UAT_DAEMON_PORT` overrides either; ≠ E2E's 9222) — the
+two ports let both daemons run in parallel. (E2E is unrelated — it stays on
+Firefox ESR + Puppeteer-BiDi / Chrome for Testing + Puppeteer, its own tier.)
 
 **Agent bridge:** a thin MCP server (`_tools/mcp-server.mjs`) Claude spawns per
 scenario that forwards each `browser_*` tool call to the daemon — it holds no
@@ -25,21 +51,27 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 
 | File | Purpose | Needs SDK? |
 |---|---|---|
-| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox + environment seed + HTTP API) | no |
+| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox or Chrome, `$UAT_BROWSER` + environment seed + HTTP API) | no |
+| `_tools/urls.mjs` | shared extension-origin URL builder (`moz-extension://`/`chrome-extension://`) | no |
 | `_tools/mcp-server.mjs` | thin MCP→HTTP client to the daemon | yes |
 | `_tools/mcp-config.json` | config Claude reads to spawn the MCP server | — |
 | `_tools/daemon-smoke.mjs` | daemon HTTP-API contract smoke | no |
 | `_tools/mcp-smoke.mjs` | full MCP path; prints payload sizes | yes |
-| `_tools/browser-smoke.mjs` | standalone browser-path check (no MCP) | no |
+| `_tools/browser-smoke.mjs` | standalone browser-path check (no MCP, Firefox only) | no |
 | `_tools/fallback-cli.mjs` | reference fallback (CLI-over-Bash); not used by the harness | no |
-| `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox, .xpi, fixture sha, claude CLI, SDK, daemon port) | no |
+| `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox or Chrome per `$UAT_BROWSER`, fixture sha, claude CLI, SDK, daemon port) | no |
 | `_tools/runner.mjs` | orchestrator: ensure skill symlink → preflight → start daemon → per-scenario `claude -p` → reset-to-default between → aggregated report | yes |
 | `scenarios/*.md` | the scenarios the runner walks | — |
 | `uat-scenario.md` | the agent skill prompt (see "Skill" below) | — |
 
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
 
-Run the whole suite with `pnpm test:uat`, or a subset by slug: `pnpm test:uat 21-restore`.
+Run the whole suite with `pnpm test:uat` (Firefox) or `pnpm test:uat:chrome`
+(Chrome), or a subset by slug: `pnpm test:uat 21-restore` /
+`pnpm test:uat:chrome 00-uat-init`. Both share one runner and one daemon
+implementation — `pnpm test:uat:chrome` is exactly
+`UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two can run
+concurrently (separate ports, separate `-chrome`-suffixed artifacts dir).
 
 Scenario agents run on **Sonnet** by default (`$UAT_MODEL` overrides) —
 visual judgment doesn't need the most expensive model, and a full run spawns
