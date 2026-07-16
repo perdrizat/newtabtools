@@ -10,7 +10,7 @@
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | `eea8565` |
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
-| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | **126/126 = 100% parity on CfT 151** (2026-07-16); Firefox full-suite re-confirmation in flight | — |
+| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | **done 2026-07-16 — 126/126 = 100% parity on CfT 151, zero skips; Firefox unchanged-proof 126/126** | `9cd51bc` |
 | D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
@@ -404,10 +404,12 @@ adaptation.)*
       network-gated class, #21 — NO Chrome skip added).
 - [x] Acceptance: **exceeded** — 126/126 executing identically, zero
       skips, every divergence a documented header note. First full run was
-      already 125/126 before any edits. Firefox unchanged-proof: fast
-      1417/1417 + full `pnpm test:e2e` re-confirmation running at close.
-      CI: workflow still runs the smoke — switching the chrome job to the
-      parity suite is a deliberate follow-up (runtime cost on CI runners).
+      already 125/126 before any edits. Firefox unchanged-proof COMPLETE:
+      fast 1417/1417 AND full `pnpm test:e2e` **126/126 (32/32 files),
+      zero failures** (14 min under parallel load — the contention-tolerant
+      design held). CI: workflow still runs the smoke — switching the
+      chrome job to the parity suite is a deliberate follow-up (runtime
+      cost on CI runners).
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
 - [x] `browser-daemon.mjs` parameterized (2026-07-16, ONE implementation,
