@@ -2,7 +2,7 @@
 
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want — **PowerTools for your browser**, extending the new tab experience much like Microsoft PowerToys does for Windows.
 
-**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests against release-channel Firefox (Puppeteer + WebDriver BiDi), plus an LLM-driven UAT tier — run on every change.
+**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. Firefox is the primary target; a Chrome build is functionally complete (same source tree, [`CHROME.md`](CHROME.md)) with a Chrome Web Store release pending. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests run against both release-channel Firefox (Puppeteer + WebDriver BiDi) and Chrome for Testing (Puppeteer + CDP), plus an LLM-driven UAT tier for both browsers — run on every change.
 
 ## Main features
 
@@ -45,10 +45,11 @@ widgets. Users who want these stay on the native page.
 
 ## What's in this repo
 
-- `webextension/` — the extension source. Manifest V3, Firefox-only, minimum version Firefox 152. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`) fanning out into ~20 feature modules; the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`). See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Architecture" for the module breakdown.
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer + WebDriver BiDi against release-channel Firefox (>= 152) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
+- `webextension/` — the extension source. Manifest V3, Firefox-first (minimum version Firefox 152), with Chrome supported as a second target (minimum version Chrome 148; store release pending, see [`CHROME.md`](CHROME.md)) built from the same source tree via a manifest overlay. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`) fanning out into ~20 feature modules; the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`). See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Architecture" for the module breakdown.
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer against release-channel Firefox (>= 152, via WebDriver BiDi) and Chrome for Testing (>= 148, via CDP) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, decisions of record, AI-assisted contribution guardrails. Completed-arc working documents (the MV3 migration, background-modules + HTML5 modernization, the page-modules arc, the chrome-prep program) live in git history and their reviews in [`audit/`](audit/).
+- [`CHROME.md`](CHROME.md) — the Chrome-port program plan and live status board (stage 3): E2E parity, UAT, and smoke are all green on Chrome for Testing; only store release prep (D7) is left.
 
 ## For developers
  
@@ -56,7 +57,7 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
 ### Quick Start
 
-1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and release-channel Firefox (>= 152). See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and release-channel Firefox (>= 152). Chrome for Testing (>= 148, auto-provisioned via `pnpm chrome:provision`) is needed only if you're running the Chrome tier. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
 
 2. **Clone and install:**
    ```bash
@@ -75,6 +76,8 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
    3. Select `dist/newtab_powertools-<version>.zip` — or pick `webextension/manifest.json` to load the unpacked source directly.
 
    The add-on stays loaded until you restart Firefox. For a throwaway run in a fresh profile that's discarded on exit, use `pnpm dev` instead.
+
+   To try it in Chrome instead, run `pnpm chrome:stage` and load the resulting `dist/chrome-dev/` folder via `chrome://extensions` → **Load unpacked** (see [`CHROME.md`](CHROME.md)).
 
 ### Testing is mandatory
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:
@@ -97,7 +100,7 @@ Hit a failing `pnpm test:uat:preflight` or a broken E2E setup? Search this table
 | `UAT daemon port` ... `already in use` | Something else is already bound to port 9876 | Stop the other process, or set `$UAT_DAEMON_PORT`. |
 | `Firefox launch (geckodriver)` ... `Selenium could not start Firefox via geckodriver` | geckodriver missing, mismatched, or a snap-confined build shadowing it on PATH | Remove a snap-confined `geckodriver` from PATH so Selenium Manager can fetch a clean one, or run `pnpm install`. |
 | `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm wants to reinstall/prune `node_modules` but has no interactive TTY to confirm it | Run `pnpm install` yourself in an interactive shell. |
-| `[chrome-smoke] x no Chrome binary found` | The forward-looking Chrome tier (`pnpm chrome:smoke`, `tests/e2e-chrome/`) can't find a Chrome/Chromium binary | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`. |
+| `[chrome-smoke] x no Chrome binary found` | The Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `tests/e2e-chrome/`) can't find a Chrome/Chromium binary to provision Chrome for Testing from | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`, then `pnpm chrome:provision`. |
 
 ## License
 

@@ -15,10 +15,11 @@
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
-**Status: D0–D5 COMPLETE (2026-07-16) — D6 (UAT on Chrome) is next, then
-D7 (store prep) and the D gate.** The Chrome build boots, captures,
-renders thumbnails, backs up, and survives SW kills — smoke 11/11 on CfT
-151. Successor to the chrome-prep
+**Status: D0–D6 + D5b COMPLETE (2026-07-16) — only D7 (store prep) and the
+D gate remain.** The Chrome build boots, captures, renders thumbnails,
+backs up, and survives SW kills — smoke 11/11, E2E parity 126/126, UAT
+11/11 on CfT 151. Top-level docs (README/TESTING/CONTRIBUTING) reflect the
+two-browser reality; the branch is ready for maintainer review. Successor to the chrome-prep
 program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
 history), which left the codebase Chrome-*ready*:
 `api` seam in place, six wrappers written (some dormant), two-target manifest
