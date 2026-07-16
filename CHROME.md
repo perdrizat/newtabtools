@@ -8,8 +8,8 @@
 | D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | — |
-| D4 — icons, action, manifest completeness | core done 2026-07-16 (`178a773`); `syncActionIconWithTheme` wiring remains | `178a773` |
-| D5 — Chrome E2E tier + CI | done except filters-ui gap 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10 landed) | — |
+| D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+ |
+| D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | — |
 | D6 — UAT on Chrome | pending | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
@@ -295,15 +295,22 @@ failing smoke checks live, and closed the arc.)*
 - [ ] PNG icon set per Decision 4 (16/32/48/128 + action icons); chrome
       overlay's `icons`/`action.default_icon` re-pointed; Firefox manifest
       untouched (keeps SVG + `theme_icons`).
-- [ ] `syncActionIconWithTheme` — **PROPOSED DESCOPE (maintainer decision
-      needed, 2026-07-16):** a Chrome MV3 service worker cannot read
-      `prefers-color-scheme` (no `matchMedia` in workers), so real wiring
-      needs a page→SW scheme relay plus a rasterized tools-dark PNG set —
-      meaningful machinery for a toolbar-icon nicety. Proposal: ship 3.0.0
-      with the static `action.default_icon` (already set, D4) and keep
-      `syncActionIconWithTheme` a documented no-op; revisit post-release
-      alongside the #12 icon redesign (which would regenerate all PNGs
-      anyway). If vetoed, the relay design lands as its own slice.
+- [x] `syncActionIconWithTheme` WIRED (descope proposal rejected by
+      maintainer 2026-07-16 — "do the action icons even if it's a bigger
+      change"): a Chrome MV3 SW cannot read `prefers-color-scheme`, so the
+      page relays it — `theme.js` sends the NEW wire message
+      `Theme.colorScheme {dark}` at boot and on every matchMedia change;
+      the dispatch calls `syncActionIconWithTheme(dark, isSWScope)` which
+      no-ops on Firefox (manifest `theme_icons` is declarative there) and
+      `action.setIcon`s the tools-light/tools-dark PNG pair on Chrome
+      (mapping mirrors Firefox's `theme_icons` semantics; tools-dark
+      16/32 PNGs added to the rasterizer + assets). **This adds a 20th
+      frozen wire name** — deliberate contract addition (the decision
+      forbids renames/drops), contract test + CONTRIBUTING updated.
+      Limitation, accepted: the icon syncs from the first new-tab render
+      per browser session (default_icon until then). VISUAL CHECK owed in
+      D6's Chrome UAT: confirm the mapping isn't inverted on a real
+      toolbar (a one-line swap if so).
 - [ ] `manifest/chrome.json`: `minimum_chrome_version` (Decision 5),
       `incognito` policy stated explicitly.
 - [ ] CSP review for the Chrome target (the Mozilla-CDN `connect-src` is
@@ -316,10 +323,11 @@ failing smoke checks live, and closed the arc.)*
       Map with a Blob" and "tile renders the stored thumbnail" are green
       (11/11, CfT 151). The favicon wires (`getFavicons`/`getFaviconsByHost`)
       use the same response shapes and inherit the fix.
-- [ ] **Pre-work (b), still open:** `filters-ui.js`'s 2-arg
-      `topSites.get(options, cb)` call shape — Chrome rejects any 2-arg
-      call ("No matching signature"); needs an argument-count-aware branch
-      at that call site (Filters drawer UI on Chrome).
+- [x] Pre-work (b) DONE (2026-07-16): `filters-ui.js` branches on
+      `topSitesOptions(api)` being `undefined` (the Chrome signal) and
+      calls 1-arg `topSites.get(cb)` there; Firefox keeps the exact 2-arg
+      call. New `tests/integration/filters-ui.test.ts` (the file had no
+      prior real-import coverage).
 - [x] `test:e2e:chrome` per Decision 3 (2026-07-16): the smoke IS the
       suite — 9 checks: boot/install/SW-start, page+grid render, capture
       round-trip (real OffscreenCanvas image in IDB), backup export

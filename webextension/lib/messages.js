@@ -6,8 +6,10 @@
  * runtime.onMessage dispatch (MODERNIZATION.md, Stage M, slice M5).
  *
  * Carved out of the former webextension/background.js verbatim: sender
- * validation, the 19 frozen wire names (MODERNIZATION.md Decision 3),
- * response shapes, and the never-capture guard are byte-equivalent — only
+ * validation, the (now 20) frozen wire names (MODERNIZATION.md Decision 3;
+ * `Theme.colorScheme` added 2026-07-16, CHROME.md D4 — additions are allowed,
+ * the decision only forbids renames/drops), response shapes, and the
+ * never-capture guard are byte-equivalent — only
  * the dependencies changed, from background.js's bare-identifier globalThis
  * bridge reads to real `import`s of the lib modules that now own each piece
  * (Tiles/Background, withStore, the capture pipeline). The dual-scope
@@ -43,7 +45,8 @@ import { getTZDateString } from './constants.js';
 import { startCaptureSession, purgeNeverCaptureHost } from './capture.js';
 import { makeZip, readZip } from './backup.js';
 import { NeverCapture } from '../prefs.js';
-import { api, broadcastToPages } from './platform.js';
+import { api, broadcastToPages, syncActionIconWithTheme } from './platform.js';
+import { _isServiceWorkerScope } from './thumbnail-image.js';
 
 /**
  * Shared cursor walk backing both `Thumbnails.getFavicons` and
@@ -86,7 +89,7 @@ function walkFaviconsInto(map, keyFor) {
 }
 
 /**
- * The runtime.onMessage listener — dispatch table for the 19 frozen wire
+ * The runtime.onMessage listener — dispatch table for the 20 frozen wire
  * names. `sender`/`sendResponse` are typed loosely (matching how this
  * dispatcher has always treated them) since the real contract is enforced by
  * `browser.runtime.onMessage.addListener`'s own signature at the single
@@ -324,6 +327,14 @@ export function handleMessage(message, sender, sendResponse) {
 			},
 		);
 		return true;
+
+	case 'Theme.colorScheme':
+		// CHROME.md D4: the page relays its prefers-color-scheme reading here
+		// (theme.js's _initThemeColorSchemeRelay) since a Chrome MV3 service
+		// worker has no window/matchMedia to read it itself. No response
+		// needed — fire-and-forget, same as Thumbnails.capture above.
+		syncActionIconWithTheme(message.dark, _isServiceWorkerScope());
+		return false;
 	}
 	return false;
 }

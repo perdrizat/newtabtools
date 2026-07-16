@@ -27,7 +27,7 @@ import { getString, isValidURL } from './common.js';
 import { Grid } from './grid.js';
 import { Page } from './page.js';
 import { Updater } from './updater.js';
-import { getThemedImageURL, updateThemeColours } from './theme.js';
+import { getThemedImageURL, updateThemeColours, _initThemeColorSchemeRelay } from './theme.js';
 import { refreshBackgroundImage, openWallpaperPicker, closeWallpaperPicker, resetWallpaper } from './wallpaper.js';
 import { _initTitlebar, refreshRecent } from './titlebar.js';
 import { _initAutoSaveIndicator } from './autosave-indicator.js';
@@ -1639,6 +1639,10 @@ const NewTabToolsObject = {
 			_initAutoSaveIndicator();
 			newTabTools.updateUI();
 			refreshBackgroundImage();
+			// CHROME.md D4: relay prefers-color-scheme to the background for the
+			// Chrome action-icon sync (no-op on Firefox — theme_icons already
+			// handles it declaratively there).
+			_initThemeColorSchemeRelay();
 
 			api.sessions.onChanged.addListener(function() {
 				refreshRecent();

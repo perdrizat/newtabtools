@@ -176,18 +176,59 @@ export function disableAction(tabId) {
 }
 
 /**
- * Chrome-dormant stub (audit §seam-homes, #4). Firefox's manifest
- * `theme_icons` entry auto-swaps the toolbar icon for the light/dark theme —
- * no JS involvement at all, which is why nothing in this codebase has ever
- * called an icon-swap function. Chrome MV3 has no `theme_icons` equivalent;
- * a Chrome fork needs this to actually call `api.action.setIcon()` with the
- * icon set matching the current theme (mirroring `theme.js`'s
- * `prefers-color-scheme` detection). No-op on Firefox by design — do NOT
- * wire this into any live call site while `theme_icons` still handles it.
+ * Sync the toolbar action icon with the current color scheme (CHROME.md D4:
+ * wired for real, replacing the former Chrome-dormant no-op stub — audit
+ * §seam-homes #4).
+ *
+ * No-op on Firefox (`isServiceWorkerScope` falsy, the event-page case):
+ * manifest `theme_icons` (manifest/firefox.json) already swaps the toolbar
+ * icon declaratively with zero JS involvement — do NOT wire an actual
+ * `api.action.setIcon()` call into that path, it would just fight the
+ * manifest.
+ *
+ * On a Chrome MV3 service worker (`isServiceWorkerScope` true) there is no
+ * `theme_icons` equivalent, and no `matchMedia` either (no `window` in a
+ * service worker) — the page relays the OS/browser color scheme via the
+ * `Theme.colorScheme` wire message (theme.js's
+ * `_initThemeColorSchemeRelay`), and lib/messages.js's handler calls this
+ * function with the relayed `dark` boolean and the `_isServiceWorkerScope()`
+ * probe (thumbnail-image.js) — same shape as `isCaptureAvailableForScope`
+ * above. `isServiceWorkerScope` is passed in rather than probed here directly
+ * since CHROME_PREP.md C1's ESLint guard confines every raw `document`
+ * reference in `lib/**` to thumbnail-image.js.
+ *
+ * Icon mapping, derived from manifest/firefox.json's `action.theme_icons`
+ * entry (reproduced here so the two never drift):
+ *
+ *   "theme_icons": [{ "dark": "images/tools-light.svg", "light": "images/tools-dark.svg", "size": 16 }]
+ *
+ * The schema's `dark`/`light` KEYS name the theme's TEXT-color scheme (a
+ * legacy WebExtension convention), not the icon file's own name — read
+ * naively backwards it looks inverted. Empirically: the `dark:` slot's VALUE
+ * (`tools-light.svg`) is the icon Firefox actually shows on a LIGHT theme;
+ * the `light:` slot's VALUE (`tools-dark.svg`) is shown on a DARK theme. Net
+ * behavior: light theme -> tools-light.svg, dark theme -> tools-dark.svg —
+ * the repo's SVG (and rasterized PNG) filenames already match the THEME
+ * they're shown on, one level removed from the confusing schema keys. This
+ * function reproduces that net behavior directly, with no inversion of its
+ * own: `dark === true` -> the 'dark' PNG variant, otherwise -> 'light'.
+ * @param {boolean} [dark] Whether the relayed color scheme is dark.
+ * @param {boolean} [isServiceWorkerScope] Chrome MV3 service worker vs.
+ *   Firefox event page.
  * @returns {void}
  */
-export function syncActionIconWithTheme() {
-	// Intentionally empty: see doc comment above.
+export function syncActionIconWithTheme(dark, isServiceWorkerScope) {
+	if (!isServiceWorkerScope) {
+		// Firefox event page: theme_icons already handles this declaratively.
+		return;
+	}
+	let variant = dark ? 'dark' : 'light';
+	api.action.setIcon({
+		path: {
+			16: `images/tools-${variant}-16.png`,
+			32: `images/tools-${variant}-32.png`,
+		},
+	}).catch(console.error);
 }
 
 /**

@@ -116,17 +116,46 @@ describe('isCaptureAvailableForScope (CHROME.md D3 slice 1: the scope fork lib/c
 	});
 });
 
-describe('syncActionIconWithTheme (action/theme-icon stub)', () => {
-	it('is a documented no-op: does not call any action/theme API', () => {
-		const enableSpy = vi.spyOn((globalThis as any).browser.action, 'enable');
-		const setIconSpy = (globalThis as any).browser.action.setIcon
-			? vi.spyOn((globalThis as any).browser.action, 'setIcon')
-			: null;
+describe('syncActionIconWithTheme (CHROME.md D4: the Chrome action-icon relay)', () => {
+	it('Firefox (isServiceWorkerScope=false): stays a no-op — theme_icons already handles it declaratively', () => {
+		const setIconMock = vi.fn();
+		(globalThis as any).browser.action.setIcon = setIconMock;
+		expect(syncActionIconWithTheme(true, false)).toBeUndefined();
+		expect(syncActionIconWithTheme(false, false)).toBeUndefined();
+		expect(setIconMock).not.toHaveBeenCalled();
+	});
+
+	it('Firefox (isServiceWorkerScope omitted, the pre-Chrome call shape): stays a no-op', () => {
+		const setIconMock = vi.fn();
+		(globalThis as any).browser.action.setIcon = setIconMock;
 		expect(syncActionIconWithTheme()).toBeUndefined();
-		expect(enableSpy).not.toHaveBeenCalled();
-		if (setIconSpy) {
-			expect(setIconSpy).not.toHaveBeenCalled();
-		}
-		enableSpy.mockRestore();
+		expect(setIconMock).not.toHaveBeenCalled();
+	});
+
+	it('Chrome service worker (isServiceWorkerScope=true) + dark scheme: setIcon called with the tools-dark path map', () => {
+		const setIconMock = vi.fn().mockResolvedValue(undefined);
+		(globalThis as any).browser.action.setIcon = setIconMock;
+		syncActionIconWithTheme(true, true);
+		expect(setIconMock).toHaveBeenCalledWith({
+			path: { 16: 'images/tools-dark-16.png', 32: 'images/tools-dark-32.png' },
+		});
+	});
+
+	it('Chrome service worker (isServiceWorkerScope=true) + light scheme: setIcon called with the tools-light path map', () => {
+		const setIconMock = vi.fn().mockResolvedValue(undefined);
+		(globalThis as any).browser.action.setIcon = setIconMock;
+		syncActionIconWithTheme(false, true);
+		expect(setIconMock).toHaveBeenCalledWith({
+			path: { 16: 'images/tools-light-16.png', 32: 'images/tools-light-32.png' },
+		});
+	});
+
+	it('Chrome service worker: a rejected setIcon is caught, never thrown/unhandled', async () => {
+		const setIconMock = vi.fn().mockRejectedValue(new Error('teardown'));
+		(globalThis as any).browser.action.setIcon = setIconMock;
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		expect(() => syncActionIconWithTheme(true, true)).not.toThrow();
+		await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
+		errorSpy.mockRestore();
 	});
 });

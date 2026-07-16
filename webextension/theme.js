@@ -183,6 +183,30 @@ export async function updateThemeColours(updateInfo) {
 }
 
 /**
+ * Relay this page's `prefers-color-scheme` reading to the background via the
+ * `Theme.colorScheme` wire message (CHROME.md D4). A Chrome MV3 service
+ * worker has no `window`/`matchMedia`, so it cannot read the OS/browser color
+ * scheme itself for the toolbar-icon swap Firefox gets for free via manifest
+ * `theme_icons` (see lib/platform.js's `syncActionIconWithTheme` for the
+ * receiving end and the icon mapping it derives). Sent once at call time and
+ * again on every `change` event, unconditionally of `Prefs.theme` — the
+ * toolbar icon tracks the OS/browser scheme directly, the same signal
+ * Firefox's `theme_icons` reacts to, independent of this page's own
+ * light/dark/system color preference. Sent on both platforms rather than
+ * gated on a Chrome/Firefox check: the Firefox background handler no-ops
+ * (one code path, not a platform branch here).
+ * @returns {void}
+ */
+export function _initThemeColorSchemeRelay() {
+	let media = window.matchMedia('(prefers-color-scheme: dark)');
+	function relay() {
+		api.runtime.sendMessage({ name: 'Theme.colorScheme', dark: media.matches });
+	}
+	relay();
+	media.addEventListener('change', relay);
+}
+
+/**
  * @param {string} name
  * @param {string} [theme]
  * @returns {Promise<string | null>}

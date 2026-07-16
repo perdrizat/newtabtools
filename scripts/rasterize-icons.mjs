@@ -102,10 +102,12 @@ function resolveChromeBinary() {
 /** @type {RasterJob[]} */
 const JOBS = [
 	{ svg: 'icon.svg', sizes: [16, 32, 48, 128], prefix: 'icon' },
-	// Chrome's action.default_icon has no theme_icons equivalent (Decision 2)
-	// — only the light glyph is needed; the dark-mode action.setIcon wiring
-	// is the separately-landing platform.js piece.
+	// CHROME.md D4: both light and dark toolbar glyphs are needed now —
+	// lib/platform.js's syncActionIconWithTheme() picks between the two PNG
+	// sets at runtime via api.action.setIcon(), driven by the page's
+	// prefers-color-scheme relay (theme.js's _initThemeColorSchemeRelay).
 	{ svg: 'tools-light.svg', sizes: [16, 32], prefix: 'tools-light' },
+	{ svg: 'tools-dark.svg', sizes: [16, 32], prefix: 'tools-dark' },
 ];
 
 /**

@@ -5,12 +5,15 @@
 /**
  * Frozen message-contract test (MODERNIZATION.md Decision 3).
  *
- * The 19 `runtime.onMessage` wire names (audit/2026-07-09-mv3-inventory.md
- * §1.8) are wire protocol between the background and every page/popup
- * client. Stage M may rename internals freely but must never rename,
- * add, or drop a wire message name without updating this list — this test
- * is the contract's regression guard and survives the whole modernization
- * arc (M and H alike).
+ * The 20 `runtime.onMessage` wire names (audit/2026-07-09-mv3-inventory.md
+ * §1.8; `Theme.colorScheme` added 2026-07-16, CHROME.md D4 — the Chrome
+ * action-icon relay, see lib/platform.js's `syncActionIconWithTheme`) are
+ * wire protocol between the background and every page/popup client. Stage M
+ * may rename internals freely but must never rename or drop a wire message
+ * name without updating this list — additions are allowed (the frozen-names
+ * decision forbids renames, not deliberate additions) — this test is the
+ * contract's regression guard and survives the whole modernization arc (M
+ * and H alike).
  *
  * MODERNIZATION.md slice M5 dissolves the former webextension/background.js:
  * the dispatch switch this test drives is now `handleMessage`, a real export
@@ -26,12 +29,12 @@
  * backup-restore.test.ts).
  *
  * Two layers:
- *   1. Behavioral — dispatch each of the 19 documented names through the
+ *   1. Behavioral — dispatch each of the 20 documented names through the
  *      real `handleMessage` with its dependencies mocked, and assert the
  *      return value (true = async, keeps the response channel open; false =
  *      synchronous / fire-and-forget) matches the documented table.
  *   2. Structural completeness — greps the `case '<name>':` labels out of
- *      lib/messages.js and asserts the set is *exactly* these 19 names, no
+ *      lib/messages.js and asserts the set is *exactly* these 20 names, no
  *      more, no fewer.
  */
 
@@ -79,6 +82,7 @@ const CONTRACT: Array<{ name: string; async: boolean; message: Record<string, un
 	{ name: 'Thumbnails.clear', async: true, message: {} },
 	{ name: 'Export:backup', async: true, message: {} },
 	{ name: 'Import:restore', async: true, message: { file: new Blob(['x']) } },
+	{ name: 'Theme.colorScheme', async: false, message: { dark: true } },
 ];
 
 describe('lib/messages.js — frozen message contract (MODERNIZATION.md Decision 3)', () => {
@@ -195,17 +199,17 @@ describe('lib/messages.js — frozen message contract (MODERNIZATION.md Decision
 	});
 
 	describe('structural completeness — no undocumented case added or removed', () => {
-		it('lib/messages.js\'s switch has exactly these 19 case labels, no more, no fewer', () => {
+		it('lib/messages.js\'s switch has exactly these 20 case labels, no more, no fewer', () => {
 			// eslint-disable-next-line ntt/no-source-grep -- structural contract check, not behavioral coverage (paired with the behavioral loop above)
 			const code = fs.readFileSync(MESSAGES_PATH, 'utf8');
 			const found = [...code.matchAll(/case '([^']+)':/g)].map(m => m[1]);
-			expect(found).toHaveLength(19);
+			expect(found).toHaveLength(20);
 			expect(new Set(found)).toEqual(new Set(CONTRACT.map(c => c.name)));
 		});
 
-		it('the CONTRACT table itself lists exactly 19 unique names (guards the guard)', () => {
-			expect(CONTRACT).toHaveLength(19);
-			expect(new Set(CONTRACT.map(c => c.name)).size).toBe(19);
+		it('the CONTRACT table itself lists exactly 20 unique names (guards the guard)', () => {
+			expect(CONTRACT).toHaveLength(20);
+			expect(new Set(CONTRACT.map(c => c.name)).size).toBe(20);
 		});
 	});
 

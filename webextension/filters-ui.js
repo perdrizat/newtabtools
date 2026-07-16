@@ -89,7 +89,8 @@ export async function fillFilterUI(highlightHost) {
 
 	if (uiRefs.optionsFilterHostAutocomplete.childElementCount === 0) {
 		let options = await topSitesOptions(api);
-		api.topSites.get(options, /** @param {browser.topSites.MostVisitedURL[]} sites */ sites => {
+		/** @param {browser.topSites.MostVisitedURL[]} sites */
+		let handleSites = sites => {
 			for (let s of sites.reduce((carry, site) => {
 				let {protocol, host} = new URL(site.url);
 				if (host && ['http:', 'https:', 'ftp:'].includes(protocol) && !carry.includes(host)) {
@@ -100,7 +101,19 @@ export async function fillFilterUI(highlightHost) {
 				let option = el('option', undefined, s);
 				uiRefs.optionsFilterHostAutocomplete.appendChild(option);
 			}
-		});
+		};
+		// Chrome rejects ANY 2-argument api.topSites.get() call — even
+		// get(undefined, callback) — with "No matching signature", thrown
+		// synchronously (verified empirically, CHROME.md D3); only the
+		// 1-argument callback form works there. `topSitesOptions(api)`
+		// resolving `undefined` IS the Chrome-path signal (see its own doc
+		// comment in common.js) — branch on that instead of the 2-arg Firefox
+		// call topSitesOptions's caller has always made.
+		if (options === undefined) {
+			api.topSites.get(handleSites);
+		} else {
+			api.topSites.get(options, handleSites);
+		}
 	}
 }
 

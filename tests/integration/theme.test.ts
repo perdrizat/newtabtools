@@ -36,7 +36,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import vm from 'node:vm';
 import { Prefs } from '../../webextension/prefs.js';
-import { updateThemeColours, parseColour } from '../../webextension/theme.js';
+import { updateThemeColours, parseColour, _initThemeColorSchemeRelay } from '../../webextension/theme.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NEWTAB_PATH = path.resolve(__dirname, '../../webextension/newTab.js');
@@ -89,6 +89,10 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 			},
 			extension: {
 				getURL: vi.fn((p: string) => `moz-extension://fake/${p}`),
+			},
+			// _initThemeColorSchemeRelay's api.runtime.sendMessage (CHROME.md D4).
+			runtime: {
+				sendMessage: vi.fn().mockResolvedValue(undefined),
 			},
 		};
 
@@ -488,5 +492,43 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 
 	it('parseColour returns null for unparseable input', () => {
 		expect(parseColour('not-a-color')).toBeNull();
+	});
+
+	// ==================== _initThemeColorSchemeRelay (CHROME.md D4) ====================
+	//
+	// A Chrome MV3 service worker has no `window`/`matchMedia`, so it cannot
+	// read `prefers-color-scheme` itself — the page relays it via the
+	// `Theme.colorScheme` wire message so lib/platform.js's
+	// `syncActionIconWithTheme` can swap the toolbar icon. Sent unconditionally
+	// of `Prefs.theme` (the icon tracks the OS/browser scheme directly, same
+	// signal Firefox's manifest `theme_icons` reacts to) and on both
+	// platforms — the Firefox background handler no-ops.
+
+	describe('_initThemeColorSchemeRelay', () => {
+		it('sends Theme.colorScheme with the current scheme at boot (dark)', () => {
+			(globalThis as any).window.matchMedia.mockReturnValue({ matches: true, addEventListener: vi.fn() });
+			_initThemeColorSchemeRelay();
+			expect(browser.runtime.sendMessage).toHaveBeenCalledWith({ name: 'Theme.colorScheme', dark: true });
+		});
+
+		it('sends Theme.colorScheme with the current scheme at boot (light)', () => {
+			(globalThis as any).window.matchMedia.mockReturnValue({ matches: false, addEventListener: vi.fn() });
+			_initThemeColorSchemeRelay();
+			expect(browser.runtime.sendMessage).toHaveBeenCalledWith({ name: 'Theme.colorScheme', dark: false });
+		});
+
+		it('registers a matchMedia change listener that re-sends the current scheme', () => {
+			const addEventListenerMock = vi.fn();
+			const media = { matches: false, addEventListener: addEventListenerMock };
+			(globalThis as any).window.matchMedia.mockReturnValue(media);
+			_initThemeColorSchemeRelay();
+			expect(addEventListenerMock).toHaveBeenCalledWith('change', expect.any(Function));
+
+			(browser.runtime.sendMessage as any).mockClear();
+			media.matches = true;
+			const changeHandler = addEventListenerMock.mock.calls[0][1];
+			changeHandler();
+			expect(browser.runtime.sendMessage).toHaveBeenCalledWith({ name: 'Theme.colorScheme', dark: true });
+		});
 	});
 });
