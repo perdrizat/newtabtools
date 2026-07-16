@@ -23,6 +23,7 @@
     "test:e2e": "tests/e2e/run_esr_tests.sh",
     "test:uat": "node tests/uat/_tools/runner.mjs",
     "chrome:provision": "node tests/e2e-chrome/_tools/provision-cft.mjs",
+    "chrome:stage": "node tests/e2e-chrome/_tools/stage-dev.mjs",
     "chrome:smoke": "node tests/e2e-chrome/_tools/smoke.mjs",
     "chrome:smoke:selenium": "node tests/e2e-chrome/_tools/selenium-smoke.mjs",
     "test:e2e:chrome": "pnpm chrome:smoke && pnpm chrome:smoke:selenium",
