@@ -238,17 +238,19 @@ describe('module-scope bridge — lib/background-main.js\'s globalThis surface a
 	});
 
 	// ------------------------------------------------------------------
-	// Lazy-loaded lib/backup.js (adjudicated review item, 2026-07-09) — out of
-	// the static import graph; dynamically imported on first actual use.
+	// lib/backup.js is a STATIC import of lib/messages.js: dynamic import()
+	// is spec-disallowed in service workers (w3c/ServiceWorker#1356), so the
+	// former lazy-load design (2026-07-09) could never dispatch
+	// Export:backup/Import:restore on Chrome.
 	// ------------------------------------------------------------------
-	describe('lib/backup.js is lazy-loaded, not statically imported', () => {
-		it('is NOT loaded merely by importing background-main.js (its whole static graph already settled in beforeAll)', () => {
-			expect(backupModuleState.loadCount).toBe(0);
+	describe('lib/backup.js is statically imported (no dynamic import in the background graph)', () => {
+		it('IS loaded by importing background-main.js (part of the settled static graph)', () => {
+			expect(backupModuleState.loadCount).toBe(1);
 			expect(mockMakeZip).not.toHaveBeenCalled();
 			expect(mockReadZip).not.toHaveBeenCalled();
 		});
 
-		it('IS loaded lazily, and round-trips, when Export:backup is actually dispatched', async () => {
+		it('round-trips when Export:backup is dispatched, with no further module load', async () => {
 			const { handleMessage } = await import('../../webextension/lib/messages.js');
 			const sendResponse = vi.fn();
 

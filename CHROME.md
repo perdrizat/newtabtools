@@ -9,7 +9,7 @@
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | — |
 | D4 — icons, action, manifest completeness | core done 2026-07-16 (`178a773`); `syncActionIconWithTheme` wiring remains | `178a773` |
-| D5 — Chrome E2E tier + CI | pending | — |
+| D5 — Chrome E2E tier + CI | in flight 2026-07-16 (smoke 9/9 incl. backup; `test:e2e:chrome` + CI job authored; static-import platform fix; page-render gaps remain — see D5 pre-work) | — |
 | D6 — UAT on Chrome | pending | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
@@ -280,9 +280,15 @@ failing smoke checks live, and closed the arc.)*
 - [ ] PNG icon set per Decision 4 (16/32/48/128 + action icons); chrome
       overlay's `icons`/`action.default_icon` re-pointed; Firefox manifest
       untouched (keeps SVG + `theme_icons`).
-- [ ] `syncActionIconWithTheme` wired: `action.setIcon` driven by
-      `prefers-color-scheme` on Chrome (the `theme_icons` substitute);
-      no-op on Firefox.
+- [ ] `syncActionIconWithTheme` — **PROPOSED DESCOPE (maintainer decision
+      needed, 2026-07-16):** a Chrome MV3 service worker cannot read
+      `prefers-color-scheme` (no `matchMedia` in workers), so real wiring
+      needs a page→SW scheme relay plus a rasterized tools-dark PNG set —
+      meaningful machinery for a toolbar-icon nicety. Proposal: ship 3.0.0
+      with the static `action.default_icon` (already set, D4) and keep
+      `syncActionIconWithTheme` a documented no-op; revisit post-release
+      alongside the #12 icon redesign (which would regenerate all PNGs
+      anyway). If vetoed, the relay design lands as its own slice.
 - [ ] `manifest/chrome.json`: `minimum_chrome_version` (Decision 5),
       `incognito` policy stated explicitly.
 - [ ] CSP review for the Chrome target (the Mozilla-CDN `connect-src` is
@@ -295,19 +301,34 @@ failing smoke checks live, and closed the arc.)*
       (b) `filters-ui.js`'s 2-arg `topSites.get` call shape (Chrome rejects
       it). Both need landing before the smoke's "tile renders it" check can
       go green.
-- [ ] `test:e2e:chrome` per Decision 3: the D1 launcher grows into a small
-      suite (boot, grid, capture, backup, theme fallback, SW respawn);
-      runner-lock discipline mirrored from `run_esr_tests.sh`.
+- [x] `test:e2e:chrome` per Decision 3 (2026-07-16): the smoke IS the
+      suite — 9 checks: boot/install/SW-start, page+grid render, capture
+      round-trip (real OffscreenCanvas image in IDB), backup export
+      (decodable base64 zip over the wire — found+fixed the dynamic-import
+      platform constraint below), SW kill/respawn + storage.session
+      survival; theme fallback is proven by the zero-page-errors check
+      (the pre-gate run errored exactly there). `pnpm test:e2e:chrome` =
+      both smokes.
+      **Platform finding (production fix):** dynamic `import()` is
+      spec-disallowed in service workers — lib/messages.js's lazy
+      backup.js import (an adjudicated 2026-07-09 design) could never work
+      on Chrome; reverted to a static import, cost re-accepted, header
+      documents the supersession.
       **Parallel-run rule (maintainer 2026-07-16):** the Chrome tier must
       be runnable concurrently with Firefox E2E (9222) and the UAT daemon
       (9876) — keep the pipe/ephemeral transports (no fixed port); if one
       ever becomes necessary, 9223 is reserved (see
-      `tests/e2e-chrome/README.md` "Port allocation").
+      `tests/e2e-chrome/README.md` "Port allocation"). Known limit: two
+      CONCURRENT Chrome-smoke invocations collide on the `dist/chrome-dev`
+      staging dir (no runner lock yet) — acceptable while the tier is one
+      script; add a lock when the suite splits into files.
 - [ ] Origin/install abstraction in a `_helpers` seam only as far as the
       smoke tier needs — full-parity porting is explicitly out of scope
       (future arc, own program if warranted).
-- [ ] CI job (GitHub Actions ships Chrome on ubuntu runners) — Chrome
-      smoke on PR, same tiering philosophy as the Firefox suite.
+- [x] CI job authored (2026-07-16): `.github/workflows/ci.yml` gains a
+      parallel `chrome-smoke` job (pnpm + `chrome:provision` + both
+      smokes; the runner's preinstalled branded Chrome is unusable for
+      extension automation). Takes effect on the next push.
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
 - [ ] `browser-daemon.mjs` Chrome variant: Selenium `.forBrowser('chrome')`

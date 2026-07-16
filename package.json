@@ -25,6 +25,7 @@
     "chrome:provision": "node tests/e2e-chrome/_tools/provision-cft.mjs",
     "chrome:smoke": "node tests/e2e-chrome/_tools/smoke.mjs",
     "chrome:smoke:selenium": "node tests/e2e-chrome/_tools/selenium-smoke.mjs",
+    "test:e2e:chrome": "pnpm chrome:smoke && pnpm chrome:smoke:selenium",
     "test:uat:preflight": "node tests/uat/_tools/preflight.mjs",
     "test": "pnpm test:fast && pnpm test:e2e",
     "verify": "pnpm lint && pnpm typecheck && pnpm lint:webext && pnpm test:fast && pnpm build",

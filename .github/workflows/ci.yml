@@ -81,3 +81,38 @@ jobs:
           name: e2e-failure-screenshots
           path: tests/e2e/_artifacts/
           if-no-files-found: ignore
+
+  # Chrome tier (CHROME.md D5). A separate job so it runs in PARALLEL with
+  # the Firefox job — the tiers are port-disjoint by design (CONTRIBUTING
+  # "Running test tiers in parallel"); here they don't even share a runner.
+  # The runner's preinstalled branded Chrome is USELESS for extension
+  # automation (>=137 removed it — tests/e2e-chrome/README.md), so Chrome
+  # for Testing is provisioned explicitly.
+  chrome-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Provision Chrome for Testing
+        run: pnpm chrome:provision
+
+      - name: Chrome E2E smoke (Puppeteer/CDP)
+        run: pnpm chrome:smoke
+
+      - name: Chrome Selenium smoke (chromedriver)
+        run: pnpm chrome:smoke:selenium

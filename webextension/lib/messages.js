@@ -18,15 +18,17 @@
  * site.js now import it for real too, so nothing reads it off
  * `globalThis` anymore.
  *
- * `makeZip`/`readZip` (lib/backup.js) are deliberately NOT a static import
- * here (audit finding, 2026-07-09 review, adjudicated): lib/backup.js's own
- * import graph pulls in the vendored `lib/zip/**` ESM tree (~25 files). A
- * static import would parse that whole tree on every event-page respawn even
- * though 'Export:backup'/'Import:restore' are rare, user-initiated actions.
- * Each case below does `const {makeZip} = await import('./backup.js')` (resp.
- * `readZip`) instead — a dynamic import is cached after its first resolution
- * (same module instance on every later call), so the cost is paid at most
- * once per event-page lifetime, only when a backup/restore actually happens.
+ * `makeZip`/`readZip` (lib/backup.js) are a STATIC import again (CHROME.md
+ * D5, 2026-07-16), reversing the 2026-07-09 adjudicated lazy-import design:
+ * dynamic `import()` is disallowed on ServiceWorkerGlobalScope by the HTML
+ * spec (w3c/ServiceWorker#1356), so the lazy path made 'Export:backup'/
+ * 'Import:restore' structurally impossible on Chrome — the SW threw
+ * `TypeError: import() is disallowed…` and the page saw a null response
+ * (found by the Chrome smoke's backup check, first real run). The cost the
+ * lazy design avoided — parsing lib/backup.js's vendored `lib/zip/**` ESM
+ * tree (~25 files) on every background respawn even when no backup happens —
+ * is knowingly re-accepted as the price of a single code path that works on
+ * both platforms.
  *
  * `registerMessageHandler()` is called once, at lib/background-main.js's own
  * top level (still synchronous-on-import — same respawn-hygiene requirement
@@ -39,6 +41,7 @@ import { withObjectStore } from './db.js';
 import { Tiles, Background } from './tiles-store.js';
 import { getTZDateString } from './constants.js';
 import { startCaptureSession, purgeNeverCaptureHost } from './capture.js';
+import { makeZip, readZip } from './backup.js';
 import { NeverCapture } from '../prefs.js';
 import { api, broadcastToPages } from './platform.js';
 
@@ -302,17 +305,18 @@ export function handleMessage(message, sender, sendResponse) {
 		return true;
 
 	case 'Export:backup':
-		// Lazy-loaded (see file header) — cached after the first call.
-		import('./backup.js').then(({makeZip}) => makeZip()).then(sendResponse).catch(function(event) {
+		// Static import (see file header — dynamic import() is spec-disallowed
+		// in service workers).
+		makeZip().then(sendResponse).catch(function(event) {
 			console.error(event);
 			sendResponse(null);
 		});
 		return true;
 	case 'Import:restore':
 		// Surface restore failures instead of swallowing the rejection — a
-		// malformed backup must report an error, not fail silently. Lazy-loaded
-		// (see file header) — cached after the first call.
-		import('./backup.js').then(({readZip}) => readZip(message.file)).then(
+		// malformed backup must report an error, not fail silently. Static
+		// import (see file header).
+		readZip(message.file).then(
 			() => sendResponse({ ok: true }),
 			err => {
 				console.error('Import:restore failed:', err);
