@@ -2,6 +2,7 @@ import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { CHROME_DEV_EXTENSION_ID } from '../e2e-chrome/_tools/chrome-env.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +12,21 @@ const __dirname = path.dirname(__filename);
 export const PROFILE_DIR = process.env.NTT_E2E_PROFILE_DIR || path.resolve(__dirname, 'test-profile');
 export const ARTIFACTS_DIR = path.resolve(__dirname, '_artifacts');
 export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
+
+/**
+ * Browser seam (CHROME.md D5b): `NTT_E2E_BROWSER=chrome` (set by
+ * `tests/e2e-chrome/run_chrome_tests.sh`) switches the SAME 32 test files
+ * from Firefox/BiDi to Chrome/CDP. Firefox stays the default so every
+ * existing invocation (`pnpm test:e2e`, a bare `vitest --project e2e`) is
+ * byte-identical to before this seam existed.
+ */
+export const IS_CHROME = process.env.NTT_E2E_BROWSER === 'chrome';
+
+// Chrome for Testing's CDP debugging port (tests/e2e-chrome/README.md's port
+// table — 9223 is the reserved fixed-port slot for this tier, distinct from
+// Firefox E2E's 9222 and both UAT daemons' 9876/9877 so all tiers can run
+// concurrently per CONTRIBUTING.md's parallel-tier practice).
+export const CDP_ENDPOINT = 'http://127.0.0.1:9223';
 
 // Single source of truth for the extension ID: read it from the manifest at
 // test time. When the AMO publication path is decided (see ROADMAP.md) and the
@@ -28,22 +44,34 @@ function verbose(...args: unknown[]) {
 }
 
 /**
- * Connect to the running Firefox ESR instance via WebDriver BiDi.
+ * Connect to the running browser instance — Firefox via WebDriver BiDi
+ * (default), or Chrome for Testing via CDP when `NTT_E2E_BROWSER=chrome`
+ * (CHROME.md D5b). The name stays `connectToFirefox` even though it's now
+ * browser-generic: all 32 E2E test files already import it, and keeping the
+ * name means zero call-site churn (and zero risk of a paste-o) across a suite
+ * this program's own gate proves must stay byte-identical on Firefox.
  *
- * Retries a bounded number of times: the BiDi session handshake can lose a race
- * with `web-ext`'s Firefox startup on slow/loaded CI runners even after the port
- * is reachable (see audit/2026-05-11 §4.3). Each E2E file's `beforeAll` calls
- * this, so a transient first-attempt failure would otherwise fail a whole file.
- * Retrying the connect is safe — it does not retry test assertions.
+ * Retries a bounded number of times: the session handshake can lose a race
+ * with the launching browser's startup on slow/loaded CI runners even after
+ * the port is reachable (see audit/2026-05-11 §4.3, observed on the BiDi
+ * path; the same race is possible on CDP so the retry applies uniformly).
+ * Each E2E file's `beforeAll` calls this, so a transient first-attempt
+ * failure would otherwise fail a whole file. Retrying the connect is safe —
+ * it does not retry test assertions.
  */
 export async function connectToFirefox(attempts = 5, delayMs = 1000): Promise<Browser> {
 	let lastErr: unknown;
 	for (let attempt = 1; attempt <= attempts; attempt++) {
 		try {
-			return await puppeteer.connect({
-				browserWSEndpoint: BIDI_ENDPOINT,
-				protocol: 'webDriverBiDi',
-			});
+			return IS_CHROME
+				? await puppeteer.connect({
+					browserURL: CDP_ENDPOINT,
+					defaultViewport: null,
+				})
+				: await puppeteer.connect({
+					browserWSEndpoint: BIDI_ENDPOINT,
+					protocol: 'webDriverBiDi',
+				});
 		} catch (err) {
 			lastErr = err;
 			verbose(`[connect] attempt ${attempt}/${attempts} failed: ${(err as Error).message}`);
@@ -111,21 +139,31 @@ export async function getExtensionUUID(): Promise<string> {
 }
 
 /**
- * Build the full `moz-extension://` URL to the new tab page for a given
- * per-profile UUID (audit 2026-07-09-modernization-h-code-review.md #7b —
- * the sibling of tests/uat/_tools/urls.mjs's `newTabURL`, kept local here
- * since this file already anchors the E2E harness's own path constants).
+ * Build the full extension-origin URL to the new tab page for a given id
+ * (audit 2026-07-09-modernization-h-code-review.md #7b — the sibling of
+ * tests/uat/_tools/urls.mjs's `newTabURL`, kept local here since this file
+ * already anchors the E2E harness's own path constants). `browser` selects
+ * the origin scheme: Firefox's per-profile `moz-extension://<uuid>/`, or
+ * Chrome's deterministic `chrome-extension://<id>/` (CHROME.md D5b) — same
+ * two-scheme shape as the UAT tooling's `newTabURL`.
  */
-export function newTabURL(uuid: string): string {
-	return `moz-extension://${uuid}/newTab.html`;
+export function newTabURL(id: string, browser: 'firefox' | 'chrome' = 'firefox'): string {
+	return browser === 'chrome' ? `chrome-extension://${id}/newTab.html` : `moz-extension://${id}/newTab.html`;
 }
 
 /**
- * Get the full URL to the extension's new tab page.
+ * Get the full URL to the extension's new tab page for whichever browser
+ * this run targets. Chrome's id is the committed dev-key id (deterministic,
+ * no profile scrape needed — `stageDevBuild()` injects the same key on every
+ * run); Firefox's UUID is per-profile and must be discovered via
+ * `getExtensionUUID()`'s prefs.js scrape.
  */
 export async function getNewTabURL(): Promise<string> {
+	if (IS_CHROME) {
+		return newTabURL(CHROME_DEV_EXTENSION_ID, 'chrome');
+	}
 	const uuid = await getExtensionUUID();
-	return newTabURL(uuid);
+	return newTabURL(uuid, 'firefox');
 }
 
 export interface WaitForConditionOpts {
@@ -548,5 +586,64 @@ export async function waitForGridReady(page: Page, timeout = 15_000): Promise<vo
 		console.error(`[Navigation] Readiness check failed: ${(e as Error).message}`);
 		await captureFailure(page, 'grid-not-ready');
 		throw e;
+	}
+}
+
+/**
+ * Chrome analogue of Firefox's `extensions.background.idle.timeout` respawn
+ * regime (CHROME.md D5b, event-page-lifecycle.test.ts): there is no pref that
+ * ages out an MV3 service worker on a bounded schedule, so the test forces
+ * the same "the background just came back from nothing" condition with a
+ * real CDP-level kill — the exact technique `tests/e2e-chrome/_tools/smoke.mjs`
+ * proved out for D3's SW kill/respawn check.
+ *
+ * Two empirically-required steps beyond the kill itself (both findings from
+ * that smoke work, reproduced here):
+ *   1. Poll until the service_worker TARGET is actually gone before doing
+ *      anything else — a wake attempt sent while it's still tearing down is
+ *      dropped, not buffered.
+ *   2. Wake it with a REAL navigation (a content page load), not a page-side
+ *      `runtime.sendMessage` — the latter did not reliably wake a worker
+ *      killed this way, even though the identical call works from idle.
+ *      `webNavigation.onCompleted` is a listener the worker registers at
+ *      top level, so Chrome must resurrect it to deliver that event.
+ *
+ * Chrome-only: puppeteer's Target API needs a real CDP `service_worker`
+ * target type, which Firefox's BiDi-connected `Browser` never produces (its
+ * event page isn't modeled as a Target at all) — callers must gate this
+ * behind `IS_CHROME`.
+ */
+export async function restartChromeServiceWorker(browser: Browser, opts: { timeout?: number } = {}): Promise<void> {
+	const { timeout = 20_000 } = opts;
+
+	const client = await browser.target().createCDPSession();
+	const { targetInfos } = await client.send('Target.getTargets');
+	const sw = targetInfos.find((t: { type: string }) => t.type === 'service_worker');
+	if (!sw) {
+		throw new Error('restartChromeServiceWorker: no service_worker target found to kill');
+	}
+	await client.send('Target.closeTarget', { targetId: sw.targetId });
+
+	const goneDeadline = Date.now() + timeout;
+	while (Date.now() < goneDeadline) {
+		if (!browser.targets().some(t => t.type() === 'service_worker')) {
+			break;
+		}
+		await new Promise(r => setTimeout(r, 250));
+	}
+
+	const wakePage = await browser.newPage();
+	try {
+		await wakePage.goto('https://example.com/', { waitUntil: 'load', timeout: 15_000 });
+	} finally {
+		await wakePage.close().catch(() => {});
+	}
+
+	const respawned = await browser.waitForTarget(
+		t => t.type() === 'service_worker',
+		{ timeout },
+	).catch(() => null);
+	if (!respawned) {
+		throw new Error(`restartChromeServiceWorker: no service_worker target reappeared within ${timeout}ms of the wake navigation`);
 	}
 }

@@ -27,7 +27,7 @@
     "chrome:stage": "node tests/e2e-chrome/_tools/stage-dev.mjs",
     "chrome:smoke": "node tests/e2e-chrome/_tools/smoke.mjs",
     "chrome:smoke:selenium": "node tests/e2e-chrome/_tools/selenium-smoke.mjs",
-    "test:e2e:chrome": "pnpm chrome:smoke && pnpm chrome:smoke:selenium",
+    "test:e2e:chrome": "tests/e2e-chrome/run_chrome_tests.sh",
     "test:uat:preflight": "node tests/uat/_tools/preflight.mjs",
     "test:uat:smoke": "node tests/uat/_tools/daemon-smoke.mjs",
     "test:uat:smoke:chrome": "UAT_BROWSER=chrome node tests/uat/_tools/daemon-smoke.mjs",

@@ -32,6 +32,8 @@ once cleared to ship, per CHROME.md Decision 7 as amended).
 - `pnpm test:uat:chrome` — runs the UAT scenario suite against Chrome for Testing, sharing the runner/daemon/MCP bridge with the Firefox tier; `pnpm test:uat:smoke`/`test:uat:smoke:chrome` wrap the daemon HTTP-API contract smoke per browser.
 - `urls.mjs`'s `newTabURL` takes a `browser` parameter (`chrome-extension://` vs. `moz-extension://`); `preflight.mjs` swaps its Firefox-only checks (geckodriver handshake, .xpi presence) for a Chrome-for-Testing binary check when `$UAT_BROWSER=chrome`; the runner's scenario prologue now states the browser under test and the new-tab origin to navigate to.
 - `uat-scenario.md` skill generalized to either extension origin, with Chrome notes on the two intentional Firefox-only divergences (no dynamic context menu; theme follows `prefers-color-scheme` only, not `browser.theme`).
+- Chrome E2E suite parity (CHROME.md D5b): `tests/e2e-chrome/run_chrome_tests.sh` — the Chrome sibling of `run_esr_tests.sh` — stages the dev build, launches Chrome for Testing directly with `--load-extension` + a fresh throwaway profile + CDP on port 9223, and runs the SAME 32-file/126-test Firefox E2E suite via `NTT_E2E_BROWSER=chrome`; own concurrency lock (`tests/e2e-chrome/.runner-lock`), parallel-safe with both Firefox tiers. First full run: 125/126 green with zero test-file changes; 126/126 (100%) after triage.
+- `tests/e2e/_helpers.ts` gains the browser seam driving the above: `IS_CHROME`/`CDP_ENDPOINT`, `connectToFirefox`/`getNewTabURL`/`newTabURL` branch Firefox BiDi@9222/`moz-extension://` vs Chrome CDP@9223/`chrome-extension://` (id imported straight from `chrome-env.mjs`), and a new `restartChromeServiceWorker` (real CDP kill + navigation-wake) for the one file that needed a Chrome-specific behavior. Zero call-site changes across all 32 E2E test files — the existing DOM/wire-driven harness (chrome-prep C3d) was already browser-agnostic.
 
 ### Changed
 
@@ -42,6 +44,9 @@ once cleared to ship, per CHROME.md Decision 7 as amended).
 - Tile stat radiogroup drops `Rank`/`Fresh` and reorders to None/Last/Visits/Trend (issue #13); `Prefs.parsePrefs`'s `statType` allow-list shrinks to match, so a previously-stored `rank`/`fresh` value now normalizes to the default (`none`) on read.
 - `lib/messages.js`'s `Thumbnails.getFavicons`/`Thumbnails.getFaviconsByHost` now share one cursor-walk helper instead of two near-identical copies (issue #17); wire shapes unchanged.
 - Backup download unified for both platforms (CHROME.md D2 Decision 2a): `makeZip` returns base64 zip bytes + filename over the wire; new page-side `backup-download.js` decodes, creates/revokes the blob URL, and triggers the download (no `URL.createObjectURL` in the background — now also ESLint-guarded via `no-restricted-properties` on `lib/**`, Decision 9). Same filename/saveAs UX on Firefox.
+- `package.json`'s `test:e2e:chrome` now runs the new Chrome E2E parity runner (CHROME.md D5b) instead of the two smoke scripts; `chrome:smoke`/`chrome:smoke:selenium` stay separately runnable as the fast per-arc gate.
+- `event-page-lifecycle.test.ts`'s Chrome branch swaps the Firefox idle-timeout-pref sleep for a real CDP kill/respawn (`restartChromeServiceWorker`) — the sleep alone would have passed vacuously on Chrome, since nothing ages a service worker out on that schedule.
+- `tests/e2e-chrome/_tools/chrome-env.mjs`'s `resolveChromeBinary`/`chromeArgs` gain precise JSDoc types (narrowed candidate-array filter, typed `stageDir` param) so `_helpers.ts` can import `CHROME_DEV_EXTENSION_ID` directly under `checkJs` without pulling in pre-existing type errors.
 
 ### Fixed
 

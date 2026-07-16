@@ -17,6 +17,13 @@ import {
 // paint. This test logs comparable before/after numbers so the delta from
 // that flip can be recorded — it is not a perf gate (assertions below are
 // deliberately generous), just a stable, grep-able measurement.
+//
+// CHROME.md D5b: runs unmodified on Chrome — same generous bound (< 15s),
+// no separate Chrome threshold added yet. Observed Chrome medians on CfT 151
+// (firstTileSeen ~127ms) were well inside Firefox's, so the shared bound
+// isn't currently a false-green risk; still PROVISIONAL per this arc's
+// plan — a solo Chrome re-baselining pass (its own median, not just a
+// shared ceiling) is future work if the instrument needs to tighten.
 
 const ITERATIONS = 3;
 const TEST_URL = 'https://boot-timing-test.example.com/';

@@ -30,6 +30,14 @@
  * signal. The §1.1 favicon *logic* (data: → Blob, remote → stored URL string,
  * page-side <img> render) is additionally covered deterministically at the
  * Fast/integration tier, so GitHub never loses real coverage.
+ *
+ * CHROME.md D5b triage: no IS_CHROME skip added — a full-suite Chrome run
+ * hit the same network-timing failure this file already documents as its
+ * inherent class, but a SOLO re-run on Chrome passed clean, matching this
+ * project's own "re-run the one file solo before treating it as a
+ * regression" practice (CONTRIBUTING.md). Not a platform-fundamental
+ * divergence, just the same public-internet flakiness Firefox already
+ * accepts here.
  */
 
 // GitHub Actions sets GITHUB_ACTIONS=true on every runner; no local shell or

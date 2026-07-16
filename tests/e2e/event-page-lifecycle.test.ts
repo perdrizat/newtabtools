@@ -9,8 +9,19 @@ import {
 	waitForGridReady,
 	resetTestState,
 	navigateAndConfirm,
+	IS_CHROME,
+	restartChromeServiceWorker,
 } from './_helpers.ts';
 
+// CHROME.md D5b: Chrome has no idle-timeout PREF to wait out (a service
+// worker's teardown schedule isn't configurable this way) — the platform
+// divergence is real, not skipped, so the "genuinely came back from
+// nothing" precondition is forced with a real CDP-level kill/respawn
+// (`restartChromeServiceWorker`, the same technique D3's smoke proved out)
+// instead of the Firefox sleep-and-let-it-idle below. Both paths reach the
+// identical postcondition this file actually asserts on: a just-respawned
+// background whose IDB/capture pipeline still works.
+//
 // MV3_MIGRATION.md Slice D: `run_esr_tests.sh` sets
 // `extensions.background.idle.timeout=10000` for the whole suite, so the
 // event page genuinely suspends after ~10s of no extension activity and
@@ -46,9 +57,15 @@ describe('E2E: event-page suspension recovery (MV3_MIGRATION.md Slice D)', () =>
 	});
 
 	it('event page respawns after idle suspension — Tiles.getAllTiles succeeds (IDB reconnected)', async () => {
-		// No extension messages, no tab navigations — let the background
-		// genuinely idle out and tear down before we touch it again.
-		await new Promise(r => setTimeout(r, 13_000));
+		if (IS_CHROME) {
+			// Force the kill/respawn directly (see the CHROME.md D5b header note)
+			// rather than waiting out a Firefox-only pref.
+			await restartChromeServiceWorker(browser);
+		} else {
+			// No extension messages, no tab navigations — let the background
+			// genuinely idle out and tear down before we touch it again.
+			await new Promise(r => setTimeout(r, 13_000));
+		}
 
 		const page = await openNewTab(browser);
 		await waitForGridReady(page);

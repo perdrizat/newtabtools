@@ -1,3 +1,18 @@
+/**
+ * KNOWN-FLAKY CLASS (accepted by CHROME_PREP.md directive 1, TESTING.md
+ * "Principled harness driving"): this file dispatches real synthesized
+ * `dragstart`/`dragend`/`drop` `DragEvent`s (with a genuine `DataTransfer()`)
+ * on real tile/cell DOM nodes rather than calling an internal `Drag.start()`
+ * with a mock event. Synthesized DnD in headless Firefox is a known-flaky
+ * class. Quarantine policy: investigate only after 3 consecutive CI failures
+ * of the same test; never revert to page-global/internal-API driving as a
+ * fix (see drag-layout.test.ts's header, which documents the same policy).
+ *
+ * CHROME.md D5b: runs unmodified on Chrome (green on CfT 151) — the same
+ * quarantine policy extends to the Chrome tier rather than getting its own
+ * rule.
+ */
+
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser } from 'puppeteer-core';
 import {

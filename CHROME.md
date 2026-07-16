@@ -10,7 +10,7 @@
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | `eea8565` |
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
-| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | pending | — |
+| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | **126/126 = 100% parity on CfT 151** (2026-07-16); Firefox full-suite re-confirmation in flight | — |
 | D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
@@ -378,31 +378,36 @@ failing smoke checks live, and closed the arc.)*
 Chrome — same test FILES, parameterized harness, documented per-file
 divergences. "We need test parity between the two as part of this run."*
 
-- [ ] Chrome E2E lifecycle runner (sibling of `run_esr_tests.sh`): launch
-      CfT with `--load-extension=<stage>` + `--remote-debugging-port=9223`
-      (the reserved port), wait for the port, run
-      `vitest --project e2e` with `NTT_E2E_BROWSER=chrome`, clean up;
-      its own concurrency lock; parallel-safe with the Firefox tiers.
-- [ ] `tests/e2e/_helpers.ts` browser seam: `connectToFirefox` →
-      `connectToBrowser` (BiDi @9222 vs CDP @9223), `getNewTabURL` →
-      per-browser origin (`prefs.js` UUID scrape vs the committed dev-key
-      id `lncefjbclhbbikhanecleanbbohpiclk`); everything wire/DOM-driven
-      (the C3d principled harness) should port untouched — that harness
-      decision is what makes parity cheap now.
-- [ ] Suite triage, file by file (documented in each file's header, honest
-      skips only for platform-fundamentals): expected divergence classes —
-      `event-page-lifecycle` (Firefox idle-timeout pref → Chrome SW
-      kill/respawn analogue), `theme` (browser.theme cases → base-scheme
-      variants), menus-dependent assertions (Decision 1: no Chrome menus),
-      `boot-timing` (medians re-baselined per browser), drag tests
-      (synthesized DnD known-flaky class — quarantine policy extends),
-      `favicon-real-sites` (network-gated, already CI-skipped, #21).
-- [ ] `pnpm test:e2e:chrome` becomes the parity suite (the 11-check smoke
-      stays as `pnpm chrome:smoke`, the fast per-arc gate); CI: the
-      chrome job runs the parity suite once stable (smoke until then).
-- [ ] Acceptance: parity suite green on CfT with every skip/variant
-      carrying a one-line platform justification in the file header —
-      target ≥90% of Firefox test cases executing identically on Chrome.
+*(Executed 2026-07-16. RESULT: **126/126 tests, 32/32 files, 100% parity,
+zero skips** — the ≥90% target beaten outright; only ONE file needed
+adaptation.)*
+- [x] Chrome E2E lifecycle runner `tests/e2e-chrome/run_chrome_tests.sh`
+      (mirrors `run_esr_tests.sh`: own mkdir lock, stages the dev build,
+      launches CfT with `--load-extension` + port **9223**, waits, runs
+      `NTT_E2E_BROWSER=chrome vitest --project e2e`, trap cleanup).
+      `pnpm test:e2e:chrome` = the parity suite now; the 11-check smoke
+      stays `pnpm chrome:smoke`.
+- [x] `tests/e2e/_helpers.ts` browser seam: `connectToFirefox` keeps its
+      name (32 importers), branches internally (BiDi @9222 / CDP @9223);
+      `getNewTabURL` per-browser origin (dev-key id imported from
+      chrome-env.mjs, no duplicate); new `restartChromeServiceWorker`
+      (CDP Target.closeTarget + navigation wake, the D3 recipe). Every
+      OTHER helper needed zero changes — the C3d wire/DOM-driven harness
+      ported untouched, exactly as predicted.
+- [x] Suite triage: 26/32 files ran UNMODIFIED first try;
+      `event-page-lifecycle` adapted (Firefox's idle-pref sleep is a
+      vacuous no-op on Chrome → real SW kill/respawn via the new helper,
+      2/2 green solo); 4 files got header-notes only (boot-timing — Chrome
+      was FASTER, shared bound kept; drag ×2 — quarantine policy extended;
+      theme — never touched browser.theme); `favicon-real-sites` failed
+      once under full-suite load and passed solo (the documented
+      network-gated class, #21 — NO Chrome skip added).
+- [x] Acceptance: **exceeded** — 126/126 executing identically, zero
+      skips, every divergence a documented header note. First full run was
+      already 125/126 before any edits. Firefox unchanged-proof: fast
+      1417/1417 + full `pnpm test:e2e` re-confirmation running at close.
+      CI: workflow still runs the smoke — switching the chrome job to the
+      parity suite is a deliberate follow-up (runtime cost on CI runners).
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
 - [x] `browser-daemon.mjs` parameterized (2026-07-16, ONE implementation,

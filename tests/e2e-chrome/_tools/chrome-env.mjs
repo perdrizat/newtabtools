@@ -75,7 +75,10 @@ export function resolveChromeBinary() {
 		'google-chrome',
 		'chromium',
 		'chromium-browser',
-	].filter(Boolean);
+		// Filtering with a type-guard (not bare `Boolean`) so tsc narrows
+		// `(string | undefined)[]` to `string[]` — needed once this file gets
+		// imported (not just run) by a checked .ts consumer (D5b, _helpers.ts).
+	].filter((c) => typeof c === 'string');
 	for (const candidate of candidates) {
 		try {
 			// Puppeteer requires an ABSOLUTE executablePath — resolve bare names via PATH.
@@ -134,7 +137,11 @@ export function stageDevBuild() {
 	return { dir, extensionId };
 }
 
-/** Args shared by every Chrome launch in this tier. */
+/**
+ * Args shared by every Chrome launch in this tier.
+ * @param {string} stageDir
+ * @return {string[]}
+ */
 export function chromeArgs(stageDir) {
 	return [
 		`--disable-extensions-except=${stageDir}`,

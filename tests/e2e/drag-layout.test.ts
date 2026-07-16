@@ -32,6 +32,11 @@
  * DnD in headless Firefox can occasionally misfire. Quarantine policy:
  * investigate on 3 consecutive CI failures; never revert to page-global
  * driving as the fix.
+ *
+ * CHROME.md D5b: runs unmodified on Chrome (green on CfT 151) — the
+ * synthesized-DragEvent approach is equally standards-based there, so the
+ * same known-flaky class and quarantine policy extends to the Chrome tier
+ * rather than getting its own rule.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
