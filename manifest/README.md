@@ -49,7 +49,16 @@ just run `pnpm build`, which does it as a prebuild step).
     after copying `webextension/` wholesale, since `manifest/chrome.json`
     overriding `icons` takes the whole key per the shallow-merge rule above —
     it can't reach into base.json's SVG-only `icons` map.
-  - **`minimum_chrome_version: "144"`** — CHROME.md D1's decided floor.
+  - **`minimum_chrome_version: "148"`** — CHROME.md Decision 10's floor:
+    148 is where `message_serialization` shipped (below), the binding
+    API requirement; every other per-API floor is far older.
+  - **`message_serialization: "structured_clone"`** (CHROME.md Decision 10)
+    — opts Chrome's extension messaging into the structured-clone
+    algorithm, so the thumbnail/favicon wire responses (`Map`s of `Blob`s)
+    cross intact instead of degrading to `{}` under JSON serialization.
+    Chrome-only key: Firefox messaging is structured-clone natively and
+    must NOT carry the key (web-ext lint would flag it, and there's
+    nothing to opt into).
   - **`incognito: "spanning"`** is stated explicitly even though it's
     Chrome's default. `chrome_url_overrides` doesn't apply in incognito
     windows regardless (Chrome never lets an extension override the

@@ -9,7 +9,7 @@
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | — |
 | D4 — icons, action, manifest completeness | core done 2026-07-16 (`178a773`); `syncActionIconWithTheme` wiring remains | `178a773` |
-| D5 — Chrome E2E tier + CI | in flight 2026-07-16 (smoke 9/9 incl. backup; `test:e2e:chrome` + CI job authored; static-import platform fix; page-render gaps remain — see D5 pre-work) | — |
+| D5 — Chrome E2E tier + CI | done except filters-ui gap 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10 landed) | — |
 | D6 — UAT on Chrome | pending | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
@@ -133,6 +133,21 @@ self-healing by design, `pendingCaptures` already round-trips
    the seam file(s) that legitimately hold them after Decision 2) — closes
    the guard blind spot that let backup.js through. Lands with the D2
    backup fix.
+10. **Structured-clone messaging on Chrome; floor raised to 148**
+   (maintainer-decided 2026-07-16, after the D3/D5 live finding that
+   Chrome's JSON messaging erases the thumbnail/favicon wire — a `Map`
+   arrives as `{}`, a `Blob` can't cross at all). Chrome 148+ ships an
+   opt-in manifest key, `"message_serialization": "structured_clone"`
+   (stable, supports Map/Blob/File/Set/Date) — set in `manifest/chrome.json`
+   ONLY; Firefox messaging is structured-clone natively and gets no key.
+   `minimum_chrome_version` moves 144 → **148** (~4 months old — still
+   within Decision 5's "quite modern"). This supersedes the two designs
+   considered for the rendering gap (page-side direct IDB reads — still a
+   valid future optimization; base64 over the wire — rejected for the hot
+   path). Proof: smoke 11/11 incl. "Thumbnails.get returns a real Map with
+   a Blob" and "tile renders the stored thumbnail" on CfT 151. Caveats
+   verified inapplicable: no SharedArrayBuffer/transferables, no
+   extension-to-extension messaging, no `toJSON()` reliance.
 
 ## Arcs
 
@@ -184,10 +199,10 @@ there. Everything after D1 gets a red/green target on real Chrome.*
 - [x] Selenium path green too (extended scope, de-risks D6 UAT-on-Chrome):
       Selenium Manager auto-provisioned chromedriver 151, `--load-extension`
       works on CfT under Selenium, grid renders (`pnpm chrome:smoke:selenium`).
-- [x] `minimum_chrome_version` pinned: **144** (CfT stable is 151 at pin
-      time; ~7 releases ≈ 7 months back — Decision 5's "months old, not
-      years"; every per-API floor is far older). Applied to
-      `manifest/chrome.json` in D4.
+- [x] `minimum_chrome_version` pinned: initially **144** (D1); raised to
+      **148** by Decision 10 (structured-clone messaging is the new
+      binding API floor — every other per-API floor is far older).
+      Applied in `manifest/chrome.json`.
 
 ### D2 — service-worker boot blockers
 - [x] `lib/thumbnail-image.js`: OffscreenCanvas/`createImageBitmap` path per
@@ -295,12 +310,16 @@ failing smoke checks live, and closed the arc.)*
       wallpaper-catalog plumbing — decide keep/drop for Chrome).
 
 ### D5 — Chrome E2E tier + CI
-- [ ] **Pre-work, from D3's live findings:** (a) thumbnail/favicon
-      rendering on Chrome — the Blob-over-wire gap (design: page-side
-      direct IDB read vs base64 wire; see D3's tracked-gap entry);
-      (b) `filters-ui.js`'s 2-arg `topSites.get` call shape (Chrome rejects
-      it). Both need landing before the smoke's "tile renders it" check can
-      go green.
+- [x] ~~Pre-work (a)~~: thumbnail/favicon rendering on Chrome — **RESOLVED
+      by Decision 10** (structured-clone messaging): the existing wire now
+      carries the Maps/Blobs as-is; smoke checks "structured clone: real
+      Map with a Blob" and "tile renders the stored thumbnail" are green
+      (11/11, CfT 151). The favicon wires (`getFavicons`/`getFaviconsByHost`)
+      use the same response shapes and inherit the fix.
+- [ ] **Pre-work (b), still open:** `filters-ui.js`'s 2-arg
+      `topSites.get(options, cb)` call shape — Chrome rejects any 2-arg
+      call ("No matching signature"); needs an argument-count-aware branch
+      at that call site (Filters drawer UI on Chrome).
 - [x] `test:e2e:chrome` per Decision 3 (2026-07-16): the smoke IS the
       suite — 9 checks: boot/install/SW-start, page+grid render, capture
       round-trip (real OffscreenCanvas image in IDB), backup export

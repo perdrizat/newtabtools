@@ -55,6 +55,7 @@ const CANONICAL_KEY_ORDER = [
 	'icons',
 	'browser_specific_settings',
 	'minimum_chrome_version',
+	'message_serialization',
 	'chrome_url_overrides',
 	'background',
 	'action',

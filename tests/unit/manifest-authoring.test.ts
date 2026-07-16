@@ -101,12 +101,20 @@ describe('manifest authoring — base + overlay merge (chrome-prep C6)', () => {
 			});
 		});
 
-		it('declares minimum_chrome_version "144" (CHROME.md D1)', () => {
-			expect(chrome.minimum_chrome_version).toBe('144');
+		it('declares minimum_chrome_version "148" (structured-clone messaging floor, CHROME.md Decision 10)', () => {
+			expect(chrome.minimum_chrome_version).toBe('148');
 		});
 
 		it('declares incognito "spanning" explicitly (the default, made deliberate)', () => {
 			expect(chrome.incognito).toBe('spanning');
+		});
+
+		it('opts in to structured-clone messaging (Maps/Blobs cross the wire, CHROME.md Decision 10)', () => {
+			expect(chrome.message_serialization).toBe('structured_clone');
+		});
+
+		it('does NOT set message_serialization on the Firefox target (structured clone is native there)', () => {
+			expect(mergeManifest('firefox').message_serialization).toBeUndefined();
 		});
 	});
 });

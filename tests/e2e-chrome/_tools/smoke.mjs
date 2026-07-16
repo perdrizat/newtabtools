@@ -219,16 +219,13 @@ try {
 			await capturePage.goto(CAPTURE_TEST_URL, { waitUntil: 'load', timeout: 15000 });
 
 			// Poll IDB DIRECTLY from the extension page (same origin as the SW's
-			// database) for the stored record. Deliberately NOT the
-			// `Thumbnails.get` wire message: its Map response serializes to `{}`
-			// over Chrome's JSON-only messaging (and Blob values wouldn't survive
-			// either), so the wire is blind here even when the record exists —
-			// verified 2026-07-16 (D3): capture stored a 16 KB image while the
-			// wire returned `{}`. The page-side THUMBNAIL RENDERING path shares
-			// that wire gap — tracked as its own CHROME.md item, out of this
-			// check's scope (this check proves navigate → capture →
-			// OffscreenCanvas → IDB). The A/B/C session's hard deadline is 2s;
-			// give it real margin on a cold CI-ish runner.
+			// database) for the stored record — the storage-side proof,
+			// independent of messaging (this is what caught the original wire
+			// blindness: a 16 KB image stored while JSON messaging returned `{}`).
+			// The wire itself is verified separately in the next check, now that
+			// `message_serialization: structured_clone` (Chrome 148+, CHROME.md
+			// Decision 10) carries Maps/Blobs. The A/B/C session's hard deadline
+			// is 2s; give it real margin on a cold CI-ish runner.
 			const found = await pollUntil(async () => {
 				return page.evaluate(u => new Promise(resolve => {
 					const req = indexedDB.open('newTabTools');
@@ -245,6 +242,43 @@ try {
 
 			check('capture round-trip: thumbnail lands in IDB after navigation', !!found,
 				found ? `stored image blob: ${found} bytes (direct IDB read)` : 'no thumbnail within 20s');
+
+			// 6b. The wire carries it: with structured-clone messaging
+			// (manifest `message_serialization`, CHROME.md Decision 10) the
+			// `Thumbnails.get` response arrives as a REAL Map with a REAL Blob —
+			// the exact shapes Chrome's JSON serialization used to erase.
+			if (found) {
+				const wire = await page.evaluate(u => new Promise(resolve => {
+					chrome.runtime.sendMessage({ name: 'Thumbnails.get', urls: [u] }, resp => {
+						if (!(resp instanceof Map)) { resolve({ ok: false, why: `not a Map: ${typeof resp}` }); return; }
+						const blob = resp.get(u);
+						if (!(blob instanceof Blob)) { resolve({ ok: false, why: `no Blob for url (got ${typeof blob})` }); return; }
+						resolve({ ok: true, size: blob.size });
+					});
+				}), CAPTURE_TEST_URL);
+				check('structured clone: Thumbnails.get returns a real Map with a Blob', !!wire.ok,
+					wire.ok ? `Map + Blob, ${wire.size} bytes over the wire` : wire.why);
+
+				// 6c. The tile RENDERS it: reload the extension page and require
+				// the pinned tile's thumbnail node to pick up a background image —
+				// the full user-visible path (D5's "tile renders it").
+				await page.goto(`chrome-extension://${extensionId}/${NEWTAB_PATH}`, { waitUntil: 'load', timeout: 15000 });
+				const rendered = await pollUntil(async () => {
+					return page.evaluate(u => {
+						const sites = document.querySelectorAll('#newtab-grid .newtab-site');
+						for (const s of sites) {
+							const link = s.querySelector('a.newtab-link');
+							if (link && link.href === u) {
+								const thumb = s.querySelector('.newtab-thumbnail');
+								if (thumb && getComputedStyle(thumb).backgroundImage.includes('url')) { return true; }
+							}
+						}
+						return false;
+					}, CAPTURE_TEST_URL);
+				}, { timeoutMs: 15000, intervalMs: 500 });
+				check('tile renders the stored thumbnail', !!rendered,
+					rendered ? 'background-image set on the pinned tile' : 'no background-image within 15s');
+			}
 			if (!found) {
 				console.log(`[chrome-smoke] ~ pinTile response: ${JSON.stringify(captureTile)}`);
 				if (swMessages.length) {
