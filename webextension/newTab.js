@@ -944,10 +944,18 @@ const NewTabToolsObject = {
 			this.darkIcons.disabled = effectiveTheme == 'light';
 			this._syncDrawerSegmented('theme', theme);
 			updateThemeColours();
-			if (theme === 'system') {
-				api.theme.onUpdated.addListener(updateThemeColours);
-			} else {
-				api.theme.onUpdated.removeListener(updateThemeColours);
+			// chrome-prep D2 slice 2 (decision of record: `prefers-color-scheme`
+			// is the base, `browser.theme` is a Firefox bonus — Chrome has no
+			// `theme` namespace at all). Gated like the existing `'menus' in
+			// api` precedent below: on Firefox this still registers/removes
+			// exactly as before this slice; on Chrome nothing is registered
+			// (the `prefers-color-scheme` base above already renders unthemed).
+			if ('theme' in api) {
+				if (theme === 'system') {
+					api.theme.onUpdated.addListener(updateThemeColours);
+				} else {
+					api.theme.onUpdated.removeListener(updateThemeColours);
+				}
 			}
 		}
 

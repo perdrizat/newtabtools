@@ -288,6 +288,48 @@ describe('Recently-closed tabs — newTab.js', () => {
 		expect(appendedCards[0].href).toBe('https://example.com');
 	});
 
+	// chrome-prep D2 slice 3: the own-extension-page filter must derive its
+	// prefix from `api.runtime.getURL('')` (works on both platforms) instead
+	// of the hardcoded `moz-extension://` literal (silently wrong scheme on
+	// Chrome, where the extension's own pages are `chrome-extension://`).
+	it('derives the own-extension-page filter from api.runtime.getURL(\'\'), not a hardcoded moz-extension:// literal', () => {
+		const items = [
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's1', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		refreshRecent();
+		expect(chrome.runtime.getURL).toHaveBeenCalledWith('');
+	});
+
+	it('skips a recently-closed item whose URL starts with the runtime\'s own origin, on a non-moz scheme (e.g. Chrome\'s chrome-extension://)', () => {
+		const realGetURL = chrome.runtime.getURL;
+		(chrome.runtime as any).getURL = vi.fn(() => 'chrome-extension://abc/');
+		try {
+			const items = [
+				{ tab: { url: 'chrome-extension://abc/newTab.html', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
+				{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
+			];
+			(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+			refreshRecent();
+			expect(appendedCards).toHaveLength(1);
+			expect(appendedCards[0].href).toBe('https://example.com');
+		} finally {
+			(chrome.runtime as any).getURL = realGetURL;
+		}
+	});
+
+	it('skips a recently-closed item whose URL starts with the runtime\'s own origin, on the real moz-extension:// scheme (matching the mocked runtime\'s own extension ID)', () => {
+		const ownOrigin = chrome.runtime.getURL('');
+		const items = [
+			{ tab: { url: ownOrigin + 'newTab.html', title: 'New Tab', sessionId: 's1', favIconUrl: null, incognito: false } },
+			{ tab: { url: 'https://example.com', title: 'Example', sessionId: 's2', favIconUrl: null, incognito: false } },
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		refreshRecent();
+		expect(appendedCards).toHaveLength(1);
+		expect(appendedCards[0].href).toBe('https://example.com');
+	});
+
 	it('skips tabs with a javascript: URL (§1.3 — card.href must never be javascript:)', () => {
 		// Middle-click/Ctrl+click bypass the onclick handler and navigate the
 		// href directly, so a javascript: session URL must be filtered out.

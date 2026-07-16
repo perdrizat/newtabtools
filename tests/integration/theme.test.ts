@@ -30,7 +30,7 @@
  *   - getThemedImageURL: recolors SVG content and returns data URI
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -108,8 +108,12 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		// the module-level `api` namespace leaf instead of a bare `browser.*`
 		// reference — declared here as a live-resolving stand-in (mirrors
 		// webextension/api.js's own Proxy) so the `globalThis.browser` mock
-		// above still takes effect at call time.
-		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); } }); var newTabTools = { ${optionsOnChange}, ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, resizeOptionsThumbnail() {}, applyTileAspect() {} };`;
+		// above still takes effect at call time. The `has` trap mirrors
+		// api.js's own (chrome-prep D2 slice 2): without it, `'theme' in api`
+		// would always resolve against the Proxy's empty `{}` target instead
+		// of the live `globalThis.browser`/`chrome`, and the theme presence-
+		// gate tests below could never observe a real absence of `api.theme`.
+		const code = `var api = new Proxy({}, { get(_t, p) { return Reflect.get(globalThis.browser ?? globalThis.chrome, p); }, has(_t, p) { return p in (globalThis.browser ?? globalThis.chrome); } }); var newTabTools = { ${optionsOnChange}, ${updateUI}, ${syncSeg}, ${syncToggle}, ${syncSlider}, darkIcons: { disabled: false }, lockedToggleButton: { style: {} }, resizeOptionsThumbnail() {}, applyTileAspect() {} };`;
 		vm.runInThisContext(code, { filename: 'theme-harness.js' });
 		harness = (globalThis as any).newTabTools;
 	});
@@ -387,6 +391,92 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 		(globalThis as any).updateThemeColours = vi.fn();
 		harness.updateUI(['theme']);
 		expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
+	});
+
+	// ==================== theme presence-gate (chrome-prep D2 slice 2) ====================
+	//
+	// Decision of record: `prefers-color-scheme` is the base, `browser.theme`
+	// is a Firefox-only bonus — no code may assume `api.theme` exists (a
+	// Chrome build has no `theme` namespace at all). Both updateThemeColours
+	// (theme.js) and updateUI's theme branch (newTab.js, vm-extracted above)
+	// must gate on `'theme' in api`, mirroring the existing `'menus' in api`
+	// precedent (newTab.js/lib/background-main.js). These tests simulate a
+	// Chrome-shaped `api` by deleting `theme` off the same `globalThis.browser`
+	// object the suite's other tests mutate, then restore it so later tests
+	// in this file keep seeing a Firefox-shaped `api.theme`.
+
+	describe('theme presence-gate — api.theme absent (Chrome has no `theme` namespace)', () => {
+		let savedTheme: unknown;
+
+		beforeEach(() => {
+			savedTheme = (globalThis as any).browser.theme;
+			delete (globalThis as any).browser.theme;
+		});
+
+		afterEach(() => {
+			(globalThis as any).browser.theme = savedTheme;
+		});
+
+		it('updateThemeColours does not throw when theme is "system" and api.theme is absent', async () => {
+			Prefs.theme = 'system';
+			await expect(updateThemeColours()).resolves.not.toThrow();
+		});
+
+		it('updateThemeColours falls back to the null-theme path (CSS custom properties cleared) when api.theme is absent', async () => {
+			Prefs.theme = 'system';
+			await updateThemeColours();
+			// Same "nothing to apply" outcome as the existing null/missing-colors
+			// regression tests above — the prefers-color-scheme base in
+			// tokens.css renders unthemed.
+			expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--back-opaque', null);
+			expect(document.documentElement.style.setProperty).toHaveBeenCalledWith('--fore-opaque', null);
+		});
+
+		it('updateUI(["theme"]) does not throw when theme is "system" and api.theme is absent', () => {
+			Prefs.theme = 'system';
+			const mockRadio = { checked: false };
+			document.querySelector = vi.fn(() => mockRadio) as any;
+			(globalThis as any).updateThemeColours = vi.fn();
+			expect(() => harness.updateUI(['theme'])).not.toThrow();
+		});
+
+		it('updateUI(["theme"]) does not throw when theme is "light" (removeListener branch) and api.theme is absent', () => {
+			Prefs.theme = 'light';
+			const mockRadio = { checked: false };
+			document.querySelector = vi.fn(() => mockRadio) as any;
+			(globalThis as any).updateThemeColours = vi.fn();
+			expect(() => harness.updateUI(['theme'])).not.toThrow();
+		});
+
+		it('updateUI(["theme"]) still resolves the effective theme via prefers-color-scheme when api.theme is absent', () => {
+			Prefs.theme = 'system';
+			(globalThis as any).window.matchMedia.mockReturnValue({ matches: true });
+			const mockRadio = { checked: false };
+			document.querySelector = vi.fn(() => mockRadio) as any;
+			(globalThis as any).updateThemeColours = vi.fn();
+			harness.updateUI(['theme']);
+			expect(document.documentElement.setAttribute).toHaveBeenCalledWith('theme', 'dark');
+		});
+	});
+
+	describe('theme presence-gate — api.theme present (Firefox unchanged)', () => {
+		it('updateUI(["theme"]) still registers the onUpdated listener when theme is "system"', () => {
+			Prefs.theme = 'system';
+			const mockRadio = { checked: false };
+			document.querySelector = vi.fn(() => mockRadio) as any;
+			(globalThis as any).updateThemeColours = vi.fn();
+			harness.updateUI(['theme']);
+			expect(browser.theme.onUpdated.addListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
+		});
+
+		it('updateUI(["theme"]) still removes the onUpdated listener when theme is "light"', () => {
+			Prefs.theme = 'light';
+			const mockRadio = { checked: false };
+			document.querySelector = vi.fn(() => mockRadio) as any;
+			(globalThis as any).updateThemeColours = vi.fn();
+			harness.updateUI(['theme']);
+			expect(browser.theme.onUpdated.removeListener).toHaveBeenCalledWith((globalThis as any).updateThemeColours);
+		});
 	});
 
 	// ==================== parseColour ====================

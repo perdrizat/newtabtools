@@ -267,6 +267,10 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 				sendMessage: vi.fn((msg: any, cb: (m: Map<string, Blob>) => void) => {
 					if (msg && msg.name === 'Thumbnails.getFaviconsByHost') { cb(faviconsByHost); }
 				}),
+				// chrome-prep D2 slice 3: refreshRecent's own-extension-page
+				// filter now reads api.runtime.getURL('') (this suite's `chrome`
+				// stand-in otherwise has no `runtime.getURL` at all).
+				getURL: vi.fn(() => 'moz-extension://fake-id/'),
 			},
 		};
 		(globalThis as any).browser = (globalThis as any).chrome;

@@ -115,7 +115,21 @@ export async function updateThemeColours(updateInfo) {
 
 	if (Prefs.theme === 'system') {
 		try {
-			_theme = updateInfo ? /** @type {browser._manifest.ThemeType} */ (updateInfo.theme) : await api.theme.getCurrent();
+			// chrome-prep D2 slice 2 (decision of record: `prefers-color-scheme`
+			// is the base, `browser.theme` is a Firefox bonus — Chrome has no
+			// `theme` namespace at all). `updateInfo` only ever arrives via the
+			// `api.theme.onUpdated` listener, which newTab.js now registers
+			// only when `'theme' in api` — so the `updateInfo` branch already
+			// implies presence. The `getCurrent()` branch is the one that must
+			// gate explicitly: falls straight to the null-theme path instead of
+			// touching the absent namespace.
+			if (updateInfo) {
+				_theme = /** @type {browser._manifest.ThemeType} */ (updateInfo.theme);
+			} else if ('theme' in api) {
+				_theme = await api.theme.getCurrent();
+			} else {
+				_theme = null;
+			}
 		} catch (ex) {
 			console.debug(ex);
 			_theme = null;

@@ -223,7 +223,11 @@ export function refreshRecent() {
 			if (!item.tab || item.tab.incognito) {
 				continue;
 			}
-			if (item.tab.url && item.tab.url.startsWith('moz-extension://')) {
+			// chrome-prep D2 slice 3: derive the own-extension-page prefix from
+			// api.runtime.getURL('') instead of a hardcoded `moz-extension://`
+			// literal (silently wrong scheme on Chrome, where the extension's
+			// own pages are `chrome-extension://`) — works on both platforms.
+			if (item.tab.url && item.tab.url.startsWith(api.runtime.getURL(''))) {
 				continue;
 			}
 			// Validate the tab URL's protocol before it becomes `card.href`.
