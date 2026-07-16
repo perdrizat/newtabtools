@@ -70,25 +70,42 @@ function initDB() {
 		};
 
 		request.onupgradeneeded = function(/* event */) {
-			db = this.result;
+			// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome capture
+			// round-trip): this handler must NOT assign the module-private `db`
+			// binding. Real IndexedDB fires `onupgradeneeded` BEFORE its
+			// versionchange transaction commits, and only fires `onsuccess`
+			// once it has; `waitForDB()`'s fast path (`if (db) return
+			// Promise.resolve();`) checks only `db`'s truthiness. Assigning `db`
+			// here let a concurrent `withStore()` caller landing in the
+			// onupgradeneeded→onsuccess window bypass the `dbInitPromise` dedup
+			// and immediately call `db.transaction(...)` against a database
+			// whose upgrade transaction hadn't committed yet — which real
+			// IndexedDB rejects with `InvalidStateError: A version change
+			// transaction is running.` (reproduced in
+			// tests/integration/db-connection.test.ts). A local `database`
+			// binding gives this handler everything it needs (create the
+			// stores/indexes) without exposing the connection early; `onsuccess`
+			// below still assigns the real module-private `db`, correctly only
+			// once the upgrade has fully committed.
+			let database = this.result;
 			// `this.transaction` is non-null during `upgradeneeded` (IndexedDB
 			// spec guarantee) — lib.dom.d.ts types it nullable generally, so
 			// a local JSDoc-cast alias avoids repeating a cast at every use.
 			let transaction = /** @type {IDBTransaction} */ (this.transaction);
 
-			if (!db.objectStoreNames.contains('tiles')) {
-				db.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
+			if (!database.objectStoreNames.contains('tiles')) {
+				database.createObjectStore('tiles', { autoIncrement: true, keyPath: 'id' });
 			}
 			if (!transaction.objectStore('tiles').indexNames.contains('url')) {
 				transaction.objectStore('tiles').createIndex('url', 'url');
 			}
 
-			if (!db.objectStoreNames.contains('background')) {
-				db.createObjectStore('background', { autoIncrement: true });
+			if (!database.objectStoreNames.contains('background')) {
+				database.createObjectStore('background', { autoIncrement: true });
 			}
 
-			if (!db.objectStoreNames.contains('thumbnails')) {
-				db.createObjectStore('thumbnails', { keyPath: 'url' });
+			if (!database.objectStoreNames.contains('thumbnails')) {
+				database.createObjectStore('thumbnails', { keyPath: 'url' });
 			}
 			if (!transaction.objectStore('thumbnails').indexNames.contains('used')) {
 				transaction.objectStore('thumbnails').createIndex('used', 'used');

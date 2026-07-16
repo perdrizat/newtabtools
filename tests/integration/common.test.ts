@@ -64,9 +64,9 @@ describe('topSitesOptions (chrome-prep C5b: shared getBrowserInfo short-circuit,
 		await expect(topSitesOptions(api)).resolves.toEqual({ providers: ['places'] });
 	});
 
-	it('returns the modern options object without calling getBrowserInfo when runtime.getBrowserInfo is absent (Chrome-dormant path)', async () => {
+	it('returns undefined (no options object at all) without calling getBrowserInfo when runtime.getBrowserInfo is absent (CHROME.md D3 slice 3 finding, 2026-07-16: real Chrome rejects ANY options object — even {} — with "No matching signature"; only a bare/undefined-argument call works)', async () => {
 		const api = { runtime: {} };
-		await expect(topSitesOptions(api)).resolves.toEqual({ limit: 100, onePerDomain: false, includeBlocked: true });
+		await expect(topSitesOptions(api)).resolves.toBeUndefined();
 	});
 });
 

@@ -7,8 +7,8 @@
 | D0 — decisions of record | done 2026-07-15 (this file) | — |
 | D1 — Chrome runtime harness + first boot | done 2026-07-15 (5/5 smoke GREEN on CfT 151; Selenium path green) | — |
 | D2 — service-worker boot blockers (thumbnail seam, backup blob URL, theme gate, scheme filter) | done 2026-07-16 (Chrome smoke 5/5 zero errors; Firefox E2E 125/126 + the one flake green solo — contention class; UAT 4/4) | `7cfbca6`+`2ae483c` |
-| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | pending | — |
-| D4 — icons, action, manifest completeness | pending | — |
+| D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | — |
+| D4 — icons, action, manifest completeness | core done 2026-07-16 (`178a773`); `syncActionIconWithTheme` wiring remains | `178a773` |
 | D5 — Chrome E2E tier + CI | pending | — |
 | D6 — UAT on Chrome | pending | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
@@ -139,8 +139,9 @@ self-healing by design, `pendingCaptures` already round-trips
 Gates per arc: red/green fast tests, `pnpm lint`, `pnpm typecheck`,
 `pnpm lint:webext`; **full Firefox E2E for any arc that touches a shipped
 Firefox code path** (D2 does; D4's manifest work doesn't); the Chrome smoke
-tier (once D1 exists) per arc thereafter. Commit per green arc; status
-board updates per arc.
+tier (once D1 exists) per arc thereafter. Commit per green arc; **this
+file's status board updates in the SAME commit, every commit that advances
+the program** (maintainer directive 2026-07-16).
 
 ### D0 — decisions of record
 - [x] The open questions resolved with the maintainer 2026-07-15; recorded
@@ -229,20 +230,51 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       benign observations; Chrome smoke 5/5 zero page errors.
 
 ### D3 — capture pipeline on Chrome
-- [ ] Wire `isCaptureAvailableViaPermission` as the Chrome fork of
-      `isCaptureAvailable` (platform-detect at the existing seam; Firefox
-      keeps the `typeof` probe per the defence-in-depth finding).
-- [ ] `captureVisibleTab` quota: Chrome enforces
-      `MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND` (2/s) — audit the
-      multi-stage capture (A/B/C passes) against it; add
-      backoff/coalescing only if the Chrome E2E proves it's actually hit.
-- [ ] SW kill/respawn proof: Chrome E2E test that terminates the worker
-      (CDP) mid-idle and proves `pendingCaptures` survives via
-      `storage.session` and the capture self-heals — the Chrome analogue
-      of the Firefox `extensions.background.idle.timeout=10000` respawn
-      regime.
-- [ ] Thumbnail round-trip green on Chrome smoke (navigate → capture →
-      IDB → tile renders it).
+*(Executed 2026-07-16; the implementing agent died on an API error before
+its final gates — the orchestrator reviewed every diff, debugged the two
+failing smoke checks live, and closed the arc.)*
+- [x] `isCaptureAvailableForScope(isServiceWorkerScope)` wired at
+      `captureTab` (already async): SW scope → permission check, event page
+      → the unchanged `typeof` probe; the two underlying probes stay
+      independently callable (defence-in-depth finding honored). The scope
+      bit is passed in from thumbnail-image.js's `_isServiceWorkerScope()`
+      — the C1 ESLint guard confines raw `document` references to that one
+      seam file.
+- [x] Quota audit: a single A/B/C session cannot trip Chrome's 2-per-second
+      cap (A+B are the only pair inside any 1s window; C is ~1.5s clear).
+      The one theoretical risk is SPA retrigger storms (each retrigger's
+      "capture A: immediate"); recorded at the session-start site, NO
+      speculative backoff (per this plan) until a real run shows it firing.
+- [x] SW kill/respawn proof in the smoke: CDP `Target.closeTarget` on the
+      SW target (probed alternatives fail: `ServiceWorker.enable` absent on
+      the browser-level session; a page-session `stopAllWorkers` accepts
+      the call but kills nothing), wake via a REAL navigation event
+      (webNavigation.onCompleted — a page-side `runtime.sendMessage` never
+      wakes the worker after this kill class), `storage.session` marker
+      survives. Smoke 8/8 GREEN.
+- [x] Capture round-trip green on Chrome smoke: pin → navigate →
+      OffscreenCanvas → a real 16 KB image in IDB, verified by DIRECT IDB
+      read from the extension page. Live-run findings fixed along the way
+      (each with its own fast-tier regression test): `fetch(data:)` blocked
+      by the CSP's `connect-src` in the SW decode path (→ `dataURLtoBlob`);
+      `chrome.topSites.get()` accepts NO options argument — the old
+      Chrome-path options object threw synchronously and silently froze
+      `Tiles._cache` empty (no capture could ever start); a REAL
+      cross-platform `lib/db.js` race (`onupgradeneeded` exposed the
+      connection before the upgrade transaction committed →
+      `InvalidStateError` for concurrent `withStore()` callers).
+- [ ] **Tracked gap (page rendering, deliberately out of D3):** thumbnails/
+      favicons cross the wire as `Map`s of `Blob`s — Chrome's JSON
+      messaging degrades a `Map` to `{}` and can't carry a `Blob` at all,
+      so tiles will not RENDER stored thumbnails on Chrome yet (capture +
+      storage proven working). Dual-shape reads landed at 4 page call
+      sites as groundwork. Design decision needed (page reads IDB directly
+      — likely simplest, both platforms share the origin — vs base64 over
+      the wire per the D2 backup precedent). Moved to D5 pre-work below.
+- [ ] **Tracked gap:** `filters-ui.js`'s callback-style
+      `topSites.get(options, cb)` — Chrome rejects any 2-arg call shape
+      outright ("No matching signature"); needs an argument-count-aware
+      branch at that call site. Moved to D5 pre-work below.
 
 ### D4 — icons, action, manifest completeness
 - [ ] PNG icon set per Decision 4 (16/32/48/128 + action icons); chrome
@@ -257,6 +289,12 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       wallpaper-catalog plumbing — decide keep/drop for Chrome).
 
 ### D5 — Chrome E2E tier + CI
+- [ ] **Pre-work, from D3's live findings:** (a) thumbnail/favicon
+      rendering on Chrome — the Blob-over-wire gap (design: page-side
+      direct IDB read vs base64 wire; see D3's tracked-gap entry);
+      (b) `filters-ui.js`'s 2-arg `topSites.get` call shape (Chrome rejects
+      it). Both need landing before the smoke's "tile renders it" check can
+      go green.
 - [ ] `test:e2e:chrome` per Decision 3: the D1 launcher grows into a small
       suite (boot, grid, capture, backup, theme fallback, SW respawn);
       runner-lock discipline mirrored from `run_esr_tests.sh`.

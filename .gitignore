@@ -18,6 +18,7 @@ tests/uat/artifacts/
 dist/
 .vitest-cache/
 *.Zone.Identifier
+.*.swp
 .DS_Store
 .vscode/
 .claude/

@@ -188,6 +188,21 @@ describe('Tile editing — optionsOnClick cases (Phase 1 slot 8)', () => {
 		expect(Tiles.putTile).not.toHaveBeenCalled();
 	});
 
+	// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a `Map` sent as
+	// a `Thumbnails.get` response degrades to a plain `{}` object over
+	// `chrome.runtime.sendMessage` on Chrome (unlike Firefox, where structured
+	// clone preserves the real Map) — `thumbs.get(...)` then throws
+	// `TypeError: thumbs.get is not a function`. This pins the fix: the
+	// call site must read a plain-object response too, not just a real Map.
+	it('options-savethumb stores image on link when thumbnail found (plain-object response, Chrome)', () => {
+		const thumbObject = { 'https://example.com': 'blob-data' };
+		chrome.runtime.sendMessage.mockImplementation((_msg: any, cb: any) => cb(thumbObject));
+		expect(() => harness.optionsOnClick(makeEvent('options-savethumb'))).not.toThrow();
+		expect(selectedSite.link.image).toBe('blob-data');
+		expect(selectedSite.link.imageIsThumbnail).toBe(true);
+		expect(Tiles.putTile).toHaveBeenCalledWith(selectedSite.link);
+	});
+
 	// ==================== background color ====================
 
 	it('options-bgcolor-set writes backgroundColor to link and putTile', () => {

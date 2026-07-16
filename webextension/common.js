@@ -91,20 +91,46 @@ export function compareVersions(a, b) {
  * call sites used to duplicate this same version-gated branch (one `await`-
  * style, one callback-style — namespace-normalized in C5a but not aligned,
  * per that slice's own note). `runtime.getBrowserInfo` is Firefox-only — a
- * verbatim port would throw on Chrome — so this short-circuits to the modern
- * options object whenever it's absent (Chrome-dormant path) rather than
- * calling it. When it IS present (Firefox, both callers' actual runtime),
- * this keeps the exact pre-existing version-gated branch: the caller's own
- * `api` is passed in rather than imported here, since the two scopes have
- * separate namespace leaves (background's `lib/platform.js`, page's
- * `api.js`) that this dual-scope file cannot import without picking one.
+ * verbatim port would throw on Chrome — so this short-circuits whenever it's
+ * absent (Chrome-dormant path) rather than calling it. When it IS present
+ * (Firefox, both callers' actual runtime), this keeps the exact pre-existing
+ * version-gated branch: the caller's own `api` is passed in rather than
+ * imported here, since the two scopes have separate namespace leaves
+ * (background's `lib/platform.js`, page's `api.js`) that this dual-scope
+ * file cannot import without picking one.
+ *
+ * CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): the Chrome-absent
+ * branch used to return the "modern" Firefox options object
+ * (`{limit, onePerDomain, includeBlocked}`) on the (wrong) assumption that
+ * Chrome just needed the same shape post-Fx63 Firefox does. It doesn't —
+ * `chrome.topSites.get()` NEVER accepts an options argument, not even `{}`;
+ * passing one throws `TypeError: Error in invocation of topSites.get
+ * (optional function callback): No matching signature.` synchronously. That
+ * silently poisoned `lib/tiles-store.js`'s `Tiles._ready`/`_cache` forever
+ * (the throw lands inside `getGridTiles()`'s unawaited `IDBRequest.onsuccess
+ * = async () => {...}` handler, so it never resolves OR rejects the outer
+ * promise — `_ready` was already set `true` moments earlier, so every LATER
+ * `ensureReady()` call takes its already-ready fast path and returns the
+ * `_cache` frozen at its initial empty value) — which in turn meant no
+ * capture session ever started for ANY pinned tile on Chrome. Returning
+ * `undefined` here makes the call site's `api.topSites.get(options)` an
+ * effectively no-arg call, which Chrome does accept. `filters-ui.js`'s
+ * CALLBACK-style call site (`api.topSites.get(options, callback)`) is a
+ * separate, still-open Chrome gap this fix does not reach: Chrome's binding
+ * rejects that call for having 2 arguments at all, regardless of what the
+ * first one is (confirmed empirically: `topSites.get(undefined, callback)`
+ * throws the same "No matching signature" error) — fixing it needs an
+ * argument-count-aware branch at that call site itself, not just this
+ * shared options helper. Out of this arc's scope (D3 is the capture
+ * pipeline, not the Filters drawer UI) — flagged here for whichever slice
+ * takes on filters-ui.js's Chrome path.
  * @param {any} api The caller's own namespace leaf (`lib/platform.js`'s or
  *   `api.js`'s `api` export).
- * @returns {Promise<{limit: number, onePerDomain: boolean, includeBlocked: boolean}|{providers: string[]}>}
+ * @returns {Promise<{limit: number, onePerDomain: boolean, includeBlocked: boolean}|{providers: string[]}|undefined>}
  */
 export async function topSitesOptions(api) {
 	if (!('getBrowserInfo' in api.runtime)) {
-		return { limit: 100, onePerDomain: false, includeBlocked: true };
+		return undefined;
 	}
 	let {version} = await api.runtime.getBrowserInfo();
 	if (compareVersions(version, '63.0a1') >= 0) {

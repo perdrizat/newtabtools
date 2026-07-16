@@ -38,10 +38,10 @@
  */
 
 import { withStore, withObjectStore } from './db.js';
-import { dataURLtoBlob, isBlank, resizeThumbnail } from './thumbnail-image.js';
+import { dataURLtoBlob, isBlank, resizeThumbnail, _isServiceWorkerScope } from './thumbnail-image.js';
 import { getTZDateString } from './constants.js';
 import { NeverCapture } from '../prefs.js';
-import { api, hasAllUrlsPermission, isCaptureAvailable, sessionGet, sessionSet } from './platform.js';
+import { api, hasAllUrlsPermission, isCaptureAvailableForScope, sessionGet, sessionSet } from './platform.js';
 
 // ---------------------------------------------------------------------------
 // Network idle monitor
@@ -121,14 +121,18 @@ export function resetNetworkIdleTimer(details) {
  * @returns {Promise<{dataURL: string|null, favIconUrl: string|null}>}
  */
 export async function captureTab(tabId, windowId) {
-	// lib/platform.js's isCaptureAvailable() wraps the same `typeof` probe
+	// lib/platform.js's isCaptureAvailableForScope() forks by runtime scope
+	// (CHROME.md D3 slice 1): Firefox's event page keeps the `typeof` probe
 	// (spike finding, 2026-07-09: Firefox hides tabs.captureVisibleTab
 	// entirely, not merely denies it, when the <all_urls> host permission is
-	// lacking/revoked). startCaptureSession() already guards on
-	// hasAllUrlsPermission() before creating a session, but this is a second,
-	// independent guard for any other caller (e.g. the action popup's
-	// Thumbnails.capture message).
-	if (!isCaptureAvailable()) {
+	// lacking/revoked); a Chrome MV3 service worker has no `document` and
+	// always defines captureVisibleTab regardless of permission state, so it
+	// instead awaits the permission-based check. startCaptureSession() already
+	// guards on hasAllUrlsPermission() before creating a session, but this is
+	// a second, independent guard for any other caller (e.g. the action
+	// popup's Thumbnails.capture message). captureTab() is already async, so
+	// awaiting here changes no signature.
+	if (!(await isCaptureAvailableForScope(_isServiceWorkerScope()))) {
 		return {dataURL: null, favIconUrl: null};
 	}
 	let tab;
@@ -266,6 +270,21 @@ function _startCaptureSession(tabId, windowId, url) {
 
 	// Clean up any prior session for this tab (SPA navigations can trigger
 	// multiple onCompleted events for the same tabId).
+	//
+	// CHROME.md D3 slice 2 (quota audit): Chrome enforces
+	// MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND = 2 — captureVisibleTab calls
+	// beyond that within a rolling second reject. A single session's own A/B/C
+	// cadence (immediate, +500ms, +~2000ms) never trips it: at most 2 calls
+	// (A, B) ever land within any 1s window, C is ~1.5s clear of B. The real
+	// risk is HERE instead — each retrigger below (this comment's SPA case)
+	// starts a brand-new session whose own "Capture A: immediate" fires right
+	// away, uncoalesced with the superseded session's in-flight call; an SPA
+	// that fires several onCompleted events for the same tab within under a
+	// second produces that many immediate captureVisibleTab calls back-to-
+	// back. Per CHROME.md, no backoff/coalescing lands speculatively — only if
+	// a real Chrome round-trip demonstrates the quota actually firing (it
+	// hasn't: D3 slice 3's smoke check is a single static navigation, no SPA
+	// retriggers, so it can't exercise this path).
 	let oldSession = captureSessions.get(tabId);
 	if (oldSession) {
 		oldSession.timers.forEach(function(t) { clearTimeout(t); });

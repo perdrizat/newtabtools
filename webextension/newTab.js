@@ -527,8 +527,12 @@ const NewTabToolsObject = {
 			api.runtime.sendMessage({
 				name: 'Thumbnails.get',
 				urls: [siteURL]
-			}, /** @param {Map<string, Blob>} thumbs */ thumbs => {
-				let blob = thumbs.get(siteURL);
+			}, /** @param {Map<string, Blob>|Record<string, Blob>} thumbs */ thumbs => {
+				// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a Map
+				// response degrades to a plain object over
+				// chrome.runtime.sendMessage on Chrome (Firefox's structured
+				// clone preserves the real Map) — read both shapes.
+				let blob = thumbs instanceof Map ? thumbs.get(siteURL) : thumbs && thumbs[siteURL];
 				if (!blob) {
 					return;
 				}
@@ -1663,14 +1667,18 @@ const NewTabToolsObject = {
 			// (no `s is Site` type guard, so `.map()` doesn't see the
 			// narrowing) — cast, not a fix.
 			urls: Grid.sites.filter(s => s && !s.thumbnail.style.backgroundImage).map(s => /** @type {Site} */ (s).link.url)
-		}, /** @param {Map<string, Blob>} thumbs */ function(thumbs) {
+		}, /** @param {Map<string, Blob>|Record<string, Blob>} thumbs */ function(thumbs) {
 			Grid.sites.forEach(s => {
 				if (!s) {
 					return;
 				}
 				let link = s.link;
 				if (!link.image) {
-					let thumb = thumbs.get(link.url);
+					// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a Map
+					// response degrades to a plain object over
+					// chrome.runtime.sendMessage on Chrome (Firefox's structured
+					// clone preserves the real Map) — read both shapes.
+					let thumb = thumbs instanceof Map ? thumbs.get(link.url) : thumbs && thumbs[link.url];
 					if (thumb) {
 						// Stash on the site under the same key site.js's
 						// refreshThumbnail uses, so whichever path re-renders
@@ -1714,15 +1722,19 @@ const NewTabToolsObject = {
 		if (!urls.length) {
 			return;
 		}
-		api.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, /** @param {Map<string, Blob | string> | undefined} favicons */ function(favicons) {
-			if (!favicons || typeof favicons.get !== 'function') {
+		api.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, /** @param {Map<string, Blob | string> | Record<string, Blob | string> | undefined} favicons */ function(favicons) {
+			if (!favicons) {
 				return;
 			}
 			Grid.sites.forEach(s => {
 				if (!s || !s.applyFavicon) {
 					return;
 				}
-				let favicon = favicons.get(s.link.url);
+				// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a Map
+				// response degrades to a plain object over
+				// chrome.runtime.sendMessage on Chrome (Firefox's structured
+				// clone preserves the real Map) — read both shapes.
+				let favicon = favicons instanceof Map ? favicons.get(s.link.url) : favicons[s.link.url];
 				// A Blob is a cached data: favicon; a string is a remote favicon
 				// URL — validate it (https/http only) before it becomes an <img src>.
 				if (favicon instanceof Blob) {

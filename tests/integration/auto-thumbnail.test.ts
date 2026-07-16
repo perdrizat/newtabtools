@@ -1209,6 +1209,27 @@ describe('getThumbnails display — newTab.js (Phase 1 slot 16)', () => {
 		expect(harness.saveCurrentThumbButton.disabled).toBe(false);
 	});
 
+	// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a `Map` sent as
+	// a `Thumbnails.get` response degrades to a plain `{}` object over
+	// `chrome.runtime.sendMessage` on Chrome (unlike Firefox, where structured
+	// clone preserves the real Map) — `thumbs.get(...)` then threw
+	// `TypeError: thumbs.get is not a function`, observed on the real Chrome
+	// capture-round-trip smoke. This pins the fix: the call site must read a
+	// plain-object response too, not just a real Map.
+	it('applies thumbnail as CSS backgroundImage from a plain-object response (Chrome: Map degrades over runtime.sendMessage)', () => {
+		const site = { link: { url: 'https://a.com' }, thumbnail: { style: { backgroundImage: '' }, querySelector: () => null } };
+		gridSites.push(site);
+		(globalThis as any).Grid.sites = gridSites;
+
+		const thumbBlob = new Blob(['thumb']);
+		globalThis.URL.createObjectURL = vi.fn(() => 'blob:thumb-url');
+		const thumbObject = { 'https://a.com': thumbBlob };
+		chrome.runtime.sendMessage.mockImplementation((_msg: any, cb: any) => cb(thumbObject));
+
+		expect(() => harness.getThumbnails()).not.toThrow();
+		expect(site.thumbnail.style.backgroundImage).toBe('url(blob:thumb-url)');
+	});
+
 	it('skips null sites in grid (empty cells)', () => {
 		gridSites.push(null, null);
 		(globalThis as any).Grid.sites = gridSites;

@@ -134,4 +134,81 @@ describe('lib/db.js — connection lifecycle (withStore readiness gate)', () => 
 		await withStore(['thumbnails', 'tiles'], 'readwrite', tx => { received = tx; });
 		expect(received).toHaveProperty('objectStore');
 	});
+
+	// =========================================================================
+	// CHROME.md D3 slice 3 finding (2026-07-16): the real Chrome capture
+	// round-trip smoke surfaced `InvalidStateError: Failed to execute
+	// 'transaction' on 'IDBDatabase': A version change transaction is
+	// running.` on a completely fresh profile's very first DB open. Root
+	// cause: `initDB()`'s `onupgradeneeded` handler assigns the module-private
+	// `db` binding (`db = this.result`) — real IndexedDB fires
+	// `onupgradeneeded` BEFORE its versionchange transaction commits, and only
+	// fires `onsuccess` once it has. `waitForDB()`'s fast path
+	// (`if (db) return Promise.resolve();`) checks only `db`'s truthiness, so
+	// a second, concurrent `withStore()` caller that lands in the window
+	// between `onupgradeneeded` and `onsuccess` sees `db` already set,
+	// bypasses the `dbInitPromise` dedup entirely, and immediately calls
+	// `db.transaction(...)` against a database whose upgrade transaction
+	// hasn't committed yet — which real IndexedDB rejects with exactly that
+	// InvalidStateError. This test reproduces the race directly (no upgrade
+	// needed for the OTHER db-connection tests above, which is why they never
+	// caught it — they only ever exercise the plain `onsuccess` path).
+	// =========================================================================
+
+	it('a concurrent withStore() call landing between onupgradeneeded and onsuccess does not transact against the still-upgrading DB', async () => {
+		let handlers: Record<string, Function> = {};
+		let upgradeComplete = false;
+
+		openMock.mockImplementationOnce(() => {
+			const req: Record<string, unknown> = {};
+			for (const prop of ['onsuccess', 'onblocked', 'onerror', 'onupgradeneeded']) {
+				Object.defineProperty(req, prop, {
+					set(cb: Function) { handlers[prop] = cb; },
+					configurable: true,
+				});
+			}
+			return req;
+		});
+
+		const upgradeDB = {
+			objectStoreNames: { contains: () => false },
+			createObjectStore: vi.fn(() => ({ createIndex: vi.fn() })),
+			close: vi.fn(),
+			transaction: vi.fn(() => {
+				if (!upgradeComplete) {
+					// Real IndexedDB's actual rejection for this exact race.
+					throw new DOMException('A version change transaction is running.', 'InvalidStateError');
+				}
+				return { objectStore: vi.fn(() => ({})) };
+			}),
+		};
+		const upgradeTx = {
+			objectStore: vi.fn(() => ({ indexNames: { contains: () => false }, createIndex: vi.fn() })),
+		};
+
+		const p1 = withStore('tiles', 'readonly', () => 'first');
+
+		// Real IndexedDB fires onupgradeneeded asynchronously relative to the
+		// open() call, but well before onsuccess.
+		await Promise.resolve();
+		handlers.onupgradeneeded.call({ result: upgradeDB, transaction: upgradeTx });
+
+		// A second, CONCURRENT withStore() call arrives while the upgrade
+		// transaction is still in flight (onsuccess has not fired yet).
+		const p2 = withStore('tiles', 'readonly', () => 'second');
+
+		// Let p2's internals run (await waitForDB(), then attempt
+		// db.transaction()) BEFORE the upgrade transaction "completes" — this
+		// is what actually reproduces the race; completing it first would hide
+		// the bug regardless of the fix.
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		// NOW let the upgrade transaction complete: IndexedDB fires onsuccess.
+		upgradeComplete = true;
+		handlers.onsuccess.call({ result: upgradeDB });
+
+		await expect(Promise.all([p1, p2])).resolves.toEqual(['first', 'second']);
+	});
 });

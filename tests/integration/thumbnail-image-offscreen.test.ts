@@ -11,8 +11,19 @@
  * `new Image()` + `document.createElement('canvas')`, neither of which
  * exists in a Chrome MV3 service worker. This adds a second implementation
  * behind a `typeof document === 'undefined'` runtime probe, using
- * `fetch(dataURL)` -> `.blob()` -> `createImageBitmap()` to decode and
+ * `dataURLtoBlob()` -> `createImageBitmap()` to decode and
  * `OffscreenCanvas`/`convertToBlob()` to encode.
+ *
+ * CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): this originally
+ * decoded via `fetch(dataURL)` -> `.blob()`, exactly like the module's own
+ * `dataURLtoBlob()` doc comment warns against — the manifest CSP's
+ * `connect-src 'self' https://firefox.settings.services.mozilla.com` has no
+ * `data:` entry, so `fetch('data:...')` throws `TypeError: Failed to fetch`
+ * in the real service worker. That silently broke the ENTIRE Chrome capture
+ * pipeline (every `resizeThumbnail`/`isBlank` call during a real capture
+ * session throws/rejects). The fix reuses the same `dataURLtoBlob()` manual
+ * decode `dataURLtoBlob`'s own doc comment already established for exactly
+ * this CSP constraint — no `fetch` call anywhere in this file anymore.
  *
  * jsdom (this suite's test environment) always provides a real `document`,
  * so the probe itself can't be flipped from a test the way a genuine
@@ -36,6 +47,10 @@ import {
 	isBlank,
 } from '../../webextension/lib/thumbnail-image.js';
 
+// A real, well-formed data URL (`dataURLtoBlob` decodes this for real —
+// unlike `fetch`, it's a synchronous parse, no mocking needed for it).
+const REAL_DATA_URL = 'data:image/png;base64,AAAA';
+
 describe('_isServiceWorkerScope — env probe', () => {
 	it('is false in this jsdom suite (a real `document` exists)', () => {
 		expect(_isServiceWorkerScope()).toBe(false);
@@ -49,6 +64,7 @@ describe('_resizeThumbnailOffscreen — service-worker resize path', () => {
 	let realOffscreenCanvas: unknown;
 	let realCreateImageBitmap: unknown;
 	let realFetch: unknown;
+	let fetchSpy: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
 		realOffscreenCanvas = (globalThis as any).OffscreenCanvas;
@@ -59,9 +75,11 @@ describe('_resizeThumbnailOffscreen — service-worker resize path', () => {
 		mockBlob = new Blob(['fake-png-bytes'], { type: 'image/png' });
 		mockCtx = { drawImage: vi.fn() };
 
-		(globalThis as any).fetch = vi.fn(async () => ({
-			blob: async () => new Blob(['source-bytes']),
-		}));
+		// `fetch` must never be called (CSP's connect-src blocks `data:` — see
+		// this file's header comment) — spied, never mocked to succeed, so any
+		// regression back to a fetch-based decode fails loudly here.
+		fetchSpy = vi.fn();
+		(globalThis as any).fetch = fetchSpy;
 		(globalThis as any).createImageBitmap = vi.fn(async () => mockBitmap);
 		(globalThis as any).OffscreenCanvas = vi.fn(function(this: any, width: number, height: number) {
 			this.width = width;
@@ -77,16 +95,24 @@ describe('_resizeThumbnailOffscreen — service-worker resize path', () => {
 		(globalThis as any).fetch = realFetch;
 	});
 
-	it('decodes the data URL via fetch + createImageBitmap, not new Image()', async () => {
-		await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
-		expect((globalThis as any).fetch).toHaveBeenCalledWith('data:image/png;base64,AAAA');
-		expect((globalThis as any).createImageBitmap).toHaveBeenCalled();
+	it('decodes the data URL via dataURLtoBlob + createImageBitmap, never via fetch (CSP: connect-src has no data: entry)', async () => {
+		await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect((globalThis as any).createImageBitmap).toHaveBeenCalledTimes(1);
+		const passedBlob = (globalThis as any).createImageBitmap.mock.calls[0][0];
+		expect(passedBlob).toBeInstanceOf(Blob);
+		expect(passedBlob.type).toBe('image/png');
+	});
+
+	it('throws on a malformed data URL instead of calling createImageBitmap with nothing decodable', async () => {
+		await expect(_resizeThumbnailOffscreen('not-a-data-url', 400)).rejects.toThrow();
+		expect((globalThis as any).createImageBitmap).not.toHaveBeenCalled();
 	});
 
 	it('sizes the canvas to targetWidth x (scale * bitmap.height), matching the DOM sizing math', async () => {
 		// bitmap 800x400, targetWidth 400 -> scale 0.5 -> height 200 (not
 		// capped, since 200 < 400).
-		await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
+		await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
 		expect((globalThis as any).OffscreenCanvas).toHaveBeenCalledWith(400, 200);
 	});
 
@@ -95,22 +121,22 @@ describe('_resizeThumbnailOffscreen — service-worker resize path', () => {
 		// down to 400 (Math.min(targetWidth, scale * height)).
 		mockBitmap.width = 400;
 		mockBitmap.height = 1000;
-		await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
+		await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
 		expect((globalThis as any).OffscreenCanvas).toHaveBeenCalledWith(400, 400);
 	});
 
 	it('draws the bitmap onto the canvas at the computed size', async () => {
-		await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
+		await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
 		expect(mockCtx.drawImage).toHaveBeenCalledWith(mockBitmap, 0, 0, 400, 200);
 	});
 
 	it('resolves with the Blob from convertToBlob()', async () => {
-		const result = await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
+		const result = await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
 		expect(result).toBe(mockBlob);
 	});
 
 	it('closes the bitmap after use', async () => {
-		await _resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400);
+		await _resizeThumbnailOffscreen(REAL_DATA_URL, 400);
 		expect(mockBitmap.close).toHaveBeenCalled();
 	});
 
@@ -121,7 +147,7 @@ describe('_resizeThumbnailOffscreen — service-worker resize path', () => {
 			this.getContext = vi.fn(() => mockCtx);
 			this.convertToBlob = vi.fn(async () => { throw new Error('encode failed'); });
 		});
-		await expect(_resizeThumbnailOffscreen('data:image/png;base64,AAAA', 400)).rejects.toThrow('encode failed');
+		await expect(_resizeThumbnailOffscreen(REAL_DATA_URL, 400)).rejects.toThrow('encode failed');
 		expect(mockBitmap.close).toHaveBeenCalled();
 	});
 });
@@ -132,6 +158,7 @@ describe('_isBlankOffscreen — service-worker blankness detection', () => {
 	let realOffscreenCanvas: unknown;
 	let realCreateImageBitmap: unknown;
 	let realFetch: unknown;
+	let fetchSpy: ReturnType<typeof vi.fn>;
 
 	beforeEach(() => {
 		realOffscreenCanvas = (globalThis as any).OffscreenCanvas;
@@ -139,9 +166,10 @@ describe('_isBlankOffscreen — service-worker blankness detection', () => {
 		realFetch = (globalThis as any).fetch;
 
 		mockBitmap = { width: 50, height: 50, close: vi.fn() };
-		(globalThis as any).fetch = vi.fn(async () => ({
-			blob: async () => new Blob(['source-bytes']),
-		}));
+		// `fetch` must never be called (CSP's connect-src blocks `data:`) — spied,
+		// never mocked to succeed.
+		fetchSpy = vi.fn();
+		(globalThis as any).fetch = fetchSpy;
 		(globalThis as any).createImageBitmap = vi.fn(async () => mockBitmap);
 	});
 
@@ -163,9 +191,18 @@ describe('_isBlankOffscreen — service-worker blankness detection', () => {
 		});
 	}
 
+	it('decodes via dataURLtoBlob, never via fetch (CSP: connect-src has no data: entry)', async () => {
+		installCanvasWithData(new Uint8ClampedArray(50 * 50 * 4));
+		await _isBlankOffscreen(REAL_DATA_URL);
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect((globalThis as any).createImageBitmap).toHaveBeenCalledTimes(1);
+		const passedBlob = (globalThis as any).createImageBitmap.mock.calls[0][0];
+		expect(passedBlob).toBeInstanceOf(Blob);
+	});
+
 	it('uses a 50x50 OffscreenCanvas', async () => {
 		installCanvasWithData(new Uint8ClampedArray(50 * 50 * 4));
-		await _isBlankOffscreen('data:image/png;base64,AAAA');
+		await _isBlankOffscreen(REAL_DATA_URL);
 		expect((globalThis as any).OffscreenCanvas).toHaveBeenCalledWith(50, 50);
 	});
 
@@ -175,7 +212,7 @@ describe('_isBlankOffscreen — service-worker blankness detection', () => {
 			data[i] = 10; data[i + 1] = 20; data[i + 2] = 30; data[i + 3] = 255;
 		}
 		installCanvasWithData(data);
-		await expect(_isBlankOffscreen('data:image/png;base64,AAAA')).resolves.toBe(true);
+		await expect(_isBlankOffscreen(REAL_DATA_URL)).resolves.toBe(true);
 	});
 
 	it('resolves false when pixels vary beyond the tolerance/threshold', async () => {
@@ -189,18 +226,18 @@ describe('_isBlankOffscreen — service-worker blankness detection', () => {
 			data[i + 3] = 255;
 		}
 		installCanvasWithData(data);
-		await expect(_isBlankOffscreen('data:image/png;base64,AAAA')).resolves.toBe(false);
+		await expect(_isBlankOffscreen(REAL_DATA_URL)).resolves.toBe(false);
 	});
 
 	it('closes the bitmap after use', async () => {
 		installCanvasWithData(new Uint8ClampedArray(50 * 50 * 4));
-		await _isBlankOffscreen('data:image/png;base64,AAAA');
+		await _isBlankOffscreen(REAL_DATA_URL);
 		expect(mockBitmap.close).toHaveBeenCalled();
 	});
 
-	it('treats decode failure as blank (mirrors the DOM path\'s img.onerror -> true)', async () => {
-		(globalThis as any).fetch = vi.fn(async () => { throw new Error('decode failed'); });
-		await expect(_isBlankOffscreen('data:image/png;base64,AAAA')).resolves.toBe(true);
+	it('treats a malformed data URL as blank (mirrors the DOM path\'s img.onerror -> true)', async () => {
+		await expect(_isBlankOffscreen('not-a-data-url')).resolves.toBe(true);
+		expect((globalThis as any).createImageBitmap).not.toHaveBeenCalled();
 	});
 });
 

@@ -88,19 +88,28 @@ function _resizeThumbnailDOM(dataURL, targetWidth) {
 }
 
 /**
- * Service-worker (`fetch`/`createImageBitmap`/`OffscreenCanvas`)
+ * Service-worker (`dataURLtoBlob`/`createImageBitmap`/`OffscreenCanvas`)
  * implementation of resizeThumbnail — same sizing math as
  * `_resizeThumbnailDOM` (targetWidth wide, height scaled to preserve aspect
  * ratio and capped at targetWidth), decoded without `Image`/`document`.
  * Exported so tests can call it directly with mocks installed on
  * `globalThis` (see this module's `_isServiceWorkerScope` doc comment).
+ *
+ * CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): this used to decode
+ * via `fetch(dataURL)` — the manifest CSP's `connect-src` has no `data:`
+ * entry (see `dataURLtoBlob`'s own doc comment, written for exactly this
+ * constraint), so `fetch('data:...')` threw `TypeError: Failed to fetch` in
+ * the real service worker, breaking every real Chrome capture. Reuses
+ * `dataURLtoBlob()`'s manual decode instead — no network/fetch involved.
  * @param {string} dataURL
  * @param {number} targetWidth
  * @returns {Promise<Blob>}
  */
 export async function _resizeThumbnailOffscreen(dataURL, targetWidth) {
-	let response = await fetch(dataURL);
-	let sourceBlob = await response.blob();
+	let sourceBlob = dataURLtoBlob(dataURL);
+	if (!sourceBlob) {
+		throw new Error('_resizeThumbnailOffscreen: malformed data URL');
+	}
 	let bitmap = await createImageBitmap(sourceBlob);
 	try {
 		let scale = targetWidth / bitmap.width;
@@ -190,19 +199,26 @@ function _isBlankDOM(dataURL) {
 }
 
 /**
- * Service-worker (`fetch`/`createImageBitmap`/`OffscreenCanvas`)
+ * Service-worker (`dataURLtoBlob`/`createImageBitmap`/`OffscreenCanvas`)
  * implementation of isBlank — decodes onto a 50×50 OffscreenCanvas, samples
  * via the same `_dominantColorRatioAboveThreshold` helper as
  * `_isBlankDOM`, so both paths apply identical sampling/threshold logic.
  * Exported so tests can call it directly with mocks installed on
  * `globalThis` (see this module's `_isServiceWorkerScope` doc comment).
+ *
+ * CHROME.md D3 slice 3 finding (2026-07-16): see `_resizeThumbnailOffscreen`'s
+ * doc comment — this decoded via `fetch(dataURL)` too, equally broken by the
+ * manifest CSP's `data:`-less `connect-src` on real Chrome. Same fix: reuse
+ * `dataURLtoBlob()`.
  * @param {string} dataURL
  * @returns {Promise<boolean>}
  */
 export async function _isBlankOffscreen(dataURL) {
 	try {
-		let response = await fetch(dataURL);
-		let sourceBlob = await response.blob();
+		let sourceBlob = dataURLtoBlob(dataURL);
+		if (!sourceBlob) {
+			throw new Error('_isBlankOffscreen: malformed data URL');
+		}
 		let bitmap = await createImageBitmap(sourceBlob);
 		try {
 			let size = 50;

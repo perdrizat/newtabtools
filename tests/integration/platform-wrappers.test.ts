@@ -18,6 +18,7 @@ import {
 	sessionSet,
 	isCaptureAvailable,
 	isCaptureAvailableViaPermission,
+	isCaptureAvailableForScope,
 	syncActionIconWithTheme,
 } from '../../webextension/lib/platform.js';
 
@@ -79,6 +80,38 @@ describe('isCaptureAvailable / isCaptureAvailableViaPermission (capture-availabi
 		} finally {
 			(globalThis as any).browser.permissions.contains = original;
 			(globalThis as any).browser.tabs.captureVisibleTab = originalCapture;
+		}
+	});
+});
+
+describe('isCaptureAvailableForScope (CHROME.md D3 slice 1: the scope fork lib/capture.js actually calls)', () => {
+	it('DOM scope (isServiceWorkerScope=false, the Firefox event page case): delegates to the typeof probe and never touches the permission API', async () => {
+		(globalThis as any).browser.tabs.captureVisibleTab = vi.fn();
+		const containsMock = vi.fn().mockResolvedValue(true);
+		const original = (globalThis as any).browser.permissions.contains;
+		(globalThis as any).browser.permissions.contains = containsMock;
+		try {
+			const result = await isCaptureAvailableForScope(false);
+			expect(result).toBe(true);
+			expect(containsMock).not.toHaveBeenCalled();
+		} finally {
+			(globalThis as any).browser.permissions.contains = original;
+		}
+	});
+
+	it('service-worker scope (isServiceWorkerScope=true, the Chrome case): delegates to the permission-based check, ignoring captureVisibleTab presence', async () => {
+		// Chrome always defines captureVisibleTab (never hides it) — set it so a
+		// wrongly-still-typeof-probing implementation would misreport "available".
+		(globalThis as any).browser.tabs.captureVisibleTab = vi.fn();
+		const containsMock = vi.fn().mockResolvedValue(false);
+		const original = (globalThis as any).browser.permissions.contains;
+		(globalThis as any).browser.permissions.contains = containsMock;
+		try {
+			const result = await isCaptureAvailableForScope(true);
+			expect(containsMock).toHaveBeenCalledWith({ origins: ['<all_urls>'] });
+			expect(result).toBe(false);
+		} finally {
+			(globalThis as any).browser.permissions.contains = original;
 		}
 	});
 });

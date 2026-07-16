@@ -206,6 +206,33 @@ describe('newTabTools.getFavicons', () => {
 		expect(b.applyFavicon).toHaveBeenCalledWith(blobB);
 	});
 
+	// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a `Map` sent as
+	// a `Thumbnails.getFavicons` response degrades to a plain `{}` object
+	// over `chrome.runtime.sendMessage` on Chrome (Firefox's structured clone
+	// preserves the real Map). The old guard (`typeof favicons.get !==
+	// 'function'`) treated that plain object the same as "no favicons at
+	// all" and silently gave up instead of reading it.
+	it('calls site.applyFavicon from a plain-object response too (Chrome: Map degrades over runtime.sendMessage)', () => {
+		const a = makeBadgeSite('https://a.example/');
+		const b = makeBadgeSite('https://b.example/');
+		(globalThis as any).Grid = { sites: [a, b] };
+		const blobA = new Blob(['a']);
+		const blobB = new Blob(['b']);
+		const responseObject = {
+			'https://a.example/': blobA,
+			'https://b.example/': blobB,
+		};
+		(globalThis as any).chrome = {
+			runtime: { sendMessage: (_msg: any, cb: any) => cb(responseObject) },
+		};
+		(globalThis as any).browser = (globalThis as any).chrome;
+
+		expect(() => harness.getFavicons()).not.toThrow();
+
+		expect(a.applyFavicon).toHaveBeenCalledWith(blobA);
+		expect(b.applyFavicon).toHaveBeenCalledWith(blobB);
+	});
+
 	it('survives an empty or malformed response without throwing', () => {
 		const a = makeBadgeSite('https://a.example/');
 		(globalThis as any).Grid = { sites: [a] };

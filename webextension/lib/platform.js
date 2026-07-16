@@ -129,6 +129,35 @@ export function isCaptureAvailableViaPermission() {
 }
 
 /**
+ * CHROME.md D3 slice 1: the scope fork `lib/capture.js`'s `captureTab()`
+ * actually calls (wiring `isCaptureAvailableViaPermission` in). Dispatches on
+ * `isServiceWorkerScope`, the same probe `lib/thumbnail-image.js`'s
+ * `_isServiceWorkerScope()` uses for the D2 OffscreenCanvas fork — passed in
+ * by the caller rather than read here directly, since CHROME_PREP.md C1's
+ * ESLint guard confines every raw `document` reference in `lib/**` to
+ * thumbnail-image.js (the one designated Chrome-swap seam). A Chrome MV3
+ * service worker has no `document`, so it uses the permission-based check;
+ * Firefox's event page always has one and keeps using the `typeof` probe
+ * exactly as before. `isCaptureAvailable()` and
+ * `isCaptureAvailableViaPermission()` stay independently callable per their
+ * own doc comments above — this function only picks WHICH one to call per
+ * scope, it does not merge their logic into one expression.
+ *
+ * Always returns a Promise, even on the synchronous Firefox path: the one
+ * real call site (`lib/capture.js`'s `captureTab()`) is already `async` and
+ * awaits the result either way, so the sync→async change costs nothing
+ * there — see that file's comment at the call site.
+ * @param {boolean} isServiceWorkerScope
+ * @returns {Promise<boolean>}
+ */
+export function isCaptureAvailableForScope(isServiceWorkerScope) {
+	if (isServiceWorkerScope) {
+		return isCaptureAvailableViaPermission();
+	}
+	return Promise.resolve(isCaptureAvailable());
+}
+
+/**
  * Enable the toolbar action for a tab. Fire-and-forget: enabling/disabling a
  * since-closed tab can reject, so failures are logged, never thrown.
  * @param {number} tabId

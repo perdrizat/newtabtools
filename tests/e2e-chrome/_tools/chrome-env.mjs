@@ -106,6 +106,15 @@ export function stageDevBuild() {
 	fs.rmSync(dir, { recursive: true, force: true });
 	fs.cpSync(path.join(ROOT, 'webextension'), dir, { recursive: true });
 
+	// Chrome's manifest icon keys don't accept SVG (manifest/chrome.json's
+	// `icons`/`action.default_icon` point at these PNGs, CHROME.md D4) — copy
+	// the pre-rasterized set (scripts/rasterize-icons.mjs) into the staged
+	// images/ dir, same as scripts/build.mjs's chrome target does for the
+	// real build artifact. Without this the CDP install rejects the staged
+	// dev build outright ("Could not load icon 'images/icon-16.png'"),
+	// blocking every check downstream of "extension installs".
+	fs.cpSync(path.join(ROOT, 'assets', 'chrome-icons'), path.join(dir, 'images'), { recursive: true });
+
 	const manifest = mergeManifest('chrome');
 	manifest.key = DEV_KEY.key;
 	fs.writeFileSync(path.join(dir, 'manifest.json'), serializeManifest(manifest));

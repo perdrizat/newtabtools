@@ -12,6 +12,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Chrome runtime tier (CHROME.md D1, `tests/e2e-chrome/`): `pnpm chrome:provision` (Chrome for Testing — branded Chrome ≥137 removed extension automation), `pnpm chrome:smoke` (Puppeteer/CDP first boot, GREEN 5/5: SW runs, grid renders; one page error = the D2 theme gate), `pnpm chrome:smoke:selenium` (Selenium path green — de-risks D6 UAT-on-Chrome); deterministic dev extension ID via committed public key.
 - README "Troubleshooting" section mapping literal preflight/E2E failure strings to cause + fix, cross-linked from TESTING.md.
 - `lib/thumbnail-image.js` gains an `OffscreenCanvas`/`createImageBitmap` service-worker implementation of `resizeThumbnail`/`isBlank`, dispatched via a `typeof document === 'undefined'` runtime probe (CHROME.md D2 slice 1); Firefox stays on the unchanged DOM path.
+- `scripts/rasterize-icons.mjs` (zero new deps: puppeteer-core + Chrome for Testing) rasterizes `icon.svg`/`tools-light.svg` to `assets/chrome-icons/*.png` (16/32/48/128 icon set, 16/32 tools-light action icon) for Chrome's manifest icon keys, which don't accept SVG (CHROME.md D4 Decision 4).
+- `scripts/build.mjs`'s chrome target stages `assets/chrome-icons/*.png` into the build's `images/` dir; the Firefox target and its output stay byte-identical.
+- `manifest/chrome.json` gains PNG `icons`/`action.default_icon` size maps, `minimum_chrome_version: "144"` (CHROME.md D1), and an explicit `incognito: "spanning"`; `scripts/build-manifest.mjs`'s `CANONICAL_KEY_ORDER` gains `minimum_chrome_version`/`incognito`.
+- Chrome smoke grows to 8 checks (CHROME.md D3): capture round-trip (pin → navigate → OffscreenCanvas → 16 KB image verified by direct IDB read — the wire is blind to it, see the Map gap below) and SW kill/respawn (CDP `Target.closeTarget` + navigation-event wake + `storage.session` survival; page-message wakes are unreliable post-kill).
+- `lib/platform.js` gains `isCaptureAvailableForScope(isServiceWorkerScope)` (CHROME.md D3): SW scope → the permission-based check, event page → the unchanged Firefox `typeof` probe; wired at `lib/capture.js`'s `captureTab` (already async). Quota audit recorded at the session-start site: a single A/B/C session never trips Chrome's 2-per-second captureVisibleTab cap; only SPA retrigger storms could, and no speculative backoff lands until a real run shows it.
 
 ### Changed
 
@@ -30,6 +35,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Deleting a screencapture (`Thumbnails.delete`/`Thumbnails.purgeHost`) no longer wipes a record's cached favicon along with the image — only `image` is cleared when a favicon/faviconUrl remains (issue #9).
 - `newTab.js`/`theme.js` no longer assume `browser.theme` exists — gated on `'theme' in api` (mirrors the `'menus' in api` precedent), so a Chrome build's `theme === 'system'` UI no longer throws registering `api.theme.onUpdated` (CHROME.md D2 slice 2).
 - `titlebar.js`'s recently-closed-tabs filter derived its own-extension-page prefix from a hardcoded `moz-extension://` literal — now reads `api.runtime.getURL('')`, so it also filters the extension's own pages on Chrome's `chrome-extension://` scheme (CHROME.md D2 slice 3).
+- `lib/db.js`'s `onupgradeneeded` no longer assigns the module-private `db` before the upgrade transaction commits — a concurrent `withStore()` caller landing in the upgradeneeded→success window could hit `InvalidStateError: A version change transaction is running` (found on real Chrome, CHROME.md D3; applies to Firefox too; regression-tested in db-connection.test.ts).
+- `common.js`'s `topSitesOptions` returned a Firefox-shaped options object on the Chrome path — but `chrome.topSites.get()` accepts NO options argument and throws synchronously, silently freezing `Tiles._cache` empty so no capture ever started on Chrome; returns `undefined` there now (CHROME.md D3). `filters-ui.js`'s callback-style 2-arg call is a separate, still-open Chrome gap (tracked in CHROME.md).
+- `lib/thumbnail-image.js`'s SW path decoded data URLs via `fetch()` — blocked by the manifest CSP's `connect-src` (no `data:`) on real Chrome; reuses `dataURLtoBlob()`'s manual decode instead (CHROME.md D3).
+- `newTab.js`/`titlebar.js` thumbnail/favicon wire responses: read both `Map` (Firefox structured clone) and plain-object shapes — Chrome's JSON messaging degrades a `Map` to `{}` (CHROME.md D3; the full Blob-over-wire rendering gap on Chrome is tracked as its own CHROME.md item).
 
 ## [2.5.0] — 2026-07-13
 

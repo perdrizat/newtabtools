@@ -303,4 +303,20 @@ describe('refreshRecent — favicon blob URLs revoked on rebuild', () => {
 		refreshRecent();
 		expect(revokeSpy).toHaveBeenCalledWith('blob:fake-1');
 	});
+
+	// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a `Map` sent as
+	// a `Thumbnails.getFaviconsByHost` response degrades to a plain `{}`
+	// object over `chrome.runtime.sendMessage` on Chrome (Firefox's
+	// structured clone preserves the real Map) — the old guard (`typeof
+	// favicons.get !== 'function'`) treated that the same as "no favicons at
+	// all" and silently gave up.
+	it('creates a blob URL for a stored favicon from a plain-object response too (Chrome: Map degrades over runtime.sendMessage)', () => {
+		(globalThis as any).chrome.runtime.sendMessage = vi.fn((msg: any, cb: (m: unknown) => void) => {
+			if (msg && msg.name === 'Thumbnails.getFaviconsByHost') {
+				cb({ 'example.com': new Blob(['f']) });
+			}
+		});
+		expect(() => refreshRecent()).not.toThrow();
+		expect(createSpy).toHaveBeenCalledTimes(1);
+	});
 });

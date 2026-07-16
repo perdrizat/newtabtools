@@ -323,12 +323,16 @@ export function refreshRecent() {
 		// stored favicon.
 		if (needFavicon.length) {
 			let hosts = [...new Set(needFavicon.map(n => n.host).filter(Boolean))];
-			api.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, /** @param {Map<string, Blob | string> | undefined} favicons */ favicons => {
-				if (!favicons || typeof favicons.get !== 'function') {
+			api.runtime.sendMessage({ name: 'Thumbnails.getFaviconsByHost', hosts }, /** @param {Map<string, Blob | string> | Record<string, Blob | string> | undefined} favicons */ favicons => {
+				if (!favicons) {
 					return;
 				}
 				for (let { host, fav } of needFavicon) {
-					let favicon = host && favicons.get(host);
+					// CHROME.md D3 slice 3 finding (2026-07-16, real Chrome): a Map
+					// response degrades to a plain object over
+					// chrome.runtime.sendMessage on Chrome (Firefox's structured
+					// clone preserves the real Map) — read both shapes.
+					let favicon = host && (favicons instanceof Map ? favicons.get(host) : favicons[host]);
 					/** @type {string | null} */
 					let src = null;
 					if (favicon instanceof Blob) {
