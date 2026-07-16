@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- `audit/2026-07-16-d-gate-audit.md` — D-gate audit of `v2.5.0..HEAD` (+ medium `/code-review` addendum, 8 findings): no blockers; all suites reproduced (FF E2E 126/126, Chrome parity 126/126, smoke 11/11 solo); findings await maintainer adjudication (headline: e294df8 blob-URL leak fix incomplete in `Updater._removeLegacySites`).
+
 ## [2.6.0] — 2026-07-16
 
 Internal minor release (testing only — never shipped to stores; maintainer
