@@ -128,6 +128,9 @@ self-healing by design, `pendingCaptures` already round-trips
    3.0.0 at the D gate, shipped to BOTH AMO and the Chrome Web Store.
    Nothing ships in between except emergency fixes. (Supersedes
    chrome-prep's "3.0.0 reserved for AMO after the audit round".)
+   **Amended 2026-07-16:** **2.6.0 is the internal minor release line** —
+   version-bumped and tagged for testing purposes only, never submitted to
+   any store; it becomes 3.0.0 when the maintainer clears the ship.
 8. **Single version stream.** CWS and AMO both ship X.Y.Z from
    `package.json` — subsumed by Decision 7's simultaneous dual-store
    release.

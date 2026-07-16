@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [2.6.0] — 2026-07-16
+
+Internal minor release (testing only — never shipped to stores; maintainer
+decision 2026-07-16: 2.6.0 is the internal testing line, bumped to 3.0.0
+once cleared to ship, per CHROME.md Decision 7 as amended).
 
 ### Added
 
