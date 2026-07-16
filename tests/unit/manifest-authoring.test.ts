@@ -70,7 +70,10 @@ describe('manifest authoring — base + overlay merge (chrome-prep C6)', () => {
 		it('carries no theme_icons (Firefox-only auto icon-switching, Decision 2)', () => {
 			expect(chrome.action).toBeDefined();
 			expect(chrome.action.theme_icons).toBeUndefined();
-			expect(chrome.action.default_icon).toBe('images/tools-light.svg');
+			// Chrome has no theme_icons equivalent, so default_icon is a plain
+			// PNG size map (see the dedicated size-map test below) rather than
+			// the single SVG path Firefox's action.default_icon uses.
+			expect(chrome.action.default_icon).not.toBe('images/tools-light.svg');
 		});
 
 		it('omits the "menus" permission (Decision 1 — Chrome ships without dynamic context menus)', () => {
@@ -80,6 +83,30 @@ describe('manifest authoring — base + overlay merge (chrome-prep C6)', () => {
 		it('carries the same version as the Firefox target (both read package.json)', () => {
 			const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 			expect(chrome.version).toBe(pkg.version);
+		});
+
+		it('declares a PNG icon size map (Chrome does not accept SVG manifest icons)', () => {
+			expect(chrome.icons).toEqual({
+				'16': 'images/icon-16.png',
+				'32': 'images/icon-32.png',
+				'48': 'images/icon-48.png',
+				'128': 'images/icon-128.png',
+			});
+		});
+
+		it('declares action.default_icon as a PNG size map (no theme_icons equivalent)', () => {
+			expect(chrome.action.default_icon).toEqual({
+				'16': 'images/tools-light-16.png',
+				'32': 'images/tools-light-32.png',
+			});
+		});
+
+		it('declares minimum_chrome_version "144" (CHROME.md D1)', () => {
+			expect(chrome.minimum_chrome_version).toBe('144');
+		});
+
+		it('declares incognito "spanning" explicitly (the default, made deliberate)', () => {
+			expect(chrome.incognito).toBe('spanning');
 		});
 	});
 });

@@ -1,13 +1,24 @@
 {
+	"icons": {
+		"16": "images/icon-16.png",
+		"32": "images/icon-32.png",
+		"48": "images/icon-48.png",
+		"128": "images/icon-128.png"
+	},
+	"minimum_chrome_version": "144",
 	"background": {
 		"service_worker": "lib/background-main.js",
 		"type": "module"
 	},
 	"action": {
-		"default_icon": "images/tools-light.svg",
+		"default_icon": {
+			"16": "images/tools-light-16.png",
+			"32": "images/tools-light-32.png"
+		},
 		"default_popup": "action.html",
 		"default_title": "__MSG_extensionName__"
 	},
+	"incognito": "spanning",
 	"permissions": [
 		"idle",
 		"search",

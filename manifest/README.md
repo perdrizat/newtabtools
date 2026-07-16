@@ -31,6 +31,37 @@ just run `pnpm build`, which does it as a prebuild step).
   omits `menus` (Chrome ships with no context-menu capability at all, not even
   a degraded static one — Decision 1's "in-tile action row IS the Chrome
   interaction").
+
+  A few more fields that only make sense on the Chrome side (CHROME.md D4):
+
+  - **`icons` / `action.default_icon` are PNG size maps, not SVG.** Chrome's
+    manifest icon keys don't accept SVG. `icons` is `{"16", "32", "48", "128"}`
+    pointing at pre-rasterized PNGs; `action.default_icon` is `{"16", "32"}`
+    pointing at the `tools-light` glyph only (no dark variant — Chrome has no
+    `theme_icons`, so there's nothing to switch between; the eventual
+    `action.setIcon` dark-mode wiring is a `lib/platform.js` concern, not a
+    manifest one). Both PNG sets are produced by the checked-in
+    `scripts/rasterize-icons.mjs` (puppeteer-core + Chrome for Testing, zero
+    new dependencies) into `assets/chrome-icons/` at the repo root — not
+    under `webextension/`, so the Firefox artifact (built straight from
+    `webextension/`) stays byte-identical. `scripts/build.mjs`'s chrome
+    target copies those PNGs into the staged build's `images/` directory
+    after copying `webextension/` wholesale, since `manifest/chrome.json`
+    overriding `icons` takes the whole key per the shallow-merge rule above —
+    it can't reach into base.json's SVG-only `icons` map.
+  - **`minimum_chrome_version: "144"`** — CHROME.md D1's decided floor.
+  - **`incognito: "spanning"`** is stated explicitly even though it's
+    Chrome's default. `chrome_url_overrides` doesn't apply in incognito
+    windows regardless (Chrome never lets an extension override the
+    incognito new-tab page), so this has no behavioral effect either way —
+    it's recorded so the choice reads as deliberate rather than an
+    accidental omission, since JSON has no comments to carry that rationale
+    inline.
+  - **CSP stays unchanged for Chrome.** `base.json`'s `content_security_policy`
+    includes `connect-src https://firefox.settings.services.mozilla.com` (the
+    wallpaper catalog fetch) — this is a plain `fetch()` call, identical on
+    Chrome, so the same CSP is kept rather than forked per-target (CHROME.md
+    D4 review item).
 - **`../scripts/build-manifest.mjs`** — the merge implementation (also a
   sibling of `../scripts/sync-version.mjs`).
 
@@ -80,12 +111,18 @@ pnpm build
 pnpm build firefox
 
 # Chrome build — DORMANT. Stages a copy of webextension/ under
-# dist/chrome-build/, overwrites its manifest.json with the merged Chrome
-# overlay, zips via web-ext build, then removes the staging directory. The
-# resulting dist/newtab_powertools-chrome.zip is unvalidated beyond "the
-# build succeeded" — there is no Chrome runtime anywhere in this project's
+# dist/chrome-build/, copies assets/chrome-icons/*.png into its images/,
+# overwrites its manifest.json with the merged Chrome overlay, zips via
+# web-ext build, then removes the staging directory. The resulting
+# dist/newtab_powertools-chrome.zip is unvalidated beyond "the build
+# succeeded" — there is no Chrome runtime anywhere in this project's
 # CI/E2E/UAT yet.
 pnpm build chrome
+
+# Regenerate assets/chrome-icons/*.png after editing
+# webextension/images/icon.svg or tools-light.svg (requires Chrome for
+# Testing — pnpm chrome:provision — or $CHROME_BIN):
+node scripts/rasterize-icons.mjs
 ```
 
 ## Guard test
@@ -99,4 +136,6 @@ guard:
 - the merge is deterministic;
 - the Chrome overlay merges into a structurally honest MV3 manifest
   (`manifest_version: 3`, `background.service_worker`, no
-  `browser_specific_settings`, no `theme_icons`, no `menus` permission).
+  `browser_specific_settings`, no `theme_icons`, no `menus` permission,
+  PNG `icons`/`action.default_icon` size maps, `minimum_chrome_version`,
+  `incognito`).

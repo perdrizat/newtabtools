@@ -48,6 +48,14 @@ if (target === 'firefox') {
 	fs.rmSync(stageDir, { recursive: true, force: true });
 	fs.cpSync(path.join(root, 'webextension'), stageDir, { recursive: true });
 
+	// Chrome's manifest icon keys don't accept SVG (manifest/chrome.json's
+	// `icons`/`action.default_icon` point at these PNGs) — copy the
+	// pre-rasterized set (scripts/rasterize-icons.mjs) into the staged
+	// images/ dir. webextension/ itself keeps only the SVG originals, so the
+	// Firefox artifact (built straight from webextension/, no staging copy)
+	// stays byte-identical.
+	fs.cpSync(path.join(root, 'assets', 'chrome-icons'), path.join(stageDir, 'images'), { recursive: true });
+
 	const merged = mergeManifest('chrome');
 	fs.writeFileSync(path.join(stageDir, 'manifest.json'), serializeManifest(merged));
 
