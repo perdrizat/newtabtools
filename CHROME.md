@@ -10,9 +10,10 @@
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | `eea8565` |
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
-| D6 — UAT on Chrome | pending | — |
+| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | pending | — |
+| D6 — UAT on Chrome | in flight 2026-07-16 (daemon parameterization + scenario triage running) | — |
 | D7 — store release prep (CWS + AMO) | pending | — |
-| D gate — full Firefox suite green (unchanged) + Chrome tier green + audit + **3.0.0 to both stores** | pending | — |
+| D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
 **Status: D0–D5 COMPLETE (2026-07-16) — D6 (UAT on Chrome) is next, then
 D7 (store prep) and the D gate.** The Chrome build boots, captures,
@@ -108,6 +109,14 @@ self-healing by design, `pendingCaptures` already round-trips
    explicitly out of scope (its own future program if ever warranted); the
    `_helpers.ts` origin/install abstraction goes only as far as the smoke
    tier needs.
+   **SUPERSEDED (maintainer 2026-07-16): full E2E suite parity IS in
+   scope for this program** — new arc D5b below. The original rationale
+   (unknown install mechanics, unknown helper depth) dissolved once D1
+   proved CfT honors `--load-extension` under a normal debugging port:
+   the SAME vitest suite can run on Chrome through a parameterized
+   helpers seam. The 11-check smoke stays as the fast per-arc gate;
+   parity is the suite-level proof. Platform-fundamental divergences get
+   documented per-file skips/variants, not silent omissions.
 4. **Icons: committed PNGs, Chrome-only.** Chrome's manifest icon keys do
    not accept SVG at all (PNG/BMP/GIF/ICO/JPEG only) — this is *additive*
    for Chrome, the Firefox manifest keeps the SVGs. PNGs are rasterized
@@ -362,6 +371,38 @@ failing smoke checks live, and closed the arc.)*
       parallel `chrome-smoke` job (pnpm + `chrome:provision` + both
       smokes; the runner's preinstalled branded Chrome is unusable for
       extension automation). Takes effect on the next push.
+
+### D5b — Chrome E2E suite parity (Decision 3 superseded, maintainer 2026-07-16)
+
+*Goal: the full Firefox E2E suite (126 tests / 32 files) runs against
+Chrome — same test FILES, parameterized harness, documented per-file
+divergences. "We need test parity between the two as part of this run."*
+
+- [ ] Chrome E2E lifecycle runner (sibling of `run_esr_tests.sh`): launch
+      CfT with `--load-extension=<stage>` + `--remote-debugging-port=9223`
+      (the reserved port), wait for the port, run
+      `vitest --project e2e` with `NTT_E2E_BROWSER=chrome`, clean up;
+      its own concurrency lock; parallel-safe with the Firefox tiers.
+- [ ] `tests/e2e/_helpers.ts` browser seam: `connectToFirefox` →
+      `connectToBrowser` (BiDi @9222 vs CDP @9223), `getNewTabURL` →
+      per-browser origin (`prefs.js` UUID scrape vs the committed dev-key
+      id `lncefjbclhbbikhanecleanbbohpiclk`); everything wire/DOM-driven
+      (the C3d principled harness) should port untouched — that harness
+      decision is what makes parity cheap now.
+- [ ] Suite triage, file by file (documented in each file's header, honest
+      skips only for platform-fundamentals): expected divergence classes —
+      `event-page-lifecycle` (Firefox idle-timeout pref → Chrome SW
+      kill/respawn analogue), `theme` (browser.theme cases → base-scheme
+      variants), menus-dependent assertions (Decision 1: no Chrome menus),
+      `boot-timing` (medians re-baselined per browser), drag tests
+      (synthesized DnD known-flaky class — quarantine policy extends),
+      `favicon-real-sites` (network-gated, already CI-skipped, #21).
+- [ ] `pnpm test:e2e:chrome` becomes the parity suite (the 11-check smoke
+      stays as `pnpm chrome:smoke`, the fast per-arc gate); CI: the
+      chrome job runs the parity suite once stable (smoke until then).
+- [ ] Acceptance: parity suite green on CfT with every skip/variant
+      carrying a one-line platform justification in the file header —
+      target ≥90% of Firefox test cases executing identically on Chrome.
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
 - [ ] `browser-daemon.mjs` Chrome variant: Selenium `.forBrowser('chrome')`
