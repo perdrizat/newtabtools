@@ -5,12 +5,13 @@
 // CHROME.md D2 (Decision 2a): the page-side home of the backup download.
 // `URL.createObjectURL` does not exist in a Chrome MV3 service worker, so
 // the background's `Export:backup` handler (lib/backup.js makeZip) returns
-// the zip as base64 bytes + filename over the wire (Chrome JSON-serializes
-// `runtime.sendMessage` responses — a Blob would not survive), and this
-// module — running in the page, where blob URLs are document-scoped and
-// well-defined — decodes the payload, creates the object URL, triggers the
-// download, and revokes the URL once the download reaches a terminal
-// state. One unified path for both platforms.
+// the zip as a Blob + filename over the wire — which survives
+// `runtime.sendMessage` on both platforms now that Chrome uses
+// structured-clone messaging (Chrome 148+ floor, Decision 10; base64 leg
+// removed per audit 2026-07-16 m3/A-note). This module — running in the page,
+// where blob URLs are document-scoped and well-defined — creates the object
+// URL from that Blob, triggers the download, and revokes the URL once the
+// download reaches a terminal state. One unified path for both platforms.
 //
 // Deliberately NOT routed through object-urls.js's keyed
 // `_freshObjectURL`/`_dropObjectURL`: that seam models one owner surface
@@ -25,22 +26,8 @@ import { api } from './api.js';
 
 /**
  * The `Export:backup` wire payload (lib/backup.js makeZip).
- * @typedef {{data: string, filename: string}} BackupPayload
+ * @typedef {{data: Blob, filename: string}} BackupPayload
  */
-
-/**
- * Decode the wire payload's base64 bytes back into the zip Blob.
- * @param {string} data
- * @returns {Blob}
- */
-function decodeBase64Zip(data) {
-	let binary = atob(data);
-	let bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-	return new Blob([bytes], { type: 'application/zip' });
-}
 
 /**
  * Create a page-scoped blob URL for the payload and hand it to the
@@ -56,7 +43,7 @@ function decodeBase64Zip(data) {
  * @returns {Promise<number>} the download id
  */
 export async function downloadBackup(payload) {
-	let url = URL.createObjectURL(decodeBase64Zip(payload.data));
+	let url = URL.createObjectURL(payload.data);
 
 	/** @type {number|undefined} */
 	let downloadId;

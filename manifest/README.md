@@ -19,15 +19,18 @@ just run `pnpm build`, which does it as a prebuild step).
   decision of record in [`CONTRIBUTING.md`](../CONTRIBUTING.md)), and
   `permissions` including `menus` (Firefox's dynamic per-tile context menu —
   the menus decision of record, same place).
-- **`chrome.json`** — a **dormant** Chrome MV3 overlay. Nothing in this
-  project's test matrix (fast tests, E2E, UAT) exercises it — it exists so
-  the Chrome port (the active program: [`CHROME.md`](../CHROME.md)) only has
-  to fork a handful of seam files, not invent a manifest from scratch. It diverges from `firefox.json` in exactly the ways
+- **`chrome.json`** — the Chrome MV3 overlay, **validated** by the
+  [`CHROME.md`](../CHROME.md) program: Chrome E2E parity (124/126 run + 2
+  SW-lifecycle tests skipped on Chrome, GH #23), Chrome UAT (11/11), and the
+  10-check smoke all run against the manifest this file builds. It diverges from
+  `firefox.json` in exactly the ways
   chrome-prep's C0/C5 decisions already called out: `background` uses the
   MV3 module `service_worker` form instead of the event-page `scripts` form;
   `action` has no `theme_icons` (Chrome gets `default_icon` only — no
-  automatic theme-driven icon switching, matching C5b's `syncActionIconWithTheme`
-  Chrome-dormant no-op stub); no `browser_specific_settings`; `permissions`
+  automatic theme-driven icon switching; `syncActionIconWithTheme` does it
+  imperatively instead, wired for real on Chrome per CHROME.md D4, a no-op only
+  on Firefox where `theme_icons` handles it declaratively); no
+  `browser_specific_settings`; `permissions`
   omits `menus` (Chrome ships with no context-menu capability at all, not even
   a degraded static one — Decision 1's "in-tile action row IS the Chrome
   interaction").
@@ -119,13 +122,14 @@ node scripts/sync-version.mjs
 pnpm build
 pnpm build firefox
 
-# Chrome build — DORMANT. Stages a copy of webextension/ under
-# dist/chrome-build/, copies assets/chrome-icons/*.png into its images/,
-# overwrites its manifest.json with the merged Chrome overlay, zips via
-# web-ext build, then removes the staging directory. The resulting
-# dist/newtab_powertools-chrome.zip is unvalidated beyond "the build
-# succeeded" — there is no Chrome runtime anywhere in this project's
-# CI/E2E/UAT yet.
+# Chrome build — the validated store artifact (CHROME.md D1–D6). Stages a copy
+# of webextension/ under dist/chrome-build/, copies assets/chrome-icons/*.png
+# into its images/, overwrites its manifest.json with the merged Chrome overlay,
+# zips via web-ext build, then removes the staging directory. The resulting
+# dist/newtab_powertools-chrome.zip is exercised by the Chrome runtime tier
+# (E2E parity, UAT, smoke). For MANUAL "Load unpacked" testing use
+# `pnpm chrome:stage` instead — it stages an unpacked build to dist/chrome-dev/
+# (see CHROME.md "Manual testing in Chrome").
 pnpm build chrome
 
 # Regenerate assets/chrome-icons/*.png after editing

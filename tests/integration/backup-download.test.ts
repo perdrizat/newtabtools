@@ -5,27 +5,19 @@
 /**
  * Page-side backup download (CHROME.md D2, Decision 2a).
  *
- * The background's `Export:backup` handler returns the zip as base64 bytes
- * + filename over the wire; webextension/backup-download.js (page scope)
- * decodes the payload, creates the blob URL, triggers the download, and
- * revokes the URL once the download reaches a terminal state — the
- * per-download lifecycle that used to live in lib/backup.js.
+ * The background's `Export:backup` handler returns the zip as a Blob +
+ * filename over the wire (structured-clone messaging, Chrome 148+ floor —
+ * audit m3/A-note); webextension/backup-download.js (page scope) creates the
+ * blob URL from it, triggers the download, and revokes the URL once the
+ * download reaches a terminal state — the per-download lifecycle that used to
+ * live in lib/backup.js.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { downloadBackup, requestBackup } from '../../webextension/backup-download.js';
 
-/** Base64-encode raw bytes the same way a wire payload carries them. */
-function b64(bytes: Uint8Array): string {
-	let binary = '';
-	for (const byte of bytes) {
-		binary += String.fromCharCode(byte);
-	}
-	return btoa(binary);
-}
-
 const PAYLOAD_BYTES = new Uint8Array(256).map((_, i) => i);
-const PAYLOAD = { data: b64(PAYLOAD_BYTES), filename: 'newtabtools.zip' };
+const PAYLOAD = { data: new Blob([PAYLOAD_BYTES], { type: 'application/zip' }), filename: 'newtabtools.zip' };
 
 let createSpy: ReturnType<typeof vi.fn>;
 let revokeSpy: ReturnType<typeof vi.fn>;
@@ -51,12 +43,14 @@ beforeEach(() => {
 });
 
 describe('downloadBackup — page-created object URL', () => {
-	it('decodes the base64 payload to the original bytes and downloads via a page-created object URL', async () => {
+	it('creates the object URL from the payload Blob and downloads via a page-created object URL', async () => {
 		await downloadBackup(PAYLOAD);
 
 		expect(createSpy).toHaveBeenCalledTimes(1);
 		const blob = createSpy.mock.calls[0][0];
 		expect(blob).toBeInstanceOf(Blob);
+		// The Blob is used directly (no base64 decode) — same bytes as the wire.
+		expect(blob).toBe(PAYLOAD.data);
 		const roundTrip = new Uint8Array(await blob.arrayBuffer());
 		expect(Array.from(roundTrip)).toEqual(Array.from(PAYLOAD_BYTES));
 

@@ -36,15 +36,18 @@ import { api, broadcastToPages } from './platform.js';
 zip.configure({ useWebWorkers: false });
 
 /**
- * Build the backup zip and return it as wire-safe bytes (CHROME.md D2,
- * Decision 2a). No blob URL and no download happens here: a Chrome MV3
- * service worker has no `URL.createObjectURL`, and Chrome JSON-serializes
- * `runtime.sendMessage` responses so a Blob/ArrayBuffer would not survive
- * the wire either — base64 is the one payload shape that works on both
- * platforms. The page side (backup-download.js) decodes the payload,
- * creates the object URL, triggers the download, and revokes the URL — the
- * per-download lifecycle that used to live here.
- * @returns {Promise<{data: string, filename: string}>}
+ * Build the backup zip and return it as a Blob over the wire (CHROME.md D2,
+ * Decision 2a; base64 leg removed per audit 2026-07-16 m3/A-note). No blob URL
+ * and no download happens here: a Chrome MV3 service worker has no
+ * `URL.createObjectURL`. The Blob survives `runtime.sendMessage` on both
+ * platforms because Chrome now uses structured-clone messaging
+ * (`message_serialization: "structured_clone"`, Chrome 148+ floor, Decision
+ * 10) — the same wire the thumbnail/favicon Blobs already cross. Returning the
+ * Blob directly removes the former base64 encode (~6-8× SW memory), the page
+ * decode (~4×), and Chrome's ~64 MB message cap that silently failed large
+ * backups. The page side (backup-download.js) creates the object URL from it,
+ * triggers the download, and revokes the URL — the per-download lifecycle.
+ * @returns {Promise<{data: Blob, filename: string}>}
  */
 export async function makeZip() {
 	let writer = new zip.ZipWriter(new zip.BlobWriter());
@@ -70,25 +73,7 @@ export async function makeZip() {
 	await writer.add('tiles.json', new zip.TextReader(JSON.stringify(tiles, null, '\t')));
 
 	let blob = await writer.close();
-	return { data: await blobToBase64(blob), filename: 'newtabtools.zip' };
-}
-
-/**
- * Base64-encode a Blob's bytes. `btoa` wants a binary string; it's built in
- * 32 KiB slices because a single `String.fromCharCode(...allBytes)` call
- * would blow the engine's argument-count limit on a multi-MB backup.
- * @param {Blob} blob
- * @returns {Promise<string>}
- */
-async function blobToBase64(blob) {
-	let bytes = new Uint8Array(await blob.arrayBuffer());
-	const SLICE_SIZE = 0x8000;
-	/** @type {string[]} */
-	let parts = [];
-	for (let i = 0; i < bytes.length; i += SLICE_SIZE) {
-		parts.push(String.fromCharCode(...bytes.subarray(i, i + SLICE_SIZE)));
-	}
-	return btoa(parts.join(''));
+	return { data: blob, filename: 'newtabtools.zip' };
 }
 
 /**

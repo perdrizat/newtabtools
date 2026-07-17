@@ -77,7 +77,13 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
    The add-on stays loaded until you restart Firefox. For a throwaway run in a fresh profile that's discarded on exit, use `pnpm dev` instead.
 
-   To try it in Chrome instead, run `pnpm chrome:stage` and load the resulting `dist/chrome-dev/` folder via `chrome://extensions` → **Load unpacked** (see [`CHROME.md`](CHROME.md)).
+   **To load it in Chrome instead** (any branded Chrome or Chrome for Testing, ≥ 148):
+   1. Run `pnpm chrome:stage`. This stages the unpacked Chrome build — the merged Chrome manifest plus the committed dev key, so the extension ID is always the same — to `dist/chrome-dev/`. (No `pnpm build` or `pnpm chrome:provision` needed for manual loading; those are only for the automated Chrome tier.)
+   2. Open `chrome://extensions` and enable **Developer mode** (top-right toggle).
+   3. Click **Load unpacked** and pick the `dist/chrome-dev/` directory.
+   4. Open a new tab.
+
+   After any source change, re-run `pnpm chrome:stage` and click the **reload** (↻) arrow on the extension's card in `chrome://extensions`. For a manual-test checklist — including the behaviours the automated tiers can't cover (real service-worker suspend/respawn, the backup **Save As** download, incognito, theme) — see [`CHROME.md`](CHROME.md#manual-testing-in-chrome-load-unpacked).
 
 ### Testing is mandatory
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:

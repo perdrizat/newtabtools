@@ -1,12 +1,13 @@
 # Chrome runtime tier (CHROME.md D1+)
 
 Tooling for running the extension on real Chrome. Established in D1; grew
-into an 11-check smoke suite in D5; D5b adds a full SUITE-PARITY runner that
-runs the same 32 Firefox E2E test files against Chrome.
+into a smoke suite in D5 (11 checks, later reduced to 10 — GH #23); D5b adds a
+full SUITE-PARITY runner that runs the same 32 Firefox E2E test files against
+Chrome.
 
 ```bash
 pnpm chrome:provision        # one-time: fetch Chrome for Testing (~200 MB, ~/.cache/puppeteer)
-pnpm chrome:smoke            # Puppeteer/CDP first-boot smoke (11 checks)
+pnpm chrome:smoke            # Puppeteer/CDP first-boot smoke (10 checks)
 pnpm chrome:smoke:selenium   # Selenium path (chromedriver via Selenium Manager) — de-risks UAT-on-Chrome (D6)
 pnpm test:e2e:chrome         # D5b: the full 32-file Firefox E2E suite, run against Chrome
 ```
@@ -64,15 +65,16 @@ First full run: **125/126 green with zero test-file changes.** After triage:
 
 | File | Outcome |
 |---|---|
-| `event-page-lifecycle.test.ts` | Adapted — Firefox's idle-timeout-pref sleep is a Chrome no-op (nothing ages the SW out on that schedule), so it would have passed vacuously; swapped in `restartChromeServiceWorker` for a real kill/respawn on the Chrome branch only. |
+| `event-page-lifecycle.test.ts` | **Skipped on Chrome (`describe.skipIf(IS_CHROME)`, GH #23).** The 2026-07-16 adaptation swapped in `restartChromeServiceWorker` for a CDP kill/respawn, but re-probing (2026-07-17, audit M2) found `Target.closeTarget` is terminal under CfT headless CDP automation — the worker never respawns on any wake, so the "respawn" assertion was vacuous. Runs for real on Firefox (idle-timeout pref); the background code is shared through the `api` seam, so that IS the real respawn-hygiene coverage. |
 | `favicon-real-sites.test.ts` | Failed once under full-suite load, passed clean on a solo re-run — the same public-internet timing flakiness this file already documents for Firefox, not a Chrome-specific misbehavior. No `IS_CHROME` skip added (per this project's "re-run solo before treating it as a regression" practice). |
 | `drag-layout.test.ts` / `drag-reorder.test.ts` | Ran unmodified, green. Header comments extended to note the existing known-flaky-DnD quarantine policy applies identically on Chrome. |
 | `theme.test.ts` | Ran unmodified, green — never touches the Firefox-only `browser.theme` bonus API (Decision 2's `prefers-color-scheme` base is what's under test). |
 | `boot-timing.test.ts` | Ran unmodified, green under the existing generous shared bound (Chrome medians were faster, not slower, than Firefox's on CfT 151) — header notes a per-browser re-baseline is still future work if the instrument ever tightens. |
 | All 27 other files | Ran unmodified, green — no divergence found. |
 
-**Parity: 126/126 (100%)** of Firefox E2E test cases pass on Chrome —
-comfortably above the ≥90% acceptance target.
+**Parity: 124/126 run + 2 skipped (GH #23)** of Firefox E2E test cases on
+Chrome — comfortably above the ≥90% acceptance target. (The 2 skips are
+`event-page-lifecycle`'s SW-respawn tests; see the triage row above.)
 
 ## Three hard-won harness facts (2026-07-15, D1)
 

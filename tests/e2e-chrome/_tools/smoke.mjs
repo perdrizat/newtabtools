@@ -307,27 +307,29 @@ try {
 		}
 	}
 
-	// 6b. (CHROME.md D5) Backup export over the wire: `Export:backup` must
-	// return a decodable base64 zip payload (the D2 page-side download design;
-	// the actual downloads-API grant is a user gesture we can't automate
-	// headlessly, so the wire payload IS the testable seam).
+	// 6b. (CHROME.md D5 / audit m3) Backup export over the wire: `Export:backup`
+	// must return the zip as a Blob + filename (base64 leg removed — the Blob now
+	// survives structured-clone messaging on Chrome). This check IS the real
+	// proof the Blob-over-wire works on genuine Chrome; the actual downloads-API
+	// grant is a user gesture we can't automate headlessly, so the wire payload
+	// is the testable seam.
 	if (swTarget && loaded) {
 		try {
 			const backup = await page.evaluate(() => new Promise(resolve => {
-				chrome.runtime.sendMessage({ name: 'Export:backup' }, resp => {
-					if (!resp || typeof resp.data !== 'string') { resolve({ ok: false, why: `bad payload: ${JSON.stringify(resp)?.slice(0, 120)}` }); return; }
+				chrome.runtime.sendMessage({ name: 'Export:backup' }, async resp => {
+					if (!resp || !(resp.data instanceof Blob)) { resolve({ ok: false, why: `bad payload: ${JSON.stringify(resp)?.slice(0, 120)}` }); return; }
 					try {
-						const bytes = atob(resp.data);
+						const bytes = new Uint8Array(await resp.data.arrayBuffer());
 						// A zip starts with PK\x03\x04.
-						const isZip = bytes.charCodeAt(0) === 0x50 && bytes.charCodeAt(1) === 0x4b;
+						const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
 						resolve({ ok: isZip && !!resp.filename, size: bytes.length, filename: resp.filename });
-					} catch (e) { resolve({ ok: false, why: `base64 decode failed: ${e}` }); }
+					} catch (e) { resolve({ ok: false, why: `blob read failed: ${e}` }); }
 				});
 			}));
-			check('backup export: Export:backup returns a decodable zip payload', !!backup.ok,
+			check('backup export: Export:backup returns a Blob zip payload over the wire', !!backup.ok,
 				backup.ok ? `${backup.filename}, ${backup.size} bytes` : backup.why || 'no payload');
 		} catch (e) {
-			check('backup export: Export:backup returns a decodable zip payload', false, String(e?.message || e));
+			check('backup export: Export:backup returns a Blob zip payload over the wire', false, String(e?.message || e));
 		}
 	}
 

@@ -263,11 +263,14 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(zipState.writtenEntries.find(e => e.filename === 'background')).toBeUndefined();
 		});
 
-		it('returns the zip as base64 bytes + filename instead of downloading', async () => {
+		it('returns the zip as a Blob + filename instead of downloading (audit m3/A-note)', async () => {
 			const result = await makeZip();
 
 			expect(result.filename).toBe('newtabtools.zip');
-			expect(atob(result.data)).toBe('mock-zip');
+			// Structured-clone messaging (Chrome 148+ floor, Decision 10) carries
+			// a Blob over the wire intact on both platforms — no base64 leg.
+			expect(result.data).toBeInstanceOf(Blob);
+			expect(await result.data.text()).toBe('mock-zip');
 			expect(mockDownloads.download).not.toHaveBeenCalled();
 		});
 	});
@@ -299,7 +302,7 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(mockDownloads.onChanged!.addListener).not.toHaveBeenCalled();
 		});
 
-		it('base64-encodes a multi-chunk (>32 KiB) zip losslessly', async () => {
+		it('returns a Blob carrying a large (>32 KiB) zip intact — no encode/size ceiling (audit m3/A-note)', async () => {
 			const bytes = new Uint8Array(100_000);
 			for (let i = 0; i < bytes.length; i++) {
 				bytes[i] = i % 256;
@@ -308,11 +311,12 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 
 			const { data } = await makeZip();
 
-			const binary = atob(data);
-			expect(binary.length).toBe(bytes.length);
+			expect(data).toBeInstanceOf(Blob);
+			const roundTrip = new Uint8Array(await data.arrayBuffer());
+			expect(roundTrip.length).toBe(bytes.length);
 			let firstMismatch = -1;
 			for (let i = 0; i < bytes.length; i++) {
-				if (binary.charCodeAt(i) !== bytes[i]) {
+				if (roundTrip[i] !== bytes[i]) {
 					firstMismatch = i;
 					break;
 				}

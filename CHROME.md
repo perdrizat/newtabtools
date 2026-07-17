@@ -10,7 +10,7 @@
 | D3 — capture pipeline on Chrome (availability fork, quota, SW respawn proof) | done 2026-07-16 (smoke 8/8: capture round-trip stores a real image on Chrome; SW kill/respawn + storage.session survival) | `eea8565` |
 | D4 — icons, action, manifest completeness | done 2026-07-16 (incl. `syncActionIconWithTheme` via the `Theme.colorScheme` relay — 20th wire name) | `178a773`+`3ab39e5` |
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
-| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | **done 2026-07-16 — 126/126 = 100% parity on CfT 151, zero skips; Firefox unchanged-proof 126/126** | `9cd51bc` |
+| D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | done 2026-07-16 — 126/126 = 100% parity on CfT 151 at the time; **amended 2026-07-17: the 2 `event-page-lifecycle` SW-respawn tests now skip on Chrome (124/126 run + 2 skipped, GH #23)** — Firefox unchanged-proof 126/126 unaffected | `9cd51bc` |
 | D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
 | D7 — store release prep (CWS + AMO) | pending | — |
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
@@ -38,6 +38,61 @@ emergency fixes excepted.
 Evidence base: `audit/2026-07-11-chrome-api-divergence.md` (the C5 divergence
 audit) + a fresh port-readiness sweep (2026-07-15) whose findings are folded
 into the arcs below.
+
+## Manual testing in Chrome (Load unpacked)
+
+The automated tiers (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `pnpm test:uat:chrome`)
+run on headless Chrome for Testing and cover boot / capture / rendering /
+backup wire / messaging. A few behaviours they **cannot** cover are exactly
+what a real-Chrome manual pass should focus on — see the checklist below.
+
+**Load the build:**
+
+1. `pnpm chrome:stage` — stages the unpacked build (merged Chrome manifest +
+   committed dev key → stable extension ID `lncefjbclhbbikhanecleanbbohpiclk`)
+   to `dist/chrome-dev/`. Works in any branded Chrome ≥ 148; no `pnpm build`
+   or `pnpm chrome:provision` needed (those are for the automated tier only).
+2. `chrome://extensions` → enable **Developer mode** (top-right).
+3. **Load unpacked** → pick `dist/chrome-dev/`.
+4. Open a new tab.
+5. After any source edit: re-run `pnpm chrome:stage`, then click the **reload**
+   (↻) arrow on the extension's card.
+
+Optional pre-check: `pnpm chrome:smoke` (fast, headless) confirms the build
+boots + captures + backs up before you load it by hand.
+
+**Focus the manual pass on the automation gaps:**
+
+- **Service-worker suspend/respawn (GH #23 — the big one).** This is the
+  coverage the automated Chrome tier can't provide (`Target.closeTarget` is
+  terminal under CDP; the natural idle-suspension has no controllable pref).
+  Open a new tab, leave Chrome idle so the SW suspends (watch the
+  `chrome://extensions` card — "service worker (Inactive)" after ~30s), then
+  navigate to a pinned site / open a new tab / trigger a capture and confirm
+  everything still works: tiles render, auto-thumbnails capture, backup/restore
+  succeed. This exercises IndexedDB reconnect, `pendingCaptures` in
+  `storage.session`, and duplicate-tolerant menu/action re-registration on a
+  real respawn.
+- **Backup Save-As download (audit m4).** Options → Backup → confirm the
+  browser **Save As** dialog appears and the downloaded `newtabtools.zip` opens
+  as a valid zip. Edge case: start the export, then close the new-tab page while
+  the Save-As dialog is open — the object URL is page-scoped, so verify the
+  download still completes (or note if it breaks).
+- **Incognito.** With the extension allowed in incognito (`incognito: spanning`),
+  browse pinned sites in an incognito window and confirm **no** thumbnails are
+  captured for them (the incognito guard).
+- **No dynamic context menu (Decision 1).** Chrome ships without the Firefox
+  per-tile right-click menu by design — confirm the in-tile action row
+  (edit / never-capture / pin / remove) carries the same operations.
+- **Theme follows `prefers-color-scheme` (Decision 2).** Toggle OS / Chrome
+  dark mode and confirm the page follows (Chrome has no `browser.theme`); check
+  the toolbar action icon swaps light/dark too (`syncActionIconWithTheme`).
+- **Toolbar action popup.** Open the popup (`action.html`). Note its **Capture**
+  button is a known no-op on both engines (audit M3 — action-popup messages
+  carry no `sender.tab`); the per-tile flow is the real capture path.
+- General smell test: auto-thumbnail capture on real sites, favicon rendering
+  on tiles + recently-closed chips, the never-capture flow (add a host → its
+  stored captures purge), restore from a backup zip.
 
 **Inherited constraints (decisions of record, not relitigated here):**
 zero runtime deps (no polyfill — the in-house `api` Proxy is the seam);
@@ -235,8 +290,12 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       round-trip).
 - [x] `lib/backup.js` blob-URL home per Decision 2a: `makeZip` returns
       `{data (base64), filename}` (chunked `btoa`, SW-safe; Chrome messaging
-      is JSON-only — a Blob doesn't survive `runtime.sendMessage` there);
-      new page leaf `backup-download.js` decodes → object URL →
+      was JSON-only at D2 — a Blob didn't survive `runtime.sendMessage` there).
+      **Superseded in 2.6.3 (audit m3/A-note):** Decision 10's structured-clone
+      messaging now carries a Blob intact, so `makeZip` returns the Blob
+      directly and the base64 leg was removed (proven by the smoke's
+      Blob-over-wire check).
+      New page leaf `backup-download.js` decodes → object URL →
       `downloads.download` → revoke-on-terminal (former background logic
       moved verbatim; `object-urls.js` deliberately NOT reused — its
       keyed revoke-on-replace model would revoke an in-flight first export
@@ -386,6 +445,15 @@ divergences. "We need test parity between the two as part of this run."*
 *(Executed 2026-07-16. RESULT: **126/126 tests, 32/32 files, 100% parity,
 zero skips** — the ≥90% target beaten outright; only ONE file needed
 adaptation.)*
+
+> **Amended 2026-07-17 (audit 2026-07-16 M2, GH #23):** the
+> `event-page-lifecycle` "adaptation" below claimed a real SW kill/respawn on
+> Chrome (2/2 green solo). Re-probing found `Target.closeTarget` is **terminal**
+> under CfT headless CDP automation — the worker never respawns on any wake, so
+> that claim was vacuous. Those 2 tests are now `describe.skipIf(IS_CHROME)`;
+> Chrome parity is **124/126 run + 2 skipped**, real respawn coverage stays the
+> shared-code Firefox suite. The rest of the D5b result (30 other files running
+> identically, Firefox unchanged-proof 126/126) is unaffected.
 - [x] Chrome E2E lifecycle runner `tests/e2e-chrome/run_chrome_tests.sh`
       (mirrors `run_esr_tests.sh`: own mkdir lock, stages the dev build,
       launches CfT with `--load-extension` + port **9223**, waits, runs
@@ -408,7 +476,9 @@ adaptation.)*
       once under full-suite load and passed solo (the documented
       network-gated class, #21 — NO Chrome skip added).
 - [x] Acceptance: **exceeded** — 126/126 executing identically, zero
-      skips, every divergence a documented header note. First full run was
+      skips *(as of 2026-07-16; amended 2026-07-17 to 124/126 run + 2 skipped —
+      see the amendment note at the top of this section, GH #23)*, every
+      divergence a documented header note. First full run was
       already 125/126 before any edits. Firefox unchanged-proof COMPLETE:
       fast 1417/1417 AND full `pnpm test:e2e` **126/126 (32/32 files),
       zero failures** (14 min under parallel load — the contention-tolerant

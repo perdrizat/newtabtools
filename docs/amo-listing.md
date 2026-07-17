@@ -2,6 +2,8 @@
 
 Canonical copy for the addons.mozilla.org listing. Edit this file first, then paste the relevant fields into the AMO Developer Hub at submission. Each version's listing snapshot lives in git; if AMO copy is ever lost or needs to be re-submitted, this file is the source of truth.
 
+> **Chrome Web Store sibling:** [`cws-listing.md`](./cws-listing.md) + [`cws-submission-notes.md`](./cws-submission-notes.md) carry the CWS listing copy and per-permission justifications. Shared prose (long description, About, privacy) is kept in sync between the two; keep them aligned when editing. Both ship at the **3.0.0** dual-store release (see [`CHROME.md`](../CHROME.md) D7).
+
 ---
 
 ## Name

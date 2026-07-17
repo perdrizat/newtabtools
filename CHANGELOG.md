@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+Docs/prep for the 3.0.0 dual-store release — no `webextension/` runtime change.
+
+### Added
+
+- CWS submission docs mirroring the AMO set: `docs/cws-listing.md` (listing copy, Chrome-adapted field limits/category/1280×800 screenshots) and `docs/cws-submission-notes.md` (single purpose, per-permission justifications verified against the code, and the Privacy-practices data-use disclosures).
+- README: full "Load unpacked in Chrome" instructions (mirroring the Firefox steps) and a CHROME.md "Manual testing in Chrome" checklist covering the behaviours the automated tiers can't — real SW suspend/respawn (GH #23), the backup Save-As download (audit m4), incognito, theme, context-menu absence.
+
+### Changed
+
+- `PRIVACY.md` is now browser-neutral (Firefox + Chrome) for the dual-store release: private-browsing → private-browsing/incognito, Firefox-Sync note generalized, and the Firefox `gecko.data_collection_permissions` attestation paired with its CWS Privacy-practices equivalent (audit M4).
+- Documentation freshness sweep: corrected stale post-2.6.2/2.6.3 claims across `manifest/README.md` (chrome.json no longer "dormant/unvalidated"), `CHROME.md` (D5b amended: 124/126 run + 2 skipped, GH #23), `tests/e2e-chrome/README.md` + `TESTING.md` (10-check smoke, 124/126 parity), and fixed a broken `ROADMAP.md` link in `tests/e2e/README.md`.
+
+## [2.6.3] — 2026-07-17
+
+Intra-day patch on the 2.6.x testing line: backup wire simplification
+(audit `2026-07-16-d-gate-audit.md` m3/A-note).
+
+### Changed
+
+- Backup export returns the zip as a `Blob` over the wire instead of base64 (audit A-note): structured-clone messaging (Chrome 148+ floor, Decision 10) carries a Blob through `runtime.sendMessage` on both platforms, so `makeZip` returns it directly and `backup-download.js` creates the object URL from it — deleting the base64 encode/decode helpers on both sides. Verified against real Chrome (smoke: "Export:backup returns a Blob zip payload over the wire").
+
+### Fixed
+
+- Large (thumbnail-heavy) backups no longer risk silent failure on Chrome (audit m3): the removed base64 leg carried a ~6-8× (encode, in the service worker) / ~4× (decode, on the page) memory amplification and could exceed Chrome's ~64 MB `runtime.sendMessage` cap; a raw `Blob` response has neither the amplification nor the ceiling.
+
 ## [2.6.2] — 2026-07-17
 
 Intra-day patch on the 2.6.x testing line: a batch of audit-adjudicated
