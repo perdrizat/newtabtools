@@ -200,7 +200,9 @@ export async function updateThemeColours(updateInfo) {
 export function _initThemeColorSchemeRelay() {
 	let media = window.matchMedia('(prefers-color-scheme: dark)');
 	function relay() {
-		api.runtime.sendMessage({ name: 'Theme.colorScheme', dark: media.matches });
+		// Swallow "Receiving end does not exist" (no page / asleep SW at
+		// startup) — the relay is best-effort (audit 2026-07-16 advisory).
+		api.runtime.sendMessage({ name: 'Theme.colorScheme', dark: media.matches }).catch(() => {});
 	}
 	relay();
 	media.addEventListener('change', relay);

@@ -536,6 +536,19 @@ describe('Filter matching — lib/tiles-store.js getGridTiles (Phase 1 slot 13)'
 		expect(urls.filter((u: string) => u.includes('b.com'))).toHaveLength(1);
 	});
 
+	// audit 2026-07-16 m6: the getGridTiles() Promise had no reject path, so any
+	// throw inside its async `onsuccess` (a topSites rejection, or m1's
+	// Object.keys(null)) left the promise unsettled forever — Tiles.getAllTiles
+	// hung and _cache/_ready froze. The handler body is now try/caught: it must
+	// reject and reset _ready instead of hanging. A short per-test timeout keeps
+	// a regression (the hang) fast to surface.
+	it('rejects and resets _ready when the topSites read throws, instead of hanging (audit m6)', async () => {
+		((globalThis as any).browser.topSites.get as any).mockRejectedValue(new Error('topSites boom'));
+
+		await expect(Tiles.getGridTiles()).rejects.toThrow('topSites boom');
+		expect(Tiles._ready).toBe(false);
+	}, 2000);
+
 	// Direct unit tests of the extracted match-and-decrement predicate.
 	describe('Tiles._hostFilteredOut predicate', () => {
 		const dot = (f: Record<string, number>) => Object.keys(f).filter(k => k[0] === '.');

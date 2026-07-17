@@ -16,9 +16,13 @@
 | D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
 **Status: D0–D6 + D5b COMPLETE (2026-07-16) — only D7 (store prep) and the
-D gate remain.** The Chrome build boots, captures, renders thumbnails,
-backs up, and survives SW kills — smoke 11/11, E2E parity 126/126, UAT
-11/11 on CfT 151. Top-level docs (README/TESTING/CONTRIBUTING) reflect the
+D gate remain.** The Chrome build boots, captures, renders thumbnails, and
+backs up — smoke 10/10, E2E parity 124/126 run (2 SW-lifecycle tests skip on
+Chrome, GH #23), UAT 11/11 on CfT 151. SW kill/respawn is not reliably
+testable under CfT CDP automation (audit 2026-07-16 M2, GH #23): the kill is
+defeated by the debugger attach and a clean kill does not respawn; real
+respawn-hygiene coverage is the shared-code Firefox event-page-lifecycle
+suite. Top-level docs (README/TESTING/CONTRIBUTING) reflect the
 two-browser reality; the branch is ready for maintainer review. Successor to the chrome-prep
 program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
 history), which left the codebase Chrome-*ready*:
@@ -115,7 +119,7 @@ self-healing by design, `pendingCaptures` already round-trips
    (unknown install mechanics, unknown helper depth) dissolved once D1
    proved CfT honors `--load-extension` under a normal debugging port:
    the SAME vitest suite can run on Chrome through a parameterized
-   helpers seam. The 11-check smoke stays as the fast per-arc gate;
+   helpers seam. The 10-check smoke stays as the fast per-arc gate;
    parity is the suite-level proof. Platform-fundamental divergences get
    documented per-file skips/variants, not silent omissions.
 4. **Icons: committed PNGs, Chrome-only.** Chrome's manifest icon keys do
@@ -386,7 +390,7 @@ adaptation.)*
       (mirrors `run_esr_tests.sh`: own mkdir lock, stages the dev build,
       launches CfT with `--load-extension` + port **9223**, waits, runs
       `NTT_E2E_BROWSER=chrome vitest --project e2e`, trap cleanup).
-      `pnpm test:e2e:chrome` = the parity suite now; the 11-check smoke
+      `pnpm test:e2e:chrome` = the parity suite now; the 10-check smoke
       stays `pnpm chrome:smoke`.
 - [x] `tests/e2e/_helpers.ts` browser seam: `connectToFirefox` keeps its
       name (32 importers), branches internally (BiDi @9222 / CDP @9223);

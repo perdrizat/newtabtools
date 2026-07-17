@@ -90,8 +90,9 @@ pnpm build
 `pnpm build` takes an optional target (`pnpm build firefox`, the default —
 byte-identical to a plain `web-ext build --source-dir webextension/`; or
 `pnpm build chrome` — the Chrome manifest overlay build, now fully validated:
-Chrome E2E parity 126/126, Chrome UAT 11/11, and the 11-check smoke all pass
-against it — see [`CHROME.md`](CHROME.md)). For manual "Load unpacked"
+Chrome E2E parity (124/126 run + 2 SW-lifecycle tests skipped on Chrome, GH #23),
+Chrome UAT 11/11, and the 10-check smoke all pass against it — see
+[`CHROME.md`](CHROME.md)). For manual "Load unpacked"
 testing in any Chrome, `pnpm chrome:stage` produces an unpacked
 `dist/chrome-dev/` directly (no CWS account needed).
 
@@ -122,7 +123,7 @@ AMO-only release. Notes for whoever runs the 3.0.0 resubmission:
 
 ### Architecture
 
-- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete — Chrome E2E suite parity (126/126), Chrome UAT (11/11), and the 11-check smoke are all green (`minimum_chrome_version` 148) — with only store release prep (D7) left; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
+- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete — Chrome E2E suite parity (124/126 run; 2 SW-lifecycle tests skip on Chrome, GH #23), Chrome UAT (11/11), and the 10-check smoke are all green (`minimum_chrome_version` 148) — with only store release prep (D7) left; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
 - **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry. Post-chrome-prep, the page is ~20 feature modules with no `globalThis` bridges anywhere — every cross-reference is a real `import`/`export`, including the E2E/UAT test harness (chrome-prep C3d):
   - **Boot/controller:** `newTab.js` (the residual controller: startup, event-listener wiring, `updateUI` dispatch, tile-tab editing, drawer/context-menu chrome) + `page-main.js` (the single orchestrator: side-effect imports in load order, then boot calls plus the `Prefs.onChange` page listener).
   - **Grid/site/cell/page:** `grid.js`/`site.js`/`cell.js`/`page.js` — the former `fx-newTab.js` monolith, split in chrome-prep C4c. `newTab.js` and `grid.js`/`page.js` form a legal call-time-only ESM cycle (no top-level cross-module calls — enforced by `tests/integration/page-module-scope.test.ts`).
@@ -154,7 +155,7 @@ MV3 has landed on both targets; **Chrome** (stage 3) is functionally complete pe
 
 - **Always run E2E tests** with `pnpm test:e2e`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script (`run_esr_tests.sh`, name unchanged) handles the full Firefox lifecycle (launch, port wait, test run, cleanup) automatically — release-channel Firefox by default (no Firefox ESR ≥152 exists yet; `$FIREFOX_ESR_BIN` still overrides the binary).
 - **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
-- **Chrome-affecting changes** (the `api` seam, `manifest/chrome.json`, anything reachable from a service worker) also run `pnpm chrome:smoke` (fast, 11 checks) or `pnpm test:e2e:chrome` (full parity suite) — see [`TESTING.md`](TESTING.md#e2e-tests-testse2e).
+- **Chrome-affecting changes** (the `api` seam, `manifest/chrome.json`, anything reachable from a service worker) also run `pnpm chrome:smoke` (fast, 10 checks) or `pnpm test:e2e:chrome` (full parity suite) — see [`TESTING.md`](TESTING.md#e2e-tests-testse2e).
 
 ### Running test tiers in parallel
 

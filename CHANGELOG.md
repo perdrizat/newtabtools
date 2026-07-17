@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.6.2] — 2026-07-17
+
+Intra-day patch on the 2.6.x testing line: a batch of audit-adjudicated
+correctness and test/build-integrity fixes (audit `2026-07-16-d-gate-audit.md`).
+
+### Changed
+
+- Chrome SW kill/respawn coverage made honest (audit M2): the smoke + `restartChromeServiceWorker` no longer report a vacuous respawn. Probing showed `Target.closeTarget` is terminal under CfT CDP automation (debugger-attach defeats the kill; a clean kill never respawns), so the smoke reports the gap informationally (10 checks, keeps `storage.session` durability) and `event-page-lifecycle.test.ts` skips its Chrome branch — real respawn coverage stays the shared-code Firefox suite (GH #23).
+- `chrome-smoke`'s `page.title()` read is now wrapped in try/catch so a transient navigation-race "execution context destroyed" fails one check instead of crashing the whole run under CPU contention (audit m9).
+- `scripts/build-uat.mjs` invokes `web-ext` bare instead of `npx web-ext`, removing a latent registry-fetch-and-execute path on a missing/partial `node_modules` (audit m10).
+
+### Fixed
+
+- `Updater._removeLegacySites` now calls `Site.destroy()` before removing a departing tile, completing the e294df8 blob-URL leak fix which had only covered the `Grid.refresh()` path — unpin/block/remove/drag/edit leaked `_thumbnailObjectURL`/`_faviconObjectURL` until the long-lived new-tab page unloaded (audit M1).
+- `Thumbnails.get`/`Thumbnails.getFavicons` guard a non-array `urls` payload before the cursor walk — a number/object/absent value used to throw inside the IDB callback, aborting the transaction so the caller's promise hung forever (audit m2).
+- Backup restore drops a non-plain-object `filters` value, and `Prefs.parsePrefs` rejects `filters: null`/arrays — a crafted `filters: null` made `Filters.getList()` run `Object.keys(null)` and hang the grid when history tiles were enabled (audit m1).
+- `pickAndStore`'s image path carries a previously-stored favicon forward when the session captured none, so a successful re-capture no longer clobbers the cached favicon (regressed the #9/#17 data) (audit m5).
+- `Tiles.getGridTiles()` now rejects (and resets `_ready`) on any throw in its async read instead of leaving the promise unsettled — a `topSites` rejection or corrupt filters map used to hang `Tiles.getAllTiles` and freeze the grid (audit m6).
+- `pickAndStore` no longer writes a bare `{url, stored, used}` "ghost" thumbnail record (no image, no favicon) that idle cleanup could never expire (audit m7).
+- `_resizeThumbnailDOM` (Firefox path) adds an `img.onerror` handler so an undecodable dataURL rejects instead of leaving the promise pending forever (parity with the service-worker path) (audit m8).
+- `theme.js`'s color-scheme relay send has a `.catch` so a "Receiving end does not exist" rejection (no page / asleep SW at startup) no longer surfaces as unhandled-rejection noise (audit advisory).
+
 ## [2.6.1] — 2026-07-17
 
 Internal patch on the 2.6.x testing line — test-infrastructure only, no

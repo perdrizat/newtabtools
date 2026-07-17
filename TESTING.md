@@ -138,7 +138,7 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm test:uat:preflight` | Validate the UAT environment only (Node/pnpm versions, release Firefox reports a clean `--version`, built `.xpi`, fixture hash, `claude` CLI, daemon port) without running scenarios or spending tokens | UAT (env check) |
 | `pnpm chrome:provision` | Fetch/cache Chrome for Testing (>= 148) via `@puppeteer/browsers` | Chrome env setup |
 | `pnpm chrome:stage` | Stage the unpacked Chrome dev build to `dist/chrome-dev/` for manual "Load unpacked" testing | Interactive Dev (Chrome) |
-| `pnpm chrome:smoke` | Run the 11-check Chrome boot/capture/backup/SW-respawn smoke (Puppeteer/CDP) | Validation (Chrome, fast) |
+| `pnpm chrome:smoke` | Run the 10-check Chrome boot/capture/backup smoke (Puppeteer/CDP; SW kill/respawn is informational, GH #23) | Validation (Chrome, fast) |
 | `pnpm test:e2e:chrome` | Run the full E2E suite (same 32 files/126 tests as `pnpm test:e2e`) against Chrome for Testing | Validation (Chrome) |
 | `pnpm test:uat:chrome` | Run the same LLM-driven UAT scenarios against Chrome for Testing | UAT (Chrome, pre-release) |
 

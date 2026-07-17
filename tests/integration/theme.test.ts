@@ -530,5 +530,18 @@ describe('Theme switching — newTab.js (Phase 1 slot 10)', () => {
 			changeHandler();
 			expect(browser.runtime.sendMessage).toHaveBeenCalledWith({ name: 'Theme.colorScheme', dark: true });
 		});
+
+		// audit 2026-07-16 advisory: the relay send had no `.catch`, so a
+		// "Receiving end does not exist" rejection (no page / asleep SW at
+		// startup) surfaced as unhandled-rejection console noise. Assert the
+		// `.catch` is attached to the returned promise (deterministic — an
+		// unhandled-rejection probe races vitest's own rejection tracking).
+		it('attaches a .catch to the relay send so a rejection cannot surface unhandled', () => {
+			(globalThis as any).window.matchMedia.mockReturnValue({ matches: false, addEventListener: vi.fn() });
+			const catchSpy = vi.fn();
+			(browser.runtime.sendMessage as any).mockReturnValue({ catch: catchSpy });
+			_initThemeColorSchemeRelay();
+			expect(catchSpy).toHaveBeenCalledWith(expect.any(Function));
+		});
 	});
 });

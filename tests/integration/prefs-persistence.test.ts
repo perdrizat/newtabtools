@@ -308,6 +308,27 @@ describe('Prefs/Blocked/Filters — prefs.js (Phase 1 slot 7)', () => {
 		expect(Filters._list).toEqual({ 'example.com': 3 });
 	});
 
+	// audit 2026-07-16 m1: `typeof null === 'object'`, so the old
+	// `typeof prefs.filters == 'object'` gate accepted `filters: null` and set
+	// `Filters._list = null`; `Filters.getList()` then ran `Object.keys(null)`
+	// and threw, hanging the grid (via Tiles.getGridTiles) when history is on.
+	// An array is likewise not a valid filter map. Both must be rejected so the
+	// prior valid list survives and getList() stays callable.
+	it('parsePrefs rejects filters:null (keeps prior list; getList stays callable)', () => {
+		Prefs.parsePrefs({ filters: { 'keep.com': 1 } });
+		Prefs.parsePrefs({ filters: null });
+		expect(Filters._list).not.toBeNull();
+		expect(() => Filters.getList()).not.toThrow();
+		expect(Filters._list).toEqual({ 'keep.com': 1 });
+	});
+
+	it('parsePrefs rejects a filters array (keeps prior list)', () => {
+		Prefs.parsePrefs({ filters: { 'keep.com': 1 } });
+		Prefs.parsePrefs({ filters: ['example.com'] as unknown as Record<string, number> });
+		expect(Array.isArray(Filters._list)).toBe(false);
+		expect(Filters._list).toEqual({ 'keep.com': 1 });
+	});
+
 	// ==================== prefsChanged ====================
 
 	it('prefsChanged applies new values via parsePrefs', async () => {

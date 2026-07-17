@@ -98,88 +98,100 @@ export const Tiles = {
 	// the wire name, not this internal one.
 	getGridTiles() {
 		let count = Prefs.rows * Prefs.columns;
-		return withObjectStore('tiles', 'readonly', store => new Promise(resolve => {
+		return withObjectStore('tiles', 'readonly', store => new Promise((resolve, reject) => {
 			let op = store.getAll();
+			// A failed getAll() request would otherwise never settle this promise
+			// (audit 2026-07-16 m6).
+			op.onerror = () => reject(op.error);
 			op.onsuccess = async () => {
+				try {
 				// `_ready` is set only on a successful read (M2 supersedes the
 				// tiles.js §2.2 fix) — a throwing/rejected read below never
 				// leaves it stuck true with an empty list.
-				this._ready = true;
-				let links = [];
-				let urlMap = new Map();
-				this._list.length = 0;
+					this._ready = true;
+					let links = [];
+					let urlMap = new Map();
+					this._list.length = 0;
 
-				for (let t of op.result) {
-					if ('position' in t) {
-						if (this._list.includes(t.url)) {
-							console.error('This URL appears twice: ' + t.url);
-							continue;
+					for (let t of op.result) {
+						if ('position' in t) {
+							if (this._list.includes(t.url)) {
+								console.error('This URL appears twice: ' + t.url);
+								continue;
+							}
+							links[t.position] = t;
+							this._list.push(t.url);
 						}
-						links[t.position] = t;
-						this._list.push(t.url);
-					}
-					urlMap.set(t.url, t);
-				}
-
-				if (!Prefs.history) {
-					this._cache = links.map(l => l.url);
-					resolve(links.slice(0, count));
-					return;
-				}
-
-				let options = await topSitesOptions(api);
-				/** @type {browser.topSites.MostVisitedURL[]} */
-				let r = await api.topSites.get(options);
-				let urls = this._list.slice();
-				let filters = Filters.getList();
-				let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
-				let remaining = r.filter(s => {
-					if (Blocked.isBlocked(s.url)) {
-						return false;
-					}
-					let url = new URL(s.url);
-					if (!SAFE_PROTOCOLS.includes(url.protocol)) {
-						return false;
+						urlMap.set(t.url, t);
 					}
 
-					let isNew = !urls.includes(s.url);
-					if (isNew) {
-						if (Tiles._hostFilteredOut(url.host, filters, dotFilters)) {
+					if (!Prefs.history) {
+						this._cache = links.map(l => l.url);
+						resolve(links.slice(0, count));
+						return;
+					}
+
+					let options = await topSitesOptions(api);
+					/** @type {browser.topSites.MostVisitedURL[]} */
+					let r = await api.topSites.get(options);
+					let urls = this._list.slice();
+					let filters = Filters.getList();
+					let dotFilters = Object.keys(filters).filter(f => f[0] == '.');
+					let remaining = r.filter(s => {
+						if (Blocked.isBlocked(s.url)) {
 							return false;
 						}
-						urls.push(s.url);
-					} else {
-						// If we pin a tile we've never visited, it has no title.
-						let t = urlMap.get(s.url);
-						if (t && !('title' in t)) {
-							t.title = s.title;
+						let url = new URL(s.url);
+						if (!SAFE_PROTOCOLS.includes(url.protocol)) {
+							return false;
 						}
-					}
-					return isNew;
-				});
 
-				// Add some extras for thumbnail generation of tiles that might get promoted.
-				let extraCount = count + 25;
-				for (let i = 0; i < extraCount && remaining.length > 0; i++) {
-					if (!links[i]) {
-						let next = remaining.shift();
-						if (next) {
-							let mapData = urlMap.get(next.url);
-							if (mapData) {
+						let isNew = !urls.includes(s.url);
+						if (isNew) {
+							if (Tiles._hostFilteredOut(url.host, filters, dotFilters)) {
+								return false;
+							}
+							urls.push(s.url);
+						} else {
+						// If we pin a tile we've never visited, it has no title.
+							let t = urlMap.get(s.url);
+							if (t && !('title' in t)) {
+								t.title = s.title;
+							}
+						}
+						return isNew;
+					});
+
+					// Add some extras for thumbnail generation of tiles that might get promoted.
+					let extraCount = count + 25;
+					for (let i = 0; i < extraCount && remaining.length > 0; i++) {
+						if (!links[i]) {
+							let next = remaining.shift();
+							if (next) {
+								let mapData = urlMap.get(next.url);
+								if (mapData) {
 								// `next` comes from browser.topSites.get() (a typed
 								// MostVisitedURL) — merge in the stored tile's extra
 								// fields (title override, custom image, etc.).
-								Object.assign(next, mapData);
+									Object.assign(next, mapData);
+								}
+								links[i] = next;
+							} else {
+								break;
 							}
-							links[i] = next;
-						} else {
-							break;
 						}
 					}
-				}
 
-				this._cache = links.map(l => l.url);
-				resolve(links.slice(0, count));
+					this._cache = links.map(l => l.url);
+					resolve(links.slice(0, count));
+				} catch (e) {
+				// Any throw in this async read path (a topSites rejection, a
+				// corrupt filters map, …) must reject — never leave the promise
+				// (and thus Tiles.getAllTiles and the grid) hanging — and reset
+				// _ready so a later read can retry (audit 2026-07-16 m6).
+					this._ready = false;
+					reject(e);
+				}
 			};
 		}));
 	},

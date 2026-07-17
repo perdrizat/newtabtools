@@ -437,6 +437,51 @@ describe('lib/messages.js — runtime.onMessage boundary (Phase 1 slot 1)', () =
 		});
 	});
 
+	// ======================== THUMBNAILS.GET/GETFAVICONS — non-array urls guard ========================
+
+	// audit 2026-07-16 m2: both handlers called `message.urls.includes(...)`
+	// inside the IDB cursor callback with no Array guard. On a real browser a
+	// non-array `urls` (number / plain object / absent — anything lacking
+	// `.includes`) threw THERE, aborting the transaction so `sendResponse` never
+	// fired and the caller's promise hung forever. The fix guards before the
+	// cursor walk: respond with an empty Map and never open a cursor. (The real
+	// hang isn't reproducible in this synchronous mock — a throw in the cursor
+	// callback rejects the promise here — so the discriminating assertion is
+	// "no cursor opened", which directly encodes the guard-before-walk fix.)
+	describe('Thumbnails.get / getFavicons — non-array urls guard (m2)', () => {
+		beforeEach(() => {
+			thumbnailStore.openCursor.mockClear();
+		});
+
+		const badPayloads: Array<[string, unknown]> = [
+			['a number', 123],
+			['a plain object', {}],
+			['absent', undefined],
+		];
+
+		for (const [label, urls] of badPayloads) {
+			it(`Thumbnails.get responds with an empty Map and opens no cursor when urls is ${label}`, async () => {
+				const result = handleMessage({ name: 'Thumbnails.get', urls }, validSender, sendResponse);
+				expect(result).toBe(true);
+				await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+				const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+				expect(map).toBeInstanceOf(Map);
+				expect(map.size).toBe(0);
+				expect(thumbnailStore.openCursor).not.toHaveBeenCalled();
+			});
+
+			it(`Thumbnails.getFavicons responds with an empty Map and opens no cursor when urls is ${label}`, async () => {
+				const result = handleMessage({ name: 'Thumbnails.getFavicons', urls }, validSender, sendResponse);
+				expect(result).toBe(true);
+				await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(1));
+				const map: Map<string, unknown> = sendResponse.mock.calls[0][0];
+				expect(map).toBeInstanceOf(Map);
+				expect(map.size).toBe(0);
+				expect(thumbnailStore.openCursor).not.toHaveBeenCalled();
+			});
+		}
+	});
+
 	// ======================== THUMBNAILS.GETFAVICONS ========================
 
 	describe('Thumbnails.getFavicons', () => {

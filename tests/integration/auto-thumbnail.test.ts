@@ -412,6 +412,17 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		getCaptureSessions().clear();
 		sessionStore = {};
 		getNetworkIdleWatchers().clear();
+		// Faithful default: store.get(url) resolves with NO existing record.
+		// pickAndStore's write path now always reads the existing record first
+		// (audit m5/m7 favicon-merge), so a bare vi.fn() returning undefined
+		// would throw on `.onsuccess =`; tests needing an existing record
+		// override this with their own mockImplementation.
+		thumbnailStore.get.mockReset();
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = { result: undefined };
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
 	});
 
 	afterEach(() => {
@@ -900,6 +911,42 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		}
 	});
 
+	// audit 2026-07-16 m5: a successful re-capture (an image WAS produced) whose
+	// tab exposed no favIconUrl this session must NOT clobber a previously
+	// stored favicon — the image path used to `store.put(record)` blind.
+	it('pickAndStore image path preserves an existing stored favicon when this capture saw none', async () => {
+		const originalTabsGet = (globalThis as any).chrome.tabs.get;
+		// Active tab, but no favIconUrl this session → the fresh record carries
+		// no favicon of its own.
+		(globalThis as any).chrome.tabs.get = vi.fn(() => Promise.resolve({
+			active: true, windowId: 1, incognito: false,
+		}));
+		const existingFavicon = new Blob(['cached-favicon'], { type: 'image/png' });
+		thumbnailStore.get.mockImplementation(() => {
+			const req: any = { result: { url: 'https://example.com', image: new Blob(['old-img']), favicon: existingFavicon, stored: '2026-07-01', used: '2026-07-01' } };
+			queueMicrotask(() => req.onsuccess?.({ target: req }));
+			return req;
+		});
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
+			await vi.advanceTimersByTimeAsync(0); // A (produces an image)
+			await vi.advanceTimersByTimeAsync(2000); // hard deadline -> C -> pickAndStore
+			for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(0); }
+
+			expect(thumbnailStore.put).toHaveBeenCalled();
+			const storedObj = thumbnailStore.put.mock.calls[0][0];
+			// The fresh capture's image is stored…
+			expect(storedObj.image).toBeInstanceOf(Blob);
+			// …and the previously cached favicon is carried forward, not erased.
+			expect(storedObj.favicon).toBe(existingFavicon);
+		} finally {
+			(globalThis as any).chrome.tabs.get = originalTabsGet;
+		}
+	});
+
+	// No captures AND no favIconUrl → pickAndStore bails at its session-level
+	// guard (capture.js:398) before any store write.
 	it('pickAndStore stores nothing when every capture attempt fails and no favicon was observed', async () => {
 		const originalCaptureVisibleTab = (globalThis as any).chrome.tabs.captureVisibleTab;
 		const originalTabsGet = (globalThis as any).chrome.tabs.get;
@@ -912,8 +959,38 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 			await vi.advanceTimersByTimeAsync(0);
 			await vi.advanceTimersByTimeAsync(2000);
+			for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(0); }
+
+			expect(thumbnailStore.put).not.toHaveBeenCalled();
+		} finally {
+			(globalThis as any).chrome.tabs.captureVisibleTab = originalCaptureVisibleTab;
+			(globalThis as any).chrome.tabs.get = originalTabsGet;
+		}
+	});
+
+	// audit 2026-07-16 m7: the harder case — a tab DOES expose a favIconUrl (so
+	// pickAndStore's session-level guard passes), but it yields no usable favicon
+	// (fetchFaviconBlob returns null for a non-`data:` URL) and is not http(s)
+	// (so it isn't stored as a live faviconUrl either). With no image either, the
+	// favicon-only path must NOT persist a bare {url, stored, used} "ghost" that
+	// idle cleanup can never expire.
+	it('pickAndStore writes no ghost record when the favIconUrl yields no usable favicon and there is no image', async () => {
+		const originalCaptureVisibleTab = (globalThis as any).chrome.tabs.captureVisibleTab;
+		const originalTabsGet = (globalThis as any).chrome.tabs.get;
+		(globalThis as any).chrome.tabs.captureVisibleTab = vi.fn(() => Promise.resolve(null));
+		// A truthy favIconUrl that fetchFaviconBlob can't turn into a Blob
+		// (not a data: URL) and that isn't http(s) → neither favicon nor
+		// faviconUrl ends up on the record.
+		(globalThis as any).chrome.tabs.get = vi.fn(() => Promise.resolve({
+			active: true, windowId: 1, incognito: false,
+			favIconUrl: 'ftp://example.com/favicon.ico',
+		}));
+
+		try {
+			onCompletedListener({ frameId: 0, tabId: 42, url: 'https://example.com' });
 			await vi.advanceTimersByTimeAsync(0);
-			await vi.advanceTimersByTimeAsync(0);
+			await vi.advanceTimersByTimeAsync(2000);
+			for (let i = 0; i < 6; i++) { await vi.advanceTimersByTimeAsync(0); }
 
 			expect(thumbnailStore.put).not.toHaveBeenCalled();
 		} finally {

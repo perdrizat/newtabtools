@@ -67,8 +67,13 @@ function _dominantColorRatioAboveThreshold(data, totalPixels) {
  * @returns {Promise<Blob>}
  */
 function _resizeThumbnailDOM(dataURL, targetWidth) {
-	return new Promise(function(resolve) {
+	return new Promise(function(resolve, reject) {
 		let img = new Image();
+		// An undecodable dataURL would otherwise leave this promise pending
+		// forever (audit 2026-07-16 m8) — the SW path already rejects.
+		img.onerror = function() {
+			reject(new Error('resizeThumbnail: image failed to decode'));
+		};
 		img.onload = function() {
 			let scale = targetWidth / img.width;
 			let canvas = document.createElement('canvas');

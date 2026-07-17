@@ -241,7 +241,12 @@ const PrefsObject = {
 		if (Array.isArray(prefs.blocked)) {
 			Blocked._list = prefs.blocked;
 		}
-		if ('filters' in prefs && typeof prefs.filters == 'object') {
+		// `typeof null === 'object'` and arrays are objects too — accept only a
+		// non-null plain object, or `Filters.getList()`'s `Object.keys` throws
+		// and hangs the grid (audit 2026-07-16 m1). Mirrors the `Array.isArray`
+		// guard on `blocked` one branch up.
+		if ('filters' in prefs && typeof prefs.filters == 'object'
+			&& prefs.filters !== null && !Array.isArray(prefs.filters)) {
 			Filters._list = prefs.filters;
 		}
 		// Re-sync whenever the key is present in this change set. A removal

@@ -628,15 +628,8 @@ export async function restartChromeServiceWorker(browser: Browser, opts: { timeo
 	if (!sw) {
 		throw new Error('restartChromeServiceWorker: no service_worker target found to kill');
 	}
-	await client.send('Target.closeTarget', { targetId: sw.targetId });
-
-	const goneDeadline = Date.now() + timeout;
-	while (Date.now() < goneDeadline) {
-		if (!browser.targets().some(t => t.type() === 'service_worker')) {
-			break;
-		}
-		await new Promise(r => setTimeout(r, 250));
-	}
+	const killedTargetId: string = sw.targetId;
+	await client.send('Target.closeTarget', { targetId: killedTargetId });
 
 	const wakePage = await browser.newPage();
 	try {
@@ -645,11 +638,20 @@ export async function restartChromeServiceWorker(browser: Browser, opts: { timeo
 		await wakePage.close().catch(() => {});
 	}
 
-	const respawned = await browser.waitForTarget(
-		t => t.type() === 'service_worker',
-		{ timeout },
-	).catch(() => null);
-	if (!respawned) {
-		throw new Error(`restartChromeServiceWorker: no service_worker target reappeared within ${timeout}ms of the wake navigation`);
+	// A genuine respawn is a NEW service_worker instance — a targetId different
+	// from the one we killed (audit 2026-07-16 M2). Waiting merely for "a
+	// service_worker target" would match the SAME worker if Target.closeTarget
+	// silently stopped killing SW targets on a future CfT (or under load where
+	// teardown and respawn overlap), reporting a vacuous respawn — so the whole
+	// SW-lifecycle suite would pass proving nothing.
+	const deadline = Date.now() + timeout;
+	while (Date.now() < deadline) {
+		const { targetInfos: current } = await client.send('Target.getTargets');
+		if (current.some((t: { type: string; targetId: string }) =>
+			t.type === 'service_worker' && t.targetId !== killedTargetId)) {
+			return;
+		}
+		await new Promise(r => setTimeout(r, 250));
 	}
+	throw new Error(`restartChromeServiceWorker: no NEW service_worker target (targetId != ${killedTargetId}) appeared within ${timeout}ms of the wake navigation — the CDP kill did not produce a fresh worker instance`);
 }

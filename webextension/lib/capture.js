@@ -466,16 +466,30 @@ function pickAndStore(tabId) {
 		// withStore() re-opens it if so, instead of throwing on a stale
 		// connection and losing the freshly-captured thumbnail silently.
 		await withObjectStore('thumbnails', 'readwrite', function(store) {
-			if (record.image) {
-				store.put(record);
-				return;
-			}
-			// Favicon-only fallback (issue #10): merge into any existing
-			// record — a failed RE-capture must never clobber a previously
-			// stored thumbnail with an image-less record.
+			// Both paths read the existing record first so a re-capture never
+			// silently drops previously-stored data.
 			let request = store.get(url);
 			request.onsuccess = function() {
 				let existing = request.result;
+
+				if (record.image) {
+					// Image path: carry a previously stored favicon forward when
+					// this session captured none, so a successful re-capture
+					// never clobbers the cached favicon (audit 2026-07-16 m5).
+					if (existing && !record.favicon && !record.faviconUrl) {
+						if (existing.favicon) {
+							record.favicon = existing.favicon;
+						} else if (existing.faviconUrl) {
+							record.faviconUrl = existing.faviconUrl;
+						}
+					}
+					store.put(record);
+					return;
+				}
+
+				// Favicon-only fallback (issue #10): merge into any existing
+				// record — a failed RE-capture must never clobber a previously
+				// stored thumbnail with an image-less record.
 				if (existing) {
 					existing.used = record.used;
 					if (record.favicon) {
@@ -486,7 +500,11 @@ function pickAndStore(tabId) {
 						delete existing.favicon;
 					}
 					store.put(existing);
-				} else {
+				} else if (record.favicon || record.faviconUrl) {
+					// No existing record: only store the favicon-only record if
+					// it actually carries a favicon — never a bare
+					// {url, stored, used} "ghost" that idle cleanup can't expire
+					// (audit 2026-07-16 m7).
 					store.put(record);
 				}
 			};

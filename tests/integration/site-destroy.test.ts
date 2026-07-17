@@ -79,3 +79,36 @@ describe('Grid.refresh — destroys existing sites before flushing them', () => 
 		expect(site._thumbnailObjectURL).toBeNull();
 	});
 });
+
+// audit 2026-07-16 M1: the e294df8 destroy() fix wired only into Grid.refresh
+// above. `Updater._removeLegacySites` is the OTHER site-removal path (unpin,
+// block/remove, drag-drop, tile edits) and must destroy() a departing site too,
+// or its blob URLs leak until the long-lived new-tab page unloads.
+describe('Updater._removeLegacySites — destroys departing sites before removing them', () => {
+	it('calls site.destroy() before node.remove() for each removed site', async () => {
+		const { Updater } = await import('../../webextension/updater.js');
+		const { Grid } = await import('../../webextension/grid.js');
+		const { Transformation } = await import('../../webextension/transformation.js');
+
+		const order: string[] = [];
+		const site = {
+			destroy: vi.fn(() => order.push('destroy')),
+			node: { remove: vi.fn(() => order.push('remove')) },
+		};
+		// `Grid.sites` is a getter over `_cells` — drive it via the backing field.
+		(Grid as any)._cells = [{ site }];
+		// hideSite normally animates the fade-out; invoke its callback
+		// synchronously so the removal path runs within the test.
+		(Transformation as any).hideSite = vi.fn((_s: unknown, cb: () => void) => cb());
+
+		// Pass an empty "surviving sites" set so `site` counts as departing.
+		await new Promise<void>(resolve => {
+			(Updater as any)._removeLegacySites([], resolve);
+		});
+
+		expect(site.destroy).toHaveBeenCalledTimes(1);
+		expect(site.node.remove).toHaveBeenCalledTimes(1);
+		// destroy() must run BEFORE the node leaves the DOM.
+		expect(order).toEqual(['destroy', 'remove']);
+	});
+});

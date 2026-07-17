@@ -13,14 +13,18 @@ import {
 	restartChromeServiceWorker,
 } from './_helpers.ts';
 
-// CHROME.md D5b: Chrome has no idle-timeout PREF to wait out (a service
-// worker's teardown schedule isn't configurable this way) — the platform
-// divergence is real, not skipped, so the "genuinely came back from
-// nothing" precondition is forced with a real CDP-level kill/respawn
-// (`restartChromeServiceWorker`, the same technique D3's smoke proved out)
-// instead of the Firefox sleep-and-let-it-idle below. Both paths reach the
-// identical postcondition this file actually asserts on: a just-respawned
-// background whose IDB/capture pipeline still works.
+// audit 2026-07-16 M2 (probed 2026-07-17): this suite is SKIPPED on Chrome.
+// It was written to force the respawn precondition via a CDP kill
+// (`restartChromeServiceWorker`), but under CfT headless CDP automation
+// `Target.closeTarget` is TERMINAL — the worker does not respawn on any wake
+// (navigation / extension-page load / runtime message), and Chrome exposes no
+// controllable idle-suspension analogue to Firefox's idle-timeout pref. So a
+// genuine kill+respawn round-trip can't be produced here; running these tests
+// on Chrome would either hang on a dead worker or (before the fix) pass
+// vacuously. They run for real on Firefox (which genuinely suspends/respawns
+// via the pref below), and the background code is shared across both platforms
+// through the `api` seam, so that IS the real respawn-hygiene coverage.
+// Restoring a genuine Chrome respawn check is tracked in GH #23.
 //
 // MV3_MIGRATION.md Slice D: `run_esr_tests.sh` sets
 // `extensions.background.idle.timeout=10000` for the whole suite, so the
@@ -42,7 +46,9 @@ import {
 // and never-capture.test.ts navigate to.
 const TEST_URL = 'https://example.com/';
 
-describe('E2E: event-page suspension recovery (MV3_MIGRATION.md Slice D)', () => {
+// Skipped on Chrome — see the block comment above (audit M2, GH #23). Runs for
+// real on Firefox.
+describe.skipIf(IS_CHROME)('E2E: event-page suspension recovery (MV3_MIGRATION.md Slice D)', () => {
 	let browser: Browser;
 
 	beforeAll(async () => {

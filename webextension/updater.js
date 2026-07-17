@@ -189,6 +189,12 @@ export var Updater = {
 				Transformation.hideSite(site, function() {
 					let node = site.node;
 
+					// Revoke the site's cached blob URLs before it leaves the
+					// grid — completes the e294df8 fix, which wired destroy()
+					// into Grid.refresh() only (audit 2026-07-16 M1). This is the
+					// other removal path (unpin/block/remove/drag/edit).
+					site.destroy();
+
 					// Remove the site from the DOM.
 					node.remove();
 					resolve();

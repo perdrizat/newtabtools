@@ -34,8 +34,12 @@ if (manifestChanged) {
 	fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, '\t'));
 }
 
-// 3. Build with web-ext and output as newtab_powertools-uat.zip
-execSync(`npx web-ext build --source-dir "${TMP_DIR}" --artifacts-dir "${path.join(ROOT, 'dist')}" --filename "newtab_powertools-uat.zip" --overwrite-dest`, { stdio: 'inherit' });
+// 3. Build with web-ext and output as newtab_powertools-uat.zip.
+// Bare `web-ext` (not `npx web-ext`): npx would fall back to fetching
+// web-ext@latest (unpinned, no cooldown) from the registry if node_modules were
+// missing/partial — a registry-fetch-and-execute path on every build. The
+// pinned local binary is on PATH here, same as scripts/build.mjs (audit m10).
+execSync(`web-ext build --source-dir "${TMP_DIR}" --artifacts-dir "${path.join(ROOT, 'dist')}" --filename "newtab_powertools-uat.zip" --overwrite-dest`, { stdio: 'inherit' });
 
 // 4. Cleanup
 fs.rmSync(TMP_DIR, { recursive: true, force: true });

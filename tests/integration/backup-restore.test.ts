@@ -497,6 +497,45 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(storedPrefs.backgroundUrl).toBe(url);
 		});
 
+		// audit 2026-07-16 m1: a crafted backup with `filters: null` (or a
+		// non-object) would be stored verbatim; on the next load parsePrefs set
+		// `Filters._list = null` and `getList()` threw, hanging the grid. Drop a
+		// non-plain-object `filters` at the restore boundary (defense-in-depth
+		// with the parsePrefs guard).
+		it('drops a null filters value at restore (audit m1)', async () => {
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ theme: 'dark', filters: null })),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.theme).toBe('dark');
+			expect(storedPrefs).not.toHaveProperty('filters');
+		});
+
+		it('drops an array filters value at restore (audit m1)', async () => {
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ filters: ['example.com'] })),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs).not.toHaveProperty('filters');
+		});
+
+		it('preserves a valid filters object at restore', async () => {
+			setupReader([
+				mockZipEntry('prefs.json', JSON.stringify({ filters: { 'example.com': 3 } })),
+			]);
+
+			await readZip(new Blob());
+
+			const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+			expect(storedPrefs.filters).toEqual({ 'example.com': 3 });
+		});
+
 		it('sanitizes malicious backgroundColor in restored tiles (§1.1 fix)', async () => {
 			const tiles = [
 				{ id: 4, url: 'https://legit.com', title: 'Evil BG', position: 0,

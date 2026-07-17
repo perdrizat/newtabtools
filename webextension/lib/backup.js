@@ -184,6 +184,14 @@ export async function readZip(file) {
 				delete filtered.backgroundUrl;
 			}
 		}
+		// `filters` must be a plain (non-null, non-array) object — a stored
+		// `null` or array makes `Prefs.parsePrefs` → `Filters.getList()` throw
+		// and hang the grid (audit 2026-07-16 m1). Drop anything else at this
+		// data boundary; parsePrefs re-guards on every load as defense-in-depth.
+		if ('filters' in filtered &&
+			(typeof filtered.filters !== 'object' || filtered.filters === null || Array.isArray(filtered.filters))) {
+			delete filtered.filters;
+		}
 		// `neverCaptureHosts` is a list of host patterns the extension must never
 		// screenshot. Validate at this data boundary: must be an Array; each entry
 		// is normalised via Filters.normalizeHost (lowercases, strips scheme/path)

@@ -191,6 +191,13 @@ export function handleMessage(message, sender, sendResponse) {
 		// it against the still-opening connection; withStore() awaits
 		// readiness itself.
 		let map = new Map();
+		// Guard a malformed payload (audit 2026-07-16 m2): a non-array `urls`
+		// would throw at `.includes()` inside the cursor callback, aborting the
+		// transaction so the caller's promise never settles (a permanent hang).
+		if (!Array.isArray(message.urls)) {
+			sendResponse(map);
+			return true;
+		}
 		withObjectStore('thumbnails', 'readwrite', function(store) {
 			return new Promise(function(resolve) {
 				store.openCursor().onsuccess = function() {
@@ -230,6 +237,11 @@ export function handleMessage(message, sender, sendResponse) {
 		// favicon comes back as its `faviconUrl` string for the page to render
 		// live via <img>. The page-side handler distinguishes the two.
 		let faviconMap = new Map();
+		// Guard a malformed payload (audit 2026-07-16 m2): see Thumbnails.get.
+		if (!Array.isArray(message.urls)) {
+			sendResponse(faviconMap);
+			return true;
+		}
 		walkFaviconsInto(faviconMap, function(row) {
 			return message.urls.includes(row.url) ? row.url : null;
 		}).then(function() {

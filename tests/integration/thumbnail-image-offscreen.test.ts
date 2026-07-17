@@ -300,4 +300,17 @@ describe('public resizeThumbnail/isBlank — stay on the DOM path in this jsdom 
 		expect(fetchSpy).not.toHaveBeenCalled();
 		expect(createImageBitmapSpy).not.toHaveBeenCalled();
 	});
+
+	// audit 2026-07-16 m8: an undecodable dataURL fires img.onerror; the DOM
+	// resize path had no onerror handler, so the promise stayed pending forever.
+	// It must reject instead (parity with the SW path, which already rejects).
+	// A short per-test timeout keeps a regression (the hang) fast to surface.
+	it('resizeThumbnail rejects (does not hang) when the image fails to decode (audit m8)', async () => {
+		(globalThis as any).Image = class MockImageErr {
+			onload: (() => void) | null = null;
+			onerror: (() => void) | null = null;
+			set src(_v: string) { queueMicrotask(() => this.onerror && this.onerror()); }
+		};
+		await expect(resizeThumbnail('data:image/png;base64,BROKEN', 100)).rejects.toThrow();
+	}, 2000);
 });
