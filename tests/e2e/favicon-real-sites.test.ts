@@ -80,6 +80,31 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 		await waitForGridReady(page);
 		const newTabURL = await getNewTabURL();
 
+		// Diagnostic (#5): report the per-site favicon state — kind + detail —
+		// from IDB, so every run (and especially a flaky failure) records WHICH
+		// site is missing a favicon and in WHAT shape (blob / remote-url /
+		// MISSING). This is the evidence that shapes the §1.1 CSP/img-model fix:
+		// a MISSING is the network-timing flake, a url/blob-present-but-no-<img>
+		// is a page-side render gap. Best-effort — never throws.
+		const describeFaviconState = async (): Promise<string> => {
+			try {
+				const state = await page.evaluate((urls: string[]) => new Promise<Record<string, string>>(resolve => {
+					chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: Map<string, unknown> | Record<string, unknown> | undefined) => {
+						const read = (u: string) => response instanceof Map ? response.get(u) : (response ? response[u] : undefined);
+						const out: Record<string, string> = {};
+						for (const u of urls) {
+							const v = read(u);
+							out[u] = v instanceof Blob ? `blob(${v.size}B)` : (typeof v === 'string' ? `url(${v})` : 'MISSING');
+						}
+						resolve(out);
+					});
+				}), [HEISE, TECHCRUNCH]);
+				return [HEISE, TECHCRUNCH].map(u => `${new URL(u).host}: ${state[u]}`).join(' | ');
+			} catch (e) {
+				return `unreadable (${(e as Error).message})`;
+			}
+		};
+
 		try {
 			// Pin both sites so they enter the tile cache (which is what the
 			// capture pipeline keys off).
@@ -147,6 +172,8 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 				{ timeout: 20_000, message: 'No favicons stored in IDB for one or both sites' }
 			) as Record<string, { kind: string; detail: string } | null>;
 
+			console.log(`[favicon-diag] stored favicon state: ${await describeFaviconState()}`);
+
 			for (const site of [HEISE, TECHCRUNCH]) {
 				expect(result[site]).not.toBeNull();
 				if (result[site]!.kind === 'blob') {
@@ -190,6 +217,7 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 			expect(visible[HEISE]).toBe(true);
 			expect(visible[TECHCRUNCH]).toBe(true);
 		} catch (e) {
+			console.log(`[favicon-diag] FAILURE — favicon state at failure: ${await describeFaviconState()}`);
 			await captureFailure(page, 'favicon-real-sites');
 			throw e;
 		} finally {

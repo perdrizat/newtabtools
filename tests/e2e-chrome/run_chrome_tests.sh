@@ -32,7 +32,7 @@ set -u
 PORT=9223
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-ARTIFACTS_DIR="$SCRIPT_DIR/../e2e/_artifacts"
+ARTIFACTS_DIR="$SCRIPT_DIR/../e2e/_artifacts-cft"
 
 # 0. Concurrency lock — this tier's own lock dir, independent of Firefox
 # E2E's tests/e2e/.runner-lock (same mkdir-atomicity technique + stale-PID
@@ -118,12 +118,21 @@ until nc -z 127.0.0.1 "$PORT" 2>/dev/null; do
   sleep 1
 done
 
+# Fresh artifacts every run, scoped to this tier's own dir (`_artifacts-cft`)
+# so it never races the Firefox suite's `_artifacts-ff` when both run
+# concurrently.
+rm -rf "$ARTIFACTS_DIR"
 mkdir -p "$ARTIFACTS_DIR"
 echo "Chrome ready. Running Vitest e2e project (NTT_E2E_BROWSER=chrome)..."
 
 # 5. Run the tests; pass through any extra args (e.g., a specific test file).
-NTT_E2E_BROWSER=chrome npx vitest run --project e2e "$@"
-EXIT_CODE=$?
+# Persist a durable pass/fail record (see run_esr_tests.sh for the rationale):
+# results.json (machine-readable) + run.log (full human output via tee).
+# $ARTIFACTS_DIR was just recreated above. ${PIPESTATUS[0]} keeps vitest's exit.
+NTT_E2E_BROWSER=chrome npx vitest run --project e2e \
+  --reporter=default --reporter=json --outputFile="$ARTIFACTS_DIR/results.json" \
+  "$@" 2>&1 | tee "$ARTIFACTS_DIR/run.log"
+EXIT_CODE=${PIPESTATUS[0]}
 
 # 6. Cleanup happens via the EXIT trap.
 exit "$EXIT_CODE"

@@ -252,6 +252,15 @@ async function makeDriver() {
 	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
 	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 	opts.addArguments('-headless');
+	// 'eager' returns each `driver.get()` at DOMContentLoaded instead of waiting
+	// for full load. The environment seed's per-site get times were pinned at the
+	// 8s SEED_PAGELOAD_TIMEOUT_MS cap on ~8 heavy sites (they never reach
+	// `complete`) under the default 'normal' strategy — enough to push the whole
+	// seed past the runner's 300s health budget (measured 325.6s, 2026-07-17).
+	// DOMContentLoaded is sufficient for history/frecency seeding and consent
+	// dismissal, so 'eager' cuts those stalls without losing visits. Matches the
+	// Chrome branch above (added there for the same reason, chrome-prep D6).
+	opts.setPageLoadStrategy('eager');
 	// Render at Full HD, 100% (device-pixel-ratio 1) — a realistic desktop
 	// viewport. Screenshots are saved at full resolution by default (see SHOT_SCALE)
 	// so the agent judges a representative FHD layout.
@@ -363,16 +372,23 @@ async function dismissConsent(d) {
 async function seedRecentlyClosed(d) {
 	const main = (await d.getAllWindowHandles())[0];
 	let seeded = 0;
-	for (const home of NEWS_URLS) {
+	const RC_N = NEWS_URLS.length;
+	for (let ri = 0; ri < RC_N; ri++) {
+		const home = NEWS_URLS[ri];
+		const homeStart = now();
+		log(`seed rc ${ri + 1}/${RC_N} start ${home}`);
 		// Collect the top 2 distinct article links from the homepage…
 		let articles = [];
 		try {
 			await d.switchTo().newWindow('tab');
+			const g0 = now();
 			try { await withTimeout(d.get(home), 12000, `recently-closed get ${home}`); } catch { /* slow */ }
+			const getMs = now() - g0;
 			await sleep(2500);
 			try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${home}`); } catch { /* best effort */ }
 			await sleep(1000);
 			try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${home}`); } catch { /* best effort */ }
+			log(`seed rc ${ri + 1}/${RC_N} homepage ${home} — get ${secs(getMs)}s`);
 			articles = await d.executeScript(`
 				const origin = location.origin, seen = new Set(), out = [];
 				for (const a of document.querySelectorAll('a[href]')) {
@@ -388,16 +404,21 @@ async function seedRecentlyClosed(d) {
 			await d.switchTo().window(main);
 		} catch { try { await d.switchTo().window(main); } catch { /* ignore */ } }
 		// …then visit + close each in its own tab so both land in recently-closed.
+		let siteSeeded = 0;
 		for (const article of (articles || [])) {
 			try {
 				await d.switchTo().newWindow('tab');
+				const g0 = now();
 				try { await withTimeout(d.get(article), 12000, `recently-closed get ${article}`); } catch { /* slow */ }
+				const getMs = now() - g0;
 				await sleep(1000);
 				await d.close();
 				await d.switchTo().window(main);
-				seeded++;
+				seeded++; siteSeeded++;
+				log(`seed rc ${ri + 1}/${RC_N} article ${article} — get ${secs(getMs)}s`);
 			} catch { try { await d.switchTo().window(main); } catch { /* ignore */ } }
 		}
+		log(`seed rc ${ri + 1}/${RC_N} done ${home} — ${siteSeeded} articles, ${secs(now() - homeStart)}s`);
 	}
 	log(`recently-closed seeded: ${seeded} articles from ${NEWS_URLS.length} sites`);
 }
@@ -408,27 +429,75 @@ async function seedRecentlyClosed(d) {
 // profile for the run); pass 2 just revisits to lift frecency.
 async function seedEnvironment(d) {
 	await d.manage().setTimeouts({ pageLoad: SEED_PAGELOAD_TIMEOUT_MS });
-	for (const url of SEED_URLS) {
+	const seedStart = now();
+	const N = SEED_URLS.length;
+
+	// Pass 1: first visit + cookie-banner dismissal. Per site we log the get
+	// time, both dismissConsent times, and the site total — so a stall shows the
+	// exact URL and phase, and the fixed-sleep overhead (3.5s/site) is visible
+	// against the variable network time (is the seed slow because the network is
+	// slow, or because we sleep 3.5s × N unconditionally?).
+	log(`seed pass 1/2 starting — ${N} sites (get -> 2.5s settle -> consent -> 1s -> consent)`);
+	let p1GetTotal = 0, p1ConsentTotal = 0, p1Clicked = 0;
+	for (let i = 0; i < N; i++) {
+		const url = SEED_URLS[i];
+		const t0 = now();
+		log(`seed p1 ${i + 1}/${N} start ${url}`);
+		const g0 = now();
 		try { await withTimeout(d.get(url), 12000, `seed get ${url}`); } catch { /* timeout harmless — URL still hit history */ }
+		const getMs = now() - g0;
 		// Settle before dismissing: consent platforms (e.g. Sourcepoint, used by
 		// BBC) render their Accept control in an async cross-origin iframe a few
 		// seconds after load. Accepting here sets a cookie that persists for the
 		// run, so the site is banner-free on every later visit (incl. captures).
 		await sleep(2500);
-		try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
+		const d1 = now();
+		let r1 = null;
+		try { r1 = await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
+		const c1 = now() - d1;
 		await sleep(1000);
-		try { await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
+		const d2 = now();
+		let r2 = null;
+		try { r2 = await withTimeout(dismissConsent(d), 10000, `dismissConsent ${url}`); } catch { /* best effort */ }
+		const c2 = now() - d2;
+		const clicked = (r1 && r1.clicked) || (r2 && r2.clicked) || false;
+		p1GetTotal += getMs; p1ConsentTotal += c1 + c2;
+		if (clicked) { p1Clicked++; }
+		log(`seed p1 ${i + 1}/${N} done ${url} — get ${secs(getMs)}s, consent ${secs(c1)}s+${secs(c2)}s${clicked ? ' (banner clicked)' : ''}, +3.5s fixed sleep, site ${secs(now() - t0)}s`);
 	}
-	for (const url of SEED_URLS) {
+	log(`seed pass 1 done in ${secs(now() - seedStart)}s — get ${secs(p1GetTotal)}s, consent ${secs(p1ConsentTotal)}s, fixed-sleep ${secs(N * 3500)}s, banners clicked ${p1Clicked}/${N}`);
+
+	// Pass 2: revisit each site to lift frecency past the topSites threshold. No
+	// consent work here (cookies already set in pass 1), just get + a 0.5s settle.
+	const p2Start = now();
+	log(`seed pass 2/2 starting — ${N} sites (revisit for frecency)`);
+	let p2GetTotal = 0;
+	for (let i = 0; i < N; i++) {
+		const url = SEED_URLS[i];
+		const g0 = now();
 		try { await withTimeout(d.get(url), 12000, `seed get ${url}`); } catch { /* timeout harmless */ }
+		const getMs = now() - g0;
+		p2GetTotal += getMs;
 		await sleep(500);
+		log(`seed p2 ${i + 1}/${N} done ${url} — get ${secs(getMs)}s`);
 	}
+	log(`seed pass 2 done in ${secs(now() - p2Start)}s — get ${secs(p2GetTotal)}s, fixed-sleep ${secs(N * 500)}s`);
+
+	const rcStart = now();
+	log(`seed recently-closed starting — ${NEWS_URLS.length} news sites`);
 	await seedRecentlyClosed(d);
+	log(`seed recently-closed done in ${secs(now() - rcStart)}s`);
+
 	await d.manage().setTimeouts({ pageLoad: NORMAL_PAGELOAD_TIMEOUT_MS });
-	log(`environment seeded: ${SEED_URLS.length} sites × 2 passes + recently-closed`);
+	log(`environment seeded: ${N} sites × 2 passes + recently-closed in ${secs(now() - seedStart)}s total`);
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Seed-timing helpers: `now()` is a monotonic-ish millisecond clock and `secs()`
+// renders a duration in seconds to one decimal, for the per-site seed logs.
+const now = () => Date.now();
+const secs = ms => (ms / 1000).toFixed(1);
 
 // Race a Selenium call against a hard deadline — defensive against a rare
 // per-site hang in the environment seed (e.g. a pathological cross-origin
@@ -608,10 +677,20 @@ const isMain = process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)
 if (isMain) {
 	driver = await makeDriver();
 	await seedEnvironment(driver);
+	// Time the post-seed startup steps too (seedEnvironment already logs its
+	// own total): if the next startup stalls, the phase — install vs pin vs the
+	// real-capture step — is named rather than guessed. captureDefaultPins does
+	// real screenshot captures, so it's the most likely slow one.
+	const iStart = now();
 	await installExtension(driver);
+	log(`startup: installExtension ${secs(now() - iStart)}s`);
 	await driver.get(NEWTAB_URL);
+	const pStart = now();
 	await pinDefaultTiles();
+	log(`startup: pinDefaultTiles ${secs(now() - pStart)}s`);
+	const cStart = now();
 	await captureDefaultPins();
+	log(`startup: captureDefaultPins ${secs(now() - cStart)}s`);
 	log(`initial newTab.html loaded [browser=${UAT_BROWSER}] (extension ${UAT_BROWSER === 'chrome' ? 'loaded pre-seed via --load-extension' : 'installed post-seed'}; default tiles pinned + imagery captured)`);
 }
 

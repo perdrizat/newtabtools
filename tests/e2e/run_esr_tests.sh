@@ -26,7 +26,7 @@ PORT=9222
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROFILE_DIR="$SCRIPT_DIR/test-profile"
 export NTT_E2E_PROFILE_DIR="$PROFILE_DIR"
-ARTIFACTS_DIR="$SCRIPT_DIR/_artifacts"
+ARTIFACTS_DIR="$SCRIPT_DIR/_artifacts-ff"
 
 # 0. Concurrency lock. Incident (2026-07-09/10): a second, unauthorized
 # invocation of this script ran while a first was still mid-suite. Both
@@ -150,9 +150,18 @@ done
 
 echo "Firefox ready. Running Vitest e2e project..."
 
-# 4. Run the tests; pass through any extra args (e.g., a specific test file)
-npx vitest run --project e2e "$@"
-EXIT_CODE=$?
+# 4. Run the tests; pass through any extra args (e.g., a specific test file).
+# Persist a durable pass/fail record: the json reporter writes a machine-
+# readable results.json, and `tee` mirrors the full human-readable run to
+# run.log — so "did last night's E2E pass?" is answerable from disk the next
+# morning without re-running (the $ARTIFACTS_DIR was wiped at the top, so
+# recreate it before the reporters write into it). ${PIPESTATUS[0]} keeps
+# vitest's exit code, not tee's.
+mkdir -p "$ARTIFACTS_DIR"
+npx vitest run --project e2e \
+  --reporter=default --reporter=json --outputFile="$ARTIFACTS_DIR/results.json" \
+  "$@" 2>&1 | tee "$ARTIFACTS_DIR/run.log"
+EXIT_CODE=${PIPESTATUS[0]}
 
 # 5. Cleanup happens via the EXIT trap
 exit "$EXIT_CODE"

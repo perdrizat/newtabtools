@@ -79,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-failure-screenshots
-          path: tests/e2e/_artifacts/
+          path: tests/e2e/_artifacts-*/
           if-no-files-found: ignore
 
   # Chrome tier (CHROME.md D5). A separate job so it runs in PARALLEL with

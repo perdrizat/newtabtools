@@ -10,8 +10,6 @@ const __dirname = path.dirname(__filename);
 // Repo-relative paths derived from the location of this file. Anchoring on
 // import.meta.url keeps the tests portable across machines and CI runners.
 export const PROFILE_DIR = process.env.NTT_E2E_PROFILE_DIR || path.resolve(__dirname, 'test-profile');
-export const ARTIFACTS_DIR = path.resolve(__dirname, '_artifacts');
-export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
 
 /**
  * Browser seam (CHROME.md D5b): `NTT_E2E_BROWSER=chrome` (set by
@@ -21,6 +19,14 @@ export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
  * byte-identical to before this seam existed.
  */
 export const IS_CHROME = process.env.NTT_E2E_BROWSER === 'chrome';
+
+// Per-browser artifacts dir so the Firefox and Chrome E2E suites (the same
+// test files under different browsers) can run concurrently without racing on
+// shared fixtures/screenshots: `_artifacts-ff` (Firefox) vs `_artifacts-cft`
+// (Chrome for Testing). Each run script wipes only its own dir — see
+// run_esr_tests.sh / run_chrome_tests.sh.
+export const ARTIFACTS_DIR = path.resolve(__dirname, IS_CHROME ? '_artifacts-cft' : '_artifacts-ff');
+export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
 
 // Chrome for Testing's CDP debugging port (tests/e2e-chrome/README.md's port
 // table — 9223 is the reserved fixed-port slot for this tier, distinct from

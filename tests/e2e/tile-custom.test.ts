@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import {
+	ARTIFACTS_DIR,
 	connectToFirefox,
 	openNewTab,
 	getNewTabURL,
@@ -37,7 +37,6 @@ async function getStoredTile(page: import('puppeteer-core').Page, url: string): 
 	}), url);
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEST_URL_TITLE = 'https://title-test.example.com/';
 const TEST_URL_THUMB = 'https://thumb-test.example.com/';
 
@@ -55,7 +54,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			'0000000c4944415408d763f86f0000000200018d5f51b70000000049454e44ae426082',
 			'hex'
 		);
-		testImagePath = path.join(__dirname, '_artifacts', 'test-thumb.png');
+		testImagePath = path.join(ARTIFACTS_DIR, 'test-thumb.png');
 		fs.mkdirSync(path.dirname(testImagePath), { recursive: true });
 		fs.writeFileSync(testImagePath, pngBuffer);
 	}, 60_000);

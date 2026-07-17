@@ -6,9 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Added
+## [2.6.1] — 2026-07-17
 
-- `audit/2026-07-16-d-gate-audit.md` — D-gate audit of `v2.5.0..HEAD` (+ medium `/code-review` addendum, 8 findings): no blockers; all suites reproduced (FF E2E 126/126, Chrome parity 126/126, smoke 11/11 solo); findings await maintainer adjudication (headline: e294df8 blob-URL leak fix incomplete in `Updater._removeLegacySites`).
+Internal patch on the 2.6.x testing line — test-infrastructure only, no
+`webextension/` runtime changes.
+
+### Changed
+
+- UAT browser daemon's environment-seeding phase now logs per-site progress (`seed p1/p2/rc i/N`, get time, consent time, per-site + per-pass totals) to `daemon.log`, so a seed stall names the exact URL/phase and the fixed-sleep overhead is visible against variable network time (diagnoses the Firefox UAT 300s health-timeout).
+- Firefox UAT daemon now uses Selenium's `'eager'` pageLoadStrategy (matching the Chrome branch): the seed's per-site `get()` was pinned at the 8s pageLoad cap on ~8 heavy sites under the default `'normal'` strategy, pushing the whole seed to 325.6s — past the runner's 300s health budget; `'eager'` returns at DOMContentLoaded, enough for history/frecency seeding and consent dismissal. Seed now completes in ~175s, verified 11/11 Firefox UAT scenarios pass on the merits.
+- E2E run scripts (`run_esr_tests.sh`, `run_chrome_tests.sh`) now persist a durable pass/fail record per browser: a `results.json` (vitest json reporter) + full `run.log` (via `tee`) in `_artifacts-ff`/`_artifacts-cft`, so a run's outcome is readable from disk afterward without re-running.
+- UAT runner's daemon health-timeout error now appends the last `daemon.log` line, naming the exact seed phase it stalled at (e.g. `seed p1 11/19 …`) instead of pointing at the file.
+- UAT daemon logs per-step timing for the post-seed startup (`installExtension`/`pinDefaultTiles`/`captureDefaultPins`), rounding out the seed timing so a startup stall names its phase.
+- `boot-timing.test.ts` now records *why* an `fcp` sample is `n/a` (no paint entries vs no first-contentful-paint among them), so the gap is diagnosable rather than silent.
+- `favicon-real-sites.test.ts` logs a per-site favicon-state diagnostic (`heise.de: url(…) | techcrunch.com: MISSING`) on both success and failure, building evidence of which site flakes and in what shape to shape the §1.1 CSP/img-model fix.
+- UAT runner now gates each scenario on the agent's own `report.json` verdict (its `verdict` + `structural_checks`/`visual_checks`), not the `claude -p` exit code: a scenario that PASSED on its merits but whose process died on an API 529 / `--max-turns` cap during wind-down is no longer marked failed. Verdict logic extracted to `tests/uat/_tools/report-verdict.mjs` and unit-tested (`uat-report-verdict.test.ts`); the runner now distinguishes an infra death from a real pre-report crash in its output.
+
+### Fixed
+
+- E2E artifacts dir is now per-browser (`_artifacts-ff` / `_artifacts-cft`) so the Firefox and Chrome E2E suites (same test files, different browser) can run concurrently without racing on shared fixtures/screenshots — the `test-thumb.png` `NS_ERROR_FILE_NOT_FOUND` contention flake; the four hand-built fixture paths now route through `_helpers.ts`'s `ARTIFACTS_DIR`, and each run script wipes only its own dir.
 
 ## [2.6.0] — 2026-07-16
 
@@ -18,6 +34,7 @@ once cleared to ship, per CHROME.md Decision 7 as amended).
 
 ### Added
 
+- `audit/2026-07-16-d-gate-audit.md` — D-gate audit of `v2.5.0..HEAD` (+ medium `/code-review` addendum, 8 findings): no blockers; all suites reproduced (FF E2E 126/126, Chrome parity 126/126, smoke 11/11 solo); findings await maintainer adjudication (headline: e294df8 blob-URL leak fix incomplete in `Updater._removeLegacySites`).
 - `pnpm chrome:stage` — stage the unpacked Chrome dev build (`dist/chrome-dev/`) for manual "Load unpacked" testing in any Chrome; no CWS account needed.
 - Chrome UAT full-scenario pass (CHROME.md D6): 11/11 scenarios green against the Chrome daemon; scenario prose generalized off Firefox-only phrasing (2 files); structured-clone favicons observed superior to Firefox's fallback rate on the recent chips.
 
@@ -68,6 +85,18 @@ once cleared to ship, per CHROME.md Decision 7 as amended).
 - `common.js`'s `topSitesOptions` returned a Firefox-shaped options object on the Chrome path — but `chrome.topSites.get()` accepts NO options argument and throws synchronously, silently freezing `Tiles._cache` empty so no capture ever started on Chrome; returns `undefined` there now (CHROME.md D3). `filters-ui.js`'s callback-style 2-arg call is a separate, still-open Chrome gap (tracked in CHROME.md).
 - `lib/thumbnail-image.js`'s SW path decoded data URLs via `fetch()` — blocked by the manifest CSP's `connect-src` (no `data:`) on real Chrome; reuses `dataURLtoBlob()`'s manual decode instead (CHROME.md D3).
 - `newTab.js`/`titlebar.js` thumbnail/favicon wire responses: read both `Map` (Firefox structured clone) and plain-object shapes — Chrome's JSON messaging degrades a `Map` to `{}` (CHROME.md D3; the full Blob-over-wire rendering gap on Chrome is tracked as its own CHROME.md item).
+- E2E artifacts dir is now per-browser (`_artifacts-ff` / `_artifacts-cft`) so the Firefox and Chrome E2E suites (same test files, different browser) can run concurrently without racing on shared fixtures/screenshots — the `test-thumb.png` `NS_ERROR_FILE_NOT_FOUND` contention flake; the four hand-built fixture paths now route through `_helpers.ts`'s `ARTIFACTS_DIR`, and each run script wipes only its own dir.
+
+### Changed
+
+- UAT browser daemon's environment-seeding phase now logs per-site progress (`seed p1/p2/rc i/N`, get time, consent time, per-site + per-pass totals) to `daemon.log`, so a seed stall names the exact URL/phase and the fixed-sleep overhead is visible against variable network time (diagnoses the Firefox UAT 300s health-timeout).
+- Firefox UAT daemon now uses Selenium's `'eager'` pageLoadStrategy (matching the Chrome branch): the seed's per-site `get()` was pinned at the 8s pageLoad cap on ~8 heavy sites under the default `'normal'` strategy, pushing the whole seed to 325.6s — past the runner's 300s health budget; `'eager'` returns at DOMContentLoaded, enough for history/frecency seeding and consent dismissal. Seed now completes in ~175s, verified 11/11 Firefox UAT scenarios pass on the merits.
+- E2E run scripts (`run_esr_tests.sh`, `run_chrome_tests.sh`) now persist a durable pass/fail record per browser: a `results.json` (vitest json reporter) + full `run.log` (via `tee`) in `_artifacts-ff`/`_artifacts-cft`, so a run's outcome is readable from disk afterward without re-running.
+- UAT runner's daemon health-timeout error now appends the last `daemon.log` line, naming the exact seed phase it stalled at (e.g. `seed p1 11/19 …`) instead of pointing at the file.
+- UAT daemon logs per-step timing for the post-seed startup (`installExtension`/`pinDefaultTiles`/`captureDefaultPins`), rounding out the seed timing so a startup stall names its phase.
+- `boot-timing.test.ts` now records *why* an `fcp` sample is `n/a` (no paint entries vs no first-contentful-paint among them), so the gap is diagnosable rather than silent.
+- `favicon-real-sites.test.ts` logs a per-site favicon-state diagnostic (`heise.de: url(…) | techcrunch.com: MISSING`) on both success and failure, building evidence of which site flakes and in what shape to shape the §1.1 CSP/img-model fix.
+- UAT runner now gates each scenario on the agent's own `report.json` verdict (its `verdict` + `structural_checks`/`visual_checks`), not the `claude -p` exit code: a scenario that PASSED on its merits but whose process died on an API 529 / `--max-turns` cap during wind-down is no longer marked failed. Verdict logic extracted to `tests/uat/_tools/report-verdict.mjs` and unit-tested (`uat-report-verdict.test.ts`); the runner now distinguishes an infra death from a real pre-report crash in its output.
 
 ## [2.5.0] — 2026-07-13
 

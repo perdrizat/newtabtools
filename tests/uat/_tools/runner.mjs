@@ -36,6 +36,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newTabURL } from './urls.mjs';
+import { parseReport, deriveVerdict, checkName } from './report-verdict.mjs';
 import { CHROME_DEV_EXTENSION_ID } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,10 +60,11 @@ const NEWTAB_URL = UAT_BROWSER === 'chrome'
 // never overwrite each other's screenshots/reports. Screenshots are prefixed
 // with the same stamp + scenario label so opening the first and paging through
 // browses them in capture order (e.g. 20260603-071342-restore-dogfood-01-grid.png).
-// A Chrome run's directory carries a `-chrome` suffix so the two tiers' runs
-// never get confused for one another when browsing tests/uat/artifacts/.
+// Each run's directory carries an explicit `-ff` / `-cft` browser token
+// (matching the E2E `_artifacts-ff` / `_artifacts-cft` dirs) so the two tiers'
+// runs are immediately distinguishable when browsing tests/uat/artifacts/.
 const RUN_STAMP = runStamp();
-const RUN_DIR = path.join(ARTIFACTS_ROOT, UAT_BROWSER === 'chrome' ? `${RUN_STAMP}-chrome` : RUN_STAMP);
+const RUN_DIR = path.join(ARTIFACTS_ROOT, `${RUN_STAMP}-${UAT_BROWSER === 'chrome' ? 'cft' : 'ff'}`);
 const MCP_CONFIG = path.join(__dirname, 'mcp-config.json');
 
 function runStamp(d = new Date()) {
@@ -113,25 +115,18 @@ async function daemonCall(endpoint, body) {
 	return json;
 }
 
-// Parse an agent's report.json defensively (it may be missing or malformed if
-// the agent crashed). Returns the failed assertions, the observations, and the
-// report's own top-level verdict (null if unreadable).
+// Read an agent's report.json defensively (it may be missing or malformed if
+// the agent crashed). Thin IO wrapper over parseReport (report-verdict.mjs,
+// unit-tested): returns whether a usable report exists plus its failed checks,
+// observations, and own verdict. `hasReport: false` means the report was
+// missing or unparseable — the caller then falls back to the process exit.
 function readReport(reportPath) {
-	const empty = { failedAssertions: [], observations: [], reportPassed: null };
+	const empty = { hasReport: false, failedAssertions: [], observations: [], reportPassed: null };
 	let raw;
 	try { raw = fs.readFileSync(reportPath, 'utf8'); } catch { return empty; }
 	let report;
 	try { report = JSON.parse(raw); } catch { return { ...empty, observations: ['report.json was not valid JSON — see the agent log'] }; }
-	const assertions = Array.isArray(report.assertions) ? report.assertions : [];
-	// An assertion failed if it carries an explicit false verdict. Accept both
-	// `passed` (the documented schema) and `pass` (a common agent variant) so a
-	// real failure can't slip through as a false green on a field-name drift.
-	return {
-		failedAssertions: assertions.filter(a => a && (a.passed === false || a.pass === false)),
-		observations: Array.isArray(report.observations) ? report.observations.map(String) : [],
-		reportPassed: typeof report.passed === 'boolean' ? report.passed
-			: typeof report.pass === 'boolean' ? report.pass : null,
-	};
+	return { hasReport: true, ...parseReport(report) };
 }
 
 // Render an aggregate human-readable summary.md from the run report (the same
@@ -158,7 +153,7 @@ function renderSummaryMd(report) {
 		lines.push(`### ${r.passed ? '✅' : '❌'} ${r.slug}`);
 		for (const a of r.failedAssertions || []) {
 			const detail = a.expected !== undefined ? ` — expected \`${a.expected}\`, got \`${a.actual}\`` : '';
-			lines.push(`- ❌ **${a.name}**${detail}`);
+			lines.push(`- ❌ **${checkName(a)}**${detail}`);
 		}
 		for (const o of r.observations || []) {
 			lines.push(`- ⚠ ${o}`);
@@ -188,7 +183,17 @@ async function waitHealthy(timeoutMs, isDead) {
 		} catch { /* not up yet */ }
 		await sleep(1000);
 	}
-	throw new Error(`daemon did not become healthy within ${timeoutMs}ms (see daemon.log)`);
+	// Self-describing timeout: the seed logs its phase per site (`seed p1 11/19
+	// …`), so surfacing the last daemon.log line names exactly where startup
+	// stalled instead of sending the reader to open the file.
+	let lastLine = '';
+	try {
+		const rows = fs.readFileSync(path.join(RUN_DIR, 'daemon.log'), 'utf8').trimEnd().split('\n');
+		lastLine = rows[rows.length - 1] || '';
+	} catch { /* log not written yet */ }
+	throw new Error(
+		`daemon did not become healthy within ${timeoutMs}ms` +
+		(lastLine ? ` — last daemon.log line: ${lastLine}` : ' (daemon.log empty/missing)'));
 }
 
 // ─── 0. ensure the skill symlink ──────────────────────────────────────────────
@@ -363,15 +368,16 @@ try {
 			.sort();
 
 		// Read the agent's report back so the runner can surface what mattered to
-		// the terminal — failed assertions, and "observations" (passed, but worth
-		// a human's eyes) — and, crucially, gate on the report's own verdict.
-		// `claude -p` exits 0 once it finishes the scenario even if the report
-		// records failed assertions, so the process exit code alone is not the
-		// pass/fail signal: a scenario fails if the process errored OR the report
-		// says failed (or is missing/unreadable when one was expected).
-		const { failedAssertions, observations, reportPassed } = readReport(reportPath);
+		// the terminal — failed checks, and "observations" (passed, but worth a
+		// human's eyes) — and gate on the report's own verdict. The report is
+		// authoritative when present: the agent can finish the assessment, write
+		// a PASS report, THEN have the `claude -p` process die on an API 529 or
+		// the --max-turns cap during wind-down — that must not flip a real PASS
+		// to a fail. Only when no usable report exists do we fall back to the
+		// process exit code (deriveVerdict, report-verdict.mjs).
+		const { hasReport, failedAssertions, observations, reportPassed } = readReport(reportPath);
 		const processOk = result.status === 0;
-		const passed = processOk && reportPassed !== false && failedAssertions.length === 0;
+		const passed = deriveVerdict({ hasReport, reportPassed, failedAssertions, processOk });
 		if (!passed) { anyFailed = true; }
 
 		results.push({
@@ -387,13 +393,17 @@ try {
 		});
 
 		console.log(`  ${passed ? '✓' : '✗'} ${slug} (${elapsedSec.toFixed(1)}s, exit ${result.status})`);
-		// If the process exited non-zero but no report failure explains it, say so —
-		// the agent likely crashed before writing a verdict.
-		if (!processOk && reportPassed !== false && !failedAssertions.length) {
-			console.log(`     ! agent exited ${result.status} without a failing report — likely crashed; check the agent log`);
+		// Distinguish an infra death (process exited non-zero AFTER a passing
+		// report — API 529 / turn cap) from a genuine crash (no usable report),
+		// so a green scenario isn't misread as broken and a real crash isn't
+		// silently swallowed.
+		if (!processOk && passed) {
+			console.log(`     ~ agent process exited ${result.status} after a passing report — infra (API 529 / --max-turns), not a scenario failure`);
+		} else if (!hasReport) {
+			console.log(`     ! agent wrote no usable report (exit ${result.status}) — ${passed ? 'passing on exit code' : 'likely crashed before reporting'}; check the agent log`);
 		}
 		for (const a of failedAssertions) {
-			console.log(`     ✗ ${a.name}`);
+			console.log(`     ✗ ${checkName(a)}`);
 			if (a.expected !== undefined) { console.log(`         expected: ${a.expected}`); }
 			if (a.actual !== undefined) { console.log(`         actual:   ${a.actual}`); }
 		}

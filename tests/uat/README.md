@@ -71,7 +71,8 @@ Run the whole suite with `pnpm test:uat` (Firefox) or `pnpm test:uat:chrome`
 `pnpm test:uat:chrome 00-uat-init`. Both share one runner and one daemon
 implementation — `pnpm test:uat:chrome` is exactly
 `UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two can run
-concurrently (separate ports, separate `-chrome`-suffixed artifacts dir).
+concurrently (separate ports, and per-browser `-ff` / `-cft`-suffixed
+artifacts dirs matching the E2E `_artifacts-ff` / `_artifacts-cft` convention).
 
 Scenario agents run on **Sonnet** by default (`$UAT_MODEL` overrides) —
 visual judgment doesn't need the most expensive model, and a full run spawns

@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import {
+	ARTIFACTS_DIR,
 	connectToFirefox,
 	openNewTab,
 	waitForGridReady,
@@ -14,8 +14,6 @@ import {
 	openDrawerUI,
 	switchDrawerTabUI,
 } from './_helpers.ts';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Minimal stored-format ZIP builder (no external dependency)
@@ -149,7 +147,7 @@ describe('E2E: Backup/restore round-trip (Phase 1 slot 3)', () => {
 			{ name: 'prefs.json', data: JSON.stringify(RESTORE_PREFS) },
 			{ name: 'tiles.json', data: JSON.stringify(RESTORE_TILES) },
 		]);
-		zipFixturePath = path.join(__dirname, '_artifacts', 'restore-fixture.zip');
+		zipFixturePath = path.join(ARTIFACTS_DIR, 'restore-fixture.zip');
 		fs.mkdirSync(path.dirname(zipFixturePath), { recursive: true });
 		fs.writeFileSync(zipFixturePath, zipBuf);
 	}, 60_000);

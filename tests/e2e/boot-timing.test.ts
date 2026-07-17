@@ -33,6 +33,11 @@ interface IterationResult {
 	domInteractive: number | null;
 	domContentLoadedEventEnd: number | null;
 	fcp: number | null;
+	// Why fcp was null this iteration (null when fcp was read fine) — so an
+	// `fcp ms: n/a` line in the log isn't an unexplained gap: it distinguishes
+	// "the browser recorded no paint entries at all" from "paint entries exist
+	// but none is first-contentful-paint".
+	fcpMissing: string | null;
 }
 
 /**
@@ -121,6 +126,11 @@ async function runIteration(browser: Browser, url: string): Promise<IterationRes
 				domInteractive: nav ? nav.domInteractive : null,
 				domContentLoadedEventEnd: nav ? nav.domContentLoadedEventEnd : null,
 				fcp: fcpEntry ? fcpEntry.startTime : null,
+				fcpMissing: fcpEntry
+					? null
+					: (paintEntries.length === 0
+						? 'no paint entries recorded'
+						: `no first-contentful-paint (have: ${paintEntries.map(p => p.name).join(', ')})`),
 			};
 		});
 	} finally {
@@ -176,6 +186,11 @@ describe('boot timing', () => {
 			formatLine('domContentLoadedEventEnd', results.map(r => r.domContentLoadedEventEnd)),
 			formatLine('fcp', results.map(r => r.fcp)),
 		];
+		// Explain any `fcp ms: n/a` samples so the gap is diagnosable, not silent.
+		const fcpReasons = Array.from(new Set(results.map(r => r.fcpMissing).filter((v): v is string => v !== null)));
+		if (fcpReasons.length > 0) {
+			lines.push(`[boot-timing] fcp n/a reason(s): ${fcpReasons.join(' | ')}`);
+		}
 		for (const line of lines) {
 			console.log(line);
 		}

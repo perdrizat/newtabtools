@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import {
+	ARTIFACTS_DIR,
 	connectToFirefox,
 	openNewTab,
 	captureFailure,
@@ -11,8 +11,6 @@ import {
 	waitForGridReady,
 	resetTestState,
 } from './_helpers.ts';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('E2E: Page background image (slot 25)', () => {
 	let browser: Browser;
@@ -29,7 +27,7 @@ describe('E2E: Page background image (slot 25)', () => {
 			'0000000c4944415408d763f86f0000000200018d5f51b70000000049454e44ae426082',
 			'hex'
 		);
-		testImagePath = path.join(__dirname, '_artifacts', 'test-bg.png');
+		testImagePath = path.join(ARTIFACTS_DIR, 'test-bg.png');
 		fs.mkdirSync(path.dirname(testImagePath), { recursive: true });
 		fs.writeFileSync(testImagePath, pngBuffer);
 	}, 60_000);

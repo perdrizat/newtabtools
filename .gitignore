@@ -12,7 +12,8 @@ node_modules/
 test-results/
 .github/logs/
 tests/e2e/test-profile/
-tests/e2e/_artifacts/
+tests/e2e/_artifacts-ff/
+tests/e2e/_artifacts-cft/
 tests/e2e/.runner-lock/
 tests/e2e-chrome/.runner-lock/
 tests/uat/artifacts/
