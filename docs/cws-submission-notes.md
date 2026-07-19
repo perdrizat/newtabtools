@@ -29,7 +29,7 @@ Mirrors the AMO note:
 ## Manifest & background (differs from AMO)
 
 - Manifest V3. **On Chrome the background is a service worker** (`background: {"service_worker": "lib/background-main.js", "type": "module"}`) — this is the inverse of the Firefox build, which uses a non-persistent event page. The same `lib/background-main.js` entry and the same ES-module background tree run on both; platform differences are isolated behind a small `api` capability seam (`webextension/lib/platform.js`). All event listeners are registered synchronously at the top level so they survive service-worker suspend/respawn.
-- **`minimum_chrome_version: 148`.** The extension passes `Blob`s and `Map`s of `Blob`s (thumbnails, favicons, the backup zip) across `runtime.sendMessage`, which requires structured-clone messaging (`message_serialization: "structured_clone"`); that manifest key is honored from Chrome 148.
+- **`minimum_chrome_version: 148`.** A conservative recent-stable floor. The extension passes `Blob`s and `Map`s of `Blob`s (thumbnails, favicons, the backup zip) across `runtime.sendMessage` via an in-package JSON-safe codec (`webextension/wire-codec.js` — base64-tagged payloads over Chrome's standard JSON message serialization; no special manifest keys, no channel-gated features). The manifest declares no `message_serialization` key.
 - No content scripts anywhere.
 
 ## Permission justifications (paste one per dashboard box)

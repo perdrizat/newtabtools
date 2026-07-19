@@ -12,20 +12,31 @@
 | D5 — Chrome E2E tier + CI | done 2026-07-16 (smoke **11/11** incl. structured-clone wire + tile-renders-thumbnail; CI job; Decision 10; filters-ui gap closed) | `8901efb`+`9cd2c6d`+`3ab39e5` |
 | D5b — Chrome E2E suite parity (the full Firefox suite on Chrome; Decision 3 superseded) | done 2026-07-16 — 126/126 = 100% parity on CfT 151 at the time; **amended 2026-07-17: the 2 `event-page-lifecycle` SW-respawn tests now skip on Chrome (124/126 run + 2 skipped, GH #23)** — Firefox unchanged-proof 126/126 unaffected | `9cd51bc` |
 | D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
-| D7 — store release prep (CWS + AMO) | pending | — |
-| D gate — full Firefox suite green (unchanged) + **Chrome parity suite green (D5b)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
+| D7 — store release prep (CWS + AMO) | **deliberately deferred** (maintainer decision 2026-07-20): with D8's implementation complete and validated on branded stable, Chrome first matures in the field via "Load unpacked" testers (README instructions) before the CWS submission | — |
+| D8 — stable-Chrome remediation (the canary-gate incident) | **implementation complete 2026-07-18** — all six code/test/CI items done + proven (wire codec, setIcon, branded E2E launcher [124 run green + 2 skips on branded 150], smoke/CI lanes + staleness guard, wallpaper degrade incl. the curated-collections link [vendored-CC0 set cancelled], test remediations, docs); **remaining: the exit-proof manual pass on the maintainer's branded Chrome** | — |
+| D gate — full Firefox suite green (unchanged) + **Chrome parity suite green ON BRANDED STABLE (D8)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
 
-**Status: D0–D6 + D5b COMPLETE (2026-07-16) — only D7 (store prep) and the
-D gate remain.** The Chrome build boots, captures, renders thumbnails, and
-backs up — smoke 10/10, E2E parity 124/126 run (2 SW-lifecycle tests skip on
-Chrome, GH #23), UAT 11/11 on CfT 151. SW kill/respawn is not reliably
-testable under CfT CDP automation (audit 2026-07-16 M2, GH #23): the kill is
-defeated by the debugger attach and a clean kill does not respawn; real
-respawn-hygiene coverage is the shared-code Firefox event-page-lifecycle
-suite. Top-level docs (README/TESTING/CONTRIBUTING) reflect the
-two-browser reality; the branch is ready for maintainer review. Successor to the chrome-prep
-program (shipped as 2.5.0; per-arc record in `CHANGELOG.md`/`audit/`/git
-history), which left the codebase Chrome-*ready*:
+**Status: D0–D6 + D5b completed on CfT (2026-07-16), but the 2026-07-17
+manual pass on BRANDED STABLE Chrome falsified part of that validation — D8
+is now the active arc; D7 and the D gate are blocked on it.** What happened:
+every Chrome tier ran on Chrome for Testing, an **unbranded** build whose
+channel detection passes canary-only feature gates. The manifest key
+`message_serialization: "structured_clone"` (Decision 10) is honored by CfT
+but **rejected by branded stable Chrome** ("requires canary channel or
+newer") — so on the browser real users run, messaging silently falls back to
+JSON and every binary wire (thumbnail/favicon display, backup export,
+restore, custom tile images, custom wallpaper) is broken, while our tiers
+stayed green. Three more production bugs surfaced in the same manual pass
+(wallpaper CDN 406s Chrome UAs; `setIcon` relative-path failure; see D8).
+The Firefox build is unaffected throughout. What REMAINS true from D0–D6:
+the SW boot, OffscreenCanvas capture pipeline, IDB storage, page rendering,
+grid/UI, and the harness itself all work on real Chrome — the falsified part
+is confined to binary payloads crossing `runtime.sendMessage` plus the three
+independent bugs. SW kill/respawn remains not reliably testable under CDP
+automation (audit 2026-07-16 M2, GH #23); real respawn-hygiene coverage is
+the shared-code Firefox event-page-lifecycle suite. Successor to the
+chrome-prep program (shipped as 2.5.0; per-arc record in
+`CHANGELOG.md`/`audit/`/git history), which left the codebase Chrome-*ready*:
 `api` seam in place, six wrappers written (some dormant), two-target manifest
 authoring, `pnpm build chrome` producing an unvalidated zip. This program
 makes that artifact actually run, then testable, then shippable.
@@ -223,6 +234,96 @@ self-healing by design, `pendingCaptures` already round-trips
    a Blob" and "tile renders the stored thumbnail" on CfT 151. Caveats
    verified inapplicable: no SharedArrayBuffer/transferables, no
    extension-to-extension messaging, no `toJSON()` reliance.
+   **SUPERSEDED by Decision 11 (2026-07-18):** the key is **channel-gated
+   to canary in branded Chrome** — stable rejects it ("'message_serialization'
+   requires canary channel or newer, but this is the stable channel") and
+   silently falls back to JSON. The official docs say "starting in Chrome
+   148" with no channel caveat; the binary disagrees; the binary wins. CfT
+   (unbranded ⇒ permissive channel detection) honors the key, which is why
+   every Chrome tier was green while production Chrome was broken — the
+   false-green mechanism Decision 12 addresses. The "148 floor" rationale
+   dies with the key; the floor itself stays 148 for now (one variable at a
+   time; revisit post-3.0.0).
+
+11. **JSON-safe wire codec; `message_serialization` removed** (maintainer-
+   decided 2026-07-18, superseding Decision 10). Structured clone is a
+   **progressive enhancement that must never be load-bearing** — on the
+   browser users actually run it does not exist. Design:
+   - Remove `message_serialization` from `manifest/chrome.json`. Dual
+     effect: kills the manifest error on stable, AND makes CfT fall back to
+     JSON — i.e. **CfT becomes a faithful stable emulator for messaging**.
+     Probes of record (2026-07-17/18, `.tmp` wire probes, results recorded
+     here): CfT+key carries real `Map`/`Blob`; CfT−key, branded-150+key,
+     and branded-150−key are **pairwise identical** (Map→plain Object,
+     Blob→`{}`, `Import:restore` fails `TypeError: Failed to fetch` — the
+     exact user-reported symptom, reproduced verbatim).
+   - New dual-scope module `webextension/wire-codec.js` (~100 lines; at the
+     webextension/ root like prefs.js/common.js — the page cannot import
+     `lib/**`, PAGE_MODULES.md Decision 6):
+     recursive **encode** (`Blob`/`File` → tagged base64 `{__ntt_blob}`,
+     `Map` → tagged entries `{__ntt_map}`) and **idempotent decode** (a
+     real Blob passes through untouched — keeps existing tests valid).
+   - Hooked at the ONLY two chokepoints: page side wraps
+     `api.runtime.sendMessage` in `api.js` (encode request, decode
+     response — all 27 page call sites untouched); background side wraps
+     `handleMessage` at its registration (`messages.js:360` — decode
+     incoming, encode `sendResponse`; the dispatcher and its 53 tests
+     untouched). **Firefox = identity passthrough** (the Firefox-unchanged
+     program invariant).
+   - Covers all ~10 binary wires generically (`Thumbnails.get`,
+     `getFavicons`, `getFaviconsByHost`, `Export:backup`, `Import:restore`,
+     `Background.get/setBackground`, `Tiles.getAllTiles/getTile/putTile`
+     via `tile.image`). Wire NAMES untouched (frozen contract intact);
+     2.6.3's `makeZip`-returns-Blob needs no revert (the seam envelopes it).
+   - Re-accepted cost, Chrome only: base64 amplification + Chrome's ~64 MB
+     message cap for backup export return — mitigate with a user-visible
+     oversize error (closes audit m3's real complaint); page-side direct
+     IDB assembly stays the future fix if it ever bites. Firefox pays
+     nothing.
+   - Reversible without a flag-day: codec output is plain JSON, which
+     structured clone also carries — if/when stable ships the flag, re-add
+     the key (1 line) and retire the codec at leisure.
+
+12. **Tier/binary version strategy — production binaries on E2E, current
+   binaries on UAT** (maintainer-decided 2026-07-18; the Firefox-ESR-era
+   pattern generalized, cf. `run_esr_tests.sh`'s name). **Principle: every
+   browser gets two lanes — the frequent tier (E2E) runs the PRODUCTION
+   binary users have; the pre-release tier (UAT) runs the CURRENT/dev
+   binary — so binary divergence surfaces as tier disagreement instead of
+   hiding behind a single binary's quirks.**
+   | Tier | Firefox | Chrome |
+   |---|---|---|
+   | E2E (frequent) | **ESR** the day a ≥152 ESR ships (`$FIREFOX_ESR_BIN`; trigger recorded below); release-channel until then | **branded stable** `google-chrome` via the dual-transport launcher; CfT fallback when no branded binary is present |
+   | UAT (pre-release) | **current release** | **CfT** (Selenium daemon unchanged) |
+   | Smoke | — | CfT locally (fast gate); **branded in CI** (runners preinstall it — free) |
+   | Manual pass (D-gates) | release, real profile | branded stable, real profile |
+   - **Chrome E2E mechanics (probe-proven 2026-07-18):** launch branded via
+     Puppeteer **pipe** transport + `--enable-unsafe-extension-debugging`,
+     install with CDP `Extensions.loadUnpacked`, AND pass
+     `--remote-debugging-port=9223` — **both transports serve
+     simultaneously**; the vitest suite connects to the port exactly as
+     today, zero test-file changes (probe: second client over the port
+     drove the extension page to a rendered 9-cell grid). One open
+     verification item: SW-target visibility over the port lagged in the
+     probe (sampled pre-wake) — confirm during implementation.
+   - **Why UAT stays on CfT (probe-proven):** Selenium/chromedriver speaks
+     the port transport; `Extensions.loadUnpacked` there returns `Method
+     not available` (pipe-only domain) and `--load-extension` is ignored on
+     branded ⇒ Selenium cannot drive branded Chrome. CfT is messaging-
+     faithful post-Decision-11, so UAT-on-CfT is honest.
+   - **Firefox:** both lanes can run ANY channel (temporary-install works
+     everywhere); the only constraint is the 152 floor. **Trigger:** when a
+     ≥152 ESR reaches Mozilla's APT repo, flip E2E to ESR (env var / binary
+     default) — UAT stays on current release. Until then both run release;
+     safe because `strict_min_version: 152` excludes pre-152 users at
+     install time (exclusion, not silent divergence).
+   - **Load-bearing rule (the incident's lesson):** no capability ships as
+     load-bearing unless proven on the PRODUCTION binary (branded stable
+     Chrome / release-or-ESR Firefox). Official docs + CfT are insufficient
+     evidence — Decision 10 had both and was still wrong for users.
+   - **CfT staleness guard:** provision/preflight warns when the cached CfT
+     drifts from current stable (this box: CfT 151 vs branded 150 — drift
+     happens in both directions).
 
 ## Arcs
 
@@ -255,6 +356,17 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       via puppeteer-core's own `@puppeteer/browsers`, ~/.cache/puppeteer —
       the Selenium-Manager binary-fetch precedent). Full harness record:
       `tests/e2e-chrome/README.md`.
+      **Amended 2026-07-18 (probe of record):** the "CDP install path
+      leaves the extension inert" half no longer reproduces on branded
+      stable **150**: Puppeteer `installExtension` over the **pipe**
+      transport + `--enable-unsafe-extension-debugging` installs and runs
+      the extension fine (grid renders, wires answer). What remains true on
+      branded: `--load-extension` is dead, and the CDP `Extensions` domain
+      is **pipe-only** — Selenium/chromedriver's port transport gets
+      `Method not available` (probe 2026-07-18), so Selenium cannot install
+      on branded. Consequence: branded stable IS automatable via the
+      Puppeteer/pipe route — the basis of Decision 12's E2E-on-branded lane
+      — while Selenium-based tiers (UAT) stay on CfT.
 - [x] Deterministic extension ID `lncefjbclhbbikhanecleanbbohpiclk` via a
       committed PUBLIC dev key (`_tools/dev-key.json`, no private half
       exists), injected only by the dev staging path (`stageDevBuild()` →
@@ -522,6 +634,121 @@ adaptation.)*
       mechanism (unpacked ids derive from path when keyless) for no
       added coverage — the key changes only the extension ID. Noted for
       D7's CWS upload validation to close the last gap.
+
+### D8 — stable-Chrome remediation (the canary-gate incident, OPEN 2026-07-18)
+
+*Trigger: the 2026-07-17 manual pass on branded stable Chrome (maintainer's
+desktop) found 4 production bugs the CfT tiers never saw. Every root cause
+was then proven by probe (curl header matrix; wire probes on CfT A/B and
+branded-150 A/B; Selenium/dual-transport probes — key numbers recorded in
+Decisions 11–12 above). The four findings:*
+
+1. *Manifest error on stable:* `message_serialization` is canary-gated →
+   JSON fallback breaks every binary wire (Decisions 10→11).
+2. *Wallpaper catalog images 406:* Mozilla's attachment CDN
+   (`firefox-settings-attachments.cdn.mozilla.net`) **rejects Chrome
+   User-Agents server-side** (curl matrix: Chrome UA→406, Firefox/curl
+   UA→200; Accept/Sec-Fetch innocent). The records API accepts Chrome
+   (titles + solid colors work); only image attachments are blocked. A page
+   cannot alter its UA; UA-spoofing via DNR rejected (circumvents Mozilla
+   policy, fragile, CWS-review red flag).
+3. *Capture/favicon "not working":* capture+storage actually work (SW-local
+   IDB writes fine); the DISPLAY wire starves under JSON (finding 1).
+4. *`Failed to set icon`:* `syncActionIconWithTheme` passes **relative**
+   `images/…` paths; Chrome's `setIcon` fetches them relative to the SW URL
+   (`/lib/`) → 404. Broken on ALL Chrome incl. CfT since D4 — the smoke
+   collected but never gated on SW console errors. (Probe: SW-context
+   `fetch('images/…')` fails, `fetch('/images/…')` → HTTP 200, both builds.)
+
+*Test-fidelity autopsy (three distinct escape classes, each with its own
+remediation below): environment fidelity (CfT channel gate — finding 1);
+assertion depth (`wallpaper-picker.test.ts` asserts style STRINGS/element
+counts, never `naturalWidth` — finding 2 passed E2E on CfT too); coverage
+(no UAT scenario opens the wallpaper picker; the toolbar icon is outside
+every page screenshot — findings 2/4).*
+
+- [x] **Wire codec + key removal** (Decision 11, done 2026-07-18):
+      `wire-codec.js` (35 unit tests: round-trip, nesting, idempotence,
+      malformed-tag rejection incl. non-pair Map entries), page hook in
+      `api.js`, background hook at `messages.js` registration,
+      `message_serialization` deleted from `manifest/chrome.json` (+ the
+      build-manifest allowlist); oversize-export user-visible error
+      (`backup_export_failed` alert, audit m3). Firefox passthrough proven
+      by full Firefox E2E: 125/126, the sole failure being
+      `favicon-real-sites` — **bisect-proven environmental** (stash-run on
+      the pre-D8 tree fails with the identical signature: heise.de favicon
+      stored 701 B, techcrunch.com missing; the codec isn't on that path
+      and is passthrough on Firefox anyway). Smoke green 11/11 on
+      key-removed CfT (honest JSON messaging).
+- [x] **setIcon absolute paths** (done 2026-07-18): `/images/…` in
+      `lib/platform.js` `syncActionIconWithTheme` (red→green via
+      platform-wrappers assertions); smoke drives the `Theme.colorScheme`
+      relay for both schemes and **gates on SW console errors** (new final
+      check — finding 4's escape closed).
+- [x] **Chrome E2E branded launcher** (Decision 12, done 2026-07-18):
+      `_tools/launch-chrome.mjs` (pipe + `installExtension` +
+      `--remote-debugging-port=9223`, branded-first binary resolution via
+      `resolveChromeBinary({prefer: 'branded'})` — the CfT-first default is
+      unchanged for UAT/smoke callers; ready-file protocol) replaces the
+      `--load-extension` launch in `run_chrome_tests.sh`;
+      `print-launch-env.mjs` deleted. SW-target visibility over the port:
+      **caveat closed** — visible 41 ms after install when actually awaited
+      (the probe had sampled pre-wake). **Full parity ON branded stable
+      150: 124 run green + 2 SW-lifecycle skips (GH #23).** The first
+      branded run caught one real codec-era test bug —
+      `tile-redesign.test.ts` seeded a thumbnail Blob over the RAW wire
+      (structured-clone-era idiom, mangled to `{}` under honest JSON) — 
+      fixed to route through the page's `api` seam (string-form evaluate;
+      vite rewrites literal `import()` in test files), re-proven green on
+      BOTH browsers. `favicon-real-sites` failed environmentally (see the
+      bisect note above).
+- [x] **Smoke/CI** (done 2026-07-18): smoke honors `$CHROME_BIN` on branded
+      (warning text now describes the production-binary lane); CI
+      branded-stable smoke job (`chrome-smoke-branded`,
+      runner-preinstalled Chrome); CfT staleness guard
+      (`cftStalenessWarning` in chrome-env.mjs, wired into
+      `chrome:provision` + the UAT preflight — verified firing on this
+      box's CfT-151-vs-branded-150 drift).
+- [x] **Wallpapers on Chrome — graceful degrade** (finding 2, done
+      2026-07-18): `isMozillaWallpaperCatalogAvailable()` capability
+      predicate in `api.js` (the CDN 406s Chrome UAs; the whole catalog is
+      treated unavailable on a `chrome-extension:` origin);
+      `fetchFirefoxWallpapers` returns a hardcoded 15-record solid-colour
+      palette (2026-07-18 snapshot of the live catalog's solid records) —
+      **zero outbound network on Chrome**; Upload Image / No Background
+      unaffected; Firefox's live catalog untouched. Proven green on both:
+      Firefox E2E (live catalog + naturalWidth load proof) and branded
+      Chrome E2E (15 swatches, zero `<img>`). Bonus fix caught by the new
+      assertions: `selectWallpaper`'s post-click refresh only matched
+      `dataset.url`, so solid swatches never showed `[selected]` — latent
+      on Firefox, glaring on Chrome's all-solid picker; fixed red/green.
+      **The vendored-CC0-set follow-up is CANCELLED** (maintainer decision
+      2026-07-18): Chrome ships NO photo wallpapers of its own — the solid
+      palette + Upload Image, plus a curated-collections link under the
+      palette (`.wallpaper-collections-note` → Unsplash's editorial
+      Wallpapers topic, https://unsplash.com/t/wallpapers — Unsplash
+      License, free to use; URL verified live; Pexels rejected, it 403s
+      automated clients). A plain user-initiated link, so "zero outbound
+      network on Chrome" still holds. Covered by integration tests (link
+      present on Chrome incl. reopen-no-duplicate, absent on the live-
+      catalog path — the negative test also caught and fixed a leaky
+      jsdom `location`-stub restore idiom in two test files), the E2E
+      Chrome/Firefox branches, and UAT scenario 24.
+- [x] **Test remediations** (one per escape class, done 2026-07-18): E2E
+      wallpaper tests assert image LOAD success (`img.complete &&
+      naturalWidth > 0` on sampled catalog thumbs — the assertion that
+      would have caught the 406s), Chrome-branch asserts the degrade shape;
+      new UAT scenario `24-wallpaper-picker` (structural checks + visual
+      judgment, platform-appropriate shape); smoke gates on SW console
+      errors (finding 4's class; landed with the setIcon item above).
+- [x] **Docs ripple** (done 2026-07-18): CONTRIBUTING architecture note
+      (wire codec in the `api`-seam bullet, D8-gated status);
+      `docs/cws-submission-notes.md` (148-floor justification without the
+      key); `manifest/README.md` (key removed); TESTING.md strategy
+      section; `tests/e2e-chrome/README.md` (launcher lifecycle, amended
+      fact 1, Decision-12 lanes).
+- [ ] **Exit proof**: repeat the manual pass on the maintainer's branded
+      stable Chrome — all four 2026-07-17 findings gone.
 
 ### D7 — store release prep (CWS + AMO, Decision 7)
 - [ ] CWS developer account, listing copy (adapt `docs/amo-listing.md`),

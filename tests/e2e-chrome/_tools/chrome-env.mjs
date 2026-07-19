@@ -41,10 +41,21 @@ export const CHROME_DEV_EXTENSION_ID = DEV_KEY.id;
 
 /**
  * Chrome-for-Testing binaries in the standard Puppeteer cache, newest first.
- * Branded Google Chrome >= 137 removed extension automation (both
- * --load-extension and the CDP install path produce a never-activated
- * extension — verified 2026-07-15, D1), so CfT is preferred over any branded
- * binary. `pnpm chrome:provision` populates this cache.
+ * `pnpm chrome:provision` populates this cache.
+ *
+ * Historical note (D1, 2026-07-15): branded Google Chrome >= 137 was found to
+ * ignore `--load-extension` outright, and the CDP install path was believed
+ * to leave the extension inert too — so CfT was preferred over any branded
+ * binary everywhere. **Amended 2026-07-18 (D1 amendment / CHROME.md Decision
+ * 12):** the CDP-install half doesn't reproduce on branded stable 150 —
+ * `browser.installExtension()` over the PIPE transport plus
+ * `--enable-unsafe-extension-debugging` installs and runs the extension fine
+ * on branded (`--load-extension` alone is still dead there). CfT-first
+ * remains the DEFAULT order below for UAT/smoke/rasterize-icons callers
+ * (Selenium, which those tiers use, still can't drive branded — the CDP
+ * `Extensions` domain is pipe-only); the new Chrome E2E launcher
+ * (`launch-chrome.mjs`) opts into branded-first via
+ * `resolveChromeBinary({ prefer: 'branded' })` below.
  * @return {string[]}
  */
 function cftCandidates() {
@@ -62,23 +73,33 @@ function cftCandidates() {
 }
 
 /**
- * Locate a runnable Chrome binary: $CHROME_BIN, then Chrome for Testing,
- * then branded/chromium binaries as a last resort (branded cannot run
- * extension automation — the smokes will say so).
+ * Locate a runnable Chrome binary.
+ *
+ * `opts.prefer` selects the search order (CHROME.md Decision 12):
+ *   - `'cft'` (default, UNCHANGED from before the D8 launcher existed):
+ *     $CHROME_BIN → Chrome for Testing (newest cached) → branded/chromium as
+ *     a last resort. Every caller except the new Chrome E2E launcher uses
+ *     this default — the UAT daemon and Selenium-based smoke still can't
+ *     drive branded Chrome (the CDP `Extensions` domain is pipe-only), so
+ *     they need CfT preferred.
+ *   - `'branded'`: $CHROME_BIN → google-chrome-stable/google-chrome (branded)
+ *     → Chrome for Testing (fallback lane, when no branded binary exists) →
+ *     chromium as a last resort. Used only by `launch-chrome.mjs` (the
+ *     Chrome E2E tier's production-binary lane).
+ * @param {{prefer?: 'cft'|'branded'}} [opts]
  * @return {{bin: string, version: string, branded: boolean} | null}
  */
-export function resolveChromeBinary() {
-	const candidates = [
-		process.env.CHROME_BIN,
-		...cftCandidates(),
-		'google-chrome-stable',
-		'google-chrome',
-		'chromium',
-		'chromium-browser',
-		// Filtering with a type-guard (not bare `Boolean`) so tsc narrows
-		// `(string | undefined)[]` to `string[]` — needed once this file gets
-		// imported (not just run) by a checked .ts consumer (D5b, _helpers.ts).
-	].filter((c) => typeof c === 'string');
+export function resolveChromeBinary({ prefer = 'cft' } = {}) {
+	const cft = cftCandidates();
+	const branded = ['google-chrome-stable', 'google-chrome'];
+	const chromium = ['chromium', 'chromium-browser'];
+	const ordered = prefer === 'branded'
+		? [process.env.CHROME_BIN, ...branded, ...cft, ...chromium]
+		: [process.env.CHROME_BIN, ...cft, ...branded, ...chromium];
+	// Filtering with a type-guard (not bare `Boolean`) so tsc narrows
+	// `(string | undefined)[]` to `string[]` — needed once this file gets
+	// imported (not just run) by a checked .ts consumer (D5b, _helpers.ts).
+	const candidates = ordered.filter((c) => typeof c === 'string');
 	for (const candidate of candidates) {
 		try {
 			// Puppeteer requires an ABSOLUTE executablePath — resolve bare names via PATH.
@@ -91,6 +112,38 @@ export function resolveChromeBinary() {
 				return { bin, version, branded: version.startsWith('Google Chrome') && !bin.includes('.cache/puppeteer') };
 			}
 		} catch { /* not this one */ }
+	}
+	return null;
+}
+
+/**
+ * CfT staleness guard (CHROME.md Decision 12): the cached Chrome for Testing
+ * and the user's branded stable drift apart in BOTH directions (this box,
+ * 2026-07-18: CfT 151 cached vs branded stable 150 installed — CfT's
+ * "stable" label can run AHEAD of the rollout users actually have). Compares
+ * the given CfT version's major against the locally installed branded
+ * Chrome's major and returns a human-readable warning on mismatch, or null
+ * when they match / no branded binary exists / either version is unparsable.
+ * Callers (chrome:provision, the UAT preflight) print it as a warning, never
+ * a hard failure — drift is a fidelity signal, not an error.
+ * @param {string} cftVersion any string containing the CfT version (e.g.
+ *   "Google Chrome for Testing 151.0.7922.34" or a bare "151.0.7922.34").
+ * @return {string | null}
+ */
+export function cftStalenessWarning(cftVersion) {
+	const cftMajor = parseInt((String(cftVersion).match(/(\d+)\.\d+\.\d+/) || [])[1] ?? '', 10);
+	if (!Number.isFinite(cftMajor)) { return null; }
+	for (const name of ['google-chrome-stable', 'google-chrome']) {
+		try {
+			const v = execFileSync(name, ['--version'], { encoding: 'utf8' }).trim();
+			const m = v.match(/Google Chrome (\d+)\./);
+			if (!m) { continue; }
+			const brandedMajor = parseInt(m[1], 10);
+			if (brandedMajor === cftMajor) { return null; }
+			return `cached CfT is major ${cftMajor} but the local branded stable is ${brandedMajor} (${v}) — `
+				+ 'the two lanes are testing different Chrome majors; re-run `pnpm chrome:provision` to resync '
+				+ '(CHROME.md Decision 12, CfT staleness guard)';
+		} catch { /* no branded binary under this name — try the next */ }
 	}
 	return null;
 }

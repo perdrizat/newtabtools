@@ -16,6 +16,7 @@ tests/e2e/_artifacts-ff/
 tests/e2e/_artifacts-cft/
 tests/e2e/.runner-lock/
 tests/e2e-chrome/.runner-lock/
+tests/e2e-chrome/.launcher-ready
 tests/uat/artifacts/
 dist/
 .vitest-cache/

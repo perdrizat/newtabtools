@@ -26,6 +26,9 @@
 	"backup_description": {
 		"message": "NewTab PowerTools will create a file containing your settings, pinned tiles, and background image."
 	},
+	"backup_export_failed": {
+		"message": "Backup export failed. The backup may be too large to export in this browser."
+	},
 	"bg_header": {
 		"message": "Page background image:"
 	},
@@ -444,6 +447,12 @@
 	},
 	"wallpaper_upload": {
 		"message": "Upload Image"
+	},
+	"wallpaper_collections_lead": {
+		"message": "Looking for a photo background? Download a free one and add it with Upload Image:"
+	},
+	"wallpaper_collections_link": {
+		"message": "Unsplash Wallpapers"
 	},
 	"wallpaper_error": {
 		"message": "Unable to load Firefox wallpapers."

@@ -20,7 +20,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { resolveChromeBinary } from '../../e2e-chrome/_tools/chrome-env.mjs';
+import { resolveChromeBinary, cftStalenessWarning } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -188,15 +188,26 @@ if (UAT_BROWSER !== 'chrome') {
 	// Chrome tier (chrome-prep D6): no geckodriver-equivalent handshake and no
 	// pre-built .xpi to check — stageDevBuild() stages the unpacked dev build
 	// fresh every time the daemon starts. Just confirm a Chrome for Testing
-	// binary is reachable; branded Chrome >= 137 cannot run extension
-	// automation at all (tests/e2e-chrome/README.md), so this is a warning
-	// (not a hard fail) pointing at the provisioning command — the daemon
-	// itself fails fast and loudly if launch is attempted with nothing found.
+	// binary is reachable. UAT is the CfT lane by design (CHROME.md Decision
+	// 12): Selenium/chromedriver cannot drive BRANDED Chrome (it ignores
+	// --load-extension, and chromedriver's port transport can't reach the
+	// pipe-only CDP Extensions install domain) — so a branded resolution here
+	// is a misconfiguration warning (not a hard fail) pointing at the
+	// provisioning command; the daemon itself fails fast and loudly if launch
+	// is attempted with nothing usable.
 	const found = resolveChromeBinary();
 	if (found) {
-		ok('Chrome for Testing', `${found.version} (${found.bin})${found.branded ? ' — WARNING: branded Chrome cannot run extension automation' : ''}`);
+		ok('Chrome for Testing', `${found.version} (${found.bin})${found.branded ? ' — WARNING: Selenium cannot drive branded Chrome (UAT needs CfT)' : ''}`);
 		if (found.branded) {
-			warn('Chrome for Testing', 'resolved binary is branded Google Chrome — run `pnpm chrome:provision` to fetch Chrome for Testing instead');
+			warn('Chrome for Testing', 'resolved binary is branded Google Chrome — Selenium/chromedriver cannot install the extension there (CHROME.md Decision 12); run `pnpm chrome:provision` to fetch Chrome for Testing');
+		} else {
+			// CfT staleness guard (CHROME.md Decision 12): an aged CfT cache
+			// silently drifts from the branded stable users run — warn when
+			// the two lanes are on different majors.
+			const drift = cftStalenessWarning(found.version);
+			if (drift) {
+				warn('Chrome for Testing', drift);
+			}
 		}
 	} else {
 		warn('Chrome for Testing', 'no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`');

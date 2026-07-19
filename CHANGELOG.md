@@ -4,19 +4,47 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [2.6.4] — 2026-07-20
 
-Docs/prep for the 3.0.0 dual-store release — no `webextension/` runtime change.
+D8 stable-Chrome remediation complete (the canary-gate incident): wire codec,
+production-binary test lanes, wallpaper degrade — validated end-to-end on
+branded stable Chrome (E2E parity, UAT 12/12, smoke). Chrome is tester-ready
+via "Load unpacked"; the CWS submission (D7) is deliberately deferred while
+the port matures in the field.
 
 ### Added
 
+- CHROME.md Decisions 11–12 + arc D8 (the stable-Chrome canary-gate incident): `message_serialization` is canary-gated in branded Chrome → JSON-safe wire codec decided, Decision 10 superseded; tier/binary version strategy recorded (E2E = production binaries, UAT = current/CfT) with probe evidence; TESTING.md gains the "Browser binary strategy" section and corrected branded-Chrome-automation claims.
+- `webextension/wire-codec.js` (Decision 11): dual-scope JSON-safe wire codec — `Blob`/`File`/`Map` tagged as base64/entries across `runtime.sendMessage`, hooked at `api.js` (page) + `lib/messages.js` registration (background), active only under `chrome-extension:`; Firefox is identity passthrough.
+- Smoke: SW console errors now GATE the run (new final check), the `Theme.colorScheme` relay is driven for both schemes (setIcon proof), and the wire checks assert the tagged-JSON raw shape + `decodeFromWire` reconstruction.
+- Chrome E2E branded launcher (Decision 12): `_tools/launch-chrome.mjs` (Puppeteer pipe install + port 9223 dual transport, branded-first binary resolution, SW-visible-over-port ready-file) replaces the `--load-extension` launch in `run_chrome_tests.sh`; `print-launch-env.mjs` deleted; full parity proven on branded stable Chrome 150 (124 run + 2 skips).
+- CI: new `chrome-smoke-branded` job runs the smoke on the runner's preinstalled stable Chrome (the production-binary lane that would have caught the canary-gate incident).
+- CfT staleness guard (`cftStalenessWarning`): `chrome:provision` and the UAT preflight warn when the cached CfT and local branded stable are on different majors.
+- Wallpapers on Chrome degrade gracefully (D8 finding 2): `isMozillaWallpaperCatalogAvailable()` seam predicate + hardcoded 15-color solid palette — zero outbound network on Chrome (the Mozilla attachment CDN 406s Chrome UAs); Firefox's live catalog unchanged.
+- Chrome wallpaper picker links to Unsplash's curated Wallpapers topic under the palette (no bundled photos — maintainer decision; the vendored-CC0-set follow-up is cancelled).
+- Test remediations per D8 escape class: E2E wallpaper tests assert real image load (`naturalWidth > 0`) and the Chrome degrade shape; new UAT scenario `24-wallpaper-picker`.
 - CWS submission docs mirroring the AMO set: `docs/cws-listing.md` (listing copy, Chrome-adapted field limits/category/1280×800 screenshots) and `docs/cws-submission-notes.md` (single purpose, per-permission justifications verified against the code, and the Privacy-practices data-use disclosures).
 - README: full "Load unpacked in Chrome" instructions (mirroring the Firefox steps) and a CHROME.md "Manual testing in Chrome" checklist covering the behaviours the automated tiers can't — real SW suspend/respawn (GH #23), the backup Save-As download (audit m4), incognito, theme, context-menu absence.
+
+### Fixed
+
+- `manifest/chrome.json` no longer declares `message_serialization: structured_clone` — canary-gated on branded stable Chrome (manifest error + silent JSON fallback breaking every binary wire: thumbnails, favicons, backup, restore); the wire codec replaces it (D8 finding 1/3).
+- Chrome toolbar icon: `syncActionIconWithTheme` now passes absolute `/images/…` paths — Chrome resolves relative `setIcon` paths against the SW's `/lib/` URL, so the icon 404'd ("Failed to set icon") on every Chrome boot since D4 (D8 finding 4).
+- Backup export failure (makeZip error, or Chrome's message-size cap) now shows a user-visible alert (`backup_export_failed`) instead of failing silently (audit m3).
+- E2E: tile-redesign's thumbnail seeding now routes through the page `api` seam — the raw-wire Blob seed was a structured-clone-era idiom that honest JSON messaging mangles (caught by the first branded parity run).
+- Wallpaper picker: clicking a solid-color swatch now marks it `[selected]` — the post-click refresh matched `dataset.url` only (latent on Firefox, glaring on Chrome's all-solid picker).
+- Closing the drawer now also dismisses the wallpaper-picker overlay — it's a fixed panel outside the drawer and used to stay stranded over the page (found by the new UAT scenario 24 on its first run).
+
+### Security
+
+- `pnpm-workspace.yaml` override `adm-zip@<0.6.0 → 0.6.0` (GHSA-xcpc-8h2w-3j85, crafted-zip 4GB allocation; transitive via web-ext → firefox-profile; dev-stack only).
 
 ### Changed
 
 - `PRIVACY.md` is now browser-neutral (Firefox + Chrome) for the dual-store release: private-browsing → private-browsing/incognito, Firefox-Sync note generalized, and the Firefox `gecko.data_collection_permissions` attestation paired with its CWS Privacy-practices equivalent (audit M4).
 - Documentation freshness sweep: corrected stale post-2.6.2/2.6.3 claims across `manifest/README.md` (chrome.json no longer "dormant/unvalidated"), `CHROME.md` (D5b amended: 124/126 run + 2 skipped, GH #23), `tests/e2e-chrome/README.md` + `TESTING.md` (10-check smoke, 124/126 parity), and fixed a broken `ROADMAP.md` link in `tests/e2e/README.md`.
+- Docs ripple for Decision 11: CONTRIBUTING (wire codec in the `api`-seam bullet, D8-gated status lines), `manifest/README.md` (key removed, floor rationale updated), `docs/cws-submission-notes.md` (148-floor justification no longer cites the removed key).
+- README + CHROME.md status: Chrome is ready for testers via "Load unpacked" and matures in the field before the CWS submission (D7 deliberately deferred); README's E2E-browser claims updated to the Decision-12 lanes (branded stable, CfT fallback/UAT).
 
 ## [2.6.3] — 2026-07-17
 

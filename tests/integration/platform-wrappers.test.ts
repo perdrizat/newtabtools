@@ -132,21 +132,26 @@ describe('syncActionIconWithTheme (CHROME.md D4: the Chrome action-icon relay)',
 		expect(setIconMock).not.toHaveBeenCalled();
 	});
 
-	it('Chrome service worker (isServiceWorkerScope=true) + dark scheme: setIcon called with the tools-dark path map', () => {
+	// The paths MUST be absolute (leading `/`): Chrome resolves a relative
+	// setIcon path against the CALLING document's URL — for a service worker
+	// that's `/lib/`, so `images/…` 404s and setIcon rejects with "Failed to
+	// set icon" on every boot (CHROME.md D8 finding 4, probe-proven: SW-scope
+	// fetch of `images/…` fails, `/images/…` returns HTTP 200).
+	it('Chrome service worker (isServiceWorkerScope=true) + dark scheme: setIcon called with the ABSOLUTE tools-dark path map', () => {
 		const setIconMock = vi.fn().mockResolvedValue(undefined);
 		(globalThis as any).browser.action.setIcon = setIconMock;
 		syncActionIconWithTheme(true, true);
 		expect(setIconMock).toHaveBeenCalledWith({
-			path: { 16: 'images/tools-dark-16.png', 32: 'images/tools-dark-32.png' },
+			path: { 16: '/images/tools-dark-16.png', 32: '/images/tools-dark-32.png' },
 		});
 	});
 
-	it('Chrome service worker (isServiceWorkerScope=true) + light scheme: setIcon called with the tools-light path map', () => {
+	it('Chrome service worker (isServiceWorkerScope=true) + light scheme: setIcon called with the ABSOLUTE tools-light path map', () => {
 		const setIconMock = vi.fn().mockResolvedValue(undefined);
 		(globalThis as any).browser.action.setIcon = setIconMock;
 		syncActionIconWithTheme(false, true);
 		expect(setIconMock).toHaveBeenCalledWith({
-			path: { 16: 'images/tools-light-16.png', 32: 'images/tools-light-32.png' },
+			path: { 16: '/images/tools-light-16.png', 32: '/images/tools-light-32.png' },
 		});
 	});
 

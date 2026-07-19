@@ -64,6 +64,11 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 		// an empty `sites` array is enough to let the guarded reads resolve.
 		(globalThis as any).Prefs = { locked: false };
 		(globalThis as any).Grid = { sites: [] };
+		// closeDrawer also dismisses the wallpaper-picker overlay (UAT
+		// scenario 24 finding, 2026-07-18) — in the real module this is the
+		// wallpaper.js import; the vm harness resolves the bare identifier
+		// through this global stub.
+		(globalThis as any).closeWallpaperPicker = vi.fn();
 		const code = `var _drawerHarness = { ${openDrawer}, ${closeDrawer}, ${toggleDrawer}, ${switchDrawerTab}, ${autoSelectFirstTile}, _refreshGridPositionsAfterDrawerTransition() {}, get selectedSiteIndex() { return this._selectedSiteIndex; }, set selectedSiteIndex(i) { this._selectedSiteIndex = i; } };`;
 		vm.runInThisContext(code, { filename: 'drawer-harness.js' });
 		harness = (globalThis as any)._drawerHarness;
@@ -133,6 +138,17 @@ describe('Drawer — open / close / toggle (Phase 3-1)', () => {
 			harness.closeDrawer();
 			harness.closeDrawer();
 			expect(document.documentElement.hasAttribute('drawer-open')).toBe(false);
+		});
+
+		it('also dismisses the wallpaper-picker overlay (UAT scenario 24 finding, 2026-07-18)', () => {
+			// The picker is a fixed overlay OUTSIDE the drawer element — without
+			// this, closing the drawer stranded an orphaned "Choose Wallpaper"
+			// panel occluding ~19% of the viewport (first-ever UAT run of the
+			// picker caught it).
+			((globalThis as any).closeWallpaperPicker as ReturnType<typeof vi.fn>).mockClear();
+			document.documentElement.setAttribute('drawer-open', '');
+			harness.closeDrawer();
+			expect((globalThis as any).closeWallpaperPicker).toHaveBeenCalled();
 		});
 	});
 

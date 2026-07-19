@@ -45,11 +45,11 @@ widgets. Users who want these stay on the native page.
 
 ## What's in this repo
 
-- `webextension/` — the extension source. Manifest V3, Firefox-first (minimum version Firefox 152), with Chrome supported as a second target (minimum version Chrome 148; store release pending, see [`CHROME.md`](CHROME.md)) built from the same source tree via a manifest overlay. The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`) fanning out into ~20 feature modules; the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`). See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Architecture" for the module breakdown.
-- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer against release-channel Firefox (>= 152, via WebDriver BiDi) and Chrome for Testing (>= 148, via CDP) for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
+- `webextension/` — the extension source. Manifest V3, Firefox-first (minimum version Firefox 152), with Chrome supported as a second target (minimum version Chrome 148) built from the same source tree via a manifest overlay. **Chrome status: working and ready for testers** — load it unpacked in any Chrome ≥ 148 (instructions below); we're letting it mature with testers before submitting to the Chrome Web Store (see [`CHROME.md`](CHROME.md)). The new tab page is an HTML5 document (`newTab.html`) loaded through a single ES-module entry (`page-main.js`) fanning out into ~20 feature modules; the background is a modular ES-module architecture under `webextension/lib/` (single entry `lib/background-main.js`). See [`CONTRIBUTING.md`](CONTRIBUTING.md) "Architecture" for the module breakdown.
+- [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer against release-channel Firefox (>= 152, via WebDriver BiDi) and branded stable Chrome (via CDP; Chrome for Testing as fallback and for UAT — see TESTING.md "Browser binary strategy") for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, decisions of record, AI-assisted contribution guardrails. Completed-arc working documents (the MV3 migration, background-modules + HTML5 modernization, the page-modules arc, the chrome-prep program) live in git history and their reviews in [`audit/`](audit/).
-- [`CHROME.md`](CHROME.md) — the Chrome-port program plan and live status board (stage 3): E2E parity, UAT, and smoke are all green on Chrome for Testing; only store release prep (D7) is left.
+- [`CHROME.md`](CHROME.md) — the Chrome-port program plan and live status board (stage 3): the full suite is validated on **branded stable Chrome** (E2E parity, UAT 12/12, smoke — the D8 remediation arc closed the CfT-only blind spot). Chrome is ready for testers via "Load unpacked"; the Chrome Web Store submission (D7) is deliberately deferred while the port matures in the field.
 
 ## For developers
  
@@ -57,7 +57,7 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
 ### Quick Start
 
-1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and release-channel Firefox (>= 152). Chrome for Testing (>= 148, auto-provisioned via `pnpm chrome:provision`) is needed only if you're running the Chrome tier. See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, and release-channel Firefox (>= 152). The Chrome tiers are needed only if you're working on Chrome-relevant paths: Chrome E2E prefers your installed branded stable Chrome (Chrome for Testing as fallback); Chrome UAT needs Chrome for Testing (>= 148, auto-provisioned via `pnpm chrome:provision`). See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
 
 2. **Clone and install:**
    ```bash

@@ -6,12 +6,15 @@
 // `URL.createObjectURL` does not exist in a Chrome MV3 service worker, so
 // the background's `Export:backup` handler (lib/backup.js makeZip) returns
 // the zip as a Blob + filename over the wire — which survives
-// `runtime.sendMessage` on both platforms now that Chrome uses
-// structured-clone messaging (Chrome 148+ floor, Decision 10; base64 leg
-// removed per audit 2026-07-16 m3/A-note). This module — running in the page,
-// where blob URLs are document-scoped and well-defined — creates the object
-// URL from that Blob, triggers the download, and revokes the URL once the
-// download reaches a terminal state. One unified path for both platforms.
+// `runtime.sendMessage` on both platforms via the JSON-safe wire codec
+// (CHROME.md Decision 11; `api.js`'s wrapped `runtime.sendMessage` tags the
+// Blob on the way out on a real Chrome origin and `decodeFromWire` untags it
+// here, transparently — structured-clone messaging turned out to be
+// canary-gated in branded stable Chrome, so it is no longer load-bearing).
+// This module — running in the page, where blob URLs are document-scoped
+// and well-defined — creates the object URL from that Blob, triggers the
+// download, and revokes the URL once the download reaches a terminal state.
+// One unified path for both platforms.
 //
 // Deliberately NOT routed through object-urls.js's keyed
 // `_freshObjectURL`/`_dropObjectURL`: that seam models one owner surface
@@ -79,15 +82,23 @@ export async function downloadBackup(payload) {
 
 /**
  * The drawer's Backup action: ask the background for the zip bytes, then
- * download them from the page. A null response means makeZip already
- * failed (and logged) in the background — nothing to download. A failed
- * download is logged, matching the old background-side behavior where the
- * rejection ended in lib/messages.js's console.error.
+ * download them from the page. A falsy response (or one with no `.data`)
+ * means the export failed — makeZip failed in the background (already
+ * logged there), or, on Chrome, the response never arrived at all because
+ * the backup was too large for the message-size cap (audit m3: this used to
+ * fail silently, leaving the user with no feedback and no file). Either way
+ * this now surfaces a visible alert instead of a silent no-op. `lastError`
+ * is read here (Chrome sets it in the oversize case) so Chrome doesn't log
+ * "Unchecked runtime.lastError" for a response callback that otherwise
+ * ignores it. A failed download is logged, matching the old background-side
+ * behavior where the rejection ended in lib/messages.js's console.error.
  * @returns {void}
  */
 export function requestBackup() {
 	api.runtime.sendMessage({name: 'Export:backup'}, /** @param {BackupPayload|null} response */ response => {
+		void api.runtime.lastError;
 		if (!response || !response.data) {
+			alert(api.i18n.getMessage('backup_export_failed'));
 			return;
 		}
 		downloadBackup(response).catch(console.error);

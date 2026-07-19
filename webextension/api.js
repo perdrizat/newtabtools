@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, you can obtain one at http://mozilla.org/MPL/2.0/. */
 
+import { _wireCodecActive, wrapRuntimeForWire } from './wire-codec.js';
+
 /**
  * Page-side normalized namespace leaf (chrome-prep C5a, CHROME_PREP.md
  * Decision 4). Page files cannot import `lib/**` (PAGE_MODULES.md Decision
@@ -38,7 +40,19 @@
  */
 export const api = new Proxy(/** @type {any} */ ({}), {
 	get(_target, prop, receiver) {
-		return Reflect.get(globalThis.browser ?? globalThis.chrome, prop, receiver);
+		let ns = globalThis.browser ?? globalThis.chrome;
+		// CHROME.md Decision 11 (2026-07-18): `runtime` is the one chokepoint
+		// that needs wire encoding — `api.runtime.sendMessage` carries the ~10
+		// binary payloads (Thumbnails.get, Export:backup, …) that a real
+		// Chrome extension's JSON message serialization would otherwise
+		// mangle (Blob -> {}, Map -> plain Object). `_wireCodecActive()` is
+		// false on Firefox and in every test environment, so this branch is
+		// dormant there and `ns.runtime` (the unwrapped, unchanged namespace)
+		// is returned exactly as before this module existed.
+		if (prop === 'runtime' && _wireCodecActive()) {
+			return wrapRuntimeForWire(ns.runtime);
+		}
+		return Reflect.get(ns, prop, receiver);
 	},
 	has(_target, prop) {
 		return prop in (globalThis.browser ?? globalThis.chrome);
@@ -83,4 +97,24 @@ export function searchWeb({query, newTab}) {
 	// Chrome-dormant path (written but unreachable while `search.search`
 	// exists — see doc comment above).
 	api.search.query({text: query, disposition});
+}
+
+/**
+ * Whether Mozilla's Remote Settings wallpaper catalogue is usable on this
+ * platform (CHROME.md D8 finding 2, curl-matrix probe 2026-07-18). The
+ * records API (`firefox.settings.services.mozilla.com`) answers Chrome
+ * requests fine — but the attachment CDN
+ * (`firefox-settings-attachments.cdn.mozilla.net`) rejects Chrome
+ * User-Agents server-side with a 406, and a page cannot alter its own UA
+ * string. Since the records API's image attachments can never load on
+ * Chrome, `wallpaper.js`'s `fetchFirefoxWallpapers` treats the WHOLE catalog
+ * as unavailable there (not just the image half) and falls back to its
+ * hardcoded solid-colour palette instead — zero outbound network requests on
+ * Chrome, a CWS privacy-story win. Firefox (`moz-extension:`) and every test
+ * environment (jsdom/http, no extension origin at all) both read `true`
+ * here, so the live-fetch path is unchanged for them.
+ * @returns {boolean}
+ */
+export function isMozillaWallpaperCatalogAvailable() {
+	return globalThis.location?.protocol !== 'chrome-extension:';
 }

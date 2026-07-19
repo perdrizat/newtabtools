@@ -6,7 +6,6 @@
 		"128": "images/icon-128.png"
 	},
 	"minimum_chrome_version": "148",
-	"message_serialization": "structured_clone",
 	"background": {
 		"service_worker": "lib/background-main.js",
 		"type": "module"

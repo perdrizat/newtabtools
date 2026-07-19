@@ -109,8 +109,8 @@ describe('manifest authoring — base + overlay merge (chrome-prep C6)', () => {
 			expect(chrome.incognito).toBe('spanning');
 		});
 
-		it('opts in to structured-clone messaging (Maps/Blobs cross the wire, CHROME.md Decision 10)', () => {
-			expect(chrome.message_serialization).toBe('structured_clone');
+		it('does NOT set message_serialization (canary-gated in branded stable Chrome; CHROME.md Decision 11 — the wire-codec.js JSON-safe codec replaces it)', () => {
+			expect(chrome.message_serialization).toBeUndefined();
 		});
 
 		it('does NOT set message_serialization on the Firefox target (structured clone is native there)', () => {

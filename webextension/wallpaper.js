@@ -21,12 +21,42 @@ import { getString } from './common.js';
 import { el } from './dom.js';
 import { uiRefs } from './ui-refs.js';
 import { _freshObjectURL, _dropObjectURL } from './object-urls.js';
+import { isMozillaWallpaperCatalogAvailable } from './api.js';
 
 /**
  * Cached Firefox wallpaper catalogue (memoized by fetchFirefoxWallpapers).
  * @type {WallpaperRecord[] | undefined}
  */
 let _wallpaperCache;
+
+/**
+ * Hardcoded solid-colour palette shown on Chrome instead of the live Mozilla
+ * catalogue (CHROME.md D8 finding 2): a 2026-07-18 snapshot of the live
+ * catalogue's `solid-colors` category records. Mozilla's attachment CDN
+ * rejects Chrome User-Agents server-side (406), so Chrome can never load the
+ * catalogue's photo attachments — `isMozillaWallpaperCatalogAvailable`
+ * gates the whole live fetch off for Chrome and `fetchFirefoxWallpapers`
+ * hands back this list instead, at zero network cost. Upload Image and No
+ * Background remain separate drawer controls, unaffected by this fallback.
+ * @type {WallpaperRecord[]}
+ */
+const CHROME_SOLID_WALLPAPERS = [
+	{ title: 'blue', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#76C1FF' },
+	{ title: 'light-blue', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#D4E7F6' },
+	{ title: 'light-purple', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#D3A3F3' },
+	{ title: 'light-green', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#DAE8E0' },
+	{ title: 'green', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#A8DF8E' },
+	{ title: 'beige', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#EDD5B8' },
+	{ title: 'yellow', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#FFF7B2' },
+	{ title: 'orange', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#FEBE5E' },
+	{ title: 'pink', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#FA87CC' },
+	{ title: 'light-pink', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#F4DBE9' },
+	{ title: 'red', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#9D242D' },
+	{ title: 'dark-blue', theme: 'dark', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#031A3E' },
+	{ title: 'dark-purple', theme: 'dark', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#450A54' },
+	{ title: 'dark-green', theme: 'dark', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#19310D' },
+	{ title: 'brown', theme: 'light', category: 'solid-colors', backgroundPosition: 'center center', solidColor: '#401F00' },
+];
 
 /**
  * A normalized Firefox new-tab wallpaper record — `fetchFirefoxWallpapers`'s
@@ -97,6 +127,12 @@ export async function fetchFirefoxWallpapers() {
 	if (_wallpaperCache) {
 		return _wallpaperCache;
 	}
+	if (!isMozillaWallpaperCatalogAvailable()) {
+		// Chrome path (CHROME.md D8 finding 2): the attachment CDN 406s Chrome
+		// UAs, so skip the network entirely — zero outbound requests by design.
+		_wallpaperCache = CHROME_SOLID_WALLPAPERS;
+		return _wallpaperCache;
+	}
 	let response = await fetch('https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/newtab-wallpapers-v2/records');
 	let json = await response.json();
 	let cdnBase = 'https://firefox-settings-attachments.cdn.mozilla.net/';
@@ -135,10 +171,38 @@ export function openWallpaperPicker() {
 	picker.hidden = false;
 	fetchFirefoxWallpapers().then(wallpapers => {
 		renderWallpaperGrid(wallpapers);
+		if (!isMozillaWallpaperCatalogAvailable()) {
+			appendCollectionsNote();
+		}
 	}).catch(() => {
 		let grid = /** @type {HTMLElement} */ (document.getElementById('wallpaper-grid'));
 		grid.textContent = getString('wallpaper_error');
 	});
+}
+
+/**
+ * Chrome-only footer under the solid palette (maintainer decision
+ * 2026-07-18, superseding the vendored-CC0-set follow-up): Chrome ships NO
+ * photo wallpapers of its own — users who want one follow this link to a
+ * curated free collection (Unsplash's editorial Wallpapers topic; Unsplash
+ * License, free to use, no attribution required), download an image, and
+ * add it via the existing Upload Image control. A plain user-initiated
+ * link, so the "zero outbound network requests on Chrome" property of the
+ * degraded picker still holds. Appended into #wallpaper-grid AFTER
+ * renderWallpaperGrid (which clears the grid on every open, so reopening
+ * never duplicates the note).
+ * @returns {void}
+ */
+function appendCollectionsNote() {
+	let grid = /** @type {HTMLElement} */ (document.getElementById('wallpaper-grid'));
+	let note = el('p', 'wallpaper-collections-note', getString('wallpaper_collections_lead') + ' ');
+	let link = document.createElement('a');
+	link.href = 'https://unsplash.com/t/wallpapers';
+	link.target = '_blank';
+	link.rel = 'noopener';
+	link.textContent = getString('wallpaper_collections_link');
+	note.appendChild(link);
+	grid.appendChild(note);
 }
 
 export function closeWallpaperPicker() {
@@ -232,10 +296,15 @@ export function selectWallpaper(wallpaperOrUrl) {
 		}
 		uiRefs.removeBackgroundButton.disabled = false;
 
-		// Update selected state in grid
+		// Update selected state in grid. Match on whichever identity the
+		// clicked record has: image records carry dataset.url, solid-colour
+		// swatches carry dataset.solidColor (a url-only match left solid
+		// swatches permanently unmarked — latent since the picker gained
+		// solid records, surfaced by Chrome's all-solid degraded picker,
+		// CHROME.md D8 finding 2 slice).
 		let thumbs = /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.wallpaper-thumb'));
 		for (let t of thumbs) {
-			if (t.dataset.url === url) {
+			if ((url && t.dataset.url === url) || (solidColor && t.dataset.solidColor === solidColor)) {
 				t.setAttribute('selected', '');
 			} else {
 				t.removeAttribute('selected');

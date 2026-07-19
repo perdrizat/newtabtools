@@ -19,15 +19,24 @@
  * per-`beforeAll` harness object had.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readNewTabHtml } from './_helpers';
+import { isMozillaWallpaperCatalogAvailable } from '../../webextension/api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MOZILLA_CDN_BASE = 'https://firefox-settings-attachments.cdn.mozilla.net/';
+
+// Captured BEFORE any test stubs `location`: restoring `{value: window.
+// location}` inside afterEach is a self-referential no-op in jsdom
+// (globalThis IS window, so it reads back the stub itself and leaks the
+// chrome-extension origin into later tests — caught by the negative
+// collections-link test below). Restore this original descriptor instead.
+const ORIGINAL_LOCATION_DESCRIPTOR =
+	Object.getOwnPropertyDescriptor(globalThis, 'location') as PropertyDescriptor;
 
 // ===========================================================================
 // Wallpaper fetch logic — behavioral
@@ -161,6 +170,132 @@ describe('Wallpaper fetch logic — newTab.js (behavioral)', () => {
 		const second = await fetchFirefoxWallpapers();
 		expect(first).toBe(second); // same reference
 		expect((globalThis as any).fetch).toHaveBeenCalledTimes(1); // only one fetch
+	});
+});
+
+// ===========================================================================
+// Chrome catalog-unavailable predicate — api.js (CHROME.md D8 finding 2)
+// ===========================================================================
+
+describe('isMozillaWallpaperCatalogAvailable — api.js', () => {
+	afterEach(() => {
+		Object.defineProperty(globalThis, 'location', ORIGINAL_LOCATION_DESCRIPTOR);
+	});
+
+	it('is true under the default jsdom test location (Firefox/test fetch path stays live)', () => {
+		expect(isMozillaWallpaperCatalogAvailable()).toBe(true);
+	});
+
+	it('is false under a chrome-extension: origin (the attachment CDN 406s Chrome UAs)', () => {
+		Object.defineProperty(globalThis, 'location', { value: { protocol: 'chrome-extension:' }, configurable: true });
+		expect(isMozillaWallpaperCatalogAvailable()).toBe(false);
+	});
+
+	it('is true under a moz-extension: origin', () => {
+		Object.defineProperty(globalThis, 'location', { value: { protocol: 'moz-extension:' }, configurable: true });
+		expect(isMozillaWallpaperCatalogAvailable()).toBe(true);
+	});
+});
+
+// ===========================================================================
+// Chrome wallpaper degrade — hardcoded solid palette (CHROME.md D8 finding 2)
+// ===========================================================================
+//
+// The attachment CDN rejects Chrome User-Agents server-side with 406 (curl
+// header matrix, CHROME.md D8), so on Chrome `fetchFirefoxWallpapers` must
+// skip the network entirely and hand back a hardcoded solid-colour palette.
+// Fresh module instance per test (see this file's header comment) so
+// `_wallpaperCache` starts `undefined` and the chrome-extension stub from one
+// test can't poison another.
+
+describe('Wallpaper fetch logic — Chrome degrade (no network, hardcoded palette)', () => {
+	let fetchFirefoxWallpapers: () => Promise<any[]>;
+	let renderWallpaperGrid: (wallpapers: any[]) => void;
+
+	beforeEach(async () => {
+		vi.resetModules();
+		({ fetchFirefoxWallpapers, renderWallpaperGrid } = await import('../../webextension/wallpaper.js'));
+		(globalThis as any).fetch = vi.fn();
+		Object.defineProperty(globalThis, 'location', { value: { protocol: 'chrome-extension:' }, configurable: true });
+	});
+
+	afterEach(() => {
+		Object.defineProperty(globalThis, 'location', ORIGINAL_LOCATION_DESCRIPTOR);
+	});
+
+	it('resolves to the 15-record hardcoded palette without calling fetch', async () => {
+		const result = await fetchFirefoxWallpapers();
+		expect(result).toHaveLength(15);
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+	});
+
+	it('every record carries a solidColor and no imageUrl', async () => {
+		const result = await fetchFirefoxWallpapers();
+		for (const wp of result) {
+			expect(typeof wp.solidColor).toBe('string');
+			expect(wp.solidColor.length).toBeGreaterThan(0);
+			expect(wp.imageUrl).toBeUndefined();
+		}
+	});
+
+	it('renders 15 solid-colour DIV swatches (no <img>) under a solid-colors heading', async () => {
+		document.body.innerHTML = '<div id="wallpaper-grid"></div>';
+		const wallpapers = await fetchFirefoxWallpapers();
+		renderWallpaperGrid(wallpapers);
+
+		const thumbs = document.querySelectorAll('.wallpaper-thumb');
+		expect(thumbs).toHaveLength(15);
+		for (const thumb of thumbs) {
+			expect(thumb.tagName).toBe('DIV');
+		}
+		expect(document.querySelectorAll('img.wallpaper-thumb')).toHaveLength(0);
+
+		const headings = Array.from(document.querySelectorAll('.wallpaper-category')).map(h => h.textContent);
+		expect(headings).toEqual(['solid colors']);
+	});
+
+	it('appends the curated-collections link (Unsplash Wallpapers) below the palette on Chrome', async () => {
+		// Maintainer decision 2026-07-18 (supersedes the vendored-CC0-set
+		// follow-up): Chrome ships NO photo wallpapers of its own — the solid
+		// palette plus Upload Image, with a link to a curated free collection
+		// for users who want a photo.
+		document.body.innerHTML = '<div id="wallpaper-picker" hidden><div id="wallpaper-grid"></div></div>';
+		const { openWallpaperPicker } = await import('../../webextension/wallpaper.js');
+		openWallpaperPicker();
+
+		await vi.waitFor(() => expect(document.querySelector('.wallpaper-collections-note')).toBeTruthy());
+		const link = document.querySelector('.wallpaper-collections-note a') as HTMLAnchorElement;
+		expect(link.href).toBe('https://unsplash.com/t/wallpapers');
+		expect(link.target).toBe('_blank');
+		expect(link.rel).toContain('noopener');
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+	});
+
+	it('re-opening the picker does not duplicate the collections link', async () => {
+		document.body.innerHTML = '<div id="wallpaper-picker" hidden><div id="wallpaper-grid"></div></div>';
+		const { openWallpaperPicker } = await import('../../webextension/wallpaper.js');
+		openWallpaperPicker();
+		await vi.waitFor(() => expect(document.querySelector('.wallpaper-collections-note')).toBeTruthy());
+		openWallpaperPicker();
+		await vi.waitFor(() => expect(document.querySelector('.wallpaper-collections-note')).toBeTruthy());
+		expect(document.querySelectorAll('.wallpaper-collections-note')).toHaveLength(1);
+	});
+});
+
+describe('Wallpaper picker — no collections link when the live catalog is available', () => {
+	beforeEach(() => {
+		vi.resetModules();
+	});
+
+	it('the Firefox/live-catalog path never renders the collections note', async () => {
+		document.body.innerHTML = '<div id="wallpaper-picker" hidden><div id="wallpaper-grid"></div></div>';
+		(globalThis as any).fetch = vi.fn().mockResolvedValue({
+			json: () => Promise.resolve({ data: [{ category: 'solid-colors', title: 'blue', solid_color: '#76C1FF' }] }),
+		});
+		const { openWallpaperPicker } = await import('../../webextension/wallpaper.js');
+		openWallpaperPicker();
+		await vi.waitFor(() => expect(document.querySelectorAll('.wallpaper-thumb').length).toBeGreaterThan(0));
+		expect(document.querySelector('.wallpaper-collections-note')).toBeNull();
 	});
 });
 

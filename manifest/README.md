@@ -52,16 +52,18 @@ just run `pnpm build`, which does it as a prebuild step).
     after copying `webextension/` wholesale, since `manifest/chrome.json`
     overriding `icons` takes the whole key per the shallow-merge rule above —
     it can't reach into base.json's SVG-only `icons` map.
-  - **`minimum_chrome_version: "148"`** — CHROME.md Decision 10's floor:
-    148 is where `message_serialization` shipped (below), the binding
-    API requirement; every other per-API floor is far older.
-  - **`message_serialization: "structured_clone"`** (CHROME.md Decision 10)
-    — opts Chrome's extension messaging into the structured-clone
-    algorithm, so the thumbnail/favicon wire responses (`Map`s of `Blob`s)
-    cross intact instead of degrading to `{}` under JSON serialization.
-    Chrome-only key: Firefox messaging is structured-clone natively and
-    must NOT carry the key (web-ext lint would flag it, and there's
-    nothing to opt into).
+  - **`minimum_chrome_version: "148"`** — originally CHROME.md Decision
+    10's floor (148 is where `message_serialization` shipped). That key is
+    **gone** (Decision 11, 2026-07-18: it's canary-channel-gated in branded
+    Chrome — stable rejects it — so binary wire payloads now cross via the
+    JSON-safe wire codec, `webextension/wire-codec.js`, which needs no
+    manifest key and no particular Chrome version). The floor itself stays
+    148 for now — one variable at a time; revisit lowering it post-3.0.0
+    (every per-API floor in use is far older).
+  - ~~`message_serialization: "structured_clone"`~~ — **removed**
+    (CHROME.md Decision 11): canary-gated in branded stable Chrome, so it
+    was never load-bearing for real users; removing it also makes CfT a
+    faithful stable emulator for messaging. The wire codec replaces it.
   - **`incognito: "spanning"`** is stated explicitly even though it's
     Chrome's default. `chrome_url_overrides` doesn't apply in incognito
     windows regardless (Chrome never lets an extension override the

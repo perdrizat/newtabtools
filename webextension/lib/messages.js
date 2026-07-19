@@ -47,6 +47,7 @@ import { makeZip, readZip } from './backup.js';
 import { NeverCapture } from '../prefs.js';
 import { api, broadcastToPages, syncActionIconWithTheme } from './platform.js';
 import { _isServiceWorkerScope } from './thumbnail-image.js';
+import { _wireCodecActive, wrapHandlerForWire } from '../wire-codec.js';
 
 /**
  * Shared cursor walk backing both `Thumbnails.getFavicons` and
@@ -353,9 +354,15 @@ export function handleMessage(message, sender, sendResponse) {
 
 /**
  * Register the listener at top level — called once from
- * lib/background-main.js's own top-level body.
+ * lib/background-main.js's own top-level body. CHROME.md Decision 11
+ * (2026-07-18): on a real Chrome extension origin, wrap `handleMessage` so
+ * an incoming binary message (base64-tagged `Blob`/`Map`) is decoded before
+ * the dispatch table sees it, and a binary response is re-tagged before it
+ * goes out. Firefox (`_wireCodecActive()` false) and the 53 direct-dispatch
+ * tests that call `handleMessage` themselves keep the bare handler,
+ * unwrapped and unchanged.
  * @returns {void}
  */
 export function registerMessageHandler() {
-	api.runtime.onMessage.addListener(handleMessage);
+	api.runtime.onMessage.addListener(_wireCodecActive() ? wrapHandlerForWire(handleMessage) : handleMessage);
 }

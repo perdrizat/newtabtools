@@ -2052,3 +2052,14 @@ li.pinned .autocomplete-icon {
 	border-color: var(--ntt-accent);
 	box-shadow: 0 0 0 1px var(--ntt-accent);
 }
+/* Chrome-only footer under the solid palette: the curated-collections link
+   (wallpaper.js appendCollectionsNote — no photo catalog ships on Chrome). */
+.wallpaper-collections-note {
+	font-size: 11.5px;
+	color: var(--ntt-mute);
+	margin: 10px 0 4px;
+	line-height: 1.45;
+}
+.wallpaper-collections-note a {
+	color: var(--ntt-accent);
+}

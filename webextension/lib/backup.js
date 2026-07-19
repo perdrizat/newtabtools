@@ -40,12 +40,15 @@ zip.configure({ useWebWorkers: false });
  * Decision 2a; base64 leg removed per audit 2026-07-16 m3/A-note). No blob URL
  * and no download happens here: a Chrome MV3 service worker has no
  * `URL.createObjectURL`. The Blob survives `runtime.sendMessage` on both
- * platforms because Chrome now uses structured-clone messaging
- * (`message_serialization: "structured_clone"`, Chrome 148+ floor, Decision
- * 10) — the same wire the thumbnail/favicon Blobs already cross. Returning the
- * Blob directly removes the former base64 encode (~6-8× SW memory), the page
- * decode (~4×), and Chrome's ~64 MB message cap that silently failed large
- * backups. The page side (backup-download.js) creates the object URL from it,
+ * platforms via the JSON-safe wire codec (CHROME.md Decision 11,
+ * `webextension/wire-codec.js`) — the same wire the thumbnail/favicon Blobs
+ * already cross. Structured-clone messaging (the former Decision 10) turned
+ * out to be canary-gated in branded stable Chrome, so it is no longer
+ * load-bearing; the codec's base64 tagging re-accepts some amplification and
+ * Chrome's ~64 MB message cap for an oversize backup (surfaced to the user as
+ * a visible alert, backup-download.js's `requestBackup`) in exchange for
+ * never depending on a manifest key that stable rejects. The page side
+ * (backup-download.js) creates the object URL from the decoded Blob,
  * triggers the download, and revokes the URL — the per-download lifecycle.
  * @returns {Promise<{data: Blob, filename: string}>}
  */

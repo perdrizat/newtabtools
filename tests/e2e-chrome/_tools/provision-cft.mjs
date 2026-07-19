@@ -6,12 +6,15 @@
 /**
  * Provision Chrome for Testing (CHROME.md D1) — `pnpm chrome:provision`.
  *
- * Branded Google Chrome >= 137 removed extension automation (both
- * `--load-extension` and the CDP install path silently produce a
- * never-activated extension — verified empirically 2026-07-15, D1). The
- * supported automation vehicle is **Chrome for Testing**, the same
- * binary-fetch model as Selenium Manager's geckodriver/chromedriver
- * provisioning (see tests/uat/README.md "Dependencies").
+ * CfT is the CURRENT-binary lane (CHROME.md Decision 12): the UAT tier and
+ * the local smoke run on it — Selenium/chromedriver cannot drive branded
+ * Chrome (branded >= 137 ignores `--load-extension`, and chromedriver's port
+ * transport can't reach the pipe-only CDP `Extensions` install domain). The
+ * E2E tier runs branded stable via `launch-chrome.mjs` (the D1-amendment
+ * pipe-install route) and only falls back to this cache when no branded
+ * binary exists. Same binary-fetch model as Selenium Manager's
+ * geckodriver/chromedriver provisioning (see tests/uat/README.md
+ * "Dependencies").
  *
  * Downloads the current CfT stable into ~/.cache/puppeteer (the standard
  * Puppeteer cache; ~200 MB once) and prints the executable path. Idempotent —
@@ -24,6 +27,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { cftStalenessWarning } from './chrome-env.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 // @puppeteer/browsers is a puppeteer-core dependency — resolve it from
@@ -43,6 +47,17 @@ if (!platform) {
 
 const buildId = await browsers.resolveBuildId(browsers.Browser.CHROME, platform, 'stable');
 console.log(`[chrome-provision] chrome for testing ${buildId} (${platform}) -> ${cacheDir}`);
+
+// CfT staleness guard (CHROME.md Decision 12): warn when the CfT "stable"
+// build being provisioned and the locally installed branded stable are on
+// different majors — the current-binary and production-binary lanes would
+// then be testing different Chromes.
+{
+	const drift = cftStalenessWarning(buildId);
+	if (drift) {
+		console.warn(`[chrome-provision] ~ ${drift}`);
+	}
+}
 
 let lastPct = -10;
 await browsers.install({

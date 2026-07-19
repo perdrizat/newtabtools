@@ -14,22 +14,32 @@ pnpm test:e2e:chrome         # D5b: the full 32-file Firefox E2E suite, run agai
 
 ## The parity suite (D5b)
 
-`pnpm test:e2e:chrome` (`run_chrome_tests.sh`) is the Chrome sibling of
-`tests/e2e/run_esr_tests.sh`: it stages the unpacked dev build
-(`print-launch-env.mjs` → `chrome-env.mjs`'s `stageDevBuild()`), launches
-Chrome for Testing directly with `--load-extension` + a fresh throwaway
-`--user-data-dir` and CDP listening on port **9223**, waits for the port,
-runs `NTT_E2E_BROWSER=chrome npx vitest run --project e2e` (the exact same
-`tests/e2e/**/*.test.ts` files the Firefox tier runs), then tears Chrome and
-the profile down. Its own `mkdir`-based concurrency lock
+`pnpm test:e2e:chrome` (`run_chrome_tests.sh`, rewritten for D8/Decision 12)
+is the Chrome sibling of `tests/e2e/run_esr_tests.sh`. It spawns
+`_tools/launch-chrome.mjs` as a long-lived background process: the launcher
+resolves a binary **branded-first** (`resolveChromeBinary({prefer:
+'branded'})` — the E2E tier runs the PRODUCTION binary users actually have;
+the cached CfT is only the fallback lane when no branded binary exists),
+stages the unpacked dev build (`chrome-env.mjs`'s `stageDevBuild()`), and
+launches Chrome with a **dual transport**: Puppeteer `pipe: true` (the CDP
+`Extensions` install domain is pipe-only on branded — `installExtension`
+loads the staged build over it) plus `--remote-debugging-port=9223` for the
+vitest suite's own `puppeteer.connect`. The launcher writes a ready-file
+(`tests/e2e-chrome/.launcher-ready`) only after the extension's
+service-worker target is confirmed visible **over the port** (41 ms in the
+first branded run — the dual-transport probe's one open caveat, closed);
+the shell script waits on that file, runs `NTT_E2E_BROWSER=chrome npx
+vitest run --project e2e` (the exact same `tests/e2e/**/*.test.ts` files the
+Firefox tier runs), then SIGTERMs the launcher, which closes Chrome and its
+Puppeteer-managed temp profile. Its own `mkdir`-based concurrency lock
 (`tests/e2e-chrome/.runner-lock`) mirrors the Firefox runner's, so the two
 tiers never collide even though they now both hold a fixed port.
 
-Unlike the Puppeteer smoke path (`chrome:smoke`), this runner passes
-`--load-extension` directly rather than doing a CDP `installExtension` —
-that legacy flag is only broken on BRANDED Chrome (D1 finding); Chrome for
-Testing, the only binary this tier ever targets, honors it fine, so the
-direct route is simpler here.
+(Historical: through D5b this runner launched CfT directly with
+`--load-extension`, which branded Chrome ignores — the canary-gate incident
+showed CfT-only validation lets channel-gated behavior through, so Decision
+12 moved this tier to branded stable. First branded run: 2026-07-18,
+Google Chrome 150, 124 run green + 2 SW-lifecycle skips.)
 
 A single positional arg (or several) selects a subset, same as the Firefox
 runner:
@@ -82,12 +92,18 @@ Violating any of these reproduces the same misleading signature — the
 extension "installs" (an ID is returned) but no service worker ever starts
 and every `chrome-extension://` URL answers `net::ERR_BLOCKED_BY_CLIENT`:
 
-1. **Branded Google Chrome >= 137 cannot run extension automation.**
-   `--load-extension` is removed and even the CDP install path leaves the
-   extension inert. Use **Chrome for Testing** (`pnpm chrome:provision`;
-   same binary-fetch model as Selenium Manager's geckodriver). The
-   `resolveChromeBinary()` helper prefers `$CHROME_BIN`, then the Puppeteer
-   cache, and warns on branded binaries.
+1. **Branded Google Chrome >= 137 ignores `--load-extension` — but the CDP
+   pipe-install route works** (amended 2026-07-18, CHROME.md D1 amendment /
+   Decision 12; the original D1 finding that "even the CDP install path
+   leaves the extension inert" did not reproduce on branded stable 150).
+   Consequences per tool: the E2E launcher and the Puppeteer smoke drive
+   branded via `installExtension` over the pipe; **Selenium/chromedriver
+   still cannot drive branded at all** (its port transport can't reach the
+   pipe-only `Extensions` domain), so the UAT tier stays on **Chrome for
+   Testing** (`pnpm chrome:provision`). `resolveChromeBinary()` defaults to
+   CfT-first for those callers; `{prefer: 'branded'}` is the E2E launcher's
+   opt-in. A CfT/branded major-version drift warning
+   (`cftStalenessWarning`) fires in provision and the UAT preflight.
 2. **Puppeteer path: install over CDP, not flags.** `browser.
    installExtension(dir)` with `pipe: true` +
    `--enable-unsafe-extension-debugging`. Do NOT pass

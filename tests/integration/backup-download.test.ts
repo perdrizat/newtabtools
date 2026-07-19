@@ -38,6 +38,7 @@ beforeEach(() => {
 	(globalThis as any).chrome = {
 		downloads: mockDownloads,
 		runtime: { sendMessage: vi.fn() },
+		i18n: { getMessage: vi.fn((key: string) => key) },
 	};
 	(globalThis as any).browser = (globalThis as any).chrome;
 });
@@ -161,6 +162,41 @@ describe('requestBackup — Export:backup round-trip into the download', () => {
 		await Promise.resolve();
 		expect(createSpy).not.toHaveBeenCalled();
 		expect(mockDownloads.download).not.toHaveBeenCalled();
+	});
+
+	it('surfaces a user-visible alert when the response is falsy (audit m3: export failure must not fail silently)', async () => {
+		(globalThis as any).chrome.runtime.lastError = undefined;
+		(globalThis as any).chrome.runtime.sendMessage = vi.fn(
+			(_msg: unknown, cb: (response: unknown) => void) => cb(null),
+		);
+		const alertSpy = vi.spyOn(globalThis, 'alert').mockImplementation(() => {});
+		const getMessageSpy = vi.spyOn((globalThis as any).chrome.i18n, 'getMessage');
+
+		requestBackup();
+		await Promise.resolve();
+
+		expect(getMessageSpy).toHaveBeenCalledWith('backup_export_failed');
+		expect(alertSpy).toHaveBeenCalledWith('backup_export_failed');
+		expect(mockDownloads.download).not.toHaveBeenCalled();
+
+		alertSpy.mockRestore();
+	});
+
+	it('surfaces a user-visible alert when the response has no .data (Chrome oversize case, api.runtime.lastError set)', async () => {
+		(globalThis as any).chrome.runtime.lastError = { message: 'Message length exceeded maximum allowed length.' };
+		(globalThis as any).chrome.runtime.sendMessage = vi.fn(
+			(_msg: unknown, cb: (response: unknown) => void) => cb(undefined),
+		);
+		const alertSpy = vi.spyOn(globalThis, 'alert').mockImplementation(() => {});
+
+		requestBackup();
+		await Promise.resolve();
+
+		expect(alertSpy).toHaveBeenCalledWith('backup_export_failed');
+		expect(mockDownloads.download).not.toHaveBeenCalled();
+
+		alertSpy.mockRestore();
+		delete (globalThis as any).chrome.runtime.lastError;
 	});
 
 	it('logs instead of throwing when the download path fails', async () => {

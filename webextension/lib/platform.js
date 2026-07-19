@@ -223,10 +223,15 @@ export function syncActionIconWithTheme(dark, isServiceWorkerScope) {
 		return;
 	}
 	let variant = dark ? 'dark' : 'light';
+	// Absolute paths (leading `/`) are load-bearing: Chrome resolves a
+	// RELATIVE setIcon path against the calling document's URL — `/lib/` for
+	// this service worker — so `images/…` 404'd and setIcon rejected with
+	// "Failed to set icon" on every Chrome boot (CHROME.md D8 finding 4,
+	// probe-proven: SW-scope fetch of `images/…` fails, `/images/…` → 200).
 	api.action.setIcon({
 		path: {
-			16: `images/tools-${variant}-16.png`,
-			32: `images/tools-${variant}-32.png`,
+			16: `/images/tools-${variant}-16.png`,
+			32: `/images/tools-${variant}-32.png`,
 		},
 	}).catch(console.error);
 }

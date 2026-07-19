@@ -85,9 +85,9 @@ jobs:
   # Chrome tier (CHROME.md D5). A separate job so it runs in PARALLEL with
   # the Firefox job — the tiers are port-disjoint by design (CONTRIBUTING
   # "Running test tiers in parallel"); here they don't even share a runner.
-  # The runner's preinstalled branded Chrome is USELESS for extension
-  # automation (>=137 removed it — tests/e2e-chrome/README.md), so Chrome
-  # for Testing is provisioned explicitly.
+  # This is the CfT (current-binary) lane of CHROME.md Decision 12; the
+  # Selenium smoke can ONLY run here (chromedriver's port transport cannot
+  # install an extension on branded Chrome — Decision 12's probe record).
   chrome-smoke:
     runs-on: ubuntu-latest
 
@@ -116,3 +116,37 @@ jobs:
 
       - name: Chrome Selenium smoke (chromedriver)
         run: pnpm chrome:smoke:selenium
+
+  # Branded-stable smoke (CHROME.md Decision 12): the PRODUCTION-binary lane,
+  # on the runner's preinstalled Google Chrome — the binary users actually
+  # run. The smoke drives it via the pipe-transport CDP install route (D1
+  # amendment 2026-07-18: --load-extension stays dead on branded, the pipe
+  # route works). This is the lane that would have caught the canary-gate
+  # incident: a manifest key CfT honored but branded stable rejected
+  # (CHROME.md D8 finding 1) — channel-gated behavior only shows up here.
+  chrome-smoke-branded:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Chrome smoke on branded stable (runner-preinstalled)
+        run: pnpm chrome:smoke
+        env:
+          # resolveChromeBinary() honors $CHROME_BIN first and resolves bare
+          # names via PATH; ubuntu-latest preinstalls google-chrome (stable).
+          CHROME_BIN: google-chrome

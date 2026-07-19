@@ -1455,6 +1455,12 @@ const NewTabToolsObject = {
 	},
 	closeDrawer() {
 		document.documentElement.removeAttribute('drawer-open');
+		// The wallpaper picker is a fixed overlay OUTSIDE the drawer element,
+		// opened from within it — closing the drawer must take it along, or an
+		// orphaned "Choose Wallpaper" panel stays occluding the page (UAT
+		// scenario 24 finding, 2026-07-18). closeWallpaperPicker() is a no-op
+		// when the picker is already hidden.
+		closeWallpaperPicker();
 		// Closing exits edit mode and re-locks the board (§2).
 		document.documentElement.setAttribute('locked', 'true');
 		Prefs.locked = true;

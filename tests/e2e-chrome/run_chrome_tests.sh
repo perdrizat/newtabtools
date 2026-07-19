@@ -1,38 +1,44 @@
 #!/bin/bash
 # tests/e2e-chrome/run_chrome_tests.sh
 #
-# Chrome sibling of tests/e2e/run_esr_tests.sh (CHROME.md D5b). Lifecycle:
+# Chrome sibling of tests/e2e/run_esr_tests.sh (CHROME.md D5b; rewritten for
+# D8/Decision 12). Lifecycle:
 #   1. Concurrency lock (this tier's OWN lock dir — independent of the
 #      Firefox E2E lock, so both tiers can run at once per CONTRIBUTING.md's
 #      "Running test tiers in parallel" practice).
-#   2. Resolve a Chrome for Testing binary + stage the unpacked dev build
-#      (tests/e2e-chrome/_tools/chrome-env.mjs, the same staging path
-#      chrome:smoke/chrome:stage use) via print-launch-env.mjs.
-#   3. Launch the CfT binary DIRECTLY (no web-ext — Chrome has no equivalent
-#      launcher) with --load-extension + a fresh throwaway profile
-#      (--user-data-dir) and CDP listening on port 9223 (the port reserved
-#      in tests/e2e-chrome/README.md's port table for exactly this).
-#   4. Wait for the CDP port to be reachable.
-#   5. Run Vitest's `e2e` project — the SAME 32 test files run.sh's Firefox
+#   2. Launch tests/e2e-chrome/_tools/launch-chrome.mjs as a background
+#      process. It resolves a Chrome binary BRANDED-FIRST (CfT is the
+#      fallback lane only when no branded binary exists — CHROME.md Decision
+#      12: the E2E tier runs the production binary users actually have),
+#      stages the unpacked dev build, and launches Chrome with a DUAL
+#      transport: Puppeteer's `pipe: true` (branded's CDP `Extensions` domain
+#      is pipe-only — `browser.installExtension()` installs the staged build
+#      over it) AND `--remote-debugging-port=9223` (so this script's Vitest
+#      run, exactly like before, connects over the port — zero test-file
+#      changes). The old rationale ("--load-extension works on CfT") is
+#      superseded: branded ignores --load-extension outright, but the CDP
+#      pipe-install route WORKS on branded stable (D1 amendment, 2026-07-18).
+#   3. Wait for the launcher's ready-file (tests/e2e-chrome/.launcher-ready) —
+#      written by the launcher only AFTER it confirms the extension's
+#      service-worker target is visible over the PORT (not just the pipe),
+#      closing the probe's one open caveat (SW visibility over the port
+#      lagged when sampled immediately after install). The ready-file
+#      therefore implies "port is up AND SW is visible over it", replacing
+#      the old bare `nc -z` port check.
+#   4. Run Vitest's `e2e` project — the SAME 32 test files run.sh's Firefox
 #      path runs — with NTT_E2E_BROWSER=chrome so tests/e2e/_helpers.ts's
 #      connectToFirefox()/getNewTabURL() switch to the CDP/chrome-extension://
-#      paths.
-#   6. Tear down Chrome + the throwaway profile.
-#
-# Unlike Firefox, --load-extension works directly on Chrome for Testing (D1
-# finding: only BRANDED Chrome >=137 removed it) — no CDP installExtension
-# dance needed here, unlike chrome-smoke.mjs's Puppeteer-launch path, which
-# targets branded-Chrome-compatible automation and so avoids the legacy
-# flags entirely. This runner only ever targets CfT, so the direct flags are
-# the simpler, equally-supported route (tests/e2e-chrome/README.md "Three
-# hard-won harness facts", fact 1).
+#      paths (unchanged by this rewrite).
+#   5. Tear down: signal the launcher (SIGTERM), which closes Chrome +
+#      Puppeteer's own temp profile and removes the ready-file itself; this
+#      script's cleanup() only removes the ready-file defensively and the
+#      lock dir.
 
 set -u
 
-PORT=9223
-
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 ARTIFACTS_DIR="$SCRIPT_DIR/../e2e/_artifacts-cft"
+READY_FILE="$SCRIPT_DIR/.launcher-ready"
 
 # 0. Concurrency lock — this tier's own lock dir, independent of Firefox
 # E2E's tests/e2e/.runner-lock (same mkdir-atomicity technique + stale-PID
@@ -57,66 +63,45 @@ fi
 echo $$ > "$LOCK_PID_FILE"
 trap 'rm -rf "$LOCK_DIR"' EXIT
 
-# 1. Resolve the Chrome binary + stage the dev build. print-launch-env.mjs
-# does the JS-only work (chrome-env.mjs's resolveChromeBinary/stageDevBuild)
-# and prints KEY=value lines this script evals; it exits nonzero (with a
-# diagnostic on stderr, already surfaced by the bare invocation) if no usable
-# binary is found.
-LAUNCH_ENV="$(node "$SCRIPT_DIR/_tools/print-launch-env.mjs")"
-LAUNCH_STATUS=$?
-if [ "$LAUNCH_STATUS" -ne 0 ]; then
-  exit "$LAUNCH_STATUS"
-fi
-eval "$LAUNCH_ENV"
-# CHROME_BIN, STAGE_DIR, EXTENSION_ID now set by the eval above.
-
-# 2. Fresh throwaway profile every run, so tests are fully isolated — same
-# rationale as run_esr_tests.sh's PROFILE_DIR, via a real tmp dir since
-# Chrome (unlike web-ext) has no equivalent of a project-local profile flag.
-CHROME_PROFILE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ntt-chrome-profile.XXXXXX")"
-
-# 3. Clean slate for any process left behind by a previous crashed run of
-# THIS script — scoped to this run's own profile dir path (never a blanket
-# `pkill chrome`, which would kill a developer's daily-driver browser).
-pkill -f "$CHROME_PROFILE_DIR" 2>/dev/null || true
-
-echo "Using Chrome for Testing: $CHROME_BIN (extension id $EXTENSION_ID)"
-echo "Launching Chrome with the staged dev build..."
-"$CHROME_BIN" \
-  --headless=new \
-  --remote-debugging-port="$PORT" \
-  --load-extension="$STAGE_DIR" \
-  --disable-extensions-except="$STAGE_DIR" \
-  --no-first-run \
-  --no-default-browser-check \
-  --disable-dev-shm-usage \
-  --user-data-dir="$CHROME_PROFILE_DIR" &
-CHROME_PID=$!
+# 1. Launch the branded-first dual-transport launcher in the background. It
+# owns the Chrome process + Puppeteer's temp profile end to end (resolve
+# binary, stage build, launch, install extension over the pipe, wait for the
+# SW to be visible over the port, write the ready-file) — this script never
+# touches Chrome flags or a profile dir directly anymore.
+rm -f "$READY_FILE"
+echo "Starting the Chrome E2E launcher (branded-first, CfT fallback)..."
+node "$SCRIPT_DIR/_tools/launch-chrome.mjs" &
+LAUNCHER_PID=$!
 
 cleanup() {
-  pkill -f "$CHROME_PROFILE_DIR" 2>/dev/null || true
-  wait "$CHROME_PID" 2>/dev/null || true
-  rm -rf "$CHROME_PROFILE_DIR"
+  if kill -0 "$LAUNCHER_PID" 2>/dev/null; then
+    kill -TERM "$LAUNCHER_PID" 2>/dev/null || true
+    wait "$LAUNCHER_PID" 2>/dev/null || true
+  fi
+  rm -f "$READY_FILE"
   rm -rf "$LOCK_DIR"
 }
 trap cleanup EXIT
 
-# 4. Wait for the CDP port to be reachable (timeout 30s) — same fail-fast
-# shape as run_esr_tests.sh's Firefox port wait.
-echo "Waiting for Chrome to be ready on port $PORT..."
+# 2. Wait for the ready-file (up to 90s, 1s steps) — fail fast if the
+# launcher process died before ever signaling readiness instead of waiting
+# out the full timeout.
+echo "Waiting for the Chrome E2E launcher to become ready..."
 count=0
-until nc -z 127.0.0.1 "$PORT" 2>/dev/null; do
-  if ! kill -0 "$CHROME_PID" 2>/dev/null; then
-    echo "Error: Chrome exited before the debugging port ($PORT) came up." >&2
+until [ -f "$READY_FILE" ]; do
+  if ! kill -0 "$LAUNCHER_PID" 2>/dev/null; then
+    echo "Error: the Chrome E2E launcher exited before signaling readiness (no ready-file at $READY_FILE)." >&2
     exit 1
   fi
   count=$((count + 1))
-  if [ "$count" -eq 30 ]; then
-    echo "Error: Chrome failed to open port $PORT within 30s" >&2
+  if [ "$count" -eq 90 ]; then
+    echo "Error: the Chrome E2E launcher did not signal readiness within 90s (no ready-file at $READY_FILE)." >&2
     exit 1
   fi
   sleep 1
 done
+echo "Launcher ready:"
+sed 's/^/  /' "$READY_FILE" 2>/dev/null || true
 
 # Fresh artifacts every run, scoped to this tier's own dir (`_artifacts-cft`)
 # so it never races the Firefox suite's `_artifacts-ff` when both run
@@ -125,7 +110,7 @@ rm -rf "$ARTIFACTS_DIR"
 mkdir -p "$ARTIFACTS_DIR"
 echo "Chrome ready. Running Vitest e2e project (NTT_E2E_BROWSER=chrome)..."
 
-# 5. Run the tests; pass through any extra args (e.g., a specific test file).
+# 3. Run the tests; pass through any extra args (e.g., a specific test file).
 # Persist a durable pass/fail record (see run_esr_tests.sh for the rationale):
 # results.json (machine-readable) + run.log (full human output via tee).
 # $ARTIFACTS_DIR was just recreated above. ${PIPESTATUS[0]} keeps vitest's exit.
@@ -134,5 +119,6 @@ NTT_E2E_BROWSER=chrome npx vitest run --project e2e \
   "$@" 2>&1 | tee "$ARTIFACTS_DIR/run.log"
 EXIT_CODE=${PIPESTATUS[0]}
 
-# 6. Cleanup happens via the EXIT trap.
+# 4. Teardown happens via the EXIT trap (signals the launcher, which closes
+# Chrome + its temp profile and removes the ready-file itself).
 exit "$EXIT_CODE"

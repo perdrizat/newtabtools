@@ -156,6 +156,27 @@ describe('selectWallpaper — writes backgroundPosition and applies to body', ()
 		expect(Prefs.backgroundUrl).toBe('https://example.com/legacy.png');
 		expect(Prefs.backgroundPosition).toBe('center center');
 	});
+
+	it('marks the clicked solid-colour swatch [selected] in the post-click grid refresh (matches dataset.solidColor, not just dataset.url)', async () => {
+		// Latent bug found by the D8 wallpaper-degrade slice (2026-07-18): the
+		// post-click refresh loop matched `t.dataset.url === url` only, so a
+		// solid-colour swatch (dataset.solidColor, no dataset.url) never gained
+		// the `[selected]` marker — invisible-ish on Firefox's photo-heavy
+		// catalog, but Chrome's degraded picker is ALL solid swatches.
+		const grid = document.getElementById('wallpaper-grid') as HTMLElement;
+		const swatch = document.createElement('div');
+		swatch.className = 'wallpaper-thumb';
+		swatch.dataset.solidColor = '#76C1FF';
+		const imgThumb = document.createElement('img');
+		imgThumb.className = 'wallpaper-thumb';
+		imgThumb.dataset.url = 'https://example.com/wp.avif';
+		imgThumb.setAttribute('selected', '');
+		grid.append(swatch, imgThumb);
+
+		await selectWallpaper({ solidColor: '#76C1FF' });
+		expect(swatch.hasAttribute('selected')).toBe(true);
+		expect(imgThumb.hasAttribute('selected')).toBe(false);
+	});
 });
 
 describe('backgroundPosition + backgroundColor prefs', () => {

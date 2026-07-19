@@ -15,10 +15,16 @@ minimumReleaseAge: 10080
 autoInstallPeers: true
 
 # Force-patch transitive advisories — parents' latest still pull vulnerable deps:
-#   hono  : @modelcontextprotocol/sdk → @hono/node-server (GHSA-88fw-hqm2-52qc)
-#   undici: jsdom (the three advisories above)
+#   hono   : @modelcontextprotocol/sdk → @hono/node-server (GHSA-88fw-hqm2-52qc)
+#   undici : jsdom (the three advisories above)
+#   adm-zip: web-ext → firefox-profile (GHSA-xcpc-8h2w-3j85, crafted-zip 4GB
+#            memory allocation; disclosed 2026-07, surfaced by the pre-commit
+#            audit 2026-07-18; 0.6.0 published 2026-07-10 — clears the 7-day
+#            minimumReleaseAge; zero deps, no install scripts, same maintainer
+#            since 2012)
 # shell-quote is NOT here: web-ext 10.4.0 → fx-runner 1.5.0 ships shell-quote
 # 1.8.4 natively, so no override is needed.
 overrides:
   'hono@<4.12.25': '4.12.25'
   'undici@<7.28.0': '7.28.0'
+  'adm-zip@<0.6.0': '0.6.0'

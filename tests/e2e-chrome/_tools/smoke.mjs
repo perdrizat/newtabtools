@@ -16,7 +16,12 @@
  *   5. page console/pageerror inventory (informational)
  *   6. (CHROME.md D3 slice 3) capture round-trip: pin a tile, navigate a real
  *      tab to it, poll for the thumbnail to land in IDB — the first real
- *      execution of the D2 OffscreenCanvas path on genuine Chrome.
+ *      execution of the D2 OffscreenCanvas path on genuine Chrome. Then
+ *      (6b/6c, CHROME.md Decision 11) the wire-codec proofs — Thumbnails.get
+ *      and Export:backup raw wires are tagged JSON, decodeFromWire yields the
+ *      real Map/Blob — and (6d, D8 finding 4) the Theme.colorScheme relay is
+ *      driven for both schemes so a failing action.setIcon lands in the SW
+ *      console inventory.
  *   7. (CHROME.md D3 slice 4 / audit 2026-07-16 M2) storage.session durability
  *      across a SW kill attempt (the `pendingCaptures` guarantee). The SW
  *      kill/respawn itself is NOT reliably testable under CfT CDP automation —
@@ -24,6 +29,9 @@
  *      so it is reported as an informational note, never a vacuous pass/fail;
  *      real respawn coverage is the shared-code Firefox event-page-lifecycle
  *      suite (GH #23). See the block comment at the check for the full probe.
+ *   8. (CHROME.md D8) SW console errors GATE the run — an error the service
+ *      worker logs anywhere in the smoke fails it (the D4 setIcon 404 sat in
+ *      this inventory ungated while every tier stayed green).
  *
  * A red result here is DATA, not a harness failure — D1 established this
  * smoke precisely to give the D2/D3 arcs a red/green target on real Chrome.
@@ -68,8 +76,13 @@ if (!found) {
 	process.exit(1);
 }
 if (found.branded) {
-	console.error('[chrome-smoke] ~ WARNING: branded Google Chrome cannot run extension automation (>=137');
-	console.error('[chrome-smoke]   removed it) — expect failure. Run `pnpm chrome:provision` for Chrome for Testing.');
+	// Branded stable Chrome WORKS here (D1 amendment, probe-proven 2026-07-18):
+	// this smoke already uses the pipe transport + CDP installExtension +
+	// --enable-unsafe-extension-debugging, the one automation route branded
+	// Chrome still supports. Running the smoke on branded (CHROME_BIN=
+	// /usr/bin/google-chrome) is the PRODUCTION-binary lane (Decision 12) —
+	// CI runs it on the runner's preinstalled Chrome.
+	console.log('[chrome-smoke] ~ branded Google Chrome: production-binary lane (pipe + CDP install — supported since the D1 amendment)');
 }
 
 const { dir, extensionId } = stageDevBuild();
@@ -230,9 +243,10 @@ try {
 			// database) for the stored record — the storage-side proof,
 			// independent of messaging (this is what caught the original wire
 			// blindness: a 16 KB image stored while JSON messaging returned `{}`).
-			// The wire itself is verified separately in the next check, now that
-			// `message_serialization: structured_clone` (Chrome 148+, CHROME.md
-			// Decision 10) carries Maps/Blobs. The A/B/C session's hard deadline
+			// The wire itself is verified separately in the next check via the
+			// JSON-safe wire codec (CHROME.md Decision 11 — structured-clone
+			// messaging turned out canary-gated in branded Chrome and is no
+			// longer load-bearing). The A/B/C session's hard deadline
 			// is 2s; give it real margin on a cold CI-ish runner.
 			const found = await pollUntil(async () => {
 				return page.evaluate(u => new Promise(resolve => {
@@ -251,21 +265,31 @@ try {
 			check('capture round-trip: thumbnail lands in IDB after navigation', !!found,
 				found ? `stored image blob: ${found} bytes (direct IDB read)` : 'no thumbnail within 20s');
 
-			// 6b. The wire carries it: with structured-clone messaging
-			// (manifest `message_serialization`, CHROME.md Decision 10) the
-			// `Thumbnails.get` response arrives as a REAL Map with a REAL Blob —
-			// the exact shapes Chrome's JSON serialization used to erase.
+			// 6b. The wire carries it: under the JSON-safe wire codec (CHROME.md
+			// Decision 11) the RAW `Thumbnails.get` response is the tagged JSON
+			// encoding (`{__ntt_map: [[url, {__ntt_blob: …}], …]}` — the only
+			// shape that survives stable Chrome's JSON message serialization),
+			// and the extension's own `decodeFromWire` (the page-side api.js
+			// seam applies it transparently) reconstructs the real Map + Blob.
+			// Assert BOTH halves — this raw-wire shape is exactly what broke
+			// silently on branded stable while structured clone false-greened
+			// on CfT (the canary-gate incident, D8 finding 1).
 			if (found) {
 				const wire = await page.evaluate(u => new Promise(resolve => {
-					chrome.runtime.sendMessage({ name: 'Thumbnails.get', urls: [u] }, resp => {
-						if (!(resp instanceof Map)) { resolve({ ok: false, why: `not a Map: ${typeof resp}` }); return; }
-						const blob = resp.get(u);
-						if (!(blob instanceof Blob)) { resolve({ ok: false, why: `no Blob for url (got ${typeof blob})` }); return; }
-						resolve({ ok: true, size: blob.size });
+					chrome.runtime.sendMessage({ name: 'Thumbnails.get', urls: [u] }, async resp => {
+						try {
+							if (!resp || !Array.isArray(resp.__ntt_map)) { resolve({ ok: false, why: `raw wire not tagged JSON: ${JSON.stringify(resp)?.slice(0, 120)}` }); return; }
+							const { decodeFromWire } = await import('/wire-codec.js');
+							const decoded = decodeFromWire(resp);
+							if (!(decoded instanceof Map)) { resolve({ ok: false, why: `decode not a Map: ${typeof decoded}` }); return; }
+							const blob = decoded.get(u);
+							if (!(blob instanceof Blob)) { resolve({ ok: false, why: `no Blob for url (got ${typeof blob})` }); return; }
+							resolve({ ok: true, size: blob.size });
+						} catch (e) { resolve({ ok: false, why: String(e) }); }
 					});
 				}), CAPTURE_TEST_URL);
-				check('structured clone: Thumbnails.get returns a real Map with a Blob', !!wire.ok,
-					wire.ok ? `Map + Blob, ${wire.size} bytes over the wire` : wire.why);
+				check('wire codec: Thumbnails.get raw wire is tagged JSON; decodeFromWire yields Map + Blob', !!wire.ok,
+					wire.ok ? `tagged JSON + decoded Map/Blob, ${wire.size} bytes over the wire` : wire.why);
 
 				// 6c. The tile RENDERS it: reload the extension page and require
 				// the pinned tile's thumbnail node to pick up a background image —
@@ -307,30 +331,57 @@ try {
 		}
 	}
 
-	// 6b. (CHROME.md D5 / audit m3) Backup export over the wire: `Export:backup`
-	// must return the zip as a Blob + filename (base64 leg removed — the Blob now
-	// survives structured-clone messaging on Chrome). This check IS the real
-	// proof the Blob-over-wire works on genuine Chrome; the actual downloads-API
-	// grant is a user gesture we can't automate headlessly, so the wire payload
-	// is the testable seam.
+	// 6c. (CHROME.md D5 / audit m3 / Decision 11) Backup export over the wire:
+	// `Export:backup` returns `{data, filename}` where the RAW `data` is the
+	// codec's tagged base64 Blob encoding (structured clone is canary-gated in
+	// branded Chrome — a raw Blob would arrive as `{}` on stable), and
+	// `decodeFromWire` reconstructs a real zip Blob (PK magic). The actual
+	// downloads-API grant is a user gesture we can't automate headlessly, so
+	// the wire payload is the testable seam.
 	if (swTarget && loaded) {
 		try {
 			const backup = await page.evaluate(() => new Promise(resolve => {
 				chrome.runtime.sendMessage({ name: 'Export:backup' }, async resp => {
-					if (!resp || !(resp.data instanceof Blob)) { resolve({ ok: false, why: `bad payload: ${JSON.stringify(resp)?.slice(0, 120)}` }); return; }
+					if (!resp || !resp.data || typeof resp.data.__ntt_blob !== 'string') { resolve({ ok: false, why: `raw wire not tagged JSON: ${JSON.stringify(resp)?.slice(0, 120)}` }); return; }
 					try {
-						const bytes = new Uint8Array(await resp.data.arrayBuffer());
+						const { decodeFromWire } = await import('/wire-codec.js');
+						const decoded = decodeFromWire(resp);
+						if (!(decoded.data instanceof Blob)) { resolve({ ok: false, why: `decode not a Blob: ${typeof decoded.data}` }); return; }
+						const bytes = new Uint8Array(await decoded.data.arrayBuffer());
 						// A zip starts with PK\x03\x04.
 						const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
-						resolve({ ok: isZip && !!resp.filename, size: bytes.length, filename: resp.filename });
-					} catch (e) { resolve({ ok: false, why: `blob read failed: ${e}` }); }
+						resolve({ ok: isZip && !!decoded.filename, size: bytes.length, filename: decoded.filename });
+					} catch (e) { resolve({ ok: false, why: `decode/read failed: ${e}` }); }
 				});
 			}));
-			check('backup export: Export:backup returns a Blob zip payload over the wire', !!backup.ok,
+			check('backup export: Export:backup zip Blob survives the wire via the codec', !!backup.ok,
 				backup.ok ? `${backup.filename}, ${backup.size} bytes` : backup.why || 'no payload');
 		} catch (e) {
-			check('backup export: Export:backup returns a Blob zip payload over the wire', false, String(e?.message || e));
+			check('backup export: Export:backup zip Blob survives the wire via the codec', false, String(e?.message || e));
 		}
+	}
+
+	// 6d. (CHROME.md D8 finding 4) Action-icon sync: drive the
+	// `Theme.colorScheme` relay for BOTH schemes. The SW-side
+	// `syncActionIconWithTheme` must resolve its `action.setIcon` call — a
+	// relative icon path resolves against the SW's own `/lib/` URL, 404s, and
+	// lands "Failed to set icon" in the SW console, which the SW-error gate
+	// (final check) now FAILS on. This is the exact bug that shipped broken on
+	// every Chrome since D4 because the smoke collected SW errors but never
+	// gated on them.
+	if (swTarget && loaded) {
+		await page.evaluate(() => new Promise(resolve => {
+			chrome.runtime.sendMessage({ name: 'Theme.colorScheme', dark: true }, () => {
+				void chrome.runtime.lastError; // fire-and-forget wire — no response by design
+				chrome.runtime.sendMessage({ name: 'Theme.colorScheme', dark: false }, () => {
+					void chrome.runtime.lastError;
+					// Give the SW's setIcon promise a beat to reject (or not)
+					// before the error gate reads the console inventory.
+					setTimeout(resolve, 500);
+				});
+			});
+		}));
+		console.log('[chrome-smoke] ~ drove Theme.colorScheme relay (dark + light) — setIcon outcome gated by the SW-error check below');
 	}
 
 	// 7. (CHROME.md D3 slice 4) SW kill/respawn proof: terminate the service
@@ -380,6 +431,17 @@ try {
 		} catch (e) {
 			check('storage.session value survives across a SW kill attempt (pendingCaptures durability)', false, String(e?.message || e));
 		}
+	}
+	// 8. (CHROME.md D8 test-fidelity remediation, coverage class) SW console
+	// errors GATE the smoke instead of being printed informationally: the D4
+	// setIcon 404 sat visible-but-ungated in this inventory for a month while
+	// every tier stayed green. `[worker-attach-failed]` is deliberately not an
+	// error (attach is best-effort); everything the SW itself logged as an
+	// error fails the run.
+	{
+		const swErrors = swMessages.filter(m => m.startsWith('[console.error]') || m.startsWith('[error]'));
+		check('no service-worker console errors across the whole run', swErrors.length === 0,
+			swErrors.length ? swErrors.slice(0, 3).join(' | ') : `${swMessages.length} SW console message(s), none errors`);
 	}
 } finally {
 	if (browser) { await browser.close(); }

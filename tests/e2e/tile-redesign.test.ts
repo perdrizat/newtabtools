@@ -477,13 +477,25 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			}, CAPTURE_URL);
 
 			// Seed a thumbnail via Thumbnails.save so the tile has backgroundImage.
-			await page.evaluate((u) => {
+			// Routed through the page's own `api` seam rather than a raw
+			// chrome.runtime.sendMessage: on Chrome the seam's wire codec encodes
+			// the Blob for plain JSON messaging (CHROME.md Decision 11 — a raw
+			// Blob arrives as `{}` on stable Chrome, exactly the canary-gate
+			// incident's symptom, and this test caught it on the first branded
+			// parity run); on Firefox the seam is identity passthrough. Awaited
+			// so the send completes before the reload below tears the page down.
+			// STRING-form evaluate: vite rewrites a literal `import()` in this
+			// file into `__vite_ssr_dynamic_import__`, which then gets serialized
+			// into the browser where it doesn't exist — a string bypasses the
+			// transform (same reason the smoke's plain-.mjs evaluate works).
+			await page.evaluate(`(async () => {
 				// Create a minimal 1×1 PNG Blob to seed as the thumbnail image.
 				const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 				const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 				const blob = new Blob([bytes], { type: 'image/png' });
-				chrome.runtime.sendMessage({ name: 'Thumbnails.save', url: u, image: blob });
-			}, CAPTURE_URL);
+				const { api } = await import('/api.js');
+				await api.runtime.sendMessage({ name: 'Thumbnails.save', url: ${JSON.stringify(CAPTURE_URL)}, image: blob });
+			})()`);
 
 			// Reload so the grid picks up the pinned tile and thumbnail.
 			await page.goto(newTabURL, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
