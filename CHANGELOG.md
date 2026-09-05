@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- audit: full-range code review v2.4.0..HEAD (`audit/2026-09-06-code-review-v2.4.0-head.md`) — 10 verified behavioral findings (2 release blockers: Chrome real-user drag-and-drop dead, popup Capture no-op) + cleanup backlog.
+
 ## [2.6.4] — 2026-07-20
 
 D8 stable-Chrome remediation complete (the canary-gate incident): wire codec,
