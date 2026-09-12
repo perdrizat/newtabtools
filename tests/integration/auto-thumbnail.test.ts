@@ -809,6 +809,12 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 	// --- Thumbnails.capture message handler ---
 
 	it('Thumbnails.capture starts a capture session for sender tab', async () => {
+		/**
+		 * COVERAGE LIMIT: A fabricated `sender.tab` is the CONTENT-script/tab-page shape.
+		 * Real popup senders have NO `.tab` — assuming otherwise hid the popup Capture
+		 * no-op for a full release cycle (audit 2026-09-06 F2).
+		 * Keep the tab-less case below.
+		 */
 		const sender = {
 			id: EXTENSION_ID,
 			tab: { id: 42, windowId: 1, url: 'https://example.com' },
@@ -817,6 +823,19 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		await vi.advanceTimersByTimeAsync(0);
 		expect(captureCallCount()).toBe(1);
 		expect(getCaptureSessions().has(42)).toBe(true);
+	});
+
+	it('Thumbnails.capture starts a capture session for popup sender (no sender.tab)', async () => {
+		const sender = { id: EXTENSION_ID }; // no sender.tab
+		onMessageListener({ 
+			name: 'Thumbnails.capture',
+			tabId: 43,
+			windowId: 2,
+			url: 'https://example.org'
+		}, sender, vi.fn());
+		await vi.advanceTimersByTimeAsync(0);
+		expect(captureCallCount()).toBe(1);
+		expect(getCaptureSessions().has(43)).toBe(true);
 	});
 
 	// --- pickAndStore writes to IDB ---

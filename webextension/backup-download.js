@@ -48,10 +48,24 @@ import { api } from './api.js';
 export async function downloadBackup(payload) {
 	let url = URL.createObjectURL(payload.data);
 
-	/** @type {number|undefined} */
-	let downloadId;
+	// ACCEPTED (audit 2026-09-06 F9b): this object URL is document-scoped, so
+	// closing the page mid-download can kill the source before the transfer
+	// commits. Unavoidable under MV3 — a Chrome service worker has no
+	// URL.createObjectURL (CHROME.md D2, which is why creation moved here), and
+	// chrome.offscreen was rejected in D0 Decision 2. Verified by the manual
+	// Save-As step in CHROME.md's checklist, NOT by an automated tier.
+	//
+	// Do NOT "fix" this with a `pagehide`/`unload` revoke. That was tried and
+	// reverted: with `saveAs: true` the Save dialog is still open and the
+	// transfer has not started, so revoking on pagehide *causes* the abort it
+	// appears to prevent, and it reclaims nothing the browser wouldn't free on
+	// document teardown anyway.
+
+	/** @type {Promise<number>|undefined} */
+	let downloadIdPromise;
 	/** @param {browser.downloads._OnChangedDownloadDelta} delta */
-	function onDownloadChanged(delta) {
+	async function onDownloadChanged(delta) {
+		let downloadId = downloadIdPromise ? await downloadIdPromise : undefined;
 		if (delta.id !== downloadId || !delta.state) {
 			return;
 		}
@@ -65,12 +79,12 @@ export async function downloadBackup(payload) {
 	}
 
 	try {
-		downloadId = await api.downloads.download({
+		downloadIdPromise = api.downloads.download({
 			url,
 			filename: payload.filename,
 			saveAs: true
 		});
-		return /** @type {number} */ (downloadId);
+		return /** @type {number} */ (await downloadIdPromise);
 	} catch (ex) {
 		URL.revokeObjectURL(url);
 		if (api.downloads && api.downloads.onChanged) {

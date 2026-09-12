@@ -188,10 +188,8 @@ export var Drag = {
 		dt.setData('text/plain', url);
 		dt.setData('text/uri-list', url);
 		dt.setData('text/x-moz-url', url + '\n' + title);
-		if (url.includes('"') && url.includes('<')) {
-			url = url.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-		}
-		dt.setData('text/html', '<a href="' + url + '">' + url + '</a>');
+		let escapedUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+		dt.setData('text/html', '<a href="' + escapedUrl + '">' + escapedUrl + '</a>');
 
 		// Create and use an empty drag element. We don't want to use the default
 		// drag image with its default opacity.
@@ -455,8 +453,15 @@ export var DropTargetShim = {
 		// XXX bug 505521 - Use the dragover event to retrieve the
 		//                  current mouse coordinates while dragging.
 		let dt = /** @type {DataTransfer & {mozSourceNode?: Node}} */ (event.dataTransfer);
-		let sourceNode = /** @type {SiteNode} */ (/** @type {Node} */ (dt.mozSourceNode).parentNode);
-		Drag.drag(/** @type {Site} */ (sourceNode._newtabSite), event);
+		/** @type {Site} */
+		let site;
+		if (dt.mozSourceNode) {
+			let sourceNode = /** @type {SiteNode} */ (/** @type {Node} */ (dt.mozSourceNode).parentNode);
+			site = /** @type {Site} */ (sourceNode._newtabSite);
+		} else {
+			site = /** @type {Site} */ (Drag.draggedSite);
+		}
+		Drag.drag(site, event);
 
 		// Find the current drop target, if there's one.
 		this._updateDropTarget(event);

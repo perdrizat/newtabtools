@@ -501,6 +501,21 @@ describe('Recently-closed tabs — newTab.js', () => {
 		expect(age._children[0].textContent).toMatch(/^\d+s$/);
 	});
 
+	it('reads lastModified from the Session, not Session.tab', () => {
+		// Chrome puts lastModified on the Session; Firefox puts it on Session.tab.
+		// Both report seconds.
+		const items = [
+			{
+				lastModified: Math.floor(Date.now() / 1000) - 300,
+				tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false },
+			},
+		];
+		(chrome.sessions.getRecentlyClosed as any).mockImplementation((cb: any) => cb(items));
+		refreshRecent();
+		const age = appendedCards[0]._children[2];
+		expect(age._children[0].textContent).toBe('5m');
+	});
+
 	it('shows age in minutes', () => {
 		const items = [
 			{ tab: { url: 'https://example.com', title: 'Ex', sessionId: 's1', favIconUrl: null, incognito: false, lastModified: Math.floor(Date.now() / 1000) - 300 } },

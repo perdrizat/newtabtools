@@ -34,6 +34,7 @@ document.getElementById('pin').onclick = function() {
 };
 
 document.getElementById('capture').onclick = async function() {
-	await api.runtime.sendMessage({name: 'Thumbnails.capture'});
+	let tab = await getTab();
+	await api.runtime.sendMessage({name: 'Thumbnails.capture', tabId: tab.id, windowId: tab.windowId, url: tab.url});
 	window.close();
 };

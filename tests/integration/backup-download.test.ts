@@ -77,10 +77,27 @@ describe('downloadBackup — page-created object URL', () => {
 		expect(revokeSpy).not.toHaveBeenCalled();
 
 		const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-		onChangedListener({ id: 101, state: { current: 'complete' } });
+		await onChangedListener({ id: 101, state: { current: 'complete' } });
 
 		expect(revokeSpy).toHaveBeenCalledWith('blob:page-url');
 		expect(mockDownloads.onChanged!.removeListener).toHaveBeenCalledWith(onChangedListener);
+	});
+
+	it('does NOT revoke the URL on pagehide (audit 2026-09-06 F9b)', async () => {
+		// The object URL is document-scoped, so a pagehide revoke *causes* the
+		// mid-download abort it looks like it prevents: with `saveAs: true` the
+		// Save dialog is still open and the transfer has not started. A revoke
+		// here was tried and reverted; this pins the removal so it can't come
+		// back. The browser frees document blob URLs on teardown regardless.
+		const addSpy = vi.spyOn(globalThis, 'addEventListener');
+		mockDownloads.download.mockResolvedValueOnce(103);
+
+		await downloadBackup(PAYLOAD);
+
+		const pagehideRegistered = addSpy.mock.calls.some(([type]) => type === 'pagehide' || type === 'unload');
+		expect(pagehideRegistered).toBe(false);
+		expect(revokeSpy).not.toHaveBeenCalled();
+		addSpy.mockRestore();
 	});
 
 	it('revokes the URL when the download reaches "interrupted"', async () => {
@@ -88,7 +105,7 @@ describe('downloadBackup — page-created object URL', () => {
 
 		await downloadBackup(PAYLOAD);
 		const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-		onChangedListener({ id: 102, state: { current: 'interrupted' } });
+		await onChangedListener({ id: 102, state: { current: 'interrupted' } });
 
 		expect(revokeSpy).toHaveBeenCalledWith('blob:page-url');
 	});
@@ -98,7 +115,7 @@ describe('downloadBackup — page-created object URL', () => {
 
 		await downloadBackup(PAYLOAD);
 		const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-		onChangedListener({ id: 999, state: { current: 'complete' } });
+		await onChangedListener({ id: 999, state: { current: 'complete' } });
 
 		expect(revokeSpy).not.toHaveBeenCalled();
 	});
@@ -108,7 +125,7 @@ describe('downloadBackup — page-created object URL', () => {
 
 		await downloadBackup(PAYLOAD);
 		const onChangedListener = mockDownloads.onChanged!.addListener.mock.calls[0][0];
-		onChangedListener({ id: 104, state: { current: 'in_progress' } });
+		await onChangedListener({ id: 104, state: { current: 'in_progress' } });
 
 		expect(revokeSpy).not.toHaveBeenCalled();
 	});

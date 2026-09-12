@@ -229,6 +229,8 @@ export function handleMessage(message, sender, sendResponse) {
 	case 'Thumbnails.capture':
 		if (sender.tab) {
 			startCaptureSession(sender.tab.id, sender.tab.windowId, sender.tab.url);
+		} else if (message.tabId !== undefined && message.windowId !== undefined && message.url) {
+			startCaptureSession(message.tabId, message.windowId, message.url);
 		}
 		return false;
 

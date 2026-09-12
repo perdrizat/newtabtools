@@ -40,8 +40,7 @@ const WEBEXT = path.resolve(__dirname, '../../webextension');
 
 const actionHtml = fs.readFileSync(path.join(WEBEXT, 'action.html'), 'utf8');
 const ACTION_JS_PATH = path.join(WEBEXT, 'action.js');
-
-const TAB = { title: 'Example Page', url: 'https://example.com/page' };
+const TAB = { id: 1, windowId: 1, title: 'Example Page', url: 'https://example.com/page' };
 
 let loadCounter = 0;
 
@@ -131,7 +130,12 @@ describe('action.js — toolbar popup glue (real markup + real module)', () => {
 		// callback) — flush the microtask so `close()` has run.
 		await tick();
 		expect(sendMessage).toHaveBeenCalledWith(
-			expect.objectContaining({ name: 'Thumbnails.capture' }),
+			expect.objectContaining({ 
+				name: 'Thumbnails.capture',
+				tabId: TAB.id,
+				windowId: TAB.windowId,
+				url: TAB.url
+			}),
 		);
 		expect(close).toHaveBeenCalled();
 	});

@@ -659,7 +659,11 @@ const NewTabToolsObject = {
 			// Chrome enforces the user-gesture rule strictly for permissions.request
 			// — this call must stay synchronous inside the click handler; don't
 			// defer it behind an `await` (audit §traps).
-			api.permissions.request({permissions: ['downloads']}, function() {
+			api.permissions.request({permissions: ['downloads']}, /** @param {boolean} granted */ function(granted) {
+				if (!granted) {
+					alert(api.i18n.getMessage('backup_permission_required') || 'Downloads permission is required to save the backup.');
+					return;
+				}
 				// The background returns the zip bytes; the page creates the blob
 				// URL and triggers the download (backup-download.js, CHROME.md D2
 				// Decision 2a).
@@ -673,7 +677,14 @@ const NewTabToolsObject = {
 			return;
 		case 'options-restore-confirm': {
 			let input = /** @type {HTMLInputElement} */ (document.getElementById('options-restore-file'));
-			api.runtime.sendMessage({name: 'Import:restore', file: /** @type {FileList} */ (input.files)[0]});
+			api.runtime.sendMessage({name: 'Import:restore', file: /** @type {FileList} */ (input.files)[0]})
+				.then(/** @param {{ok: boolean, error?: string}|null} response */ response => {
+					if (!response || !response.ok) {
+						console.error('Restore failed:', response?.error);
+						alert(api.i18n.getMessage('backup_restore_failed') || 'Restore failed.');
+					}
+				})
+				.catch(console.error);
 			this._hideConfirm('options-restore-confirm-row');
 			return;
 		}

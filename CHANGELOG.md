@@ -4,11 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [2.6.5] — 2026-09-12
 
 ### Added
 
 - audit: full-range code review v2.4.0..HEAD (`audit/2026-09-06-code-review-v2.4.0-head.md`) — 10 verified behavioral findings (2 release blockers: Chrome real-user drag-and-drop dead, popup Capture no-op) + cleanup backlog.
+- audit: remediation plan rev 2 (`audit/2026-09-06-chrome-audit-remediation-plan.md`) — per-finding fixes corrected (4 defects in rev 1), per-finding test plan, all 7 feasibility questions resolved.
+- audit: Chrome 151 `sessions` probe settles finding 8 — `lastModified` is on the Session (not the Tab) and is in **seconds**, not milliseconds as assumed; fix reduces to a one-line read-location fallback.
+- audit: plan folds re-litigation defence into each fix (3 inline comments on unfixed/probed items + 2 test-header coverage-limit notes) — no index, no new comment convention.
+- audit: Firefox test-tier remediation plan rev 2 (`audit/2026-09-06-firefox-remediation-plan.md`) — root cause proven and attributed upstream to Firefox bug 1579790 (landed **Fx 153**): driver-initiated navigation is allowlisted to http/https/file/about:blank, so `moz-extension://` is refused, blocking all 32 E2E files and UAT; `-remote-allow-system-access` tested and does not lift it; not the ESR flip, not the bugfixes (fast tier 1497 green, and the full E2E suite is 126/126 on a downloaded Fx 152.0.6 against the same tree).
+- audit: report gains a Corrections block + per-finding markers (F8 milliseconds claim disproven; F2/F9b were already-documented known limitations; disposition re-scoped to finding 1 as the sole release gate); plan gains a pointer so the 8 cleanup findings aren't orphaned.
+- `tests/integration/site-unpin.test.ts` — pins `Site.prototype.unpin`'s keep-vs-delete boundary in both directions (bookkeeping flags delete; user-set title / custom image / background colour keep).
+- `tests/integration/drag-escape.test.ts` — pins the `text/html` drag flavour's escaping, including the `&`-first ordering and the single-character cases the old `&&` condition let through (audit 2026-09-06 F6).
+- `recent-tabs.test.ts` gains a Chrome-shape case (`lastModified` on the Session, not `Session.tab`) — every existing age-chip fixture used the Firefox shape, so the F8 read-location fallback was passing untested.
+- audit report gains a "Remediation status at 2.6.5" section: per-finding fix/test matrix, plus what is deferred and why (findings 3 and 4 untested pending a page-level mount helper, finding 10 unimplemented, trusted-event drag E2E still missing).
+
+### Changed
+
+- deps: transitive security bumps clear the `nanoid` (3.3.12→3.3.18) and `postcss` (8.5.15→8.5.26) advisories; `lightningcss` 1.32→1.33, `picomatch`, `@napi-rs/wasm-runtime` and `@tybys/wasm-util` moved as resolution side-effects. No direct dependency changed — `package.json` is untouched.
+- deps: `pnpm-workspace.yaml` overrides extended to the remaining flagged transitives (`brace-expansion` ×2 majors, `js-yaml`, `shell-quote`, `fast-uri`, `ip-address`) and the `undici` floor raised 7.28.0→7.29.0, per the documented exact-pin policy; the stale "shell-quote needs no override" note is corrected (the 1.8.4 web-ext ships is itself vulnerable). `pnpm audit --audit-level=high` now exits 0.
+- deps: `image-size`'s two high advisories accepted via a documented `auditConfig.ignoreGhsas` exception (GHSA-w3rx-r6r6-pgpr, GHSA-5p2g-fcmc-qvqq) — upstream is archived so no fix will ship, the newest addons-linter still pins 2.0.2, and both live in the ICNS / JXL-HEIF-JP2 parsers, which cannot execute here because `webextension/` is SVG-only. `ignoreCves` with the equivalent CVE ids silently matches nothing; pnpm keys on the GHSA id. Rejected alternatives and the revisit trigger are recorded in `pnpm-workspace.yaml`.
+
+### Fixed
+
+- `backup-download.js` no longer revokes the backup object URL on `pagehide` — with `saveAs: true` that aborted the very download it appeared to protect, and the browser frees document-scoped blob URLs on teardown anyway; the accepted MV3 lifetime limitation is now recorded at the call site (audit 2026-09-06 F9b).
+- `site.js`'s unpin keep-record check no longer discards a user-set tile title: it now keys on real `Tile` data (`image` / `backgroundColor` / `titleIsUserSet === true`) instead of an allow-list containing three non-existent keys, fixing both the original zombie-record bug and the over-correction that replaced it (audit 2026-09-06 F5).
+- `tests/e2e/run_esr_tests.sh` default restored to release `firefox` — an uncommitted flip to `firefox-esr` contradicted both the comment above it and the minimum-152 decision of record.
+- Stale pre-split `tests/e2e/_artifacts/` removed and gitignored; only the `-ff`/`-cft` per-browser dirs were covered, so the bare path was committable.
+- `drag-reorder.test.ts`'s coverage note no longer claims trusted-drag coverage "in the Chrome-only case below" — no such case exists; it now states the gap plainly.
+- docs: `CONTRIBUTING.md` records the two audit-remediation traps (an advisory's patched-version floor may name an unpublished release; unfixable advisories need `auditConfig.ignoreGhsas`, not `ignoreCves`) and corrects the "`pnpm update` is a no-op" claim, which holds only for direct deps.
 
 ## [2.6.4] — 2026-07-20
 

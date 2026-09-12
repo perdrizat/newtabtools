@@ -11,6 +11,17 @@
  * CHROME.md D5b: runs unmodified on Chrome (green on CfT 151) — the same
  * quarantine policy extends to the Chrome tier rather than getting its own
  * rule.
+ *
+ * COVERAGE LIMIT: the synthetic `drop` events below are untrusted, and
+ * cell.js:259 routes drops to Drop.drop ONLY when !event.isTrusted — so this
+ * file never reaches DropTargetShim, the path real users take. It stayed green
+ * through a total Chrome drag outage (audit 2026-09-06 F1).
+ *
+ * The DropTargetShim branch is covered at the integration tier by
+ * drag-drop-shim.test.ts (both DataTransfer shapes). There is still NO
+ * trusted-event E2E coverage — a `page.setDragInterception` test is the
+ * outstanding gap; do not read this file's green as proof that real-user drag
+ * works on either browser.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

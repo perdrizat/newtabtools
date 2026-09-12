@@ -29,6 +29,12 @@
 	"backup_export_failed": {
 		"message": "Backup export failed. The backup may be too large to export in this browser."
 	},
+	"backup_permission_required": {
+		"message": "NewTab PowerTools needs the Downloads permission to save your backup."
+	},
+	"backup_restore_failed": {
+		"message": "Restore failed. The backup file may be corrupt or invalid."
+	},
 	"bg_header": {
 		"message": "Page background image:"
 	},

@@ -22,9 +22,98 @@ autoInstallPeers: true
 #            audit 2026-07-18; 0.6.0 published 2026-07-10 — clears the 7-day
 #            minimumReleaseAge; zero deps, no install scripts, same maintainer
 #            since 2012)
-# shell-quote is NOT here: web-ext 10.4.0 → fx-runner 1.5.0 ships shell-quote
-# 1.8.4 natively, so no override is needed.
+# The block below is the documented remedy for a transitive advisory: an exact
+# pin here, never a floated resolution (CONTRIBUTING.md "Keeping dependencies
+# current"). Each floor is the highest "Patched versions" across every advisory
+# `pnpm audit` reports for that package, re-derived 2026-09-12.
+#
+# brace-expansion needs TWO selectors: the tree carries both a 1.x line (via
+# minimatch 3.x) and a >=3 line, each with its own advisory chain. A single
+# override would force one major on both.
+#
+# undici's floor moved 7.28.0 → 7.29.0 (a newer advisory supersedes the old
+# pin). shell-quote's former "no override needed" note is now stale: the
+# 1.8.4 that web-ext → fx-runner ships natively is itself the vulnerable
+# version (GHSA-395f-4hp3-45gv; first fixed release is 1.10.0, NOT the 1.8.5
+# the advisory's floor names — that version was never published).
 overrides:
   'hono@<4.12.25': '4.12.25'
-  'undici@<7.28.0': '7.28.0'
+  'undici@<7.29.0': '7.29.0'
   'adm-zip@<0.6.0': '0.6.0'
+  'brace-expansion@<2': '1.1.18'
+  'brace-expansion@>=3': '5.0.9'
+  'js-yaml@<4.3.2': '4.3.2'
+  'shell-quote@<1.10.0': '1.10.0'
+  'fast-uri@<3.1.6': '3.1.6'
+  'ip-address@<10.3.1': '10.3.1'
+# image-size is NOT overridable — see the accepted-risk block below.
+#
+# Trap worth remembering: an advisory's "Patched versions" floor is NOT proof a
+# release exists. shell-quote's floor reads ">=1.8.5" but no 1.8.5 was ever
+# published (1.10.0 is the first fixed release), and image-size's reads ">=2.0.3"
+# which does not exist at all. Always confirm with
+# `pnpm view <pkg>@<version> version` before pinning a floor here — a phantom
+# pin fails the whole install with ERR_PNPM_NO_MATCHING_VERSION.
+
+# ---------------------------------------------------------------------------
+# Accepted risk: image-size (2 high advisories) — reviewed 2026-09-12
+# ---------------------------------------------------------------------------
+# CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr — ICNS parser infinite loop (CVSS 8.7)
+# CVE-2025-71329 / GHSA-5p2g-fcmc-qvqq — JXL/HEIF parser infinite loop (CVSS 8.7)
+#
+# Why an exception and not a pin:
+#   1. NO FIX EXISTS. Both GitHub advisories state "Patched versions: None
+#      available" (published 2026-06-10). pnpm audit's ">=2.0.3" floor is
+#      synthesised — 2.0.2 is simultaneously the latest published release and
+#      the vulnerable one. Neither advisory offers a workaround section.
+#   2. NO UPGRADE PATH. The newest addons-linter (10.12.0, vs our transitive
+#      10.7.0) still declares an exact `"image-size": "2.0.2"`, so bumping
+#      web-ext 10.4.0 → 10.6.0 does not help either.
+#
+# Why the vulnerable code is UNREACHABLE here (not merely low-risk):
+#   Reach is `web-ext → addons-linter → image-size`, dev-only tooling that
+#   cannot enter the shipped extension (the package has no runtime deps). The
+#   single call site is addons-linter's `getImageMetadata(io, iconPath)`, which
+#   parses icon files INSIDE THE PACKAGE BEING LINTED — for us, `webextension/`.
+#   Both CVEs live specifically in the ICNS parser and the JXL/HEIF/JP2
+#   box-walking loops. `webextension/` contains NO raster images at all: every
+#   asset is SVG, so image-size dispatches to `svg.cjs` on every call and the
+#   vulnerable loops never execute. (The Chrome PNGs live in
+#   `assets/chrome-icons` and are staged into `dist/`, never into the linted
+#   source dir.)
+#
+# Upstream status (checked 2026-09-12) — waiting for Mozilla is NOT a plan:
+#   mozilla/addons-linter#6148 "npm audit failures: image-size" was opened
+#   2026-08-13 by Rob--W and has ZERO comments — filed, not triaged, no
+#   direction. The obvious fix was already attempted and is blocked:
+#   addons-linter#5413 proposed swapping image-size for `image-dimensions`
+#   (sindresorhus, zero deps, 19 kB) and was closed "for now" because
+#   image-dimensions has NO SVG SUPPORT. Still true at 2.5.1, and its README
+#   says "Supporting all kinds of image formats is a non-goal." addons-linter
+#   must parse SVG icons, so that swap cannot land until upstream changes its
+#   mind. (Mozilla itself uses audit exceptions for transitive dev advisories
+#   in web-ext, which is the same posture taken here.)
+#
+# Rejected alternatives, so nobody re-derives them:
+#   - `pnpm patch` on image-size: the fix is a one-line zero-guard per loop and
+#     would work, but it is maintenance guarding a path that cannot execute.
+#   - `image-size-next` (community fork) or a local shim via a `link:` override:
+#     both change what addons-linter does internally. addons-linter is a
+#     CONFORMANCE ORACLE for AMO submission — its value is behaving exactly as
+#     Mozilla ships it. Diverging it risks passing locally and failing review.
+#     The fork additionally is 29 days old with a single anonymous maintainer.
+#
+# Revisit trigger — NOT a version check (upstream image-size is ARCHIVED; 2.0.3
+# will never ship). Revisit if a RASTER image ever lands in `webextension/`,
+# and immediately if it is ever .icns/.heic/.heif/.jxl/.jp2, since the
+# unreachability argument above is what makes this acceptable. Re-check at the
+# next dependency sweep
+# even if nothing prompts it — an accepted risk with no expiry becomes invisible.
+auditConfig:
+  # Must be ignoreGhsas, NOT ignoreCves: pnpm audit keys advisories by the GHSA
+  # id it prints in the "More info" row, and an ignoreCves entry naming the
+  # equivalent CVE silently matches nothing (verified 2026-09-12 — the two
+  # advisories still failed the gate with exit 1).
+  ignoreGhsas:
+    - GHSA-w3rx-r6r6-pgpr # CVE-2025-71330, image-size ICNS parser DoS
+    - GHSA-5p2g-fcmc-qvqq # CVE-2025-71329, image-size JXL/HEIF parser DoS

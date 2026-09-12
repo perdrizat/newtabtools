@@ -216,7 +216,21 @@ Site.prototype = {
 			this.updateAttributes(false);
 
 			let op;
-			if (Object.keys(this._link).some(k => !['id', 'title', 'url', 'position'].includes(k))) {
+			// Keep the record (dropping only `position`) when the tile carries
+			// user data worth surviving an unpin; otherwise delete it outright.
+			// Tested against the real `Tile` shape (lib/tiles-store.js): a custom
+			// uploaded `image`, a per-tile `backgroundColor`, or a user-set title.
+			// `imageIsThumbnail` needs no case of its own — it only ever
+			// accompanies `image`.
+			//
+			// Bookkeeping flags must NOT count as data (audit 2026-09-06 F5):
+			// `titleIsUserSet` is written as `false` on every title/URL edit, and
+			// the original "any key outside id/title/url/position" test treated
+			// that as meaningful, so an edited tile could never be deleted — it
+			// lingered as a zombie whose stale id/title merged onto future
+			// topSites entries via tiles-store.js's `Object.assign`. Hence the
+			// explicit `=== true`, not a truthiness check on the key's presence.
+			if (this._link.image || this._link.backgroundColor || this._link.titleIsUserSet === true) {
 				delete this._link.position;
 				op = Tiles.putTile(this._link);
 			} else {

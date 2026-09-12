@@ -20,6 +20,7 @@ import {
 	isCaptureAvailableViaPermission,
 	isCaptureAvailableForScope,
 	syncActionIconWithTheme,
+	broadcastToPages,
 } from '../../webextension/lib/platform.js';
 
 describe('sessionGet/sessionSet (storage.session wrapper)', () => {
@@ -162,5 +163,14 @@ describe('syncActionIconWithTheme (CHROME.md D4: the Chrome action-icon relay)',
 		expect(() => syncActionIconWithTheme(true, true)).not.toThrow();
 		await vi.waitFor(() => expect(errorSpy).toHaveBeenCalled());
 		errorSpy.mockRestore();
+	});
+});
+
+describe('broadcastToPages guard (Finding 7)', () => {
+	it('throws if called with a payload, enforcing wire codec safety', () => {
+		expect(() => (broadcastToPages as any)('Page.updateGrid', { data: new Blob() }))
+			.toThrow(/broadcastToPages only accepts a string name/);
+		expect(() => (broadcastToPages as any)({ name: 'Page.updateGrid', data: new Blob() }))
+			.toThrow(/broadcastToPages only accepts a string name/);
 	});
 });

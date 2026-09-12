@@ -301,5 +301,8 @@ export function createMenuTolerant(props) {
  * @returns {Promise<void>}
  */
 export function broadcastToPages(name) {
+	if (arguments.length > 1 || typeof name !== 'string') {
+		throw new Error('broadcastToPages only accepts a string name. If you need payloads, wrap it with wire-codec.js first (Finding 7).');
+	}
 	return api.runtime.sendMessage({name}).catch(() => {});
 }

@@ -145,6 +145,20 @@ export function _formatAge(lastModified) {
 	if (!lastModified) {
 		return '';
 	}
+	// BOTH engines report seconds — verified on Chrome 151, 2026-09-06 (audit
+	// 2026-09-06 F8, probe `.tmp/q5-sessions-probe.mjs`): `lastModified` came
+	// back as 1788717109 against a `Date.now()` of 1788717110828, i.e. seconds,
+	// exactly like Firefox. Only its LOCATION diverges (Chrome puts it on the
+	// Session, Firefox on Session.tab — handled at the destructure in
+	// `refreshRecent`), not its units.
+	// Do NOT "fix" this by unconditionally dividing by 1000: that dates every
+	// Chrome chip ~20 days into the past. The guard below is defensive only —
+	// a seconds-epoch value is ~1.8e9, so it never fires today; it exists so a
+	// future engine that did report milliseconds (~1.8e12) would degrade to a
+	// wrong-by-nothing value rather than a nonsensical negative age.
+	if (lastModified > 1e11) {
+		lastModified = Math.floor(lastModified / 1000);
+	}
 	let seconds = Math.floor(Date.now() / 1000) - lastModified;
 	if (seconds < 60) {
 		return seconds + 's';
@@ -248,7 +262,8 @@ export function refreshRecent() {
 			// `SessionTab` adds `lastModified` (real at runtime — a
 			// `browser.sessions`-obtained tab — but missing from
 			// `@types/firefox-webext-browser`'s plain `Tab`).
-			let {url, title, sessionId, favIconUrl, lastModified} = /** @type {SessionTab & {url: string}} */ (item.tab);
+			let {url, title, sessionId, favIconUrl} = /** @type {SessionTab & {url: string}} */ (item.tab);
+			let lastModified = item.lastModified || /** @type {SessionTab} */ (item.tab).lastModified;
 			let displayTitle = title || url;
 			let domain;
 			try {
