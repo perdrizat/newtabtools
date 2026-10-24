@@ -15,6 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { Builder, By, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { newTabURL } from './urls.mjs';
+import { resolveUatEnv } from './uat-browsers.mjs';
+
+// Firefox-only by design; refuse any other UAT_BROWSER rather than silently
+// running Firefox under a Chrome request.
+resolveUatEnv({ tool: 'browser-smoke.mjs', supported: ['firefox'] });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // XPI_DIR holds the canonical build output (.xpi) — same artifact UAT and AMO

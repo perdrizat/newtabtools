@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.6.6] — 2026-10-24
+
+### Changed
+
+- docs: CONTRIBUTING.md records two more dependency traps — override floors go stale and must be re-derived each sweep, and a fix younger than `minimumReleaseAge` is waited out via a dated temporary exception, never `minimumReleaseAgeExclude`.
+- deps: 12 dev dependencies bumped to their newest within-major release that clears the 7-day `minimumReleaseAge` — MCP SDK 1.29.0→1.32.1, web-ext 10.4.0→10.8.0, eslint 10.5.0→10.13.0, typescript-eslint 8.61.0→8.71.2 (both), puppeteer-core 25.1.0→25.14.0, selenium-webdriver 4.44.0→4.51.0, vitest 4.1.8→4.1.12, globals 17.6.0→17.13.0, jest-webextension-mock 4.1.1→4.2.0, @types/node 24.13.2→24.19.2, @types/firefox-webext-browser 143.0.0→143.0.1. Majors held back deliberately (vitest 5, jsdom 30); `@zip.js/zip.js` deferred because bumping it re-vendors shipped code.
+- deps: every advisory floor in `pnpm-workspace.yaml` re-derived — undici→7.30.1, adm-zip→0.6.1, brace-expansion→1.1.20/5.0.11, shell-quote→1.11.0, fast-uri→3.1.7 — plus new pins for proxy-addr, zod, source-map-js and vite. Targets the 23 high and 2 critical advisories disclosed since 2026-09-12.
+- deps: `body-parser` (GHSA-mrhx-c7xc-m3w5 / GHSA-27r3-jxmh-p828, one issue under two ids) temporarily ignored until **2026-10-29** — its only fix (2.4.0) is two days old and blocked by the release-age guard, which is kept rather than bypassed; unreachable here because the UAT MCP server uses stdio transport and no HTTP server runs.
+- deps: `image-size` accepted-risk exception deleted — addons-linter now declares 2.0.4, which web-ext 10.8.0 pulls in, so no override or exception is needed.
+- uat: per-browser settings (daemon port, health timeout, artifact suffix, extension URL scheme) now come from one registry, `tests/uat/_tools/uat-browsers.mjs`, replacing six hand-copied `=== 'chrome' ? … : …` ternaries that silently treated any other value as Firefox. Unknown `UAT_BROWSER` values now throw, each tool declares which browsers it implements, and `tests/integration/uat-browsers.test.ts` blocks new direct reads of `UAT_BROWSER` or hardcoded ports.
+- deps: `node-forge` (GHSA-86w9-cpqp-85rv) accepted via `auditConfig.ignoreGhsas` — no fix is published (1.4.0 is both newest and vulnerable) and it is reachable only through web-ext's Android ADB client, which this project never targets.
+
+### Fixed
+
+- uat: `mcp-smoke.mjs` now works with `UAT_BROWSER=chrome` — it polled Firefox's daemon port and passed no port to the daemon or MCP server it spawned, so in Chrome mode it could never see a healthy daemon; it also now uses Chrome's 600 s health budget instead of a hardcoded 300 s.
+- uat: `preflight.mjs` now checks the daemon port against both E2E tiers' ports, not only Firefox E2E's.
+- uat: `browser-smoke.mjs` and `fallback-cli.mjs` refuse a non-Firefox `UAT_BROWSER` instead of silently running Firefox.
+
 ## [2.6.5] — 2026-09-12
 
 ### Added

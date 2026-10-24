@@ -16,16 +16,22 @@
  * pref); Chrome reaches it via `chrome-extension://<id>/`, where `<id>` is
  * deterministic from the committed dev key (see
  * `tests/e2e-chrome/_tools/chrome-env.mjs`). All existing single-arg callers
- * (Firefox-only) keep working unchanged — `browser` defaults to `'firefox'`.
+ * (Firefox-only) keep working unchanged — `browser` defaults to the registry's
+ * default browser.
+ *
+ * The URL scheme comes from the browser registry (uat-browsers.mjs), so an
+ * unknown browser throws instead of silently getting `moz-extension://`.
  */
+
+import { DEFAULT_UAT_BROWSER, uatBrowserProfile } from './uat-browsers.mjs';
 
 /**
  * @param {string} id the extension's per-profile moz-extension UUID (Firefox)
  *   or its deterministic extension id (Chrome)
- * @param {'firefox'|'chrome'} [browser] which store origin to build — defaults
- *   to `'firefox'` so existing single-arg call sites are unaffected
+ * @param {string} [browser] a registered UAT browser name — defaults to the
+ *   registry default so existing single-arg call sites are unaffected
  * @returns {string} the full extension-origin URL to the new tab page
  */
-export function newTabURL(id, browser = 'firefox') {
-	return browser === 'chrome' ? `chrome-extension://${id}/newTab.html` : `moz-extension://${id}/newTab.html`;
+export function newTabURL(id, browser = DEFAULT_UAT_BROWSER) {
+	return `${uatBrowserProfile(browser).extensionScheme}://${id}/newTab.html`;
 }

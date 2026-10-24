@@ -42,11 +42,11 @@
 //     also answers to the `chrome.*` alias) and Selenium's browser-agnostic
 //     API, so it needs no per-browser branching.
 //
-// PORT: 9876 by default for Firefox, 9877 for Chrome (chrome-prep D6, so both
-// daemons can run in parallel — see tests/e2e-chrome/README.md "Port
-// allocation"); $UAT_DAEMON_PORT overrides either. Firefox's default is
-// deliberately != E2E's 9222 (tests/e2e/run_esr_tests.sh). preflight.mjs
-// enforces the port is free before the runner starts.
+// PORT: each browser has its own default daemon port, defined once in the
+// browser registry (uat-browsers.mjs), so both daemons can run in parallel —
+// see tests/e2e-chrome/README.md "Port allocation". $UAT_DAEMON_PORT
+// overrides it. The registry keeps every default clear of the E2E tiers'
+// ports, and preflight.mjs enforces the port is free before the runner starts.
 //
 // Endpoints (all JSON):
 //   GET  /health          -> { status, ready, port }
@@ -79,14 +79,19 @@ import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import chromeWebdriver from 'selenium-webdriver/chrome.js';
 import { newTabURL } from './urls.mjs';
+import { resolveUatEnv } from './uat-browsers.mjs';
 import { resolveChromeBinary, stageDevBuild, chromeArgs } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
 
-const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
-const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876;
-const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
+// `supported` lists the browsers this file has code paths for (makeDriver,
+// installExtension, withSeedTimeout). Registering a new browser in
+// uat-browsers.mjs makes the daemon refuse it here, by name, until those
+// branches exist — rather than falling through to the Firefox path.
+const UAT = resolveUatEnv({ tool: 'browser-daemon.mjs', supported: ['firefox', 'chrome'] });
+const UAT_BROWSER = UAT.browser;
+const PORT = UAT.port;
 const XPI_DIR = process.env.XPI_DIR || path.resolve(ROOT, 'dist');
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
@@ -518,7 +523,7 @@ function withTimeout(promise, ms, label) {
 	// counts as a visit ("URL still hit history"). Chromedriver tolerates the
 	// race (verified by the green Chrome daemon-smoke) and needs it — see the
 	// hang note above.
-	if (UAT_BROWSER !== 'chrome') { return promise; }
+	if (UAT_BROWSER === 'firefox') { return promise; }
 	return Promise.race([
 		promise,
 		new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
@@ -691,7 +696,8 @@ if (isMain) {
 	const cStart = now();
 	await captureDefaultPins();
 	log(`startup: captureDefaultPins ${secs(now() - cStart)}s`);
-	log(`initial newTab.html loaded [browser=${UAT_BROWSER}] (extension ${UAT_BROWSER === 'chrome' ? 'loaded pre-seed via --load-extension' : 'installed post-seed'}; default tiles pinned + imagery captured)`);
+	const extensionLoad = { firefox: 'installed post-seed', chrome: 'loaded pre-seed via --load-extension' }[UAT_BROWSER];
+	log(`initial newTab.html loaded [browser=${UAT_BROWSER}] (extension ${extensionLoad}; default tiles pinned + imagery captured)`);
 }
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────

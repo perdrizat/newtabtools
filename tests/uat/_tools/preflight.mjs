@@ -21,6 +21,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { resolveChromeBinary, cftStalenessWarning } from '../../e2e-chrome/_tools/chrome-env.mjs';
+import { resolveUatEnv, RESERVED_E2E_PORTS } from './uat-browsers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -31,7 +32,8 @@ const require = createRequire(import.meta.url);
 // vs. Chrome for Testing) — everything else (node/pnpm/claude CLI/fixture/SDK)
 // is shared, since the runner + daemon are one parameterized implementation,
 // not a fork.
-const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
+const UAT = resolveUatEnv({ tool: 'preflight.mjs', supported: ['firefox', 'chrome'] });
+const UAT_BROWSER = UAT.browser;
 
 // SHA-256 of tests/uat/newtabtools_knowngood.zip — bump when fixtureVersion
 // changes. Source of truth: tests/uat/README.md "fixtureVersion" section.
@@ -87,7 +89,7 @@ console.log();
 // check right after this block: it needs no geckodriver-equivalent handshake
 // or a pre-built .xpi, since stageDevBuild() stages the unpacked dev build
 // fresh at daemon start (chrome-prep D6).
-if (UAT_BROWSER !== 'chrome') {
+if (UAT_BROWSER === 'firefox') {
 	const envBin = process.env.FIREFOX_BIN;
 	let bin = null;
 	if (envBin) {
@@ -184,7 +186,7 @@ if (UAT_BROWSER !== 'chrome') {
 			ok('Built .xpi', xpiName);
 		}
 	}
-} else {
+} else if (UAT_BROWSER === 'chrome') {
 	// Chrome tier (chrome-prep D6): no geckodriver-equivalent handshake and no
 	// pre-built .xpi to check — stageDevBuild() stages the unpacked dev build
 	// fresh every time the daemon starts. Just confirm a Chrome for Testing
@@ -251,13 +253,11 @@ if (UAT_BROWSER !== 'chrome') {
 	}
 }
 
-// 8. browser-daemon port is free (and not colliding with E2E's 9222)
+// 8. browser-daemon port is free (and not colliding with either E2E tier)
 {
-	const E2E_PORT = 9222; // tests/e2e/run_esr_tests.sh
-	const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876; // chrome-prep D6: 9877 so both daemons can run in parallel
-	const port = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
-	if (port === E2E_PORT) {
-		fail('UAT daemon port', `${port} collides with E2E's port ${E2E_PORT} — pick another via $UAT_DAEMON_PORT`);
+	const port = UAT.port;
+	if (RESERVED_E2E_PORTS.includes(port)) {
+		fail('UAT daemon port', `${port} collides with an E2E tier's port (${RESERVED_E2E_PORTS.join(', ')}) — pick another via $UAT_DAEMON_PORT`);
 	} else {
 		const free = await new Promise((resolve) => {
 			const probe = net.createServer();

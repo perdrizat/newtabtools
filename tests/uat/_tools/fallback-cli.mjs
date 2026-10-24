@@ -25,6 +25,10 @@ import { fileURLToPath } from 'node:url';
 import { Builder } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { newTabURL } from './urls.mjs';
+import { resolveUatEnv } from './uat-browsers.mjs';
+
+// Firefox-only reference tool; refuse any other UAT_BROWSER.
+resolveUatEnv({ tool: 'fallback-cli.mjs', supported: ['firefox'] });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // XPI_DIR = canonical build output. ART_DIR = UAT evidence (daemon file, etc.).

@@ -52,7 +52,8 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 | File | Purpose | Needs SDK? |
 |---|---|---|
 | `_tools/browser-daemon.mjs` | long-lived browser host (Firefox or Chrome, `$UAT_BROWSER` + environment seed + HTTP API) | no |
-| `_tools/urls.mjs` | shared extension-origin URL builder (`moz-extension://`/`chrome-extension://`) | no |
+| `_tools/uat-browsers.mjs` | the single browser registry: per-browser daemon port, health timeout, artifact suffix and URL scheme, plus `resolveUatEnv()`/`uatChildEnv()`. Every tool resolves its browser here; adding a browser means adding a row (see the module header) | no |
+| `_tools/urls.mjs` | shared extension-origin URL builder (`moz-extension://`/`chrome-extension://`, scheme from the registry) | no |
 | `_tools/mcp-server.mjs` | thin MCP→HTTP client to the daemon | yes |
 | `_tools/mcp-config.json` | config Claude reads to spawn the MCP server | — |
 | `_tools/daemon-smoke.mjs` | daemon HTTP-API contract smoke | no |

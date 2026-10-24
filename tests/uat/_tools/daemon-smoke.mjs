@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Standalone smoke for browser-daemon.mjs — the long-lived browser host that
 // holds ONE Selenium session (Firefox or Chrome, per $UAT_BROWSER) for a whole
-// UAT run and exposes it over a localhost HTTP API (port 9876 Firefox / 9877
-// Chrome by default; $UAT_DAEMON_PORT overrides either).
+// UAT run and exposes it over a localhost HTTP API (per-browser default port
+// from uat-browsers.mjs; $UAT_DAEMON_PORT overrides it).
 //
 // This is the daemon's behavioural contract test: spawn it, wait for /health,
 // drive each endpoint once, then SIGTERM it. It is independent of the MCP and
@@ -22,16 +22,18 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newTabURL } from './urls.mjs';
+import { resolveUatEnv, uatChildEnv } from './uat-browsers.mjs';
 import { CHROME_DEV_EXTENSION_ID } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DAEMON = path.join(__dirname, 'browser-daemon.mjs');
-const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
-const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876;
-const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
+const UAT = resolveUatEnv({ tool: 'daemon-smoke.mjs', supported: ['firefox', 'chrome'] });
+const UAT_BROWSER = UAT.browser;
+const PORT = UAT.port;
 const BASE = `http://127.0.0.1:${PORT}`;
 const UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = UAT_BROWSER === 'chrome' ? newTabURL(CHROME_DEV_EXTENSION_ID, 'chrome') : newTabURL(UUID, 'firefox');
+const EXTENSION_ID = { firefox: UUID, chrome: CHROME_DEV_EXTENSION_ID }[UAT_BROWSER];
+const NEWTAB_URL = newTabURL(EXTENSION_ID, UAT_BROWSER);
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const size = o => Buffer.byteLength(JSON.stringify(o));
@@ -60,15 +62,13 @@ async function waitHealthy(timeoutMs) {
 }
 
 console.log(`[daemon-smoke] spawning ${UAT_BROWSER} daemon on port ${PORT} (newtab: ${NEWTAB_URL})`);
-const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit'], env: { ...process.env, UAT_BROWSER, UAT_DAEMON_PORT: String(PORT) } });
+const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit'], env: uatChildEnv(UAT) });
 
-// Chrome's `--headless=new` renders pages much closer to real Chrome (full JS/ads/
-// trackers) than Firefox's classic `-headless`, so the same 19-site x2-pass +
-// 5-news-site environment seed measurably takes longer per site under Chrome
-// (mainly the per-site cross-origin-iframe consent-dismissal walk) — a real
-// timing difference, not a hang (verified: a 2-site seed reaches /health in well
-// under a minute on Chrome). Give Chrome double the budget.
-const HEALTH_TIMEOUT_MS = UAT_BROWSER === 'chrome' ? 600000 : 300000;
+// Per-browser health budget from the registry. Chrome gets double: its
+// `--headless=new` seed is measurably slower per site (mainly the per-site
+// cross-origin-iframe consent-dismissal walk) — a real timing difference, not
+// a hang (verified: a 2-site seed reaches /health in well under a minute).
+const HEALTH_TIMEOUT_MS = UAT.healthTimeoutMs;
 
 let exitCode = 0;
 try {

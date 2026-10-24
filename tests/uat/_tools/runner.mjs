@@ -36,6 +36,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newTabURL } from './urls.mjs';
+import { resolveUatEnv, uatChildEnv } from './uat-browsers.mjs';
 import { parseReport, deriveVerdict, checkName } from './report-verdict.mjs';
 import { CHROME_DEV_EXTENSION_ID } from '../../e2e-chrome/_tools/chrome-env.mjs';
 
@@ -46,15 +47,15 @@ const ARTIFACTS_ROOT = path.join(ROOT, 'tests/uat/artifacts');
 const FIXTURE = path.join(ROOT, 'tests/uat/newtabtools_knowngood.zip');
 
 // chrome-prep D6: one parameterized runner drives either browser daemon.
-// $UAT_BROWSER selects `firefox` (default) or `chrome`; everything below
-// (preflight, daemon spawn, scenario loop, MCP env) is shared — only the
-// port default, the artifacts-dir suffix, and the newtab origin threaded into
-// the scenario prologue differ.
-const UAT_BROWSER = process.env.UAT_BROWSER === 'chrome' ? 'chrome' : 'firefox';
+// $UAT_BROWSER selects the browser; everything below (preflight, daemon
+// spawn, scenario loop, MCP env) is shared. The per-browser values — port,
+// health budget, artifacts-dir suffix — come from the registry
+// (uat-browsers.mjs); only the extension id below is runner-specific.
+const UAT = resolveUatEnv({ tool: 'runner.mjs', supported: ['firefox', 'chrome'] });
+const UAT_BROWSER = UAT.browser;
 const FIREFOX_UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
-const NEWTAB_URL = UAT_BROWSER === 'chrome'
-	? newTabURL(CHROME_DEV_EXTENSION_ID, 'chrome')
-	: newTabURL(FIREFOX_UUID, 'firefox');
+const EXTENSION_ID = { firefox: FIREFOX_UUID, chrome: CHROME_DEV_EXTENSION_ID }[UAT_BROWSER];
+const NEWTAB_URL = newTabURL(EXTENSION_ID, UAT_BROWSER);
 
 // Each run writes into its own YYYYMMDD-HHMMSS directory so successive runs
 // never overwrite each other's screenshots/reports. Screenshots are prefixed
@@ -64,7 +65,7 @@ const NEWTAB_URL = UAT_BROWSER === 'chrome'
 // (matching the E2E `_artifacts-ff` / `_artifacts-cft` dirs) so the two tiers'
 // runs are immediately distinguishable when browsing tests/uat/artifacts/.
 const RUN_STAMP = runStamp();
-const RUN_DIR = path.join(ARTIFACTS_ROOT, `${RUN_STAMP}-${UAT_BROWSER === 'chrome' ? 'cft' : 'ff'}`);
+const RUN_DIR = path.join(ARTIFACTS_ROOT, `${RUN_STAMP}-${UAT.artifactSuffix}`);
 const MCP_CONFIG = path.join(__dirname, 'mcp-config.json');
 
 function runStamp(d = new Date()) {
@@ -74,14 +75,10 @@ function runStamp(d = new Date()) {
 const PREFLIGHT = path.join(__dirname, 'preflight.mjs');
 const DAEMON = path.join(__dirname, 'browser-daemon.mjs');
 
-const DEFAULT_PORT = UAT_BROWSER === 'chrome' ? 9877 : 9876;
-const PORT = parseInt(process.env.UAT_DAEMON_PORT, 10) || DEFAULT_PORT;
+const PORT = UAT.port;
 const BASE = `http://127.0.0.1:${PORT}`;
-// generous: history seed is slow on cold links; Chrome's `--headless=new` does
-// fuller rendering (JS/ads/trackers) than Firefox's classic `-headless`, so the
-// same seed measurably takes longer per site — verified timing difference, not
-// a hang (see daemon-smoke.mjs). Give Chrome double the budget.
-const HEALTH_TIMEOUT_MS = UAT_BROWSER === 'chrome' ? 600000 : 300000;
+// Generous, and per-browser — see the registry for why Chrome gets double.
+const HEALTH_TIMEOUT_MS = UAT.healthTimeoutMs;
 
 // Scenario agents run on a mid-tier model by default (maintainer decision
 // 2026-07-15): visual judgment doesn't need the most expensive model, and a
@@ -269,7 +266,7 @@ console.log(`runner: artifacts for this run -> ${RUN_DIR}/`);
 console.log(`\n=== UAT runner: starting ${UAT_BROWSER} browser daemon (port ${PORT}) ===\n`);
 const daemon = spawn('node', [DAEMON], {
 	stdio: ['ignore', 'inherit', 'inherit'],
-	env: { ...process.env, UAT_BROWSER, UAT_DAEMON_PORT: String(PORT), ARTIFACTS_DIR: RUN_DIR },
+	env: uatChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR }),
 });
 
 // Record an early exit so waitHealthy can fail fast instead of polling a corpse.
@@ -342,13 +339,7 @@ try {
 			{
 				input: prompt,
 				stdio: ['pipe', 'pipe', 'inherit'],
-				env: {
-					...process.env,
-					UAT_BROWSER,
-					UAT_DAEMON_PORT: String(PORT),
-					ARTIFACTS_DIR: RUN_DIR,
-					UAT_SCENARIO_LABEL: slug,
-				},
+				env: uatChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR, UAT_SCENARIO_LABEL: slug }),
 				encoding: 'utf8',
 			},
 		);
