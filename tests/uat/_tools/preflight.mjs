@@ -153,8 +153,12 @@ if (UAT_BROWSER === 'firefox') {
 		const opts = new firefox.Options();
 		if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
 		opts.addArguments('-headless');
+		// Mirror the daemon's launch path exactly (this check exists to validate
+		// it): FF 153+ needs geckodriver's --allow-system-access opt-in for
+		// driven moz-extension:// navigation — see browser-daemon.mjs.
+		const service = new firefox.ServiceBuilder().addArguments('--allow-system-access');
 		const t0 = Date.now();
-		driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+		driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).setFirefoxService(service).build();
 		await driver.get('about:blank');
 		ok('Firefox launch (geckodriver)', `headless launch OK in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 	} catch (e) {

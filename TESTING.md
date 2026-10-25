@@ -133,15 +133,22 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm lint:webext` | Run `web-ext lint` (Mozilla policy check) | Quality |
 | `pnpm typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
 | `pnpm test:fast` | Run Unit + Integration tests | TDD Loop |
-| `pnpm test:e2e` | Run full E2E suite against release-channel Firefox (>= 152; `$FIREFOX_ESR_BIN` overrides binary) | Validation |
+| `pnpm test:e2e` | Run full E2E suite against Firefox and Chrome sequentially | Validation |
+| `pnpm test:e2e:ff` | Run full E2E suite against release-channel Firefox (>= 152; `$FIREFOX_ESR_BIN` overrides binary) | Validation (Firefox) |
+| `pnpm test:e2e:chrome` | Run the full E2E suite (same 32 files/126 tests) against Chrome (branded stable Chrome / CfT fallback) | Validation (Chrome) |
 | `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
-| `pnpm test:uat` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (pre-release) |
-| `pnpm test:uat:preflight` | Validate the UAT environment only (Node/pnpm versions, release Firefox reports a clean `--version`, built `.xpi`, fixture hash, `claude` CLI, daemon port) without running scenarios or spending tokens | UAT (env check) |
+| `pnpm test:uat` | Run LLM-driven user acceptance scenarios against Firefox and Chrome sequentially | UAT (pre-release) |
+| `pnpm test:uat:ff` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (Firefox, pre-release) |
+| `pnpm test:uat:chrome` | Run the same LLM-driven UAT scenarios against Chrome for Testing | UAT (Chrome, pre-release) |
+| `pnpm test:uat:preflight` | Validate the UAT environment for Firefox and Chrome sequentially | UAT (env check) |
+| `pnpm test:uat:preflight:ff` | Validate the UAT environment only for Firefox without running scenarios or spending tokens | UAT (Firefox env check) |
+| `pnpm test:uat:preflight:chrome` | Validate the UAT environment only for Chrome without running scenarios or spending tokens | UAT (Chrome env check) |
+| `pnpm test:uat:smoke` | Run the UAT daemon HTTP-API smoke against Firefox and Chrome sequentially | UAT (smoke check) |
+| `pnpm test:uat:smoke:ff` | Run the UAT daemon HTTP-API smoke against Firefox | UAT (smoke check, Firefox) |
+| `pnpm test:uat:smoke:chrome` | Run the UAT daemon HTTP-API smoke against Chrome | UAT (smoke check, Chrome) |
 | `pnpm chrome:provision` | Fetch/cache Chrome for Testing (>= 148) via `@puppeteer/browsers` | Chrome env setup |
 | `pnpm chrome:stage` | Stage the unpacked Chrome dev build to `dist/chrome-dev/` for manual "Load unpacked" testing | Interactive Dev (Chrome) |
 | `pnpm chrome:smoke` | Run the 10-check Chrome boot/capture/backup smoke (Puppeteer/CDP; SW kill/respawn is informational, GH #23) | Validation (Chrome, fast) |
-| `pnpm test:e2e:chrome` | Run the full E2E suite (same 32 files/126 tests as `pnpm test:e2e`) against Chrome for Testing | Validation (Chrome) |
-| `pnpm test:uat:chrome` | Run the same LLM-driven UAT scenarios against Chrome for Testing | UAT (Chrome, pre-release) |
 
 All four quality/test checks should pass on a clean clone. If `test:e2e` hangs or fails to bind port 9222, see the E2E section below.
 
@@ -154,7 +161,7 @@ All four quality/test checks should pass on a clean clone. If `test:e2e` hangs o
 | One fast-tier file by name | `pnpm test:fast typography` |
 | One integration file | `pnpm test:integration recent-tabs` |
 | One unit file | `pnpm test:unit url-validation` |
-| One E2E file (path) | `pnpm test:e2e tests/e2e/titlebar.test.js` |
+| One E2E file (path) | `pnpm test:e2e:ff tests/e2e/titlebar.test.js` |
 
 The filter is a substring match against the file path, so `pnpm test:fast titlebar` runs every fast file with "titlebar" in its name. This is the sanctioned way to run a single test during the TDD inner loop — reaching for raw `vitest`/`npx` skips the project/env setup the scripts provide.
 
@@ -199,9 +206,11 @@ Testing has three deterministic tiers plus a fourth judgment-based tier (UAT), e
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | Vitest + jsdom | `pnpm test:unit` | On every save during TDD |
 | **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `pnpm test:integration` | On every save during TDD |
-| **E2E** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) via WebDriver BiDi | `pnpm test:e2e` | At feature completion and pre-commit |
+| **E2E** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) and Chrome | `pnpm test:e2e` (`:ff`, `:chrome`) | At feature completion and pre-commit |
+| **E2E (Firefox)** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) via WebDriver BiDi | `pnpm test:e2e:ff` | At feature completion and pre-commit |
 | **E2E (Chrome parity)** | `tests/e2e/` (same files) + `tests/e2e-chrome/` (runner/helpers) | Vitest + Puppeteer + **branded stable Chrome** (Decision 12; CfT fallback) via CDP, port 9223 | `pnpm test:e2e:chrome` | Alongside the Firefox E2E tier for Chrome-affecting changes; see `tests/e2e-chrome/README.md` |
-| **UAT** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + release-channel Firefox) | `pnpm test:uat` | Pre-release only; never on PR/CI |
+| **UAT** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + Firefox and Chrome) | `pnpm test:uat` (`:ff`, `:chrome`) | Pre-release only; never on PR/CI |
+| **UAT (Firefox)** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + release-channel Firefox) | `pnpm test:uat:ff` | Pre-release only; never on PR/CI |
 | **UAT (Chrome)** | `tests/uat/` (same scenarios) | Claude Code (headless) + thin MCP client → browser daemon (Selenium + Chrome for Testing), port 9877 | `pnpm test:uat:chrome` | Pre-release only; never on PR/CI |
 
 `pnpm test:fast` runs Unit + Integration together (both use the same Vitest jsdom project, so bundling them is just a script convenience).
@@ -254,8 +263,8 @@ E2E tests exercise the extension from the user's perspective in a real Firefox. 
 - **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox instance launched by `web-ext run`. The tier runs on **release-channel Firefox** (`firefox`, >= 152) rather than ESR, because MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0 and no ESR that new exists yet in Mozilla's APT repo (see [`CONTRIBUTING.md`](CONTRIBUTING.md) "Decisions of record"). `$FIREFOX_ESR_BIN` still overrides the binary — the runner will move back to ESR once a 152-based build reaches the APT repo. (Playwright was tried and rejected — its patched-Firefox design cannot drive a system Firefox. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
 - **Location:** `tests/e2e/*.test.js` (matching the Unit/Integration naming).
 - **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) (name unchanged) launches Firefox with `--remote-debugging-port=9222` and `extensions.background.idle.timeout=10000` — a short idle timeout so the MV3 event page genuinely suspends and respawns during the suite (deliberate lifecycle stress; see `tests/e2e/event-page-lifecycle.test.ts`) — waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
-- **How to run:** Always use `pnpm test:e2e` (which calls `run_esr_tests.sh`). Do **not** run `npx vitest run --project e2e` directly — the shell script is responsible for launching Firefox with the BiDi debugging port, waiting for it to be ready, and cleaning up afterwards. Without it, tests will hang trying to connect to a non-existent browser. To run a single test file: `pnpm test:e2e tests/e2e/my-test.test.js`.
-- **Chrome parity:** the same suite (same `tests/e2e/*.test.js` files, zero call-site changes) runs against **branded stable Chrome** (Decision 12 — the production binary; CfT fallback when none is present) via `pnpm test:e2e:chrome`, which calls the sibling lifecycle script [`tests/e2e-chrome/run_chrome_tests.sh`](tests/e2e-chrome/run_chrome_tests.sh) (stages the dev build; branded launch = Puppeteer pipe + CDP `Extensions.loadUnpacked` with the suite connecting on CDP port 9223 — landing with CHROME.md D8; the CfT fallback keeps `--load-extension`). Full parity: 124/126 run + 2 SW-lifecycle tests skipped on Chrome (GH #23), 32/32 files, with per-file divergences documented as header notes rather than silent omissions — see [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md) and `CHROME.md` D5b. Run it alongside `pnpm test:e2e` (not instead of it) for any change that touches a Chrome-relevant path (the `api` seam, manifest, service-worker-visible code).
+- **How to run:** Use `pnpm test:e2e` to run both browsers (`pnpm test:e2e:ff && pnpm test:e2e:chrome`), or `pnpm test:e2e:ff` / `pnpm test:e2e:chrome` for single-browser runs. Do **not** run `npx vitest run --project e2e` directly — the shell scripts are responsible for launching the browser with the debugging port, waiting for it to be ready, and cleaning up afterwards. Without them, tests will hang trying to connect to a non-existent browser. To run a single test file against Firefox: `pnpm test:e2e:ff tests/e2e/my-test.test.js` (or against Chrome: `pnpm test:e2e:chrome tests/e2e/my-test.test.js`).
+- **Chrome parity:** the same suite (same `tests/e2e/*.test.js` files, zero call-site changes) runs against **branded stable Chrome** (Decision 12 — the production binary; CfT fallback when none is present) via `pnpm test:e2e:chrome`, which calls the sibling lifecycle script [`tests/e2e-chrome/run_chrome_tests.sh`](tests/e2e-chrome/run_chrome_tests.sh) (stages the dev build; branded launch = Puppeteer pipe + CDP `Extensions.loadUnpacked` with the suite connecting on CDP port 9223 — landing with CHROME.md D8; the CfT fallback keeps `--load-extension`). Full parity: 124/126 run + 2 SW-lifecycle tests skipped on Chrome (GH #23), 32/32 files, with per-file divergences documented as header notes rather than silent omissions — see [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md) and `CHROME.md` D5b. Run it alongside `pnpm test:e2e:ff` (or run `pnpm test:e2e` for both) for any change that touches a Chrome-relevant path (the `api` seam, manifest, service-worker-visible code).
 - **When to run:**
   1. Once at the end of every completed feature.
   2. Always as part of the "prepare for commit" workflow.

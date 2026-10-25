@@ -56,7 +56,10 @@ async function runDaemon() {
 	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 	opts.addArguments('-headless');
 
-	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+	// FF 153+ blocks driven moz-extension:// navigation; the opt-in is
+	// geckodriver's --allow-system-access (bug 1579790) — see browser-daemon.mjs.
+	const service = new firefox.ServiceBuilder().addArguments('--allow-system-access');
+	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).setFirefoxService(service).build();
 	await driver.installAddon(newestXpi(), true);
 	await driver.get(NEWTAB_URL);
 

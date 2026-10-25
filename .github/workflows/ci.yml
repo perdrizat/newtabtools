@@ -70,7 +70,7 @@ jobs:
         run: pnpm test:fast
 
       - name: E2E tests (Puppeteer + BiDi)
-        run: pnpm test:e2e
+        run: pnpm test:e2e:ff
         env:
           E2E_VERBOSE: 1
 

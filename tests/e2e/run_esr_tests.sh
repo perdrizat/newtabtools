@@ -109,13 +109,21 @@ echo "Using $FX_VERSION_OUT ($FIREFOX_BIN)"
 # (menus, IDB, capture) is exercised on essentially every test, not just the
 # dedicated event-page-lifecycle suite.
 echo "Launching Firefox via web-ext..."
+# --remote-allow-system-access: Firefox 153 restricted WebDriver BiDi
+# navigation in content scope to a whitelist (http/https/file/about:blank —
+# bug 1579790), which hard-rejects the moz-extension:// gotos every E2E test
+# depends on ("Navigation ... is not allowed in this context" →
+# "Extension runtime not available" across the whole suite). This flag is
+# Mozilla's documented opt-in for privileged navigation in a driven browser;
+# it only affects this test-launched instance. Harmless on pre-153 Firefox.
 web-ext run \
   --source-dir webextension/ \
   --firefox="$FIREFOX_BIN" \
   --firefox-profile "$PROFILE_DIR" \
   --keep-profile-changes \
   --pref=extensions.background.idle.timeout=10000 \
-  --args="--remote-debugging-port" --args="$PORT" --args="-headless" &
+  --args="--remote-debugging-port" --args="$PORT" --args="-headless" \
+  --args="--remote-allow-system-access" &
 WEB_EXT_PID=$!
 
 cleanup() {

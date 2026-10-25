@@ -270,7 +270,15 @@ async function makeDriver() {
 	// viewport. Screenshots are saved at full resolution by default (see SHOT_SCALE)
 	// so the agent judges a representative FHD layout.
 	opts.addArguments(`--width=${WIN_W}`, `--height=${WIN_H}`);
-	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).build();
+	// Firefox 153 restricted driven navigation (Marionette + BiDi) in content
+	// scope to http/https/file/about:blank (bug 1579790) — every driver.get()
+	// of the moz-extension:// new-tab page is hard-rejected without an explicit
+	// opt-in. The Firefox flag can't be set via capabilities (geckodriver
+	// rejects it so a remote client can't self-escalate); the operator-side
+	// opt-in is geckodriver's own --allow-system-access argument. Harmless on
+	// pre-153 stacks.
+	const service = new firefox.ServiceBuilder().addArguments('--allow-system-access');
+	const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(opts).setFirefoxService(service).build();
 	await applyWindowSize(driver);
 	// NB: the extension is NOT installed here. The daemon seeds history first
 	// (no extension loaded → no auto-thumbnail capture), then installs it, so the

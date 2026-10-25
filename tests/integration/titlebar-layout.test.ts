@@ -48,6 +48,12 @@ describe('Titlebar layout invariants — CSS rules', () => {
 		expect(search![0]).not.toMatch(/var\(--ntt-search-w/);
 	});
 
+	it('search input truncates overflow with an ellipsis inside the fixed-width box (issue #22)', () => {
+		const input = css.match(/^#ntt-search-input\s*\{[^}]*\}/m);
+		expect(input).not.toBeNull();
+		expect(input![0]).toMatch(/text-overflow:\s*ellipsis/);
+	});
+
 	it('recent cards live in #ntt-titlebar-recent between search and buttons', () => {
 		expect(css).toMatch(/#ntt-titlebar-recent\s*\{/);
 	});

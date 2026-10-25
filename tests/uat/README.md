@@ -67,12 +67,13 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
 
-Run the whole suite with `pnpm test:uat` (Firefox) or `pnpm test:uat:chrome`
-(Chrome), or a subset by slug: `pnpm test:uat 21-restore` /
-`pnpm test:uat:chrome 00-uat-init`. Both share one runner and one daemon
+Run the whole suite with `pnpm test:uat` (runs both Firefox and Chrome
+sequentially), single-browser with `pnpm test:uat:ff` (Firefox) or
+`pnpm test:uat:chrome` (Chrome), or a subset by slug: `pnpm test:uat:ff 21-restore` /
+`pnpm test:uat:chrome 00-uat-init`. All scripts share one runner and one daemon
 implementation — `pnpm test:uat:chrome` is exactly
-`UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two can run
-concurrently (separate ports, and per-browser `-ff` / `-cft`-suffixed
+`UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two browsers can run
+concurrently when executed individually (separate ports, and per-browser `-ff` / `-cft`-suffixed
 artifacts dirs matching the E2E `_artifacts-ff` / `_artifacts-cft` convention).
 
 Scenario agents run on **Sonnet** by default (`$UAT_MODEL` overrides) —
@@ -121,7 +122,7 @@ node tests/uat/_tools/mcp-smoke.mjs
 
 ## Troubleshooting (preflight failures)
 
-`pnpm test:uat:preflight` (also the first step of `pnpm test:uat`) prints `[ok]`/`[warn]`/`[fail]` per check. Fixes for the `[fail]`s:
+`pnpm test:uat:preflight` (or `pnpm test:uat:preflight:ff` / `:preflight:chrome`; also the first step of `pnpm test:uat`) prints `[ok]`/`[warn]`/`[fail]` per check. Fixes for the `[fail]`s:
 
 | Preflight failure | Fix |
 |---|---|

@@ -757,6 +757,10 @@ input[type="button"] {
 	outline: none;
 	font-family: var(--ntt-font-ui);
 	min-width: 0;
+	/* The full placeholder is longer than the fixed-width search box, so let the
+	   overflow read as a deliberate ellipsis instead of an abrupt mid-word clip
+	   (issue #22). Applies to the placeholder and to typed overflow alike. */
+	text-overflow: ellipsis;
 }
 #ntt-search-input::placeholder {
 	color: var(--ntt-sub);

@@ -51,7 +51,10 @@ options.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_
 options.addArguments('-headless'); // drop to watch it run
 
 const t0 = Date.now();
-const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(options).build();
+// FF 153+ blocks driven moz-extension:// navigation; the opt-in is
+// geckodriver's --allow-system-access (bug 1579790) — see browser-daemon.mjs.
+const service = new firefox.ServiceBuilder().addArguments('--allow-system-access');
+const driver = await new Builder().forBrowser('firefox').setFirefoxOptions(options).setFirefoxService(service).build();
 console.log(`[smoke] Firefox up in ${((Date.now() - t0) / 1000).toFixed(1)}s (geckodriver owns the lifecycle)`);
 
 try {

@@ -101,9 +101,10 @@ export function resolveChromeBinary({ prefer = 'cft' } = {}) {
 	// imported (not just run) by a checked .ts consumer (D5b, _helpers.ts).
 	const candidates = ordered.filter((c) => typeof c === 'string');
 	for (const candidate of candidates) {
+		let bin = '';
 		try {
 			// Puppeteer requires an ABSOLUTE executablePath — resolve bare names via PATH.
-			const bin = path.isAbsolute(candidate)
+			bin = path.isAbsolute(candidate)
 				? candidate
 				: execFileSync('which', [candidate], { encoding: 'utf8' }).trim();
 			if (!bin || !fs.existsSync(bin)) { continue; }
@@ -111,7 +112,11 @@ export function resolveChromeBinary({ prefer = 'cft' } = {}) {
 			if (version) {
 				return { bin, version, branded: version.startsWith('Google Chrome') && !bin.includes('.cache/puppeteer') };
 			}
-		} catch { /* not this one */ }
+		} catch (err) {
+			if (bin && fs.existsSync(bin)) {
+				console.warn(`[chrome-env] candidate ${bin} failed verification: ${err instanceof Error ? err.message : String(err)}`);
+			}
+		}
 	}
 	return null;
 }

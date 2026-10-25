@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+## [2026-10-25]
+
+### Changed
+
+- scripts: `test:e2e` and `test:uat` (plus `:preflight` and `:smoke`) now run both Firefox and Chrome sequentially, with `:ff` and `:chrome` scripts for single-browser runs.
+
+### Fixed
+
+- Search-box placeholder now truncates with an ellipsis instead of an abrupt mid-word clip at the fixed search width (issue #22).
+- E2E/UAT harnesses work on Firefox ≥153 again (bug 1579790 restricted driven navigation to `moz-extension://` pages): `run_esr_tests.sh` passes `--remote-allow-system-access` to Firefox; the four Selenium launch sites pass `--allow-system-access` to geckodriver (the flag is rejected via capabilities by design).
+- CI `chrome:provision` exports `CHROME_BIN` to `GITHUB_ENV` with executable permissions, ensuring `chrome:smoke:selenium` uses the provisioned CfT binary.
+
 ## [2.6.6] — 2026-10-24
 
 ### Changed

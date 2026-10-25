@@ -78,4 +78,12 @@ const executablePath = browsers.computeExecutablePath({
 	buildId,
 	cacheDir,
 });
+try {
+	fs.chmodSync(executablePath, 0o755);
+} catch { /* best effort */ }
+
+if (process.env.GITHUB_ENV) {
+	fs.appendFileSync(process.env.GITHUB_ENV, `CHROME_BIN=${executablePath}\n`);
+}
+
 console.log(`[chrome-provision] ✓ ready: ${executablePath}`);

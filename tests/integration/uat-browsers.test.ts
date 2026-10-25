@@ -200,3 +200,25 @@ describe('UAT tools resolve their browser only through the registry', () => {
 		expect(src).not.toMatch(/!==?\s*['"](chrome|firefox)['"]/);
 	});
 });
+
+describe('package.json multi-browser test scripts', () => {
+	const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+
+	it('defines symmetric :ff, :chrome, and combined scripts for e2e and uat', () => {
+		expect(pkg.scripts['test:e2e:ff']).toBe('tests/e2e/run_esr_tests.sh');
+		expect(pkg.scripts['test:e2e:chrome']).toBe('tests/e2e-chrome/run_chrome_tests.sh');
+		expect(pkg.scripts['test:e2e']).toBe('pnpm test:e2e:ff && pnpm test:e2e:chrome');
+
+		expect(pkg.scripts['test:uat:ff']).toBe('node tests/uat/_tools/runner.mjs');
+		expect(pkg.scripts['test:uat:chrome']).toBe('UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs');
+		expect(pkg.scripts['test:uat']).toBe('pnpm test:uat:ff && pnpm test:uat:chrome');
+
+		expect(pkg.scripts['test:uat:preflight:ff']).toBe('node tests/uat/_tools/preflight.mjs');
+		expect(pkg.scripts['test:uat:preflight:chrome']).toBe('UAT_BROWSER=chrome node tests/uat/_tools/preflight.mjs');
+		expect(pkg.scripts['test:uat:preflight']).toBe('pnpm test:uat:preflight:ff && pnpm test:uat:preflight:chrome');
+
+		expect(pkg.scripts['test:uat:smoke:ff']).toBe('node tests/uat/_tools/daemon-smoke.mjs');
+		expect(pkg.scripts['test:uat:smoke:chrome']).toBe('UAT_BROWSER=chrome node tests/uat/_tools/daemon-smoke.mjs');
+		expect(pkg.scripts['test:uat:smoke']).toBe('pnpm test:uat:smoke:ff && pnpm test:uat:smoke:chrome');
+	});
+});
