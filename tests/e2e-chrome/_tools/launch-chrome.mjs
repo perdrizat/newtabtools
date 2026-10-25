@@ -119,6 +119,7 @@ async function main() {
 				'--no-first-run',
 				'--no-default-browser-check',
 				'--disable-dev-shm-usage',
+				'--no-sandbox',
 				'--enable-unsafe-extension-debugging',
 				`--remote-debugging-port=${PORT}`,
 			],

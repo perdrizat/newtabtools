@@ -94,7 +94,7 @@ export function refreshBackgroundImage() {
 	document.body.style.backgroundPosition =
 		uiRefs.backgroundFake.style.backgroundPosition = Prefs.backgroundPosition || 'center center';
 	document.body.style.backgroundColor = Prefs.backgroundColor || '';
-	if (Prefs.backgroundUrl) {
+	if (Prefs.backgroundUrl && isMozillaWallpaperCatalogAvailable()) {
 		document.body.style.backgroundImage =
 			uiRefs.backgroundFake.style.backgroundImage = 'url("' + Prefs.backgroundUrl + '")';
 		_dropObjectURL('background');

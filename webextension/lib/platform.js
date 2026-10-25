@@ -306,3 +306,14 @@ export function broadcastToPages(name) {
 	}
 	return api.runtime.sendMessage({name}).catch(() => {});
 }
+
+/**
+ * Whether Mozilla's Remote Settings wallpaper catalogue is reachable.
+ * Mozilla's attachment CDN returns 406 to Chrome User-Agents.
+ * @returns {boolean}
+ */
+export function isMozillaWallpaperCatalogAvailable() {
+	return typeof globalThis.location !== 'undefined'
+		? globalThis.location.protocol !== 'chrome-extension:'
+		: true;
+}

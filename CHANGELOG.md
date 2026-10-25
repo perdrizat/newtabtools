@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Chrome: Firefox Mozilla-CDN wallpapers are silently ignored at restore and live render, cleanly falling back to the default surface/theme.
+- CI: `chrome:smoke` and Chrome E2E pass `--no-sandbox` so Chrome for Testing launches unprivileged on Ubuntu 24.04/26.04 runners.
 - Search-box placeholder now truncates with an ellipsis instead of an abrupt mid-word clip at the fixed search width (issue #22).
 - E2E/UAT harnesses work on Firefox ≥153 again (bug 1579790 restricted driven navigation to `moz-extension://` pages): `run_esr_tests.sh` passes `--remote-allow-system-access` to Firefox; the four Selenium launch sites pass `--allow-system-access` to geckodriver (the flag is rejected via capabilities by design).
 - CI `chrome:provision` exports `CHROME_BIN` to `GITHUB_ENV` with executable permissions, ensuring `chrome:smoke:selenium` uses the provisioned CfT binary.

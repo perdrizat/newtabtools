@@ -86,4 +86,25 @@ describe('restore applies the wallpaper live (no reload)', () => {
 
 		expect(document.body.style.backgroundImage).toContain(CDN);
 	});
+
+	it('does not apply CDN wallpaper on Chrome even if backgroundUrl is set', () => {
+		const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
+		try {
+			Object.defineProperty(globalThis, 'location', {
+				value: { protocol: 'chrome-extension:' },
+				configurable: true,
+			});
+			Prefs.backgroundUrl = CDN + 'main-workspace/newtab-wallpapers-v2/abc.avif';
+
+			nt.updateUI(['backgroundUrl']);
+
+			expect(document.body.style.backgroundImage).toBe('');
+		} finally {
+			if (originalDescriptor) {
+				Object.defineProperty(globalThis, 'location', originalDescriptor);
+			} else {
+				delete (globalThis as any).location;
+			}
+		}
+	});
 });

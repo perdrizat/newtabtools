@@ -501,6 +501,33 @@ describe('backup/restore — lib/backup.js (MODERNIZATION.md M4)', () => {
 			expect(storedPrefs.backgroundUrl).toBe(url);
 		});
 
+		it('silently ignores Firefox-CDN backgroundUrl on Chrome at restore', async () => {
+			const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
+			try {
+				Object.defineProperty(globalThis, 'location', {
+					value: { protocol: 'chrome-extension:' },
+					configurable: true,
+				});
+				const url = 'https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/newtab-wallpapers-v2/abc.avif';
+				const prefs = { theme: 'dark', backgroundUrl: url };
+				setupReader([
+					mockZipEntry('prefs.json', JSON.stringify(prefs)),
+				]);
+
+				await readZip(new Blob());
+
+				const storedPrefs = mockStorageLocal.set.mock.calls[0][0];
+				expect(storedPrefs.theme).toBe('dark');
+				expect(storedPrefs).not.toHaveProperty('backgroundUrl');
+			} finally {
+				if (originalDescriptor) {
+					Object.defineProperty(globalThis, 'location', originalDescriptor);
+				} else {
+					delete (globalThis as any).location;
+				}
+			}
+		});
+
 		// audit 2026-07-16 m1: a crafted backup with `filters: null` (or a
 		// non-object) would be stored verbatim; on the next load parsePrefs set
 		// `Filters._list = null` and `getList()` threw, hanging the grid. Drop a

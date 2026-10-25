@@ -31,7 +31,7 @@ import * as zip from './zip/zip-core.js';
 import { Tiles, Background } from './tiles-store.js';
 import { purgeNeverCaptureHost } from './capture.js';
 import { Filters } from '../prefs.js';
-import { api, broadcastToPages } from './platform.js';
+import { api, broadcastToPages, isMozillaWallpaperCatalogAvailable } from './platform.js';
 
 zip.configure({ useWebWorkers: false });
 
@@ -165,9 +165,13 @@ export async function readZip(file) {
 		// the Firefox wallpaper CDN is allowed, and the whole string must match
 		// (no trailing `") ; background: url(…)` CSS-injection payload).
 		// Anything else is dropped rather than stored.
+		// On Chrome, Mozilla's attachment CDN returns 406 to Chrome User-Agents,
+		// so Firefox-CDN wallpapers cannot be loaded — silently drop at restore.
 		if ('backgroundUrl' in filtered) {
 			let safeBackgroundUrl = /^https:\/\/firefox-settings-attachments\.cdn\.mozilla\.net\/[^"'()\s]*$/;
-			if (filtered.backgroundUrl !== '' &&
+			if (!isMozillaWallpaperCatalogAvailable()) {
+				delete filtered.backgroundUrl;
+			} else if (filtered.backgroundUrl !== '' &&
 				(typeof filtered.backgroundUrl !== 'string' || !safeBackgroundUrl.test(filtered.backgroundUrl))) {
 				delete filtered.backgroundUrl;
 			}

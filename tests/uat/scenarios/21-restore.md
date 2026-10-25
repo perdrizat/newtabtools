@@ -20,9 +20,13 @@ to repopulate → close drawer). It leaves a
    the count is typically 16; assert at least the fixture's nine).
 3. **Spacing pref applied:** `document.documentElement.getAttribute('spacing')`
    === `'medium'`.
-4. **Wallpaper applied live:** `document.body.style.backgroundImage` contains
-   `firefox-settings-attachments.cdn.mozilla.net` — the fixture's Mozilla-CDN
-   wallpaper, applied as a pref with no reload. Empty / `none` is a failure.
+4. **Wallpaper applied live:**
+   - On Firefox: `document.body.style.backgroundImage` contains
+     `firefox-settings-attachments.cdn.mozilla.net` — the fixture's Mozilla-CDN
+     wallpaper, applied as a pref with no reload. Empty / `none` is a failure.
+   - On Chrome: Mozilla's attachment CDN returns 406 to Chrome, so Firefox-CDN
+     wallpapers are silently ignored at restore. `document.body.style.backgroundImage`
+     must be empty / `none` (clean fallback to default surface/theme).
 5. **Fixture tiles present (by content):**
    ```
    const titles = [...document.querySelectorAll('.newtab-title')].map(t => t.textContent);
@@ -37,7 +41,7 @@ to repopulate → close drawer). It leaves a
    return (() => {
      const input = document.getElementById('options-restore-file');
      const label = document.querySelector('label[for="options-restore-file"]');
-     const nameEl = document.querySelector('.ntt-file-name');
+     const nameEl = document.querySelector('label[for="options-restore-file"] ~ .ntt-file-name');
      return {
        inputHidden: input.offsetWidth <= 1 && input.offsetHeight <= 1,
        labelThemed: !!label && getComputedStyle(label).borderTopStyle === 'solid',
@@ -53,9 +57,11 @@ to repopulate → close drawer). It leaves a
 ## Visual judgment
 
 - Read `01-restored`. Judge: the nine tiles sit in a clean 4×4 grid (rows of
-  4 / 4 / 1), no overlap or clipping, titles legible, **and** the Mozilla-CDN
-  wallpaper is visibly rendered behind them. Pass = clean layout **and** visible
-  wallpaper.
+  4 / 4 / 1), no overlap or clipping, titles legible:
+  - On Firefox: the Mozilla-CDN wallpaper is visibly rendered behind them.
+  - On Chrome: clean default theme/surface rendered behind them (Mozilla-CDN wallpaper
+    silently ignored).
+  Pass = clean layout and appropriate background.
 - Read `02-restore-control`. Judge: the Restore row's "Choose file…" control is a
   themed button (matches the other drawer buttons in the active theme — not a native
   system-grey file widget), with the selected filename shown in themed type beside it.

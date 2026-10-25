@@ -207,6 +207,7 @@ export function chromeArgs(stageDir) {
 		'--no-first-run',
 		'--no-default-browser-check',
 		'--disable-dev-shm-usage',
+		'--no-sandbox',
 	];
 }
 
