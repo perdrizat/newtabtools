@@ -147,7 +147,10 @@ export function handleMessage(message, sender, sendResponse) {
 	// the message protocol. Added to support hermetic E2E test cleanup, but
 	// also useful for any future "reset all tiles" UI action.
 	case 'Tiles.clear':
-		Tiles.clear().then(sendResponse);
+		Tiles.clear().then(function() {
+			broadcastToPages('Page.updateGrid');
+			sendResponse();
+		});
 		return true;
 	case 'Tiles.pinTile':
 		Tiles.pinTile(message.title, message.url).then(function(id) {

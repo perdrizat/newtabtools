@@ -122,14 +122,23 @@ export var Transformation = {
 			return;
 		}
 
-		let first = /** @type {NttRect} */ (Grid.cells[0].position);
+		if (!Grid.cells[0]?.position && typeof Grid.cacheCellPositions === 'function') {
+			Grid.cacheCellPositions();
+		}
+
+		let first = /** @type {NttRect | undefined} */ (Grid.cells[0]?.position);
 		let style = site.node.style;
-		style.width = first.width + 'px';
-		style.height = first.height + 'px';
+		if (first) {
+			style.width = first.width + 'px';
+			style.height = first.height + 'px';
+		}
 
 		site.node.setAttribute('frozen', 'true');
 		site.index = /** @type {Cell} */ (site.cell).index;
-		this.setSitePosition(site, /** @type {NttRect} */ (Grid.cells[site.index].position));
+		let cellPos = Grid.cells[site.index]?.position;
+		if (cellPos) {
+			this.setSitePosition(site, /** @type {NttRect} */ (cellPos));
+		}
 	},
 
 	/**
@@ -175,7 +184,12 @@ export var Transformation = {
 		if (currentIndex == target.index) {
 			finish();
 		} else {
-			this.setSitePosition(site, /** @type {NttRect} */ (target.position));
+			if (!target.position && typeof Grid.cacheCellPositions === 'function') {
+				Grid.cacheCellPositions();
+			}
+			if (target.position) {
+				this.setSitePosition(site, /** @type {NttRect} */ (target.position));
+			}
 			site.index = target.index;
 			this._whenTransitionEnded(site.node, ['left', 'top'], finish);
 		}
@@ -230,12 +244,18 @@ export var Transformation = {
 	   */
 	_whenTransitionEnded(node, properties, callback) {
 		let props = new Set(properties);
-		node.addEventListener('transitionend', function onEnd(e) {
+		let timer = setTimeout(() => {
+			node.removeEventListener('transitionend', onEnd);
+			callback();
+		}, 300);
+		function onEnd(/** @type {TransitionEvent} */ e) {
 			if (props.has(e.propertyName)) {
+				clearTimeout(timer);
 				node.removeEventListener('transitionend', onEnd);
 				callback();
 			}
-		});
+		}
+		node.addEventListener('transitionend', onEnd);
 	},
 
 	/**

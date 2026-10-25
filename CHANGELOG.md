@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- E2E: `lock-grid.test.ts` flakiness on Chrome fixed by handling unpopulated cell positions in `Transformation.freezeSitePosition`/`slideSiteTo` and adding a timeout fallback in `_whenTransitionEnded`.
+- Store: `Tiles.clear()` resets `_list` in memory and broadcasts `Page.updateGrid`, preventing stale pinned state in subsequent pins and tests.
+- E2E: `favicon-real-sites.test.ts` decodes tagged Map/Blob wire payloads so live favicon queries work across Chrome's JSON-safe wire codec.
 - Chrome: Firefox Mozilla-CDN wallpapers are silently ignored at restore and live render, cleanly falling back to the default surface/theme.
 - CI: `chrome:smoke` and Chrome E2E pass `--no-sandbox` so Chrome for Testing launches unprivileged on Ubuntu 24.04/26.04 runners.
 - Search-box placeholder now truncates with an ellipsis instead of an abrupt mid-word clip at the fixed search width (issue #22).

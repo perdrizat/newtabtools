@@ -243,6 +243,7 @@ export const Tiles = {
 	 * @returns {Promise<void>}
 	 */
 	clear() {
+		this._list.length = 0;
 		return withObjectStore('tiles', 'readwrite', store => new Promise((resolve, reject) => {
 			let op = store.clear();
 			op.onsuccess = () => resolve(undefined);

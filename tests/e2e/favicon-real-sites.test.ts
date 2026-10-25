@@ -89,12 +89,18 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 		const describeFaviconState = async (): Promise<string> => {
 			try {
 				const state = await page.evaluate((urls: string[]) => new Promise<Record<string, string>>(resolve => {
-					chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: Map<string, unknown> | Record<string, unknown> | undefined) => {
-						const read = (u: string) => response instanceof Map ? response.get(u) : (response ? response[u] : undefined);
+					chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: any) => {
+						let map = response;
+						if (response && Array.isArray(response.__ntt_map)) {
+							map = new Map(response.__ntt_map);
+						}
+						const read = (u: string) => map instanceof Map ? map.get(u) : (map ? map[u] : undefined);
 						const out: Record<string, string> = {};
 						for (const u of urls) {
 							const v = read(u);
-							out[u] = v instanceof Blob ? `blob(${v.size}B)` : (typeof v === 'string' ? `url(${v})` : 'MISSING');
+							out[u] = (v instanceof Blob || (v && typeof v === 'object' && v.__ntt_blob))
+								? 'blob(...)'
+								: (typeof v === 'string' ? `url(${v})` : 'MISSING');
 						}
 						resolve(out);
 					});
@@ -151,13 +157,22 @@ describe.skipIf(IN_GITHUB_CI)('E2E: real favicons for third-party HTTPS sites', 
 				(...args: unknown[]) => {
 					const urls = args[0] as string[];
 					return new Promise(resolve => {
-						chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: Map<string, unknown>) => {
-							if (!response || response.size < urls.length) { resolve(null); return; }
+						chrome.runtime.sendMessage({ name: 'Thumbnails.getFavicons', urls }, (response: any) => {
+							let map = response;
+							if (response && Array.isArray(response.__ntt_map)) {
+								map = new Map(response.__ntt_map);
+							}
+							if (!map || (!(map instanceof Map) && typeof map !== 'object')) { resolve(null); return; }
+							const read = (u: string) => map instanceof Map ? map.get(u) : map[u];
+							const size = map instanceof Map ? map.size : Object.keys(map).length;
+							if (size < urls.length) { resolve(null); return; }
 							const out: Record<string, { kind: string; detail: string } | null> = {};
 							for (const u of urls) {
-								const v = response.get(u);
+								const v = read(u);
 								if (v instanceof Blob) {
 									out[u] = { kind: 'blob', detail: `${v.size}` };
+								} else if (v && typeof v === 'object' && typeof v.__ntt_blob === 'string') {
+									out[u] = { kind: 'blob', detail: `${atob(v.__ntt_blob).length}` };
 								} else if (typeof v === 'string') {
 									out[u] = { kind: 'url', detail: v };
 								} else {

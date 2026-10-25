@@ -340,10 +340,13 @@ describe('Tiles pin/unpin — lib/tiles-store.js (Phase 1 slot 6)', () => {
 
 	// ==================== clear ====================
 
-	it('clear empties the IDB tiles store', async () => {
-		mockDb._stores.tiles.push({ id: 1, url: 'https://a.com', title: 'A', position: 0 });
+	it('clear empties the IDB tiles store and clears in-memory pinned list', async () => {
+		await Tiles.putTile({ url: 'https://a.com', title: 'A', position: 0 });
+		expect(Tiles.isPinned('https://a.com')).toBe(true);
 		await Tiles.clear();
 		expect(mockDb._stores.tiles).toHaveLength(0);
+		expect(Tiles.isPinned('https://a.com')).toBe(false);
+		expect(Tiles._list).toHaveLength(0);
 	});
 
 	// ==================== Background ====================
