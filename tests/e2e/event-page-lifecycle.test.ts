@@ -11,6 +11,7 @@ import {
 	navigateAndConfirm,
 	ENGINE,
 	restartChromeServiceWorker,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 // audit 2026-07-16 M2 (probed 2026-07-17): this suite is SKIPPED on Chrome.
@@ -108,7 +109,7 @@ describe.skipIf(ENGINE === 'chromium')('E2E: event-page suspension recovery (MV3
 				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Example', url: u }, resolve);
 			}), TEST_URL);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 			await page.waitForSelector('.newtab-site[pinned]', { timeout: 15_000 });
 
@@ -125,7 +126,7 @@ describe.skipIf(ENGINE === 'chromium')('E2E: event-page suspension recovery (MV3
 			// content page right now and has no `chrome` global to poll with
 			// (same navigate-back idiom as auto-thumbnail.test.ts).
 			await new Promise(r => setTimeout(r, 3000));
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Poll for the thumbnail record via the same message newTab.js's

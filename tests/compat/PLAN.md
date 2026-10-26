@@ -1,6 +1,9 @@
 # Compat tier: plan
 
-**Status:** planned 2026-10-26, not started.
+**Status:** steps 1-3 done 2026-10-26 (Firefox ESR + release probes, console
+experiment adopted); steps 4-7 open, tracked in Linear ACK-55. Readying E2E
+for the release-channel gates before they reach ESR: ACK-54. How to run:
+[`README.md`](README.md).
 **Goal:** know within days of a new Firefox or Chrome build whether our test
 harness still works on it, and have a place to develop workarounds before the
 change reaches the binaries E2E and UAT run on.
@@ -43,25 +46,29 @@ Nightly and canary are noisy: on demand only, not scheduled.
 ```
 tests/compat/
   PLAN.md                  this file
-  NOTEBOOK.md              moved from tests/BROWSER-COMPAT.md (links updated)
+  NOTEBOOK.md              moved from tests/BROWSER-COMPAT.md
   README.md                how to run, how to read a diff
-  run.mjs                  provision channel -> launch -> run probes -> write matrix -> diff
-  probes/*.probe.ts        one capability per probe, shared harness
+  run.mjs                  per target: E2E runner (NTT_CHANNEL, project compat) -> matrix -> diff
+  matrix.mjs               targets, error classification, diff (fast-tier tested)
+  harness.test.ts          the `compat` Vitest project: runs every probe, writes the matrix
+  probes/*.probe.ts        probes grouped by area (navigation, commands, events)
   expected/<browser>-<channel>.json   committed expected matrix
   experiments/YYYY-MM-DD-<slug>/       dated experiments
   _artifacts/              gitignored: actual matrices, logs
 ```
 
-Probe files use a `.probe.ts` suffix so the `tests/e2e/**/*.test.ts` glob and
-the fast tier never pick them up.
+Probe files use a `.probe.ts` suffix so no tier's test glob picks them up.
+Rather than its own launcher, run.mjs drives the E2E runner: the registry's
+`$NTT_CHANNEL` picks the binary and `$NTT_VITEST_PROJECT=compat` the harness.
 
 ## Probe format
 
-Each probe exports `{ id, description, run(ctx) }`; `run` returns `ok`,
-`gated` (with the error string) or `broken` (unexpected failure). The harness
-gives every probe a fresh extension page, a 5s timeout and try/catch, so one
-hanging command cannot stall the run. Matrix rows: probe id, channel, version,
-result, error-string fingerprint.
+Each probe is `{ id, description, timeoutMs?, run(ctx) }`; `run` resolves or
+throws, and the harness classifies the throw as `gated` (known gate string),
+`absent` (timeout or event never arrived) or `error`. Every probe gets fresh
+extension pages, a timeout and try/catch, so one hanging command cannot stall
+the run. Matrix rows: probe id, result, error string; the header carries the
+browser version. Only results are diffed.
 
 Initial probes, from the 2026-10-26 hand-run (`.tmp/zz-probe-capabilities.test.ts`):
 navigate to `moz-extension://`, `evaluate`, input actions, `setFiles`,
@@ -72,8 +79,8 @@ navigate to `moz-extension://`, `evaluate`, input actions, `setFiles`,
 ## Commands
 
 - `pnpm test:compat` runs probes on every scheduled channel and prints the diff.
-- `pnpm test:compat ff-beta` runs one channel.
-- `pnpm test:compat ff-beta --e2e` also runs the E2E suite on that channel.
+- `pnpm test:compat firefox-beta` runs one channel (`<browser>-<channel>`).
+- `pnpm test:compat firefox-beta --e2e` also runs the E2E suite on that channel.
 - `pnpm test:compat --accept` rewrites `expected/` from the last run (reviewed in the diff like any other change).
 
 ## CI
@@ -91,17 +98,13 @@ read and dismissed defeats the tier.
 
 ## Steps
 
-1. Create `tests/compat/`; move the notebook and update its links (TESTING.md,
-   CONTRIBUTING.md, `tests/e2e/README.md`, `ci.yml`, the audit note).
-2. Probe harness + `run.mjs` for Firefox, ESR and release, using the system
-   binaries; port the hand-run probes. Commit expected matrices for both.
-   Retire `tests/e2e/_debug/probe_bidi.sh` and `_debug/bidi_proof.mjs` (and
-   their `tests/e2e/README.md` entries): the "endpoint up / session opens"
-   probe supersedes them.
-3. First experiment: `devtools.console.stdout.content` (Firefox prints console
-   output to stdout) for extension pages. Outcome decides the fix for
-   `loads-cleanly.test.ts`, whose console assertion is vacuous on Firefox today.
-4. Channel provisioning via `@puppeteer/browsers` (beta, nightly).
+1. ~~Create `tests/compat/`; move the notebook and update its links.~~ Done 2026-10-26.
+2. ~~Probe harness + `run.mjs` for Firefox ESR and release, system binaries;
+   expected matrices; retire `tests/e2e/_debug/`.~~ Done 2026-10-26.
+3. ~~Experiment: `devtools.console.stdout.content` for extension pages.~~
+   Done 2026-10-26: adopted; `loads-cleanly.test.ts` checks for real on Firefox.
+4. Channel provisioning via `@puppeteer/browsers` (beta, nightly). Each new
+   channel joins the browser's `channels` in the registry and its env module.
 5. Chrome probes (stable, CfT, beta, canary), including the
    `--load-extension` / `installExtension` routes.
 6. `compat.yml` scheduled workflow.

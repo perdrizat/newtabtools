@@ -10,6 +10,7 @@ import {
 	resetTestState,
 	navigateAndConfirm,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 // Use example.com — a simple, static page where drawWindow reliably works.
@@ -48,7 +49,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 
 			// Reload so the tile appears in the grid and the background's
 			// Tiles._cache includes the URL.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Confirm precondition: tile is rendered and pinned.
@@ -65,7 +66,7 @@ describe('E2E: Auto-thumbnail capture and display (slot 17)', () => {
 			await new Promise(r => setTimeout(r, 3000));
 
 			// Step 3: Navigate back to the new tab page and check for thumbnail.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Wait for getThumbnails to fetch and apply the backgroundImage.

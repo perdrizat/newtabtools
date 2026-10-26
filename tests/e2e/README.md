@@ -6,7 +6,7 @@ E2E tests run against **real Firefox** with the unpacked extension installed. Th
 - **`puppeteer-core`** connects to the running Firefox over **WebDriver BiDi** — a W3C standard that mainline Firefox supports out of the box.
 - **Vitest** is the test runner, same as for Unit and Integration tests, with a separate `e2e` project (see [`vitest.config.js`](../../vitest.config.js)).
 
-**Firefox channel:** this tier runs on **Firefox ESR (>= 153)** by default — the `e2e` channel in [`../_browsers/registry.mjs`](../_browsers/registry.mjs) (`firefox-esr`; `$FIREFOX_BIN` overrides the binary). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from 152.0, so the tier ran on release until the 153 ESR shipped. Since Firefox 153 the launch needs `--remote-allow-system-access` to navigate to `moz-extension://` pages. Per-version BiDi quirks, error strings and the ESR-bump checklist live in [`../BROWSER-COMPAT.md`](../BROWSER-COMPAT.md).
+**Firefox channel:** this tier runs on **Firefox ESR (>= 153)** by default — the `e2e` channel in [`../_browsers/registry.mjs`](../_browsers/registry.mjs) (`firefox-esr`; `$FIREFOX_BIN` overrides the binary). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from 152.0, so the tier ran on release until the 153 ESR shipped. Since Firefox 153 the launch needs `--remote-allow-system-access` to navigate to `moz-extension://` pages. Per-version BiDi quirks, error strings and the ESR-bump checklist live in [`../compat/NOTEBOOK.md`](../compat/NOTEBOOK.md).
 
 **Chrome parity (CHROME.md D5b):** this SAME `tests/e2e/**/*.test.ts` suite also runs against branded stable Chrome via `pnpm test:e2e:chrome` (`tests/e2e/run.sh chrome`) — no separate test files. `$NTT_BROWSER` (set by the runner) makes [`_helpers.ts`](_helpers.ts) resolve the browser from the registry: BiDi@9222 vs CDP@9223, the `moz-extension://` vs `chrome-extension://` origin, and `ENGINE` (`gecko`/`chromium`) for the few tests that branch. See [`../_browsers/chrome/README.md`](../_browsers/chrome/README.md) for the Chrome launcher and the per-file triage table. Everything below describes the Firefox path specifically.
 
@@ -99,12 +99,13 @@ npx vitest --project e2e tests/e2e/your_test.test.js
 4. **Stale Firefox processes.** The Firefox hook `pkill`s on entry and on teardown, scoped to this run's test profile (not a blanket process-name kill — that would hit a developer's daily-driver Firefox, and the former `pkill -f firefox-esr` even killed the invoking shell when `firefox-esr` was on its command line). If a manual run crashes uncleanly and leaves a process behind, `pkill -f <profile-dir-path>` to clear it, or as a last resort `pkill -f firefox`.
 5. **`captureVisibleTab`/`captureTab` require Firefox >= 152.** Both are `undefined` on any older build (MV2 or MV3) — a test that exercises capture will fail opaquely on an out-of-date binary, not with a clear "unsupported version" error. Check `firefox --version` first if capture tests fail unexpectedly.
 
-## Manual debugging tools (not part of the test run)
+## When the driver itself looks broken
 
-These scripts live alongside the tests but Vitest's `include: ['tests/e2e/**/*.test.js']` does not pick them up:
+Run `pnpm test:compat` ([`../compat/README.md`](../compat/README.md)). Its probes check the driver one capability at a time (session connects, extension-page navigation, each command and event) on ESR and release, and diff the result against the committed matrix. That tells a browser/driver change apart from a test or extension bug.
 
-- [`_debug/bidi_proof.mjs`](_debug/bidi_proof.mjs) — minimal Puppeteer + BiDi proof of concept; useful when something looks broken to verify the bridge itself.
-- [`_debug/probe_bidi.sh`](_debug/probe_bidi.sh) — launches Firefox with the BiDi port and curls the endpoint to verify it responds.
+## Navigating to the extension page
+
+Use `openNewTab` or `gotoExtensionPage` from `_helpers.ts`, never a raw `page.goto`: on Firefox the goto never resolves for `moz-extension://` pages, so awaiting it costs its full timeout. The helper fires the goto and polls for the new document instead (`tests/integration/browser-registry.test.ts` guards this).
 
 ## File naming
 

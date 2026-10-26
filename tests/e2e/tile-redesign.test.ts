@@ -10,6 +10,7 @@ import {
 	resetTestState,
 	siteLinkExists,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://tile-redesign-test.example.com/';
@@ -34,7 +35,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			});
 		}, TEST_URL);
 		const url = await getNewTabURL();
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await gotoExtensionPage(page, url);
 		await waitForGridReady(page);
 		await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 15_000, message: 'Setup: pinned tile not in grid' });
 		await page.close();
@@ -415,7 +416,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 				});
 			}, removeUrl);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 			await waitForCondition(page, siteLinkExists, [removeUrl], { timeout: 10_000, message: 'Remove test tile not in grid' });
 
@@ -498,7 +499,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			})()`);
 
 			// Reload so the grid picks up the pinned tile and thumbnail.
-			await page.goto(newTabURL, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, newTabURL);
 			await waitForGridReady(page);
 
 			// Wait until the tile has a backgroundImage (thumbnail applied).

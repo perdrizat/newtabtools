@@ -10,9 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- `tests/BROWSER-COMPAT.md`: living notebook of browser/driver gates, error strings, rejected alternatives, ESR-bump checklist and investigation log.
-- `tests/compat/PLAN.md`: plan for a compat tier (driver capability probes + E2E on beta/nightly channels + experiments).
-- `tests/_browsers/registry.mjs`: one browser registry for E2E and UAT (engine, per-tier default channel, ports); guarded by `browser-registry.test.ts`.
+- `tests/compat/NOTEBOOK.md`: living notebook of browser/driver gates, error strings, rejected alternatives, ESR-bump checklist and investigation log.
+- Compat tier (`pnpm test:compat`, `tests/compat/`): driver capability probes on Firefox ESR + release, diffed against committed matrices; remaining steps in `PLAN.md` (ACK-55).
+- `tests/_browsers/registry.mjs`: one browser registry for E2E and UAT (engine, channels, per-tier default channel, ports); guarded by `browser-registry.test.ts`.
+- `$NTT_CHANNEL` runs any tier on another registered channel (e.g. `NTT_CHANNEL=release pnpm test:e2e:firefox`).
+- `gotoExtensionPage` E2E helper: polls for the new document instead of awaiting Firefox's never-resolving goto; Firefox E2E several times faster.
 
 ### Changed
 
@@ -21,18 +23,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Chrome tools moved to `tests/_browsers/chrome/`; `resolveChromeBinary` takes the registry `channel` (`stable`/`cft`).
 - `$NTT_BROWSER` replaces `$UAT_BROWSER`/`$NTT_E2E_BROWSER`, `$FIREFOX_BIN` replaces `$FIREFOX_ESR_BIN` (old names now fail loudly).
 - E2E tests branch on `ENGINE` (`gecko`/`chromium`) instead of `IS_CHROME`.
-- Compat plan step 2 retires the `tests/e2e/_debug` BiDi probes.
 - docs: dropped live test/file/scenario counts (stale on every change); kept dated records and the README's rounded figures.
-
 - Firefox E2E defaults to `firefox-esr` (153 ESR) locally and in CI; UAT stays on release Firefox (Decision 12 trigger met).
-- docs: E2E suite counts updated to 31 files/125 tests; `loads-cleanly.test.ts` flags its console assertion as vacuous on Firefox (BiDi sends no console events for extension pages).
+- Firefox E2E captures browser console output to `_artifacts/firefox/browser.log` (`devtools.console.stdout.content`).
 
 ### Fixed
 
 - `run_esr_tests.sh` no longer kills its invoking shell: dropped the `pkill -f firefox-esr` name match, profile-dir match only.
+- `loads-cleanly.test.ts` console-error check is real on Firefox (read from the browser log; was vacuous, BiDi sends no console events for extension pages).
 
 ### Removed
 
+- `tests/e2e/_debug/` BiDi probes (superseded by the compat tier).
 - E2E: removed network-dependent `tests/e2e/favicon-real-sites.test.ts` (live web coverage is handled by UAT; hermetic IDB fixture seeding tracked in ACK-52).
 
 ## [2026-10-25]

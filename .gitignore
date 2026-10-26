@@ -14,6 +14,7 @@ test-results/
 tests/e2e/test-profile/
 tests/e2e/_artifacts/
 tests/e2e/.runner-lock-*/
+tests/compat/_artifacts/
 tests/_browsers/chrome/.launcher-ready
 tests/uat/artifacts/
 dist/

@@ -7,7 +7,7 @@
 # overrides it (e.g. `FIREFOX_BIN=firefox` to preview release-only driver
 # gates). MV3's `tabs.captureVisibleTab` needs Firefox >= 152, so this ran
 # on release until the 153 ESR shipped. Per-version quirks:
-# tests/BROWSER-COMPAT.md.
+# tests/compat/NOTEBOOK.md.
 
 FIREFOX_HOOK_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
@@ -49,33 +49,42 @@ browser_launch() {
   # which hard-rejects the moz-extension:// gotos every E2E test depends on.
   # This flag is Mozilla's documented opt-in for privileged navigation in a
   # driven browser; it only affects this test-launched instance.
-  echo "Launching Firefox via web-ext..."
-  web-ext run \
+  #
+  # Console capture: BiDi delivers no console/pageerror events for extension
+  # pages, so devtools.console.stdout.content makes Firefox print them, and
+  # web-ext's --verbose relays Firefox's stdout/stderr into $BROWSER_LOG,
+  # which loads-cleanly.test.ts reads
+  # (tests/compat/experiments/2026-10-26-console-stdout).
+  BROWSER_LOG="$NTT_E2E_ARTIFACTS_DIR/browser.log"
+  echo "Launching Firefox via web-ext (output: $BROWSER_LOG)..."
+  web-ext run --verbose \
     --source-dir webextension/ \
     --firefox="$FIREFOX_BIN" \
     --firefox-profile "$PROFILE_DIR" \
     --keep-profile-changes \
     --pref=extensions.background.idle.timeout=10000 \
+    --pref=devtools.console.stdout.content=true \
     --args="--remote-debugging-port" --args="$NTT_E2E_PORT" --args="-headless" \
-    --args="--remote-allow-system-access" &
+    --args="--remote-allow-system-access" > "$BROWSER_LOG" 2>&1 &
   WEB_EXT_PID=$!
 }
 
 # Wait for the BiDi port (30s). Abort the moment web-ext (and thus Firefox)
-# dies, rather than polling a dead process for the full timeout; the
-# backgrounded web-ext output above carries the cause.
+# dies, rather than polling a dead process for the full timeout; the tail of
+# the web-ext output carries the cause.
 browser_wait_ready() {
   echo "Waiting for Firefox to be ready on port $NTT_E2E_PORT..."
   local count=0
   until nc -z 127.0.0.1 "$NTT_E2E_PORT" 2>/dev/null; do
     if ! kill -0 "$WEB_EXT_PID" 2>/dev/null; then
-      echo "Error: web-ext/Firefox exited before the debugging port ($NTT_E2E_PORT) came up." >&2
-      echo "       See the web-ext output above for the cause (e.g. Firefox failed to launch)." >&2
+      echo "Error: web-ext/Firefox exited before the debugging port ($NTT_E2E_PORT) came up. Last output ($BROWSER_LOG):" >&2
+      tail -n 20 "$BROWSER_LOG" >&2
       return 1
     fi
     count=$((count + 1))
     if [ "$count" -eq 30 ]; then
-      echo "Error: Firefox failed to open port $NTT_E2E_PORT within 30s" >&2
+      echo "Error: Firefox failed to open port $NTT_E2E_PORT within 30s. Last output ($BROWSER_LOG):" >&2
+      tail -n 20 "$BROWSER_LOG" >&2
       return 1
     fi
     sleep 1

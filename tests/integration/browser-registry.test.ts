@@ -96,16 +96,23 @@ describe('BROWSERS registry', () => {
 });
 
 describe('per-browser channel resolvers cover every registered channel', () => {
-	it('firefox-env maps every firefox channel to a binary', () => {
-		for (const tier of TIERS) {
-			expect(FIREFOX_CHANNEL_BINARIES).toHaveProperty(BROWSERS.firefox.tiers[tier].channel);
+	it('lists each browser\'s channels, including every tier default', () => {
+		expect([...BROWSERS.firefox.channels]).toEqual(['esr', 'release']);
+		expect([...BROWSERS.chrome.channels]).toEqual(['stable', 'cft']);
+		for (const profile of Object.values(BROWSERS)) {
+			expect(Object.isFrozen(profile.channels)).toBe(true);
+			for (const tier of TIERS) {
+				expect(profile.channels).toContain(profile.tiers[tier].channel);
+			}
 		}
 	});
 
+	it('firefox-env maps every firefox channel to a binary', () => {
+		expect(Object.keys(FIREFOX_CHANNEL_BINARIES).sort()).toEqual([...BROWSERS.firefox.channels].sort());
+	});
+
 	it('chrome-env knows every chrome channel', () => {
-		for (const tier of TIERS) {
-			expect(CHROME_CHANNELS).toContain(BROWSERS.chrome.tiers[tier].channel);
-		}
+		expect([...CHROME_CHANNELS].sort()).toEqual([...BROWSERS.chrome.channels].sort());
 	});
 
 	it('every registered browser has an E2E launcher hook', () => {
@@ -154,6 +161,17 @@ describe('resolveBrowserEnv', () => {
 	it('honours UAT_DAEMON_PORT on the uat tier only', () => {
 		expect(resolveBrowserEnv({ tier: 'uat', env: { NTT_BROWSER: 'chrome', UAT_DAEMON_PORT: '9999' } }).port).toBe(9999);
 		expect(resolveBrowserEnv({ tier: 'e2e', env: { UAT_DAEMON_PORT: '9999' } }).port).toBe(BROWSERS.firefox.tiers.e2e.port);
+	});
+
+	it('lets NTT_CHANNEL override the tier\'s default channel', () => {
+		expect(resolveBrowserEnv({ tier: 'e2e', env: { NTT_CHANNEL: 'release' } }).channel).toBe('release');
+		expect(resolveBrowserEnv({ tier: 'uat', env: { NTT_BROWSER: 'chrome', NTT_CHANNEL: 'stable' } }).channel).toBe('stable');
+		expect(resolveBrowserEnv({ tier: 'e2e', env: { NTT_CHANNEL: '' } }).channel).toBe('esr');
+	});
+
+	it('rejects a channel the browser does not have', () => {
+		expect(() => resolveBrowserEnv({ tier: 'e2e', env: { NTT_CHANNEL: 'cft' } }))
+			.toThrow(/unknown NTT_CHANNEL "cft" for firefox.*esr, release/);
 	});
 
 	it('rejects a malformed UAT_DAEMON_PORT', () => {
@@ -214,7 +232,7 @@ describe('naming helpers', () => {
 describe('registry shell-env CLI (consumed by tests/e2e/run.sh)', () => {
 	function shellEnv(env: Record<string, string>) {
 		const clean = Object.fromEntries(Object.entries(process.env)
-			.filter(([k]) => !['NTT_BROWSER', 'UAT_BROWSER', 'NTT_E2E_BROWSER', 'FIREFOX_ESR_BIN'].includes(k)));
+			.filter(([k]) => !['NTT_BROWSER', 'NTT_CHANNEL', 'UAT_BROWSER', 'NTT_E2E_BROWSER', 'FIREFOX_ESR_BIN'].includes(k)));
 		return spawnSync(process.execPath, [REGISTRY, 'shell-env', 'e2e'], { encoding: 'utf8', env: { ...clean, ...env } });
 	}
 
@@ -226,6 +244,12 @@ describe('registry shell-env CLI (consumed by tests/e2e/run.sh)', () => {
 		expect(r.stdout).toContain('export NTT_CHANNEL=\'stable\'');
 		expect(r.stdout).toContain(`export NTT_E2E_PORT='${BROWSERS.chrome.tiers.e2e.port}'`);
 		expect(r.stdout).toContain(`export NTT_E2E_ARTIFACTS_DIR='${e2eArtifactsDir('chrome')}'`);
+	});
+
+	it('exports the NTT_CHANNEL override, so the hook launches that channel', () => {
+		const r = shellEnv({ NTT_BROWSER: 'firefox', NTT_CHANNEL: 'release' });
+		expect(r.status).toBe(0);
+		expect(r.stdout).toContain('export NTT_CHANNEL=\'release\'');
 	});
 
 	it('exits non-zero with the registry error on an unknown browser', () => {
@@ -266,6 +290,16 @@ describe('tools resolve their browser only through the registry', () => {
 		const e2eDir = path.join(ROOT, 'tests/e2e');
 		for (const f of fs.readdirSync(e2eDir).filter(n => n.endsWith('.ts'))) {
 			expect(fs.readFileSync(path.join(e2eDir, f), 'utf8'), f).not.toMatch(/\bIS_CHROME\b/);
+		}
+	});
+
+	// Firefox's goto never resolves on moz-extension:// (compat/NOTEBOOK.md §3),
+	// so a raw goto there costs its full timeout. Only _helpers.ts may call
+	// goto, plus boot-timing, which fires it unawaited on purpose.
+	it('E2E test files navigate via the helpers, not a raw page.goto', () => {
+		const e2eDir = path.join(ROOT, 'tests/e2e');
+		for (const f of fs.readdirSync(e2eDir).filter(n => n.endsWith('.test.ts') && n !== 'boot-timing.test.ts')) {
+			expect(/\.goto\(/.test(fs.readFileSync(path.join(e2eDir, f), 'utf8')), f).toBe(false);
 		}
 	});
 });

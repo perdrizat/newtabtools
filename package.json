@@ -23,6 +23,7 @@
     "test:e2e": "pnpm test:e2e:firefox && pnpm test:e2e:chrome",
     "test:e2e:firefox": "tests/e2e/run.sh firefox",
     "test:e2e:chrome": "tests/e2e/run.sh chrome",
+    "test:compat": "node tests/compat/run.mjs",
     "test:uat": "pnpm test:uat:firefox && pnpm test:uat:chrome",
     "test:uat:firefox": "NTT_BROWSER=firefox node tests/uat/_tools/runner.mjs",
     "test:uat:chrome": "NTT_BROWSER=chrome node tests/uat/_tools/runner.mjs",

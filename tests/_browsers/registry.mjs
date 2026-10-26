@@ -15,8 +15,10 @@
  * default channel lives here (CHROME.md Decision 12: the frequent E2E tier
  * runs the production binary, the pre-release UAT tier the current one), and
  * the per-browser env module (`firefox/firefox-env.mjs`,
- * `chrome/chrome-env.mjs`) turns a channel into a binary. `$FIREFOX_BIN` /
- * `$CHROME_BIN` override the binary for whichever tier is running.
+ * `chrome/chrome-env.mjs`) turns a channel into a binary. `$NTT_CHANNEL`
+ * picks another of the browser's `channels` for whichever tier is running
+ * (the compat tier uses it); `$FIREFOX_BIN` / `$CHROME_BIN` override the
+ * binary outright.
  *
  * The rules this module enforces:
  *
@@ -57,6 +59,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * @typedef {object} BrowserProfile
  * @property {'gecko'|'chromium'|'webkit'} engine
  * @property {string} extensionScheme URL scheme of the extension origin
+ * @property {readonly string[]} channels every channel the env module can resolve to a binary
  * @property {Readonly<Record<'e2e'|'uat', Readonly<TierProfile>>>} tiers
  */
 
@@ -68,6 +71,7 @@ export const BROWSERS = Object.freeze({
 	firefox: Object.freeze({
 		engine: 'gecko',
 		extensionScheme: 'moz-extension',
+		channels: Object.freeze(['esr', 'release']),
 		tiers: Object.freeze({
 			e2e: Object.freeze({ channel: 'esr', port: 9222 }),
 			uat: Object.freeze({ channel: 'release', port: 9876, healthTimeoutMs: 300_000 }),
@@ -81,6 +85,7 @@ export const BROWSERS = Object.freeze({
 	chrome: Object.freeze({
 		engine: 'chromium',
 		extensionScheme: 'chrome-extension',
+		channels: Object.freeze(['stable', 'cft']),
 		tiers: Object.freeze({
 			e2e: Object.freeze({ channel: 'stable', port: 9223 }),
 			uat: Object.freeze({ channel: 'cft', port: 9877, healthTimeoutMs: 600_000 }),
@@ -168,6 +173,10 @@ export function resolveBrowserEnv({ tier, env = process.env, tool = 'test tool',
 	}
 
 	const tierProfile = profile.tiers[tier];
+	const channel = env.NTT_CHANNEL || tierProfile.channel;
+	if (!profile.channels.includes(channel)) {
+		throw new Error(`unknown NTT_CHANNEL "${channel}" for ${browser} — expected one of: ${profile.channels.join(', ')}`);
+	}
 	let port = tierProfile.port;
 	if (tier === 'uat' && env.UAT_DAEMON_PORT !== undefined && env.UAT_DAEMON_PORT !== '') {
 		port = Number(env.UAT_DAEMON_PORT);
@@ -182,6 +191,7 @@ export function resolveBrowserEnv({ tier, env = process.env, tool = 'test tool',
 		engine: profile.engine,
 		extensionScheme: profile.extensionScheme,
 		...tierProfile,
+		channel,
 		port,
 	};
 }

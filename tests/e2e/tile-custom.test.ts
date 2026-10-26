@@ -13,6 +13,7 @@ import {
 	resetTestState,
 	siteLinkExists,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 /**
@@ -83,7 +84,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				});
 			}, TEST_URL_TITLE);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Wait for tile in grid.
@@ -110,7 +111,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			expect(tileTitle).toBe('My Custom Title');
 
 			// Verify persistence across reload.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const titleAfterReload = await waitForCondition(
@@ -154,7 +155,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 				});
 			}, TEST_URL_THUMB);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			await waitForCondition(page, siteLinkExists, [TEST_URL_THUMB], { timeout: 10_000, message: 'Tile not in grid' });
@@ -217,7 +218,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await page.evaluate((u) => new Promise(resolve => {
 				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Auto', url: u }, resolve);
 			}), TILE);
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 			await waitForCondition(page, siteLinkExists, [TILE], { timeout: 10_000, message: 'tile not in grid' });
 
@@ -262,7 +263,7 @@ describe('E2E: Per-tile custom title and image (slot 28)', () => {
 			await page.evaluate((u) => new Promise(resolve => {
 				chrome.runtime.sendMessage({ name: 'Tiles.pinTile', title: 'Doomed', url: u }, resolve);
 			}), TILE);
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 			await waitForCondition(
 				page,

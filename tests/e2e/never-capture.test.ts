@@ -12,6 +12,7 @@ import {
 	openDrawerUI,
 	switchDrawerTabUI,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 // Reuse example.com — the same stable target auto-thumbnail.test.ts navigates to.
@@ -154,7 +155,7 @@ describe('E2E: Never-capture feature', () => {
 			await new Promise(r => setTimeout(r, 3000));
 
 			// Navigate back to the new tab page.
-			await page.goto(newTabURL, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, newTabURL);
 			await waitForGridReady(page);
 
 			// No thumbnail record should exist for this URL.

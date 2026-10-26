@@ -24,6 +24,18 @@ export default defineConfig({
           hookTimeout: 30_000,
         },
       },
+      {
+        // The compat tier's probe harness; launched by tests/compat/run.mjs
+        // through tests/e2e/run.sh (NTT_VITEST_PROJECT=compat).
+        test: {
+          name: 'compat',
+          environment: 'node',
+          include: ['tests/compat/**/*.test.ts'],
+          fileParallelism: false,
+          testTimeout: 60_000,
+          hookTimeout: 60_000,
+        },
+      },
     ],
   },
 });

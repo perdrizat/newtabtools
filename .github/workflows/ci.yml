@@ -33,7 +33,7 @@ jobs:
         # E2E runs on the production binary (CHROME.md Decision 12): the
         # registry's E2E channel for Firefox is ESR (tests/_browsers/registry.mjs),
         # >= 153 (MV3 capture needs >= 152). Driver quirks per version:
-        # tests/BROWSER-COMPAT.md.
+        # tests/compat/NOTEBOOK.md.
         run: |
           sudo install -d -m 0755 /etc/apt/keyrings
           wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null

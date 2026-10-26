@@ -9,6 +9,7 @@ import {
 	resetTestState,
 	getNewTabURL,
 	setPrefs,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 /**
@@ -151,7 +152,7 @@ describe('E2E: Tile aspect ratio (issue #505)', () => {
 			// Re-navigate to the same URL (pattern used by other E2E tests —
 			// page.reload via BiDi can hang on extension pages).
 			const url = await getNewTabURL();
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const attr = await page.evaluate(() => document.documentElement.getAttribute('tileaspect'));

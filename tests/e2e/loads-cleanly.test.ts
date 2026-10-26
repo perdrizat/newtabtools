@@ -1,17 +1,30 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState } from './_helpers.ts';
+import {
+	ENGINE,
+	connectToFirefox,
+	openNewTab,
+	waitForGridReady,
+	resetTestState,
+	browserLogSize,
+	firefoxConsoleErrorsSince,
+} from './_helpers.ts';
 
 describe('E2E Smoke: Extension loads cleanly', () => {
 	let browser: Browser;
 	let page: Page;
 	const consoleErrors: string[] = [];
+	let logOffset = 0;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
 		await resetTestState(browser);
-		// Hook the console listener BEFORE goto() so we observe errors that
-		// fire during the page's initial load. Attaching after openNewTab
+		// Firefox: BiDi delivers no console events for extension pages, so
+		// errors are read from the browser's stdout log instead (the hook sets
+		// devtools.console.stdout.content). Only lines written from here on count.
+		logOffset = browserLogSize();
+		// Chrome: hook the console listener BEFORE goto() so we observe errors
+		// that fire during the page's initial load. Attaching after openNewTab
 		// returns would race the navigation and miss early errors; attaching
 		// to a separately-created page would orphan the listener entirely.
 		page = await openNewTab(browser, {
@@ -24,6 +37,8 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 			},
 		});
 		await waitForGridReady(page);
+		// Let late boot work (tiles, thumbnails, background replies) report.
+		await new Promise(r => setTimeout(r, 1_000));
 	}, 60_000);
 
 	afterAll(async () => {
@@ -35,12 +50,11 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 		}
 	});
 
-	// KNOWN GAP (2026-10-26, tests/BROWSER-COMPAT.md §3): Firefox's BiDi never
-	// delivers console events for moz-extension:// pages, so on Firefox this
-	// assertion passes vacuously; it is only real on Chrome. Fix pending the
-	// compat-tier console-capture experiment (tests/compat/PLAN.md step 3).
+	// On Firefox this also covers the background page: its errors land in the
+	// same log (tests/compat/experiments/2026-10-26-console-stdout).
 	it('opens the new tab page with zero console errors', () => {
-		expect(consoleErrors).toEqual([]);
+		const errors = ENGINE === 'gecko' ? firefoxConsoleErrorsSince(logOffset) : consoleErrors;
+		expect(errors).toEqual([]);
 	});
 
 	it('renders the HTML5 page (not a blank page or parse error)', async () => {

@@ -1,0 +1,77 @@
+{
+	"browser": "firefox",
+	"channel": "release",
+	"version": "firefox/158.0.1",
+	"probes": {
+		"session-connect": {
+			"result": "ok"
+		},
+		"navigate-extension-page": {
+			"result": "ok"
+		},
+		"goto-resolves": {
+			"result": "absent",
+			"error": "absent: goto never resolved"
+		},
+		"reload": {
+			"result": "absent",
+			"error": "absent: reload never resolved"
+		},
+		"pages-lists-extension-page": {
+			"result": "absent",
+			"error": "absent: extension page not listed"
+		},
+		"preload-script-runs": {
+			"result": "gated",
+			"error": "Protocol error (script.addPreloadScript): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"evaluate": {
+			"result": "ok"
+		},
+		"input-keyboard": {
+			"result": "ok"
+		},
+		"input-mouse": {
+			"result": "ok"
+		},
+		"expose-function": {
+			"result": "ok"
+		},
+		"upload-file": {
+			"result": "gated",
+			"error": "Protocol error (input.setFiles): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"set-viewport": {
+			"result": "gated",
+			"error": "Protocol error (browsingContext.setViewport): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"bring-to-front": {
+			"result": "gated",
+			"error": "Protocol error (browsingContext.activate): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"screenshot": {
+			"result": "gated",
+			"error": "Protocol error (browsingContext.captureScreenshot): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"print-pdf": {
+			"result": "gated",
+			"error": "Protocol error (browsingContext.print): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"dialog-accept": {
+			"result": "gated",
+			"error": "Protocol error (browsingContext.handleUserPrompt): unsupported operation The command does not support browsing contexts in privileged scope"
+		},
+		"console-event": {
+			"result": "absent",
+			"error": "absent: no console event (0 others)"
+		},
+		"pageerror-event": {
+			"result": "absent",
+			"error": "absent: no pageerror event (0 others)"
+		},
+		"request-event": {
+			"result": "absent",
+			"error": "absent: no request event (0 others)"
+		}
+	}
+}

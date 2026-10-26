@@ -8,6 +8,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://example.com/';
@@ -63,7 +64,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 
 			// First reload — verify the pinned state was persisted to storage
 			// and the UI renders [pinned].
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Target the specific tile by finding its `.newtab-site` node via DOM
@@ -82,7 +83,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 
 			// Second reload — same expectation. Catches cases where the pin
 			// state is cached in memory but not durably written.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const state = await waitForCondition(
@@ -148,7 +149,7 @@ describe('E2E Smoke: Pin/unpin via UI', () => {
 			);
 
 			// Reload — the unpin must have been persisted.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const stateAfterReload = await page.evaluate((u) => {

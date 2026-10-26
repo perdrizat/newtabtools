@@ -36,6 +36,7 @@ import {
 	resetTestState,
 	setPrefs,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 const TEST_URL_A = 'https://drag-a.example.com/';
@@ -91,7 +92,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			await removeTileByUrl(page, TEST_URL_B);
 
 			// Reload to clear grid.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Pin two tiles at known positions.
@@ -105,7 +106,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			}, TEST_URL_A, TEST_URL_B);
 
 			// Reload so both tiles appear.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Wait for both tiles.
@@ -167,7 +168,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			await new Promise(r => setTimeout(r, 2000));
 
 			// Reload and verify the new order persisted.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			await waitForCondition(page, bothCellsExist, [TEST_URL_A, TEST_URL_B], { timeout: 10_000, message: 'Tiles not found after reload' });
@@ -203,7 +204,7 @@ describe('E2E: Drag-reorder tiles (slot 27)', () => {
 			}, TEST_URL_A);
 
 			const url = await getNewTabURL();
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Enable lock via storage (direct, reliable). Poll rather than

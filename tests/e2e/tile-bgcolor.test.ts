@@ -10,6 +10,7 @@ import {
 	resetTestState,
 	siteLinkExists,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 const TEST_URL = 'https://bgcolor-test.example.com/';
@@ -46,7 +47,7 @@ describe('E2E: Per-tile background color (slot 22)', () => {
 			}, TEST_URL);
 
 			// Reload to show pinned tile.
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			// Wait for the tile to appear in grid.

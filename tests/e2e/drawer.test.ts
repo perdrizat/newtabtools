@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, waitForCondition, resetTestState, captureFailure, getNewTabURL, removeTileByUrl } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, waitForCondition, resetTestState, captureFailure, getNewTabURL, removeTileByUrl, gotoExtensionPage } from './_helpers.ts';
 
 /**
  * Set one or more prefs via `browser.storage.local` and wait for the
@@ -312,7 +312,7 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Empty state test' }, () => resolve());
 		}), TEST_URL);
 		const url = await getNewTabURL();
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await gotoExtensionPage(page, url);
 		await waitForGridReady(page);
 		await waitForCondition(
 			page,
@@ -380,7 +380,7 @@ describe('E2E: Configure drawer — open / close / push-layout / Layout tab (Pha
 			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Tile select test' }, () => resolve());
 		}), TEST_URL);
 		const url = await getNewTabURL();
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await gotoExtensionPage(page, url);
 		await waitForGridReady(page);
 		await waitForCondition(
 			page,

@@ -9,6 +9,7 @@ import {
 	waitForGridReady,
 	resetTestState,
 	setPrefs,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 describe('E2E: Configurable columns and rows (slot 19)', () => {
@@ -49,7 +50,7 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 			);
 			expect(colsAfter).toBe(5);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const colsReload = await waitForCondition(
@@ -96,7 +97,7 @@ describe('E2E: Configurable columns and rows (slot 19)', () => {
 			);
 			expect(cellCount).toBe(15);
 
-			await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+			await gotoExtensionPage(page, url);
 			await waitForGridReady(page);
 
 			const cellsReload = await waitForCondition(

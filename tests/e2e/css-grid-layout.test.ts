@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Browser, Page } from 'puppeteer-core';
-import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition, getNewTabURL, getPref, setPrefs } from './_helpers.ts';
+import { connectToFirefox, openNewTab, waitForGridReady, resetTestState, waitForCondition, getNewTabURL, getPref, setPrefs, gotoExtensionPage } from './_helpers.ts';
 
 describe('E2E: CSS Grid layout + design tokens + icons', () => {
 	let browser: Browser;
@@ -22,7 +22,7 @@ describe('E2E: CSS Grid layout + design tokens + icons', () => {
 			}, () => resolve());
 		}));
 		const url = await getNewTabURL();
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await gotoExtensionPage(page, url);
 		await waitForGridReady(page);
 	}, 60_000);
 

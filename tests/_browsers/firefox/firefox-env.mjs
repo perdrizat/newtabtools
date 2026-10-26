@@ -9,7 +9,7 @@
  * this maps the channel to a binary. `$FIREFOX_BIN` overrides it for
  * whichever tier is running (e.g. `FIREFOX_BIN=firefox pnpm test:e2e:firefox`
  * previews release-only driver gates on the E2E suite — see
- * tests/BROWSER-COMPAT.md).
+ * tests/compat/NOTEBOOK.md).
  *
  * CLI: `node firefox-env.mjs <channel>` prints the resolved absolute path, or
  * exits 1 with an actionable message.

@@ -27,6 +27,36 @@ export const ENGINE = BROWSER.engine;
 // fixtures/screenshots. tests/e2e/run.sh wipes only the running browser's dir.
 export const ARTIFACTS_DIR = e2eArtifactsDir(BROWSER.browser);
 
+// Firefox's own output for the whole run: the Firefox hook sets
+// devtools.console.stdout.content and writes web-ext's verbose output here,
+// because BiDi delivers no console/pageerror events for extension pages
+// (compat/experiments/2026-10-26-console-stdout).
+export const BROWSER_LOG = path.join(ARTIFACTS_DIR, 'browser.log');
+
+/** Current size of BROWSER_LOG in bytes; pass it to firefoxConsoleErrorsSince. */
+export function browserLogSize(): number {
+	try {
+		return fs.statSync(BROWSER_LOG).size;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * console.error calls and uncaught errors from extension pages (page and
+ * background) that Firefox printed after byte `offset` of BROWSER_LOG.
+ * Throws if the log is missing, so the check can never pass vacuously.
+ */
+export function firefoxConsoleErrorsSince(offset: number): string[] {
+	if (!fs.existsSync(BROWSER_LOG)) {
+		throw new Error(`${BROWSER_LOG} missing — is tests/_browsers/firefox/e2e.sh writing it?`);
+	}
+	const text = fs.readFileSync(BROWSER_LOG).subarray(offset).toString('utf8');
+	return text.split('\n')
+		.map(line => /(console\.error: .*|JavaScript error: moz-extension:\/\/.*)$/.exec(line)?.[1])
+		.filter((m): m is string => !!m);
+}
+
 // The browser's E2E debugging port comes from the registry (unique across
 // every browser and tier, so all tiers can run concurrently per
 // CONTRIBUTING.md's parallel-tier practice).
@@ -242,6 +272,47 @@ export async function captureFailure(page: Page, label: string): Promise<string>
 	return target;
 }
 
+// Poll interval for gotoExtensionPage. Full Firefox suite, 2026-10-26:
+// 25 ms 125 s, 50 ms 130 s, 100 ms 132 s, 150 ms 139 s, 250 ms 155 s
+// (0 ms gained nothing over 100 ms on a subset). 50 ms sits at the knee:
+// within noise of 25 ms at half the polling.
+const NAV_POLL_MS = 50;
+
+/**
+ * Navigate `page` to an extension page and return once the NEW document has
+ * parsed (readyState past 'loading'), without waiting on Puppeteer's goto.
+ *
+ * On Firefox the goto never resolves for moz-extension:// (compat/NOTEBOOK.md
+ * §3), so awaiting it cost its full timeout on every navigation. The goto is
+ * fired unawaited and the document is polled instead. A new document is told
+ * apart from the old one (a reload of the same URL) by `performance.timeOrigin`,
+ * which is per-document. Evaluates that race the commit are retried.
+ */
+export async function gotoExtensionPage(
+	page: Page,
+	url: string,
+	opts: WaitForConditionOpts = {},
+): Promise<void> {
+	const { timeout = 15_000, interval = NAV_POLL_MS } = opts;
+	const before = await page.evaluate(() => performance.timeOrigin).catch(() => null);
+	page.goto(url, { waitUntil: 'domcontentloaded', timeout }).catch(e => {
+		verbose(`[Navigation] goto warning (ignoring): ${(e as Error).message}`);
+	});
+	const deadline = Date.now() + timeout;
+	while (Date.now() < deadline) {
+		try {
+			const doc = await page.evaluate(() => ({
+				href: location.href, ready: document.readyState, origin: performance.timeOrigin,
+			}));
+			if (doc.origin !== before && doc.href.startsWith(url) && doc.ready !== 'loading') {
+				return;
+			}
+		} catch { /* evaluate raced the navigation commit; retry */ }
+		await new Promise(r => setTimeout(r, interval));
+	}
+	throw new Error(`gotoExtensionPage: ${url} never loaded within ${timeout}ms`);
+}
+
 export interface OpenNewTabOpts {
 	beforeNavigate?: (page: Page) => void | Promise<void>;
 }
@@ -266,16 +337,7 @@ export async function openNewTab(browser: Browser, opts: OpenNewTabOpts = {}): P
 	}
 
 	verbose(`[Navigation] Navigating to ${url}`);
-
-	// The initial goto can race with the extension's own startup; ignore
-	// the early reject and rely on a subsequent readiness check (like
-	// waitForGridReady) to confirm the page is usable.
-	await page.goto(url, {
-		waitUntil: 'domcontentloaded',
-		timeout: 3_000, // Always times out on moz-extension:// (BiDi issue); caught below.
-	}).catch(e => {
-		verbose(`[Navigation] Initial goto warning (ignoring): ${(e as Error).message}`);
-	});
+	await gotoExtensionPage(page, url);
 
 	return page;
 }
@@ -508,7 +570,7 @@ export async function resetPrefs(browser: Browser): Promise<void> {
 export async function resetTestState(browser: Browser): Promise<void> {
 	const url = await getNewTabURL();
 	const page = await browser.newPage();
-	await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 3_000 }).catch(() => {});
+	await gotoExtensionPage(page, url);
 
 	// Wait for extension runtime (scripts loaded), not full Grid init.
 	await waitForExtensionRuntime(page);

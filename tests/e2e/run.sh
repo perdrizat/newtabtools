@@ -15,7 +15,7 @@
 #      (tests/e2e/_helpers.ts reads the same registry via $NTT_BROWSER).
 #   5. browser_stop (hook), from the EXIT trap.
 #
-# Per-version driver quirks: tests/BROWSER-COMPAT.md.
+# Per-version driver quirks: tests/compat/NOTEBOOK.md.
 
 set -u
 
@@ -34,6 +34,14 @@ shift
 # by the CLI); an unknown browser or a renamed legacy variable fails here.
 ENV_LINES="$(NTT_BROWSER="$REQUESTED_BROWSER" node "$BROWSERS_DIR/registry.mjs" shell-env e2e)" || exit 1
 eval "$ENV_LINES"
+
+# The compat tier (tests/compat/run.mjs) reuses this lifecycle for its probe
+# harness by selecting its own Vitest project.
+VITEST_PROJECT="${NTT_VITEST_PROJECT:-e2e}"
+case "$VITEST_PROJECT" in
+  e2e|compat) ;;
+  *) echo "Error: unknown NTT_VITEST_PROJECT '$VITEST_PROJECT' (expected e2e or compat)." >&2; exit 2 ;;
+esac
 
 HOOK="$BROWSERS_DIR/$NTT_BROWSER/e2e.sh"
 if [ ! -f "$HOOK" ]; then
@@ -90,14 +98,14 @@ echo "E2E: browser=$NTT_BROWSER engine=$NTT_ENGINE channel=$NTT_CHANNEL port=$NT
 browser_launch || exit 1
 browser_wait_ready || exit 1
 
-echo "$NTT_BROWSER ready. Running Vitest e2e project..."
+echo "$NTT_BROWSER ready. Running Vitest $VITEST_PROJECT project..."
 
 # 4. Run the tests; pass through any extra args (e.g., a specific test file).
 # Persist a durable pass/fail record: the json reporter writes a machine-
 # readable results.json, and `tee` mirrors the full human-readable run to
 # run.log — so "did last night's E2E pass?" is answerable from disk the next
 # morning without re-running. ${PIPESTATUS[0]} keeps vitest's exit code.
-npx vitest run --project e2e \
+npx vitest run --project "$VITEST_PROJECT" \
   --reporter=default --reporter=json --outputFile="$NTT_E2E_ARTIFACTS_DIR/results.json" \
   "$@" 2>&1 | tee "$NTT_E2E_ARTIFACTS_DIR/run.log"
 EXIT_CODE=${PIPESTATUS[0]}

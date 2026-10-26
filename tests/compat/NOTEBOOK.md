@@ -9,7 +9,7 @@ next one starts from here instead of from scratch.
 `audit/` holds dated, point-in-time reviews; this file is the opposite: one
 current-state document plus an append-only log.
 
-## Current state (last verified 2026-10-26)
+## Current state (last verified 2026-10-26; per-capability detail: `pnpm test:compat`)
 
 | Tier | Browser | Driver route | Status |
 |---|---|---|---|
@@ -23,7 +23,8 @@ current-state document plus an append-only log.
 lane) was removed from E2E on 2026-10-26; live-site favicons are covered by
 UAT. Not a driver issue.
 
-Planned successor tier for this notebook's probing work: [`compat/PLAN.md`](compat/PLAN.md).
+This notebook belongs to the compat tier ([`PLAN.md`](PLAN.md), [`README.md`](README.md)):
+its capability probes re-check the gates below on every run.
 
 ## Firefox: the gates, and how to recognise them
 
@@ -60,12 +61,14 @@ Planned successor tier for this notebook's probing work: [`compat/PLAN.md`](comp
   | `page.setViewport` (`browsingContext.setViewport`) | OK | **gated** |
   | `page.bringToFront` (`browsingContext.activate`) | OK | **gated** |
   | `page.screenshot` (`browsingContext.captureScreenshot`) | OK | **gated** (the `main` source opts in, so likely fixed in a later release) |
-  | `page.evaluateOnNewDocument` (`script.addPreloadScript`) | OK (registers) | **gated** |
+  | `page.evaluateOnNewDocument` (`script.addPreloadScript`) | registers, never runs (§3) | **gated** |
   | `page.pdf` (`browsingContext.print`) | OK | **gated** |
   | `dialog.accept` (`browsingContext.handleUserPrompt`) | OK | **gated** |
 
   "gated" = `The command does not support browsing contexts in privileged scope`.
-  Expect the right-hand column to reach ESR at the next ESR major.
+  Expect the right-hand column to reach ESR at the next ESR major. The compat
+  tier's committed matrices ([`expected/`](expected/)) are the machine-checked
+  form of this table; `pnpm test:compat` fails when either column moves.
 - **Status:** E2E avoids it by running ESR 153. Will arrive with the next ESR
   major (uploads, viewport, focus, screenshots, preload scripts, dialogs). Options then: an in-page `DataTransfer` upload helper (works through
   `script.callFunction`), or an upstream fix (request `supportsPrivilegedScope`
@@ -79,24 +82,35 @@ Planned successor tier for this notebook's probing work: [`compat/PLAN.md`](comp
   events fire for `moz-extension://` pages.
 - **Symptom:** `page.goto(moz-extension://...)` never resolves; tests hang to
   the timeout.
-- **Workaround (in place):** `openNewTab` in `tests/e2e/_helpers.ts` races
-  `goto` against a 3s timeout and then polls the DOM. Cost: about 3s per page
-  open; most Firefox E2E tests show a 3.1s floor because of it.
-- **Probed on both 153.5.1esr and 158.0.1, same result:**
+- **Workaround (in place):** `gotoExtensionPage` in `tests/e2e/_helpers.ts`
+  fires the `goto` unawaited and polls for the new document
+  (`performance.timeOrigin` changed, `readyState` past `loading`) every 50 ms.
+  Until 2026-10-26 the helpers awaited the goto to its timeout (3s in
+  `openNewTab`, 10s at 32 call sites in test files), which made Firefox E2E
+  about 10x slower than Chrome.
+- **Probed on both 153.5.1esr and 158.0.1, same result** (now the compat
+  probes `console-event`, `pageerror-event`, `request-event`, `reload`,
+  `pages-lists-extension-page`):
   - `page.on('console')`: **never fires** for the extension page.
-    Consequence: `loads-cleanly.test.ts`'s "zero console errors" assertion
-    passes vacuously on Firefox (it is only real on Chrome).
   - `page.on('pageerror')`: never fires (uncaught exceptions invisible).
   - `page.on('request')` / network events: never fire for the page's own
     fetches, so request interception/mocking of the page is not possible.
   - `page.reload()`: hangs (waits for a load event that never comes). Use
-    `page.evaluate(() => location.reload())` + DOM polling instead.
+    `gotoExtensionPage` to the same URL instead.
   - `browser.pages()`: does not list extension pages; keep the `Page` handle
     from `openNewTab`.
-- **Workaround for console/errors:** capture in-page instead: install a
-  `console.error`/`window.onerror`/`unhandledrejection` recorder from the page
-  and read it back with `page.evaluate`. Early-boot errors need the recorder to
-  exist before boot (preload script, ESR only) or a test-only hook in the page.
+  - `page.evaluateOnNewDocument` (`script.addPreloadScript`): registers on
+    ESR but **never runs** on the next extension document; gated on release.
+    A preload hook is no route to early-boot instrumentation.
+- **Workaround for console/errors (in place):** `devtools.console.stdout.content=true`
+  makes Firefox print `console.*` calls and uncaught errors of extension pages
+  (page and background) to stdout/stderr. The Firefox E2E hook sets it and
+  writes web-ext's `--verbose` output to `tests/e2e/_artifacts/firefox/browser.log`;
+  `loads-cleanly.test.ts` reads it via `firefoxConsoleErrorsSince`. Evidence:
+  [`experiments/2026-10-26-console-stdout/`](experiments/2026-10-26-console-stdout/).
+- Firefox's Remote Agent allows **one** BiDi session: a second
+  `puppeteer.connect` fails with `session not created Maximum number of active
+  sessions`. Disconnect before connecting again.
 
 ## Chrome: the gates
 
@@ -124,11 +138,13 @@ Do not re-research these unless the stated reason changes.
 
 ## Re-validation checklist (run on every ESR major bump or a red tier after an update)
 
-1. `firefox-esr --version`, `firefox --version`; record both below.
+1. `pnpm test:compat`: probes both channels and diffs against `expected/`;
+   the output names each changed capability with its error string, and the
+   versions land in `_artifacts/<target>.json`.
 2. Run `pnpm test:e2e:firefox`. If it fails, grep `tests/e2e/_artifacts/firefox/run.log`
    for the error strings above to classify each failure.
 3. Run the same suite on release to see what is coming next:
-   `FIREFOX_BIN=firefox pnpm test:e2e:firefox`.
+   `pnpm test:compat firefox-release --e2e` (or `NTT_CHANNEL=release pnpm test:e2e:firefox`).
    (Each tier's default channel is set in `tests/_browsers/registry.mjs`;
    change it there, not in the scripts.)
 4. Check the upstream sources for new gates: MDN "Firefox NNN for developers"
@@ -152,6 +168,24 @@ Do not re-research these unless the stated reason changes.
 ## Log
 
 Newest first. One entry per investigation: date, versions, what was tried, result.
+
+### 2026-10-26: compat tier probes; console capture; goto wait removed
+
+- Versions: firefox-esr 153.5.1esr, firefox 158.0.1.
+- `pnpm test:compat` probes reproduced the hand-run matrix (section 2) on both
+  channels; committed as `expected/firefox-{esr,release}.json`. New finding:
+  the ESR preload script registers but never runs (section 3).
+- A second BiDi session is refused (`Maximum number of active sessions`), so
+  the session probe checks the harness's live session instead.
+- Console experiment (`experiments/2026-10-26-console-stdout/`):
+  `devtools.console.stdout.content` delivers console calls and uncaught
+  errors on both versions; adopted in the Firefox E2E hook. Red check: an
+  injected `console.error` now fails `loads-cleanly.test.ts` on Firefox.
+- Poll interval for `gotoExtensionPage`, on the four slowest Firefox files
+  (tile-redesign, tile-custom, drag-reorder, pin-persists): 241 s with the
+  old goto waits; 18.0 s at 0 ms, 18.2 s at 100 ms, 57.0 s at 1000 ms.
+  Full-suite sweep (solo runs, 125/125 each): 25 ms 125.5 s, 50 ms 130.0 s,
+  100 ms 131.7 s, 150 ms 139.1 s, 250 ms 155.0 s. 50 ms chosen.
 
 ### 2026-10-26: Firefox 158 E2E red; switch E2E to ESR
 

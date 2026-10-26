@@ -45,6 +45,7 @@ import {
 	connectToFirefox, openNewTab, waitForGridReady, waitForCondition,
 	resetTestState, getNewTabURL, siteLinkExists, openDrawerUI, closeDrawerUI,
 	removeTileByUrl,
+	gotoExtensionPage,
 } from './_helpers.ts';
 
 describe('E2E: Drag layout invariants', () => {
@@ -64,7 +65,7 @@ describe('E2E: Drag layout invariants', () => {
 			chrome.runtime.sendMessage({ name: 'Tiles.pinTile', url: u, title: 'Drag layout' }, () => resolve());
 		}), TEST_URL);
 		const url = await getNewTabURL();
-		await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10_000 }).catch(() => {});
+		await gotoExtensionPage(page, url);
 		await waitForGridReady(page);
 		await waitForCondition(page, siteLinkExists, [TEST_URL], { timeout: 10_000, message: 'pinned tile did not surface in grid' });
 	}, 90_000);
