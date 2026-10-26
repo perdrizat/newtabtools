@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - Build targets come from `tests/_browsers/registry.mjs`; Chrome PNG icons moved from `assets/chrome-icons/` to `overlays/chrome/images/`.
 - Scripts named command-first like the rest: `pnpm dev:firefox` / `pnpm dev:chrome` (were `dev` / `chrome:stage`), `provision:chrome` (was `chrome:provision`).
-- CI runs the full Chrome E2E suite on the runner's branded stable Chrome, replacing both Chrome smoke jobs.
+- CI runs the full Chrome E2E suite on the runner's branded stable Chrome, replacing both Chrome smoke jobs; jobs named after the pnpm scripts (`check`, `test-e2e-firefox`, `test-e2e-chrome`).
 - Chrome dev build stages to `dist/dev/chrome/` (was `dist/chrome-dev/`); E2E and UAT each stage their own (`dist/_stage/chrome-<tier>/`), so they no longer race.
 - `loads-cleanly.test.ts` also gates on background errors across the theme relay (Chrome service-worker console; caught the D8 setIcon bug red).
 - Chrome UAT preflight checks the daemon's chromedriver launch path end to end.

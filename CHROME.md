@@ -599,7 +599,7 @@ adaptation.)*
       zero failures** (14 min under parallel load — the contention-tolerant
       design held). CI: workflow still runs the smoke — switching the
       chrome job to the parity suite is a deliberate follow-up (runtime
-      cost on CI runners). *(Done 2026-10-26: CI's `e2e-chrome` job runs
+      cost on CI runners). *(Done 2026-10-26: CI's `test-e2e-chrome` job runs
       the parity suite on the runner's branded stable; both smokes
       retired — their background-error/theme-relay check moved into
       `loads-cleanly.test.ts`, the Selenium check into the Chrome UAT

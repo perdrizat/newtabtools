@@ -10,8 +10,11 @@ env:
   # Opt-in to the new GitHub Actions runtime to silence deprecation warnings
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Job ids follow the pnpm script names (`test:e2e:firefox` -> `test-e2e-firefox`;
+# job ids can't contain `:`). Both E2E jobs run the same test files on their
+# browser, in parallel, once `check` is green.
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,28 +32,11 @@ jobs:
           node-version-file: '.node-version'
           cache: 'pnpm'
 
-      - name: Install Firefox ESR
-        # E2E runs on the production binary (CHROME.md Decision 12): the
-        # registry's E2E channel for Firefox is ESR (tests/_browsers/registry.mjs),
-        # >= 153 (MV3 capture needs >= 152). Driver quirks per version:
-        # tests/compat/NOTEBOOK.md.
-        run: |
-          sudo install -d -m 0755 /etc/apt/keyrings
-          wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
-          echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | sudo tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
-          echo '
-          Package: *
-          Pin: origin packages.mozilla.org
-          Pin-Priority: 1000
-          ' | sudo tee /etc/apt/preferences.d/mozilla
-          sudo apt-get update && sudo apt-get install -y firefox-esr
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Dependency audit
-        # Per audit/2026-05-04-security-review.md §2.7. Establishes a
-        # baseline before more deps land in Phase 0/1. Fails on high or
+        # Per audit/2026-05-04-security-review.md §2.7. Fails on high or
         # critical advisories so a new vulnerable dep can't be merged
         # silently. `--prod` would narrow to runtime deps if needed,
         # but we currently have no runtime deps (the extension itself
@@ -69,7 +55,43 @@ jobs:
       - name: Unit & Integration tests
         run: pnpm test:fast
 
-      - name: E2E tests (Puppeteer + BiDi)
+  # Firefox E2E on the registry's E2E channel, ESR (CHROME.md Decision 12),
+  # >= 153 (MV3 capture needs >= 152). Driver quirks per version:
+  # tests/compat/NOTEBOOK.md.
+  test-e2e-firefox:
+    needs: check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: 'pnpm'
+
+      - name: Install Firefox ESR
+        run: |
+          sudo install -d -m 0755 /etc/apt/keyrings
+          wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | sudo tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
+          echo '
+          Package: *
+          Pin: origin packages.mozilla.org
+          Pin-Priority: 1000
+          ' | sudo tee /etc/apt/preferences.d/mozilla
+          sudo apt-get update && sudo apt-get install -y firefox-esr
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: E2E tests (Firefox ESR)
         run: pnpm test:e2e:firefox
         env:
           E2E_VERBOSE: 1
@@ -82,14 +104,13 @@ jobs:
           path: tests/e2e/_artifacts/firefox/
           if-no-files-found: ignore
 
-  # Chrome E2E (CHROME.md D5): the same test files as the Firefox job, in a
-  # separate job so it runs in PARALLEL. It runs on the registry's E2E
-  # channel, branded stable (CHROME.md Decision 12) — the runner's
-  # preinstalled Google Chrome, the binary users actually run, so no
-  # provisioning step. That is the lane that would have caught the
-  # canary-gate incident: a manifest key Chrome for Testing honored but
-  # branded stable rejected (CHROME.md D8 finding 1).
-  e2e-chrome:
+  # Chrome E2E on the registry's E2E channel, branded stable (CHROME.md
+  # Decision 12): the runner's preinstalled Google Chrome, the binary users
+  # actually run, so no provisioning step. That is the lane that would have
+  # caught the canary-gate incident: a manifest key Chrome for Testing honored
+  # but branded stable rejected (CHROME.md D8 finding 1).
+  test-e2e-chrome:
+    needs: check
     runs-on: ubuntu-latest
 
     steps:
