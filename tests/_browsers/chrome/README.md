@@ -2,22 +2,22 @@
 
 Everything Chrome-specific that the E2E and UAT tiers share, under the
 browser registry's `chrome` key ([`../registry.mjs`](../registry.mjs)).
-Established in D1; grew into a smoke suite in D5; D5b added SUITE PARITY: the same E2E test files run against
-Chrome.
+Established in D1 as a first-boot smoke; D5b added SUITE PARITY: the same
+E2E test files run against Chrome. (The smokes were retired 2026-10-26: CI
+runs the parity suite, the Selenium check lives in the Chrome UAT preflight.)
 
 | File | Role |
 |---|---|
-| `chrome-env.mjs` | `resolveChromeBinary({ channel })` (`stable` = branded-first, `cft` = CfT-first), `stageDevBuild()`, the dev-key id |
+| `chrome-env.mjs` | `resolveChromeBinary({ channel })` (`stable` = branded-first, `cft` = CfT-first), `stageDevBuild()` / `tierStageDir()`, the dev-key id |
 | `e2e.sh` | E2E launcher hook sourced by `tests/e2e/run.sh chrome` |
 | `launch-chrome.mjs` | the long-lived dual-transport launcher the hook spawns |
-| `provision-cft.mjs`, `stage-dev.mjs`, `smoke.mjs`, `selenium-smoke.mjs` | the `chrome:*` pnpm scripts |
+| `provision-cft.mjs`, `stage-dev.mjs` | `pnpm provision:chrome`, `pnpm dev:chrome` |
 | `dev-key.json` | committed public key → deterministic extension id |
 
 ```bash
-pnpm chrome:provision        # one-time: fetch Chrome for Testing (~200 MB, ~/.cache/puppeteer)
-pnpm chrome:smoke            # Puppeteer/CDP first-boot smoke
-pnpm chrome:smoke:selenium   # Selenium path (chromedriver via Selenium Manager) — de-risks UAT-on-Chrome (D6)
-pnpm test:e2e:chrome         # D5b: the full E2E suite, run against Chrome
+pnpm provision:chrome   # one-time, for Chrome UAT: fetch Chrome for Testing (~200 MB, ~/.cache/puppeteer)
+pnpm dev:chrome         # stage dist/dev/chrome/ for "Load unpacked" in any Chrome
+pnpm test:e2e:chrome    # D5b: the full E2E suite, run against Chrome
 ```
 
 ## The parity suite (D5b)
@@ -29,7 +29,8 @@ which spawns `launch-chrome.mjs` as a long-lived background process. The
 launcher resolves a binary **branded-first** (`resolveChromeBinary({ channel:
 'stable' })` — the E2E tier runs the PRODUCTION binary users actually have;
 the cached CfT is only the fallback lane when no branded binary exists),
-stages the unpacked dev build (`stageDevBuild()`), and launches Chrome with a
+stages the unpacked dev build (`stageDevBuild()` into its own
+`dist/_stage/chrome-e2e/`), and launches Chrome with a
 **dual transport**: Puppeteer `pipe: true` (the CDP `Extensions` install
 domain is pipe-only on branded — `installExtension` loads the staged build
 over it) plus `--remote-debugging-port=<registry port, 9223>` for the vitest
@@ -106,11 +107,11 @@ and every `chrome-extension://` URL answers `net::ERR_BLOCKED_BY_CLIENT`:
    pipe-install route works** (amended 2026-07-18, CHROME.md D1 amendment /
    Decision 12; the original D1 finding that "even the CDP install path
    leaves the extension inert" did not reproduce on branded stable 150).
-   Consequences per tool: the E2E launcher and the Puppeteer smoke drive
+   Consequences per tool: the E2E launcher drives
    branded via `installExtension` over the pipe; **Selenium/chromedriver
    still cannot drive branded at all** (its port transport can't reach the
    pipe-only `Extensions` domain), so the UAT tier stays on **Chrome for
-   Testing** (`pnpm chrome:provision`) — the registry's `cft` UAT channel.
+   Testing** (`pnpm provision:chrome`) — the registry's `cft` UAT channel.
    `resolveChromeBinary()` defaults to CfT-first for those callers; the E2E
    launcher runs the registry's `stable` channel (branded-first). A CfT/branded major-version drift warning
    (`cftStalenessWarning`) fires in provision and the UAT preflight.
@@ -139,8 +140,7 @@ browsers and tiers and that no tool hardcodes one:
 | Chrome E2E (`test:e2e:chrome`, CDP — D5b) | 9223 |
 | Firefox UAT daemon (`browser-daemon.mjs`, `$NTT_BROWSER=firefox` — default) | 9876 (`$UAT_DAEMON_PORT`) |
 | Chrome UAT daemon (`browser-daemon.mjs`, `$NTT_BROWSER=chrome` — D6) | 9877 (`$UAT_DAEMON_PORT`) |
-| Chrome Puppeteer smoke path (`chrome:smoke`) | **none** — pipe transport, no debugging port |
-| Chrome Selenium path (smokes, D6 UAT daemon) | chromedriver: ephemeral per session |
+| Chrome Selenium path (D6 UAT daemon, its preflight check) | chromedriver: ephemeral per session |
 
 Each browser's E2E run holds its own lock (`tests/e2e/.runner-lock-<browser>`),
 so Firefox and Chrome E2E share the machine freely; just don't run two
@@ -152,7 +152,7 @@ so Firefox and Chrome E2E share the machine freely; just don't run two
 extension ID (`lncefjbclhbbikhanecleanbbohpiclk`) from the manifest `key`
 field, so every profile/machine gets the same ID. No private key exists —
 none is needed to load unpacked. The key is injected only by the dev staging
-path (`stageDevBuild()` → `dist/chrome-dev/`); `pnpm build chrome` store
+path (`stageDevBuild()`); `pnpm build:chrome` store
 artifacts never carry it.
 
 ## First-boot result (2026-07-15)

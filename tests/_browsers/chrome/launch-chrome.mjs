@@ -16,7 +16,7 @@
  *      BRANDED-first — Decision 12: the E2E tier runs the production binary
  *      users actually have) via `resolveChromeBinary({ channel })` —
  *      $CHROME_BIN → google-chrome-stable/google-chrome → the Puppeteer CfT
- *      cache (the fallback lane, same binaries `chrome:provision` populates)
+ *      cache (the fallback lane, same binaries `provision:chrome` populates)
  *      → chromium as a last resort.
  *   2. Stage the unpacked dev build (`stageDevBuild()`, unchanged).
  *   3. `puppeteer.launch()` with a DUAL transport: `pipe: true` (the CDP
@@ -53,7 +53,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
-import { resolveChromeBinary, stageDevBuild } from './chrome-env.mjs';
+import { resolveChromeBinary, stageDevBuild, tierStageDir } from './chrome-env.mjs';
 import { resolveBrowserEnv } from '../registry.mjs';
 
 const E2E = resolveBrowserEnv({ tier: 'e2e', tool: 'launch-chrome.mjs', supported: ['chrome'] });
@@ -75,7 +75,7 @@ async function main() {
 	const found = resolveChromeBinary({ channel: E2E.channel });
 	if (!found) {
 		logErr('x no Chrome binary found ($CHROME_BIN, google-chrome(-stable), the Puppeteer CfT cache, or chromium).');
-		logErr('  Run `pnpm chrome:provision` (Chrome for Testing), install branded Chrome, or set CHROME_BIN.');
+		logErr('  Run `pnpm provision:chrome` (Chrome for Testing), install branded Chrome, or set CHROME_BIN.');
 		process.exitCode = 1;
 		return;
 	}
@@ -83,7 +83,7 @@ async function main() {
 		? `channel ${E2E.channel}, production-binary lane (branded): ${found.version} (${found.bin})`
 		: `channel ${E2E.channel}, fallback lane (no branded binary found; using CfT/chromium): ${found.version} (${found.bin})`);
 
-	const { dir, extensionId } = stageDevBuild();
+	const { dir, extensionId } = stageDevBuild({ dir: tierStageDir('e2e') });
 	log(`staged: ${dir}`);
 	log(`extension id: ${extensionId}`);
 
@@ -113,8 +113,8 @@ async function main() {
 			pipe: true,
 			// Puppeteer injects --disable-extensions by default (only auto-dropped
 			// when the legacy --disable-extensions-except flag is present) — it
-			// silently inerts the CDP-installed extension (the same finding
-			// smoke.mjs proved out for branded's install route).
+			// silently inerts the CDP-installed extension (harness fact 3 in
+			// this directory's README).
 			ignoreDefaultArgs: ['--disable-extensions'],
 			args: [
 				'--no-first-run',

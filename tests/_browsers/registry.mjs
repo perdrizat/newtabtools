@@ -97,6 +97,9 @@ export const DEFAULT_BROWSER = 'firefox';
 
 const NAMES = Object.keys(BROWSERS);
 
+/** All registered browser targets (build and test). */
+export const TARGETS = Object.freeze([...NAMES]);
+
 /** Variables renamed by the 2026-10-26 naming harmonization, and their successors. */
 const RENAMED_ENV = Object.freeze({
 	UAT_BROWSER: 'NTT_BROWSER',

@@ -21,7 +21,7 @@ an ID transfer.
 
 Mirrors the AMO note:
 
-- **No transpilation, bundling, or minification.** The extension runs exactly as written. The uploaded zip is produced by `pnpm build chrome`, which stages `webextension/`, swaps in the merged Chrome manifest (`manifest/base.json` + `manifest/chrome.json`), copies the PNG icons, and zips — no code transform.
+- **No transpilation, bundling, or minification.** The extension runs exactly as written. The uploaded zip (`dist/newtab_powertools-<version>-chrome.zip`) is produced by `pnpm build:chrome`, which stages `webextension/`, copies the PNG icons over it, writes the merged Chrome manifest (`manifest/base.json` + `manifest/chrome.json`), and zips — no code transform.
 - **No minified files.** `webextension/lib/zip/` vendors `@zip.js/zip.js`'s unminified, unbundled ESM "core" build verbatim (a ~20-file tree plus `zip-core.js` + hand-written `zip-core.d.ts` types), reproduced by `pnpm install && pnpm update-zip`. `webextension/lib/backup.js` consumes it via a plain `import * as zip from './zip/zip-core.js'`.
 - **No remote code.** All executable code ships in the package. The extension's CSP (`script-src 'self'`) forbids loading remote scripts. The single outbound network request (below) fetches wallpaper **data**, never code.
 - Full source, MPL-2.0: <https://github.com/perdrizat/newtabtools>.

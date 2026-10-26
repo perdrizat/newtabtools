@@ -16,6 +16,7 @@ import { Builder, By, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { newTabURL, resolveBrowserEnv } from '../../_browsers/registry.mjs';
 import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
+import { artifactPath } from '../../../scripts/stage.mjs';
 
 // Firefox-only by design; refuse any other NTT_BROWSER rather than silently
 // running Firefox under a Chrome request.
@@ -33,13 +34,10 @@ const SHOT = `${ART_DIR}/browser-smoke.png`;
 
 function resolveXpi() {
 	if (process.argv[2]) { return process.argv[2]; }
-	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
-	const xpis = fs.readdirSync(XPI_DIR)
-		.filter(f => f.endsWith('.xpi') || f.endsWith('.zip'))
-		.map(f => path.join(XPI_DIR, f))
-		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (xpis.length === 0) { throw new Error(`No .xpi/.zip in ${XPI_DIR} — run \`pnpm build\` first.`); }
-	return xpis[0];
+	// The Firefox package by name: dist/ also holds the Chrome one.
+	const xpi = artifactPath('firefox', { dir: XPI_DIR });
+	if (!fs.existsSync(xpi)) { throw new Error(`No ${xpi} — run \`pnpm build:firefox\` first.`); }
+	return xpi;
 }
 
 const xpi = resolveXpi();

@@ -20,9 +20,9 @@ import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { resolveChromeBinary, cftStalenessWarning } from '../../_browsers/chrome/chrome-env.mjs';
-import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
+import { resolveChromeBinary, cftStalenessWarning, stageDevBuild, chromeArgs, NEWTAB_PATH } from '../../_browsers/chrome/chrome-env.mjs';import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
 import { resolveBrowserEnv, tierPorts } from '../../_browsers/registry.mjs';
+import { artifactPath } from '../../../scripts/stage.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -167,8 +167,7 @@ if (UAT_BROWSER === 'firefox') {
 	}
 
 	// 4. .xpi built for current manifest version
-	const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-	const xpiPath = path.join(ROOT, `dist/newtab_powertools-${pkg.version}.zip`);
+	const xpiPath = artifactPath('firefox');
 	const xpiName = path.basename(xpiPath);
 	if (!fs.existsSync(xpiPath)) {
 		fail('Built .xpi', `${xpiName} not found in dist/ — run \`pnpm build\``);
@@ -196,7 +195,7 @@ if (UAT_BROWSER === 'firefox') {
 	if (found) {
 		ok('Chrome for Testing', `${found.version} (${found.bin})${found.branded ? ' — WARNING: Selenium cannot drive branded Chrome (UAT needs CfT)' : ''}`);
 		if (found.branded) {
-			warn('Chrome for Testing', 'resolved binary is branded Google Chrome — Selenium/chromedriver cannot install the extension there (CHROME.md Decision 12); run `pnpm chrome:provision` to fetch Chrome for Testing');
+			warn('Chrome for Testing', 'resolved binary is branded Google Chrome — Selenium/chromedriver cannot install the extension there (CHROME.md Decision 12); run `pnpm provision:chrome` to fetch Chrome for Testing');
 		} else {
 			// CfT staleness guard (CHROME.md Decision 12): an aged CfT cache
 			// silently drifts from the branded stable users run — warn when
@@ -205,9 +204,43 @@ if (UAT_BROWSER === 'firefox') {
 			if (drift) {
 				warn('Chrome for Testing', drift);
 			}
+
+			// The daemon's launch path end to end: Selenium Manager provisions
+			// chromedriver, --load-extension loads the staged dev build, and the
+			// dev-key extension ID serves a page that renders the grid. Surfaces
+			// a chromedriver or extension-load failure here in seconds instead of
+			// as a daemon-startup timeout (the Chrome analogue of check 3b).
+			const PREFLIGHT_STAGE = path.join(ROOT, '.tmp', 'preflight-chrome');
+			let driver = null;
+			try {
+				const { Builder } = await import('selenium-webdriver');
+				const chrome = (await import('selenium-webdriver/chrome.js')).default;
+				// Not the UAT stage: preflight may run while a UAT daemon uses it.
+				const { dir, extensionId } = stageDevBuild({ dir: PREFLIGHT_STAGE });
+				const opts = new chrome.Options();
+				opts.setChromeBinaryPath(found.bin);
+				opts.addArguments('--headless=new', ...chromeArgs(dir));
+				const t0 = Date.now();
+				driver = await new Builder().forBrowser('chrome').setChromeOptions(opts).build();
+				await driver.get(`chrome-extension://${extensionId}/${NEWTAB_PATH}`);
+				const cells = await driver.wait(async () => {
+					const n = await driver.executeScript('return document.querySelectorAll("#newtab-grid .newtab-cell").length');
+					return n > 0 ? n : null;
+				}, 15_000);
+				ok('Chrome launch (chromedriver)', `extension loaded, grid renders ${cells} cells, in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+			} catch (e) {
+				const msg = (e && e.message ? e.message : String(e)).split('\n')[0];
+				fail('Chrome launch (chromedriver)',
+					`Selenium could not load the extension in Chrome for Testing: ${msg}\n` +
+					'         This is the exact launch path the UAT daemon uses — check chromedriver\n' +
+					'         (Selenium Manager) matches the CfT version, or re-run `pnpm provision:chrome`.');
+			} finally {
+				if (driver) { try { await driver.quit(); } catch { /* already down */ } }
+				fs.rmSync(PREFLIGHT_STAGE, { recursive: true, force: true });
+			}
 		}
 	} else {
-		warn('Chrome for Testing', 'no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`');
+		warn('Chrome for Testing', 'no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm provision:chrome`');
 	}
 }
 

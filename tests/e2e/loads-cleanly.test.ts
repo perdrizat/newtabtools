@@ -14,11 +14,24 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 	let browser: Browser;
 	let page: Page;
 	const consoleErrors: string[] = [];
+	// Chrome: what the service worker logs as an error (Firefox's background
+	// page errors land in the browser log instead, read below).
+	const workerErrors: string[] = [];
 	let logOffset = 0;
 
 	beforeAll(async () => {
 		browser = await connectToFirefox();
 		await resetTestState(browser);
+		if (ENGINE === 'chromium') {
+			const target = await browser.waitForTarget(t => t.type() === 'service_worker', { timeout: 10_000 });
+			const worker = await target.worker();
+			worker?.on('console', msg => {
+				if (msg.type() === 'error') {
+					workerErrors.push(msg.text());
+				}
+			});
+			worker?.on('error', err => workerErrors.push(String(err)));
+		}
 		// Firefox: BiDi delivers no console events for extension pages, so
 		// errors are read from the browser's stdout log instead (the hook sets
 		// devtools.console.stdout.content). Only lines written from here on count.
@@ -54,6 +67,24 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 	// same log (tests/compat/experiments/2026-10-26-console-stdout).
 	it('opens the new tab page with zero console errors', () => {
 		const errors = ENGINE === 'gecko' ? firefoxConsoleErrorsSince(logOffset) : consoleErrors;
+		expect(errors).toEqual([]);
+	});
+
+	// The Theme.colorScheme relay drives Chrome's action.setIcon, whose failure
+	// is only ever a background console error (a relative icon path 404'd on
+	// every Chrome boot unnoticed, CHROME.md D8 finding 4). A no-op on Firefox.
+	it('the background reports no errors, including across the theme relay', async () => {
+		for (const dark of [true, false]) {
+			await page.evaluate(d => new Promise<void>(resolve => {
+				chrome.runtime.sendMessage({ name: 'Theme.colorScheme', dark: d }, () => {
+					void chrome.runtime.lastError; // fire-and-forget: no response by design
+					resolve();
+				});
+			}), dark);
+		}
+		// Give the setIcon promise a beat to reject.
+		await new Promise(r => setTimeout(r, 500));
+		const errors = ENGINE === 'gecko' ? firefoxConsoleErrorsSince(logOffset) : workerErrors;
 		expect(errors).toEqual([]);
 	});
 

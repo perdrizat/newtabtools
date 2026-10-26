@@ -20,12 +20,18 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { mergeManifest } from '../../scripts/build-manifest.mjs';
+import { mergeManifest, TARGETS } from '../../scripts/build-manifest.mjs';
+import { TARGETS as REGISTRY_TARGETS } from '../_browsers/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 
 describe('manifest authoring — base + overlay merge (chrome-prep C6)', () => {
+	it('exports TARGETS derived from the browser registry', () => {
+		expect(TARGETS).toEqual(REGISTRY_TARGETS);
+		expect(TARGETS).toEqual(['firefox', 'chrome']);
+	});
+
 	it('merge(base, firefox) deep-equals the committed webextension/manifest.json', () => {
 		// eslint-disable-next-line ntt/no-source-grep -- structural check that the generated manifest matches the merge output, not a behavioral source-grep
 		const committed = JSON.parse(fs.readFileSync(path.join(ROOT, 'webextension/manifest.json'), 'utf8'));

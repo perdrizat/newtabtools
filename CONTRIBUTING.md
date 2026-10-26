@@ -60,15 +60,17 @@ All development on this project is test-driven. Before writing any code, please 
 
 1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js, Firefox ESR (>= 153, the E2E target) and release-channel Firefox (the UAT target).
 2.  **TDD:** We follow a strict red/green TDD workflow. Unit and Integration tests run on every save; E2E tests run at feature completion.
-3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`pnpm dev`, `pnpm test:fast`, etc.). This project uses **pnpm** as the package manager (enforced by a `preinstall` guard so the `minimumReleaseAge` supply-chain rule in `pnpm-workspace.yaml` actually applies).
+3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`pnpm dev:firefox`, `pnpm test:fast`, etc.). This project uses **pnpm** as the package manager (enforced by a `preinstall` guard so the `minimumReleaseAge` supply-chain rule in `pnpm-workspace.yaml` actually applies).
 
 ### Build
 
-Currently, there is no build step (no compiler between source and runtime) for either MV3 target — `webextension/` runs as-is. You can run the Firefox build locally using Mozilla's `web-ext` tool.
+Currently, there is no build step (no compiler between source and runtime) for either MV3 target — `webextension/` runs as-is.
 
 ```bash
-# Run the extension locally
-pnpm dev
+# Run the extension by hand: Firefox in a throwaway profile (web-ext run)
+pnpm dev:firefox
+# Chrome: stage dist/dev/chrome/, then "Load unpacked" it in any Chrome
+pnpm dev:chrome
 ```
 
 `webextension/manifest.json` is a **generated** file (chrome-prep C6): it's
@@ -83,18 +85,22 @@ for the merge semantics and the Chrome overlay (validated, see
 The extension will eventually be deployed to Mozilla Add-ons (AMO).
 
 ```bash
-# Build the .xpi artifact for upload (regenerates the manifest first)
+# Build artifacts for all registered browsers (Firefox and Chrome)
 pnpm build
+
+# Or build for a single target:
+pnpm build:firefox
+pnpm build:chrome
 ```
 
-`pnpm build` takes an optional target (`pnpm build firefox`, the default —
-byte-identical to a plain `web-ext build --source-dir webextension/`; or
-`pnpm build chrome` — the Chrome manifest overlay build, now fully validated:
-Chrome E2E parity (the SW-lifecycle tests skip on Chrome, GH #23), Chrome
-UAT, and the smoke all pass against it — see
-[`CHROME.md`](CHROME.md)). For manual "Load unpacked"
-testing in any Chrome, `pnpm chrome:stage` produces an unpacked
-`dist/chrome-dev/` directly (no CWS account needed).
+Each browser in `tests/_browsers/registry.mjs` packages to
+`dist/newtab_powertools-<version>-<browser>.zip`. Every build — store
+packages, the Firefox UAT package and the unpacked Chrome dev build — is
+staged by `scripts/stage.mjs`: a copy of `webextension/`, then
+`overlays/<browser>/` (browser-only assets, such as Chrome's PNG icons), then
+the merged manifest. For manual "Load unpacked" testing in any Chrome,
+`pnpm dev:chrome` produces an unpacked `dist/dev/chrome/` directly (no CWS
+account needed).
 
 ### Releasing to AMO
 
@@ -123,7 +129,7 @@ AMO-only release. Notes for whoever runs the 3.0.0 resubmission:
 
 ### Architecture
 
-- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete on the automated tiers — Chrome E2E suite parity (the SW-lifecycle tests skip on Chrome, GH #23), Chrome UAT, and the smoke are green (`minimum_chrome_version` 148) — but a 2026-07-17 manual pass on **branded stable** Chrome exposed the canary-gate incident (CfT honored a canary-gated manifest key that stable rejects), opening the D8 remediation arc: the JSON-safe **wire codec** (CHROME.md Decision 11) now carries binary payloads over plain JSON messaging, and the tiers split across production/current binaries (Decision 12). Store release prep (D7) is gated on D8; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
+- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete on the automated tiers — Chrome E2E suite parity (the SW-lifecycle tests skip on Chrome, GH #23), and Chrome UAT are green (`minimum_chrome_version` 148) — but a 2026-07-17 manual pass on **branded stable** Chrome exposed the canary-gate incident (CfT honored a canary-gated manifest key that stable rejects), opening the D8 remediation arc: the JSON-safe **wire codec** (CHROME.md Decision 11) now carries binary payloads over plain JSON messaging, and the tiers split across production/current binaries (Decision 12). Store release prep (D7) is gated on D8; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
 - **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry. Post-chrome-prep, the page is ~20 feature modules with no `globalThis` bridges anywhere — every cross-reference is a real `import`/`export`, including the E2E/UAT test harness (chrome-prep C3d):
   - **Boot/controller:** `newTab.js` (the residual controller: startup, event-listener wiring, `updateUI` dispatch, tile-tab editing, drawer/context-menu chrome) + `page-main.js` (the single orchestrator: side-effect imports in load order, then boot calls plus the `Prefs.onChange` page listener).
   - **Grid/site/cell/page:** `grid.js`/`site.js`/`cell.js`/`page.js` — the former `fx-newTab.js` monolith, split in chrome-prep C4c. `newTab.js` and `grid.js`/`page.js` form a legal call-time-only ESM cycle (no top-level cross-module calls — enforced by `tests/integration/page-module-scope.test.ts`).
@@ -156,7 +162,7 @@ MV3 has landed on both targets; **Chrome** (stage 3) is in the D8 stable-Chrome 
 - **Always run E2E tests** with `pnpm test:e2e` (runs both Firefox and Chrome sequentially) or `pnpm test:e2e:firefox` / `pnpm test:e2e:chrome`. This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The runner (`tests/e2e/run.sh <browser>`) handles the full lifecycle (launch, port wait, test run, cleanup) automatically, on the tier's default channel from the browser registry — Firefox ESR / branded Chrome stable (`$FIREFOX_BIN` / `$CHROME_BIN` override the binary). Driver/browser-version quirks and the re-validation checklist for an ESR bump live in [`tests/compat/NOTEBOOK.md`](tests/compat/NOTEBOOK.md); `pnpm test:compat` re-probes them.
 - **Never run `npx vitest run --project e2e` directly** — `tests/e2e/run.sh` is responsible for launching the browser with its debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
 - **Test-browser naming:** every browser is spelled by its key in [`tests/_browsers/registry.mjs`](tests/_browsers/registry.mjs) (`firefox`, `chrome`) — in directories (`tests/_browsers/<browser>/`, `tests/e2e/_artifacts/<browser>/`, `tests/uat/artifacts/<stamp>-<browser>/`), pnpm script suffixes and the `$NTT_BROWSER` selector. The channel is a separate axis: each tier's default channel (E2E: production binary; UAT: current binary — CHROME.md Decision 12), and every port, is a registry field. Adding a browser = a registry row + a `tests/_browsers/<browser>/` dir (env module + `e2e.sh` launcher hook) + its pnpm scripts; E2E tests branch on `ENGINE` (`gecko`/`chromium`), not the browser name.
-- **Chrome-affecting changes** (the `api` seam, `manifest/chrome.json`, anything reachable from a service worker) also run `pnpm chrome:smoke` (fast) or `pnpm test:e2e:chrome` (full parity suite) — see [`TESTING.md`](TESTING.md#e2e-tests-testse2e).
+- **Chrome-affecting changes** (the `api` seam, `manifest/chrome.json`, anything reachable from a service worker) also run `pnpm test:e2e:chrome` (the same suite on branded stable Chrome) — see [`TESTING.md`](TESTING.md#e2e-tests-testse2e).
 
 ### Running test tiers in parallel
 
@@ -165,13 +171,13 @@ The tiers are port- and artifact-disjoint by design, so they can run concurrentl
 - **The two E2E tiers run in parallel freely.** **Firefox E2E** (`pnpm test:e2e:firefox`, port 9222, artifacts → `tests/e2e/_artifacts/firefox/`) and **Chrome E2E** (`pnpm test:e2e:chrome`, port 9223, artifacts → `tests/e2e/_artifacts/chrome/`) run the *same* test files on different browsers. Each launches its own browser + profile and writes to its own per-browser artifacts dir, so the fixtures/screenshots the tests write never race. (Before the per-browser split, a concurrent run's fixture cleanup deleted the other's `test-thumb.png` mid-test → `NS_ERROR_FILE_NOT_FOUND`; the four hand-built fixture paths now route through `_helpers.ts`'s browser-scoped `ARTIFACTS_DIR`, and each run wipes only its own dir.)
 - **Run the two UAT tiers one at a time on a constrained box.** **Firefox UAT** (`pnpm test:uat:firefox`, port 9876, `$UAT_DAEMON_PORT`) and **Chrome UAT** (`pnpm test:uat:chrome`, port 9877) are port- and artifact-disjoint (per-run timestamped dirs with a `-firefox` / `-chrome` suffix; every port is a field in [`tests/_browsers/registry.mjs`](tests/_browsers/registry.mjs), unique across browsers and tiers), so co-running is *safe*, but each daemon's environment-seeding phase (19 sites × 2 passes) is CPU-hungry and Firefox UAT's daemon-health timeout is only 300s (Chrome's is 600s). On a CPU-constrained machine the two seeding phases starve each other and Firefox UAT times out before it seeds — run them sequentially there, and only overlap them if you have plenty of cores.
 - Parallel means **across tiers, not within one**: a second concurrent `pnpm test:e2e:firefox` (or `test:e2e:chrome`) is refused by that browser's runner lock (`tests/e2e/.runner-lock-<browser>`), and one UAT daemon owns its port for the whole run.
-- **Don't overlap the two Chrome *build*-staging tools:** `pnpm chrome:smoke` and `pnpm test:e2e:chrome` both stage the unpacked build to `dist/chrome-dev/`, so running them at the same time races on that dir — the smoke is a solo pre-check anyway.
+- **Chrome runs the extension straight from its stage dir**, so each Chrome tier stages its own: E2E `dist/_stage/chrome-e2e/`, UAT `dist/_stage/chrome-uat/`, `pnpm dev:chrome` `dist/dev/chrome/` (re-running `dev:chrome` replaces the build a manually loaded Chrome is using — reload it there).
 - **Timing caveat:** `tests/e2e/boot-timing.test.ts` asserts boot-latency medians, and the UAT daemon's environment-seeding phase is CPU-hungry. If a timing assertion fails during a parallel run, re-run that one file solo before treating it as a regression — everything else in both suites uses bounded polls and is contention-tolerant.
 
 ### Before Committing
 
 - **Run `pnpm test`** (which runs both `test:fast` and `test:e2e`). Fast tests alone are not sufficient — E2E tests catch rendering bugs that unit/integration tests cannot. If E2E tests were already run as part of finishing the current feature and no files changed since, this step can be skipped. **Do not skip E2E tests because you assume the environment is unavailable — run the command and let it fail or succeed.**
-- **If the change touches a Chrome-relevant path**, also run `pnpm chrome:smoke` (fast) or `pnpm test:e2e:chrome` (full parity suite) before committing — same rule as the Firefox E2E gate above.
+- **If the change touches a Chrome-relevant path**, also run `pnpm test:e2e:chrome` before committing — same rule as the Firefox E2E gate above.
 - **For user-visible UI changes, run the UAT tier** with `pnpm test:uat` (or `pnpm test:uat:firefox` / `pnpm test:uat:chrome`) and review the run's `summary.md` + screenshots before requesting review. UAT is pre-release / local-only (it spends Claude Code subscription tokens and never runs in CI) — it catches the "looks broken to a user" bug class deterministic tests miss. See [`TESTING.md`](TESTING.md#uat-tests-testsuat--see-uat_planmd) and [`tests/uat/README.md`](tests/uat/README.md).
 - If your new tests use `fs.readFileSync` on files under `webextension/`, the ESLint rule `ntt/no-source-grep` will flag it — add a disable comment with justification if the check is purely structural. The justification must say *why a behavioral test isn't possible*, and a source-string match may never be the sole coverage for a functional behavior — see [`TESTING.md`](TESTING.md#test-design-principles).
 - **Daily patch bump.** The patch version bumps **once per day, on that day's first commit**: run `pnpm version patch`. It bumps `version` in `package.json` and makes a `vX.Y.Z` commit + tag; the next `pnpm build` mirrors the version into `manifest.json` via `scripts/sync-version.mjs` (so you never hand-edit the manifest version). `package.json` is the single source of truth. Run it on a clean tree — commit your in-progress work first, then bump. Later commits the same day reuse that day's version (no further bump until tomorrow).

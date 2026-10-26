@@ -80,8 +80,9 @@ import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import chromeWebdriver from 'selenium-webdriver/chrome.js';
 import { newTabURL, resolveBrowserEnv } from '../../_browsers/registry.mjs';
-import { resolveChromeBinary, stageDevBuild, chromeArgs } from '../../_browsers/chrome/chrome-env.mjs';
+import { resolveChromeBinary, stageDevBuild, tierStageDir, chromeArgs } from '../../_browsers/chrome/chrome-env.mjs';
 import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
+import { artifactPath } from '../../../scripts/stage.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -190,15 +191,12 @@ function log(msg) {
 
 function resolveXpi() {
 	if (process.env.EXTENSION_XPI) { return process.env.EXTENSION_XPI; }
-	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
-	const files = fs.readdirSync(XPI_DIR)
-		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
-		.map(n => path.join(XPI_DIR, n))
-		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!files.length) { throw new Error(`No EXTENSION_XPI set and no .xpi/.zip in ${XPI_DIR}`); }
-	
-	const uatBundle = files.find(f => f.includes('-uat.zip'));
-	return uatBundle || files[0];
+	// The UAT package (optional permissions promoted), else the Firefox store
+	// package — by name: dist/ also holds the Chrome one.
+	const candidates = [path.join(XPI_DIR, 'newtab_powertools-uat.zip'), artifactPath('firefox', { dir: XPI_DIR })];
+	const xpi = candidates.find(f => fs.existsSync(f));
+	if (!xpi) { throw new Error(`No EXTENSION_XPI set and neither ${candidates.join(' nor ')} exists — run \`pnpm build:firefox\` first.`); }
+	return xpi;
 }
 
 // $UAT_VIEWPORT=WxH: size the window so the *inner* viewport (what the
@@ -226,14 +224,14 @@ async function makeDriver() {
 	if (UAT_BROWSER === 'chrome') {
 		const found = resolveChromeBinary({ channel: UAT.channel });
 		if (!found) {
-			throw new Error('no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`.');
+			throw new Error('no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm provision:chrome`.');
 		}
 		// Stage the unpacked dev build (merged Chrome manifest + committed dev
 		// key) so `--load-extension` gets a deterministic extension id — see
 		// tests/_browsers/chrome/chrome-env.mjs. Unlike Firefox's installAddon,
 		// this MUST happen at launch (see the module header divergence note), so
 		// NEWTAB_URL is resolved here rather than at module scope.
-		chromeStage = stageDevBuild();
+		chromeStage = stageDevBuild({ dir: tierStageDir('uat') });
 		NEWTAB_URL = newTabURL(chromeStage.extensionId, 'chrome');
 		const opts = new chromeWebdriver.Options();
 		opts.setChromeBinaryPath(found.bin);

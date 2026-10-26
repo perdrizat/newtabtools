@@ -21,6 +21,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	BROWSERS,
 	TIERS,
+	TARGETS,
 	DEFAULT_BROWSER,
 	tierPorts,
 	resolveBrowserEnv,
@@ -47,6 +48,10 @@ describe('BROWSERS registry', () => {
 
 	it('defines the e2e and uat tiers', () => {
 		expect([...TIERS]).toEqual(['e2e', 'uat']);
+	});
+
+	it('exports TARGETS matching registered browser names', () => {
+		expect(TARGETS).toEqual(names);
 	});
 
 	it('pins the default channel per tier (CHROME.md Decision 12: production binary on E2E, current on UAT)', () => {
@@ -309,6 +314,7 @@ describe('package.json per-browser test scripts', () => {
 
 	it('defines one script per registered browser for each tier command, and a combined one', () => {
 		const commands: Record<string, (b: string) => string> = {
+			'build': b => `node scripts/build.mjs ${b}`,
 			'test:e2e': b => `tests/e2e/run.sh ${b}`,
 			'test:uat': b => `NTT_BROWSER=${b} node tests/uat/_tools/runner.mjs`,
 			'test:uat:preflight': b => `NTT_BROWSER=${b} node tests/uat/_tools/preflight.mjs`,
@@ -319,6 +325,22 @@ describe('package.json per-browser test scripts', () => {
 				expect(pkg.scripts[`${base}:${b}`], `${base}:${b}`).toBe(cmd(b));
 			}
 			expect(pkg.scripts[base]).toBe(names.map(b => `pnpm ${base}:${b}`).join(' && '));
+		}
+	});
+
+	it('runs the extension by hand with one dev:<browser> script per registered browser', () => {
+		for (const b of names) {
+			expect(pkg.scripts[`dev:${b}`], `dev:${b}`).toBeDefined();
+		}
+		expect(pkg.scripts.dev).toBeUndefined();
+		expect(Object.keys(pkg.scripts).filter(k => k.startsWith('stage:'))).toEqual([]);
+	});
+
+	it('names every per-browser script command-first, browser last (build:chrome, not chrome:build)', () => {
+		for (const key of Object.keys(pkg.scripts)) {
+			for (const b of names) {
+				expect(key.startsWith(`${b}:`), key).toBe(false);
+			}
 		}
 	});
 

@@ -36,7 +36,7 @@ matrix) and extension feature tests.
 
 | Browser | Channels | Provisioning |
 |---|---|---|
-| Firefox | esr (E2E target), release (UAT target), beta, nightly | `@puppeteer/browsers` (already a `puppeteer-core` dependency; `chrome:provision` uses it), cached under a gitignored dir |
+| Firefox | esr (E2E target), release (UAT target), beta, nightly | `@puppeteer/browsers` (already a `puppeteer-core` dependency; `provision:chrome` uses it), cached under a gitignored dir |
 | Chrome | branded stable (E2E target), CfT (UAT target), beta, canary | same; branded stable from the system install |
 
 Nightly and canary are noisy: on demand only, not scheduled.

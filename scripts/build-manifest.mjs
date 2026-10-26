@@ -42,11 +42,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TARGETS } from '../tests/_browsers/registry.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const manifestDir = path.join(root, 'manifest');
 
-const TARGETS = ['firefox', 'chrome'];
+export { TARGETS };
 
 const CANONICAL_KEY_ORDER = [
 	'name',
@@ -124,21 +125,26 @@ export function serializeManifest(manifestObj) {
 }
 
 /**
- * Regenerate the committed Firefox manifest (webextension/manifest.json) in place.
- * @returns {string} the absolute path written
+ * Regenerate the committed Firefox manifest (webextension/manifest.json) in
+ * place. An in-sync file is left untouched: `pnpm build` resyncs once per
+ * browser, and a bumped mtime would make the packages built before it look
+ * stale (the UAT preflight compares the two).
+ * @param {string} [outPath] default: webextension/manifest.json
+ * @returns {string} the absolute path
  */
-export function writeFirefoxManifest() {
-	const merged = mergeManifest('firefox');
-	const outPath = path.join(root, 'webextension/manifest.json');
-	fs.writeFileSync(outPath, serializeManifest(merged));
+export function writeFirefoxManifest(outPath = path.join(root, 'webextension/manifest.json')) {
+	const content = serializeManifest(mergeManifest('firefox'));
+	if (!fs.existsSync(outPath) || fs.readFileSync(outPath, 'utf8') !== content) {
+		fs.writeFileSync(outPath, content);
+	}
 	return outPath;
 }
 
 // CLI: `node scripts/build-manifest.mjs [target] [outPath]`
 //   - firefox (default), no outPath: regenerates webextension/manifest.json in place.
 //   - any target with an explicit outPath: writes the merged manifest there
-//     (used by scripts/build.mjs to stage the Chrome build directory — there
-//     is no committed Chrome manifest file, only the overlay source).
+//     (there is no committed Chrome manifest file, only the overlay source;
+//     builds stage theirs through scripts/stage.mjs).
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
 	const target = process.argv[2] || 'firefox';
@@ -146,7 +152,7 @@ if (isMain) {
 
 	if (!outPath) {
 		if (target !== 'firefox') {
-			throw new Error(`node scripts/build-manifest.mjs ${target} requires an explicit output path (e.g. node scripts/build-manifest.mjs chrome dist/chrome-build/manifest.json)`);
+			throw new Error(`node scripts/build-manifest.mjs ${target} requires an explicit output path (e.g. node scripts/build-manifest.mjs chrome .tmp/manifest.json)`);
 		}
 		const written = writeFirefoxManifest();
 		console.log(`Wrote ${path.relative(root, written)}`);

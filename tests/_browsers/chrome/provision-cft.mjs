@@ -4,7 +4,7 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Provision Chrome for Testing (CHROME.md D1) — `pnpm chrome:provision`.
+ * Provision Chrome for Testing (CHROME.md D1) — `pnpm provision:chrome`.
  *
  * CfT is the CURRENT-binary lane (CHROME.md Decision 12): the UAT tier and
  * the local smoke run on it — Selenium/chromedriver cannot drive branded

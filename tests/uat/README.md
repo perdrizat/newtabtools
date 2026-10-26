@@ -131,7 +131,7 @@ node tests/uat/_tools/mcp-smoke.mjs
 | **pnpm — need ≥ 11** | `corepack enable && corepack prepare pnpm@11.6.0 --activate`. |
 | **Firefox — did not report a Firefox version**, or **emits wrapper noise (`xdg-settings`)** | The release `firefox` is the Ubuntu **snap** shim and is broken/noisy for geckodriver. Either `sudo apt install xdg-utils` (un-break the wrapper), or — preferred — install the **Mozilla APT** build so `firefox` is a real binary, or point `$FIREFOX_BIN` at one. |
 | **Firefox — not found** | Install release Firefox (Mozilla APT) or set `$FIREFOX_BIN`. |
-| **Built .xpi — not found / older than manifest** | `pnpm build` (writes `dist/newtab_powertools-<version>.zip`). |
+| **Built .xpi — not found / older than manifest** | `pnpm build:firefox` (writes `dist/newtab_powertools-<version>-firefox.zip` and `dist/newtab_powertools-uat.zip`). |
 | **UAT fixture — sha256 mismatch** | Unintentional: restore `newtabtools_knowngood.zip` from git. Intentional regen: bump `fixtureVersion` + update the hash here and in `preflight.mjs`. |
 | **claude CLI — not found** | Install per <https://docs.claude.com/claude-code>, then `claude /login`. |
 | **@modelcontextprotocol/sdk — not resolvable** | `pnpm install`. |

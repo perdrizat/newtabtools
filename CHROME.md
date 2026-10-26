@@ -14,7 +14,7 @@
 | D6 — UAT on Chrome | **done 2026-07-16 — 11/11 scenarios passed on Chrome** (daemon parameterized, both smokes green in parallel, store-candidate equivalence verified) | `6633788`+ |
 | D7 — store release prep (CWS + AMO) | **deliberately deferred** (maintainer decision 2026-07-20): with D8's implementation complete and validated on branded stable, Chrome first matures in the field via "Load unpacked" testers (README instructions) before the CWS submission | — |
 | D8 — stable-Chrome remediation (the canary-gate incident) | **implementation complete 2026-07-18** — all six code/test/CI items done + proven (wire codec, setIcon, branded E2E launcher [124 run green + 2 skips on branded 150], smoke/CI lanes + staleness guard, wallpaper degrade incl. the curated-collections link [vendored-CC0 set cancelled], test remediations, docs); **remaining: the exit-proof manual pass on the maintainer's branded Chrome** | — |
-| D gate — full Firefox suite green (unchanged) + **Chrome parity suite green ON BRANDED STABLE (D8)** + Chrome smoke green + audit + **3.0.0 to both stores** | pending | — |
+| D gate — full Firefox suite green (unchanged) + **Chrome parity suite green ON BRANDED STABLE (D8)** (CI runs it) + audit + **3.0.0 to both stores** | pending | — |
 
 **Status: D0–D6 + D5b completed on CfT (2026-07-16), but the 2026-07-17
 manual pass on BRANDED STABLE Chrome falsified part of that validation — D8
@@ -52,25 +52,25 @@ into the arcs below.
 
 ## Manual testing in Chrome (Load unpacked)
 
-The automated tiers (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `pnpm test:uat:chrome`)
-run on headless Chrome for Testing and cover boot / capture / rendering /
-backup wire / messaging. A few behaviours they **cannot** cover are exactly
+The automated tiers (`pnpm test:e2e:chrome` on headless branded stable,
+`pnpm test:uat:chrome` on Chrome for Testing) cover boot / capture /
+rendering / backup wire / messaging. A few behaviours they **cannot** cover are exactly
 what a real-Chrome manual pass should focus on — see the checklist below.
 
 **Load the build:**
 
-1. `pnpm chrome:stage` — stages the unpacked build (merged Chrome manifest +
+1. `pnpm dev:chrome` — stages the unpacked build (merged Chrome manifest +
    committed dev key → stable extension ID `lncefjbclhbbikhanecleanbbohpiclk`)
-   to `dist/chrome-dev/`. Works in any branded Chrome ≥ 148; no `pnpm build`
-   or `pnpm chrome:provision` needed (those are for the automated tier only).
+   to `dist/dev/chrome/`. Works in any branded Chrome ≥ 148; no `pnpm build`
+   or `pnpm provision:chrome` needed (those are for the automated tier only).
 2. `chrome://extensions` → enable **Developer mode** (top-right).
-3. **Load unpacked** → pick `dist/chrome-dev/`.
+3. **Load unpacked** → pick `dist/dev/chrome/`.
 4. Open a new tab.
-5. After any source edit: re-run `pnpm chrome:stage`, then click the **reload**
+5. After any source edit: re-run `pnpm dev:chrome`, then click the **reload**
    (↻) arrow on the extension's card.
 
-Optional pre-check: `pnpm chrome:smoke` (fast, headless) confirms the build
-boots + captures + backs up before you load it by hand.
+Optional pre-check: `pnpm test:e2e:chrome` confirms the build boots,
+captures and backs up before you load it by hand.
 
 **Focus the manual pass on the automation gaps:**
 
@@ -354,7 +354,7 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       automation — `--load-extension` is ignored AND the CDP install path
       leaves the extension inert (verified against a minimal hello-world
       MV3 extension, so it's the platform, not this codebase). Provisioning
-      is `pnpm chrome:provision` (`tests/_browsers/chrome/provision-cft.mjs`,
+      is `pnpm provision:chrome` (`tests/_browsers/chrome/provision-cft.mjs`,
       via puppeteer-core's own `@puppeteer/browsers`, ~/.cache/puppeteer —
       the Selenium-Manager binary-fetch precedent). Full harness record:
       `tests/_browsers/chrome/README.md`.
@@ -372,7 +372,7 @@ there. Everything after D1 gets a red/green target on real Chrome.*
 - [x] Deterministic extension ID `lncefjbclhbbikhanecleanbbohpiclk` via a
       committed PUBLIC dev key (`_tools/dev-key.json`, no private half
       exists), injected only by the dev staging path (`stageDevBuild()` →
-      `dist/chrome-dev/`) — never by `pnpm build chrome` store artifacts.
+      `dist/dev/chrome/`) — never by `pnpm build:chrome` store artifacts.
 - [x] Launcher: Puppeteer `browser.installExtension()` over the pipe
       transport + `--enable-unsafe-extension-debugging` +
       `ignoreDefaultArgs: ['--disable-extensions']` (each omission
@@ -539,14 +539,13 @@ failing smoke checks live, and closed the arc.)*
       (9876) — keep the pipe/ephemeral transports (no fixed port); if one
       ever becomes necessary, 9223 is reserved (see
       `tests/_browsers/chrome/README.md` "Port allocation"). Known limit: two
-      CONCURRENT Chrome-smoke invocations collide on the `dist/chrome-dev`
+      CONCURRENT Chrome-smoke invocations collide on the `dist/dev/chrome`
       staging dir (no runner lock yet) — acceptable while the tier is one
       script; add a lock when the suite splits into files.
-- [ ] Origin/install abstraction in a `_helpers` seam only as far as the
-      smoke tier needs — full-parity porting is explicitly out of scope
-      (future arc, own program if warranted).
+- [x] ~~Origin/install abstraction in a `_helpers` seam only as far as the
+      smoke tier needs~~ — superseded by D5b's full parity.
 - [x] CI job authored (2026-07-16): `.github/workflows/ci.yml` gains a
-      parallel `chrome-smoke` job (pnpm + `chrome:provision` + both
+      parallel `chrome-smoke` job (pnpm + `provision:chrome` + both
       smokes; the runner's preinstalled branded Chrome is unusable for
       extension automation). Takes effect on the next push.
 
@@ -600,7 +599,11 @@ adaptation.)*
       zero failures** (14 min under parallel load — the contention-tolerant
       design held). CI: workflow still runs the smoke — switching the
       chrome job to the parity suite is a deliberate follow-up (runtime
-      cost on CI runners).
+      cost on CI runners). *(Done 2026-10-26: CI's `e2e-chrome` job runs
+      the parity suite on the runner's branded stable; both smokes
+      retired — their background-error/theme-relay check moved into
+      `loads-cleanly.test.ts`, the Selenium check into the Chrome UAT
+      preflight.)*
 
 ### D6 — UAT on Chrome (Decision 6: the pre-release visual pass)
 - [x] `browser-daemon.mjs` parameterized (2026-07-16, ONE implementation,
@@ -711,7 +714,7 @@ every page screenshot — findings 2/4).*
       branded-stable smoke job (`chrome-smoke-branded`,
       runner-preinstalled Chrome); CfT staleness guard
       (`cftStalenessWarning` in chrome-env.mjs, wired into
-      `chrome:provision` + the UAT preflight — verified firing on this
+      `provision:chrome` + the UAT preflight — verified firing on this
       box's CfT-151-vs-branded-150 drift).
 - [x] **Wallpapers on Chrome — graceful degrade** (finding 2, done
       2026-07-18): `isMozillaWallpaperCatalogAvailable()` capability
@@ -767,7 +770,7 @@ every page screenshot — findings 2/4).*
 
 ### D gate
 - [ ] Full Firefox `pnpm test` green and byte-identical Firefox artifact
-      (the "Firefox unchanged" proof), Chrome smoke tier green, Chrome UAT
+      (the "Firefox unchanged" proof), Chrome E2E green on branded stable, Chrome UAT
       pass (D6), `pnpm audit` clean, follow-up code-review round
       adjudicated, CHANGELOG promotion, **3.0.0 bump + simultaneous
       AMO/CWS submission** (Decision 7).

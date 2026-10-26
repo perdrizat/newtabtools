@@ -1,45 +1,36 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { DIST, stageBuild } from './stage.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
-const TMP_DIR = path.join(ROOT, 'dist', 'uat-build');
-const MANIFEST_PATH = path.join(TMP_DIR, 'manifest.json');
-
-// 1. Copy webextension to a temp dir
-fs.rmSync(TMP_DIR, { recursive: true, force: true });
-fs.cpSync(path.join(ROOT, 'webextension'), TMP_DIR, { recursive: true });
-
-// 2. Patch manifest.json to promote optional permissions. MV3 splits
-// permissions into API permissions (`permissions`/`optional_permissions`)
-// and host permissions (`host_permissions`/`optional_host_permissions`,
-// the latter not currently used but handled defensively if it ever is) —
-// only the API side gets merged/promoted here; host_permissions is left
-// alone (MV3_MIGRATION.md Slice D).
-const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
-let manifestChanged = false;
-if (manifest.optional_permissions) {
-	manifest.permissions = [...(manifest.permissions || []), ...manifest.optional_permissions];
-	delete manifest.optional_permissions;
-	manifestChanged = true;
-}
-if (manifest.optional_host_permissions) {
-	manifest.host_permissions = [...(manifest.host_permissions || []), ...manifest.optional_host_permissions];
-	delete manifest.optional_host_permissions;
-	manifestChanged = true;
-}
-if (manifestChanged) {
-	fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, '\t'));
+// The Firefox UAT package: the Firefox stage (scripts/stage.mjs) with its
+// optional permissions promoted to required. MV3 splits permissions into API
+// permissions (`permissions`/`optional_permissions`) and host permissions
+// (`host_permissions`/`optional_host_permissions`, the latter not currently
+// used but handled defensively if it ever is) — only the API side gets
+// merged/promoted here; host_permissions is left alone (MV3_MIGRATION.md Slice D).
+function promoteOptional(manifest) {
+	const m = { ...manifest };
+	if (m.optional_permissions) {
+		m.permissions = [...(m.permissions || []), ...m.optional_permissions];
+		delete m.optional_permissions;
+	}
+	if (m.optional_host_permissions) {
+		m.host_permissions = [...(m.host_permissions || []), ...m.optional_host_permissions];
+		delete m.optional_host_permissions;
+	}
+	return m;
 }
 
-// 3. Build with web-ext and output as newtab_powertools-uat.zip.
+const stageDir = stageBuild('firefox', path.join(DIST, '_stage', 'firefox-uat'), { patchManifest: promoteOptional });
+
 // Bare `web-ext` (not `npx web-ext`): npx would fall back to fetching
 // web-ext@latest (unpinned, no cooldown) from the registry if node_modules were
 // missing/partial — a registry-fetch-and-execute path on every build. The
 // pinned local binary is on PATH here, same as scripts/build.mjs (audit m10).
-execSync(`web-ext build --source-dir "${TMP_DIR}" --artifacts-dir "${path.join(ROOT, 'dist')}" --filename "newtab_powertools-uat.zip" --overwrite-dest`, { stdio: 'inherit' });
+execSync(`web-ext build --source-dir "${stageDir}" --artifacts-dir "${DIST}" --filename "newtab_powertools-uat.zip" --overwrite-dest`, { stdio: 'inherit' });
 
-// 4. Cleanup
-fs.rmSync(TMP_DIR, { recursive: true, force: true });
+fs.rmSync(stageDir, { recursive: true, force: true });
+try {
+	fs.rmdirSync(path.join(DIST, '_stage'));
+} catch { /* not empty, or already gone */ }

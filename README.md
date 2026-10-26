@@ -57,7 +57,7 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
 
 ### Quick Start
 
-1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, Firefox ESR (>= 153, E2E) and release-channel Firefox (UAT). The Chrome tiers are needed only if you're working on Chrome-relevant paths: Chrome E2E prefers your installed branded stable Chrome (Chrome for Testing as fallback); Chrome UAT needs Chrome for Testing (>= 148, auto-provisioned via `pnpm chrome:provision`). See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
+1. **Environment Setup:** You will need Node.js >= 24, `pnpm` >= 11, Firefox ESR (>= 153, E2E) and release-channel Firefox (UAT). The Chrome tiers are needed only if you're working on Chrome-relevant paths: Chrome E2E prefers your installed branded stable Chrome (Chrome for Testing as fallback); Chrome UAT needs Chrome for Testing (>= 148, auto-provisioned via `pnpm provision:chrome`). See the **[Environment Setup Guide](TESTING.md#environment-setup)** for installation instructions.
 
 2. **Clone and install:**
    ```bash
@@ -66,24 +66,24 @@ If you want to contribute to NewTab PowerTools, please read the **[Contributing 
    pnpm install
    ```
 
-3. **Build the XPI and load it in Firefox:**
+3. **Build the packages and load in Firefox:**
    ```bash
-   pnpm build
+   pnpm build:firefox
    ```
-   This syncs the version into `manifest.json` and packages the add-on to `dist/newtab_powertools-<version>.zip` (a zip *is* an XPI — Firefox accepts either extension). To load it into your own browser profile via the debug interface:
+   This syncs the version into `manifest.json` and packages the add-on to `dist/newtab_powertools-<version>-firefox.zip` (a zip *is* an XPI — Firefox accepts either extension; `pnpm build` packages every browser). To load it into your own browser profile via the debug interface:
    1. Open `about:debugging#/runtime/this-firefox`.
    2. Click **Load Temporary Add-on…**.
-   3. Select `dist/newtab_powertools-<version>.zip` — or pick `webextension/manifest.json` to load the unpacked source directly.
+   3. Select `dist/newtab_powertools-<version>-firefox.zip` — or pick `webextension/manifest.json` to load the unpacked source directly.
 
-   The add-on stays loaded until you restart Firefox. For a throwaway run in a fresh profile that's discarded on exit, use `pnpm dev` instead.
+   The add-on stays loaded until you restart Firefox. For a throwaway run in a fresh profile that's discarded on exit, use `pnpm dev:firefox` instead.
 
    **To load it in Chrome instead** (any branded Chrome or Chrome for Testing, ≥ 148):
-   1. Run `pnpm chrome:stage`. This stages the unpacked Chrome build — the merged Chrome manifest plus the committed dev key, so the extension ID is always the same — to `dist/chrome-dev/`. (No `pnpm build` or `pnpm chrome:provision` needed for manual loading; those are only for the automated Chrome tier.)
+   1. Run `pnpm dev:chrome`. This stages the unpacked Chrome build — the merged Chrome manifest plus the committed dev key, so the extension ID is always the same — to `dist/dev/chrome/`. (No `pnpm build` or `pnpm provision:chrome` needed for manual loading; those are only for the automated Chrome tier.)
    2. Open `chrome://extensions` and enable **Developer mode** (top-right toggle).
-   3. Click **Load unpacked** and pick the `dist/chrome-dev/` directory.
+   3. Click **Load unpacked** and pick the `dist/dev/chrome/` directory.
    4. Open a new tab.
 
-   After any source change, re-run `pnpm chrome:stage` and click the **reload** (↻) arrow on the extension's card in `chrome://extensions`. For a manual-test checklist — including the behaviours the automated tiers can't cover (real service-worker suspend/respawn, the backup **Save As** download, incognito, theme) — see [`CHROME.md`](CHROME.md#manual-testing-in-chrome-load-unpacked).
+   After any source change, re-run `pnpm dev:chrome` and click the **reload** (↻) arrow on the extension's card in `chrome://extensions`. For a manual-test checklist — including the behaviours the automated tiers can't cover (real service-worker suspend/respawn, the backup **Save As** download, incognito, theme) — see [`CHROME.md`](CHROME.md#manual-testing-in-chrome-load-unpacked).
 
 ### Testing is mandatory
 Because of the advent of AI coding assistants, **testing is mandatory** and we employ a strict red/green TDD workflow. See the **[Testing Guide](TESTING.md)** for:
@@ -107,7 +107,7 @@ Hit a failing `pnpm test:uat:preflight` or a broken E2E setup? Search this table
 | `UAT daemon port` ... `already in use` | Something else is already bound to port 9876 | Stop the other process, or set `$UAT_DAEMON_PORT`. |
 | `Firefox launch (geckodriver)` ... `Selenium could not start Firefox via geckodriver` | geckodriver missing, mismatched, or a snap-confined build shadowing it on PATH | Remove a snap-confined `geckodriver` from PATH so Selenium Manager can fetch a clean one, or run `pnpm install`. |
 | `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm wants to reinstall/prune `node_modules` but has no interactive TTY to confirm it | Run `pnpm install` yourself in an interactive shell. |
-| `[chrome-smoke] x no Chrome binary found` | The Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `tests/_browsers/chrome/`) can't find a Chrome/Chromium binary to provision Chrome for Testing from | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`, then `pnpm chrome:provision`. |
+| `[launch-chrome] x no Chrome binary found` | The Chrome tier (`pnpm test:e2e:chrome`, `tests/_browsers/chrome/`) can't find a Chrome/Chromium binary | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`; for Chrome UAT, `pnpm provision:chrome`. |
 
 ## License
 

@@ -122,7 +122,7 @@ browser-theme wording — Chrome follows `prefers-color-scheme`, there is no
 
 ## Icon
 
-128×128 PNG — `assets/chrome-icons/icon-128.png` (rasterized from `icon.svg` by
+128×128 PNG — `overlays/chrome/images/icon-128.png` (rasterized from `icon.svg` by
 `scripts/rasterize-icons.mjs`; CWS requires PNG, not SVG).
 
 ## License
@@ -132,6 +132,6 @@ MPL-2.0.
 ## Versioning
 
 CWS, like AMO, requires each upload's manifest `version` to be strictly higher
-than the last. `package.json` is the single source of truth; `pnpm build chrome`
+than the last. `package.json` is the single source of truth; `pnpm build:chrome`
 mirrors it into the generated `manifest.json`. First CWS upload is **3.0.0**,
 matching the simultaneous AMO 3.0.0 upload.

@@ -488,7 +488,7 @@ describe('E2E: Tile redesign — new tile structure', () => {
 			// STRING-form evaluate: vite rewrites a literal `import()` in this
 			// file into `__vite_ssr_dynamic_import__`, which then gets serialized
 			// into the browser where it doesn't exist — a string bypasses the
-			// transform (same reason the smoke's plain-.mjs evaluate works).
+			// transform (plain .mjs files are not transformed at all).
 			await page.evaluate(`(async () => {
 				// Create a minimal 1×1 PNG Blob to seed as the thumbnail image.
 				const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

@@ -26,6 +26,7 @@ import { Builder } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import { newTabURL, resolveBrowserEnv } from '../../_browsers/registry.mjs';
 import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
+import { artifactPath } from '../../../scripts/stage.mjs';
 
 // Firefox-only reference tool; refuse any other NTT_BROWSER.
 const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'fallback-cli.mjs', supported: ['firefox'] });
@@ -40,13 +41,10 @@ const UUID = 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const NEWTAB_URL = newTabURL(UUID);
 
 function newestXpi() {
-	if (!fs.existsSync(XPI_DIR)) { throw new Error(`No ${XPI_DIR} — run \`pnpm build\` first.`); }
-	const f = fs.readdirSync(XPI_DIR)
-		.filter(n => n.endsWith('.xpi') || n.endsWith('.zip'))
-		.map(n => path.join(XPI_DIR, n))
-		.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-	if (!f.length) { throw new Error(`No xpi/zip in ${XPI_DIR} — run \`pnpm build\` first.`); }
-	return f[0];
+	// The Firefox package by name: dist/ also holds the Chrome one.
+	const xpi = artifactPath('firefox', { dir: XPI_DIR });
+	if (!fs.existsSync(xpi)) { throw new Error(`No ${xpi} — run \`pnpm build:firefox\` first.`); }
+	return xpi;
 }
 
 async function runDaemon() {

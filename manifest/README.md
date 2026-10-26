@@ -21,7 +21,7 @@ just run `pnpm build`, which does it as a prebuild step).
   the menus decision of record, same place).
 - **`chrome.json`** — the Chrome MV3 overlay, **validated** by the
   [`CHROME.md`](../CHROME.md) program: Chrome E2E parity (the SW-lifecycle
-  tests skip on Chrome, GH #23), Chrome UAT, and the smoke all run against
+  tests skip on Chrome, GH #23) and Chrome UAT both run against
   the manifest this file builds. It diverges from
   `firefox.json` in exactly the ways
   chrome-prep's C0/C5 decisions already called out: `background` uses the
@@ -45,10 +45,9 @@ just run `pnpm build`, which does it as a prebuild step).
     `action.setIcon` dark-mode wiring is a `lib/platform.js` concern, not a
     manifest one). Both PNG sets are produced by the checked-in
     `scripts/rasterize-icons.mjs` (puppeteer-core + Chrome for Testing, zero
-    new dependencies) into `assets/chrome-icons/` at the repo root — not
-    under `webextension/`, so the Firefox artifact (built straight from
-    `webextension/`) stays byte-identical. `scripts/build.mjs`'s chrome
-    target copies those PNGs into the staged build's `images/` directory
+    new dependencies) into `overlays/chrome/images/` at the repo root — not
+    under `webextension/`, so they stay out of the Firefox package.
+    `scripts/stage.mjs` copies `overlays/chrome/` over every Chrome stage
     after copying `webextension/` wholesale, since `manifest/chrome.json`
     overriding `icons` takes the whole key per the shallow-merge rule above —
     it can't reach into base.json's SVG-only `icons` map.
@@ -118,25 +117,24 @@ current version. It runs in two places:
 # pnpm build already do for you — you normally don't need to run this by hand)
 node scripts/sync-version.mjs
 
-# Firefox build (default target) — byte-identical to the pre-C6 build:
-# regenerate the manifest, then `web-ext build` straight from webextension/
-# (no staging copy; source == shipped holds).
+# Every registered browser (tests/_browsers/registry.mjs), or one of them.
+# Each is staged by scripts/stage.mjs under dist/_stage/<browser>/ (a copy of
+# webextension/, then overlays/<browser>/ if present, then the merged
+# manifest) and zipped to dist/newtab_powertools-<version>-<browser>.zip.
+# The Firefox stage is an exact copy of webextension/ (source == shipped
+# holds); Firefox also builds dist/newtab_powertools-uat.zip.
 pnpm build
-pnpm build firefox
+pnpm build:firefox
+pnpm build:chrome
 
-# Chrome build — the validated store artifact (CHROME.md D1–D6). Stages a copy
-# of webextension/ under dist/chrome-build/, copies assets/chrome-icons/*.png
-# into its images/, overwrites its manifest.json with the merged Chrome overlay,
-# zips via web-ext build, then removes the staging directory. The resulting
-# dist/newtab_powertools-chrome.zip is exercised by the Chrome runtime tier
-# (E2E parity, UAT, smoke). For MANUAL "Load unpacked" testing use
-# `pnpm chrome:stage` instead — it stages an unpacked build to dist/chrome-dev/
-# (see CHROME.md "Manual testing in Chrome").
-pnpm build chrome
+# The Chrome runtime tiers (E2E parity, UAT) and MANUAL "Load unpacked"
+# testing use the same Chrome stage plus the dev key, unpacked (each in its
+# own dir; manual: dist/dev/chrome/, see CHROME.md "Manual testing in Chrome").
+pnpm dev:chrome
 
-# Regenerate assets/chrome-icons/*.png after editing
+# Regenerate overlays/chrome/images/*.png after editing
 # webextension/images/icon.svg or tools-light.svg (requires Chrome for
-# Testing — pnpm chrome:provision — or $CHROME_BIN):
+# Testing — pnpm provision:chrome — or $CHROME_BIN):
 node scripts/rasterize-icons.mjs
 ```
 

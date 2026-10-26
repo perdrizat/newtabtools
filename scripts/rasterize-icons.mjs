@@ -13,7 +13,7 @@
  *
  * Zero new dependencies: uses `puppeteer-core` (already a devDependency for
  * the Chrome runtime tier, tests/_browsers/chrome/) driving the Chrome for Testing
- * binary already provisioned by `pnpm chrome:provision`. This script
+ * binary already provisioned by `pnpm provision:chrome`. This script
  * resolves that binary itself (a small inline copy of the logic in
  * tests/_browsers/chrome/chrome-env.mjs).
  *
@@ -22,17 +22,16 @@
  * screenshotted with a transparent background (`omitBackground: true`) so
  * the PNG has no baked-in canvas color.
  *
- * Output: assets/chrome-icons/*.png (repo root, NOT webextension/ — the
- * Firefox .xpi packs webextension/ verbatim via `web-ext build`, so keeping
- * generated Chrome-only assets outside that tree is what keeps the Firefox
- * artifact byte-identical). scripts/build.mjs's chrome target copies these
- * into the staged build's images/ directory at build time.
+ * Output: overlays/chrome/images/*.png (NOT webextension/ — keeping
+ * Chrome-only assets out of that tree keeps them out of the Firefox
+ * package). scripts/stage.mjs copies overlays/chrome/ over every Chrome
+ * stage, so they land in the staged build's images/ directory.
  *
  * Regenerate after editing webextension/images/icon.svg or tools-light.svg:
  *
  *   node scripts/rasterize-icons.mjs
  *
- * Requires Chrome for Testing to already be provisioned (`pnpm chrome:provision`)
+ * Requires Chrome for Testing to already be provisioned (`pnpm provision:chrome`)
  * or $CHROME_BIN pointing at a runnable Chrome/Chromium binary.
  */
 
@@ -45,7 +44,7 @@ import puppeteer from 'puppeteer-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const imagesDir = path.join(root, 'webextension', 'images');
-const outDir = path.join(root, 'assets', 'chrome-icons');
+const outDir = path.join(root, 'overlays', 'chrome', 'images');
 
 /**
  * Chrome-for-Testing binaries in the standard Puppeteer cache, newest first.
@@ -137,7 +136,7 @@ async function main() {
 	const bin = resolveChromeBinary();
 	if (!bin) {
 		console.error('[rasterize-icons] x no Chrome binary found ($CHROME_BIN or the Puppeteer cache).');
-		console.error('[rasterize-icons]   Run `pnpm chrome:provision` (Chrome for Testing) or set CHROME_BIN.');
+		console.error('[rasterize-icons]   Run `pnpm provision:chrome` (Chrome for Testing) or set CHROME_BIN.');
 		process.exit(1);
 	}
 

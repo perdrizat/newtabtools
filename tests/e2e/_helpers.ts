@@ -645,7 +645,7 @@ export async function waitForGridReady(page: Page, timeout = 15_000): Promise<vo
  * regime (CHROME.md D5b, event-page-lifecycle.test.ts): there is no pref that
  * ages out an MV3 service worker on a bounded schedule, so the test forces
  * the same "the background just came back from nothing" condition with a
- * real CDP-level kill — the exact technique `tests/_browsers/chrome/smoke.mjs`
+ * real CDP-level kill — the technique the (since retired) Chrome smoke
  * proved out for D3's SW kill/respawn check.
  *
  * Two empirically-required steps beyond the kill itself (both findings from

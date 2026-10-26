@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- `pnpm build:<browser>` per registered browser (`pnpm build` runs all); packages are `dist/newtab_powertools-<version>-<browser>.zip`.
+- `scripts/stage.mjs`: one staging path (webextension/ + `overlays/<browser>/` + merged manifest) for store, UAT and Chrome dev builds.
 - `tests/compat/NOTEBOOK.md`: living notebook of browser/driver gates, error strings, rejected alternatives, ESR-bump checklist and investigation log.
 - Compat tier (`pnpm test:compat`, `tests/compat/`): driver capability probes on Firefox ESR + release, diffed against committed matrices; remaining steps in `PLAN.md` (ACK-55).
 - `tests/_browsers/registry.mjs`: one browser registry for E2E and UAT (engine, channels, per-tier default channel, ports); guarded by `browser-registry.test.ts`.
@@ -18,6 +20,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Build targets come from `tests/_browsers/registry.mjs`; Chrome PNG icons moved from `assets/chrome-icons/` to `overlays/chrome/images/`.
+- Scripts named command-first like the rest: `pnpm dev:firefox` / `pnpm dev:chrome` (were `dev` / `chrome:stage`), `provision:chrome` (was `chrome:provision`).
+- CI runs the full Chrome E2E suite on the runner's branded stable Chrome, replacing both Chrome smoke jobs.
+- Chrome dev build stages to `dist/dev/chrome/` (was `dist/chrome-dev/`); E2E and UAT each stage their own (`dist/_stage/chrome-<tier>/`), so they no longer race.
+- `loads-cleanly.test.ts` also gates on background errors across the theme relay (Chrome service-worker console; caught the D8 setIcon bug red).
+- Chrome UAT preflight checks the daemon's chromedriver launch path end to end.
+- UAT tools load the Firefox package by name instead of the newest zip in `dist/`.
 - Test naming harmonized on registry keys: `test:{e2e,uat}:firefox`, `_artifacts/<browser>/`, `uat/artifacts/<stamp>-<browser>/`; `ff`/`cft` tokens retired.
 - Shared E2E runner `tests/e2e/run.sh <browser>` + per-browser `tests/_browsers/<browser>/e2e.sh` hooks replace `run_esr_tests.sh` / `tests/e2e-chrome/`.
 - Chrome tools moved to `tests/_browsers/chrome/`; `resolveChromeBinary` takes the registry `channel` (`stable`/`cft`).
@@ -29,12 +38,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- `sync-version` no longer rewrites an in-sync `manifest.json` (its mtime bump made fresh packages look stale to the UAT preflight).
 - `run_esr_tests.sh` no longer kills its invoking shell: dropped the `pkill -f firefox-esr` name match, profile-dir match only.
 - `loads-cleanly.test.ts` console-error check is real on Firefox (read from the browser log; was vacuous, BiDi sends no console events for extension pages).
 
 ### Removed
 
 - `tests/e2e/_debug/` BiDi probes (superseded by the compat tier).
+- `chrome:smoke` / `chrome:smoke:selenium` (superseded by Chrome E2E in CI and the Chrome UAT preflight).
+- Unsuffixed `dist/newtab_powertools-<version>.zip` and `dist/newtab_powertools-chrome.zip` artifact names.
 - E2E: removed network-dependent `tests/e2e/favicon-real-sites.test.ts` (live web coverage is handled by UAT; hermetic IDB fixture seeding tracked in ACK-52).
 
 ## [2026-10-25]
