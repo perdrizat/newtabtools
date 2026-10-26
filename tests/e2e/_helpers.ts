@@ -2,7 +2,8 @@ import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { CHROME_DEV_EXTENSION_ID } from '../e2e-chrome/_tools/chrome-env.mjs';
+import { CHROME_DEV_EXTENSION_ID } from '../_browsers/chrome/chrome-env.mjs';
+import { resolveBrowserEnv, e2eArtifactsDir, newTabURL } from '../_browsers/registry.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,27 +13,25 @@ const __dirname = path.dirname(__filename);
 export const PROFILE_DIR = process.env.NTT_E2E_PROFILE_DIR || path.resolve(__dirname, 'test-profile');
 
 /**
- * Browser seam (CHROME.md D5b): `NTT_E2E_BROWSER=chrome` (set by
- * `tests/e2e-chrome/run_chrome_tests.sh`) switches the SAME 32 test files
- * from Firefox/BiDi to Chrome/CDP. Firefox stays the default so every
- * existing invocation (`pnpm test:e2e`, a bare `vitest --project e2e`) is
- * byte-identical to before this seam existed.
+ * Browser seam (CHROME.md D5b): `$NTT_BROWSER` (set by `tests/e2e/run.sh
+ * <browser>`) switches the SAME test files between browsers; Firefox is the
+ * registry default. Branch on `ENGINE`, not the browser name, wherever the
+ * behaviour follows the engine (a Chromium-based browser inherits Chrome's
+ * handling).
  */
-export const IS_CHROME = process.env.NTT_E2E_BROWSER === 'chrome';
+export const BROWSER = resolveBrowserEnv({ tier: 'e2e', tool: 'tests/e2e/_helpers.ts', supported: ['firefox', 'chrome'] });
+export const ENGINE = BROWSER.engine;
 
-// Per-browser artifacts dir so the Firefox and Chrome E2E suites (the same
-// test files under different browsers) can run concurrently without racing on
-// shared fixtures/screenshots: `_artifacts-ff` (Firefox) vs `_artifacts-cft`
-// (Chrome for Testing). Each run script wipes only its own dir — see
-// run_esr_tests.sh / run_chrome_tests.sh.
-export const ARTIFACTS_DIR = path.resolve(__dirname, IS_CHROME ? '_artifacts-cft' : '_artifacts-ff');
-export const BIDI_ENDPOINT = 'ws://127.0.0.1:9222/session';
+// Per-browser artifacts dir (tests/e2e/_artifacts/<browser>/) so the browsers'
+// runs of the same test files can go concurrently without racing on shared
+// fixtures/screenshots. tests/e2e/run.sh wipes only the running browser's dir.
+export const ARTIFACTS_DIR = e2eArtifactsDir(BROWSER.browser);
 
-// Chrome for Testing's CDP debugging port (tests/e2e-chrome/README.md's port
-// table — 9223 is the reserved fixed-port slot for this tier, distinct from
-// Firefox E2E's 9222 and both UAT daemons' 9876/9877 so all tiers can run
-// concurrently per CONTRIBUTING.md's parallel-tier practice).
-export const CDP_ENDPOINT = 'http://127.0.0.1:9223';
+// The browser's E2E debugging port comes from the registry (unique across
+// every browser and tier, so all tiers can run concurrently per
+// CONTRIBUTING.md's parallel-tier practice).
+export const BIDI_ENDPOINT = `ws://127.0.0.1:${BROWSER.port}/session`;
+export const CDP_ENDPOINT = `http://127.0.0.1:${BROWSER.port}`;
 
 // Single source of truth for the extension ID: read it from the manifest at
 // test time. When the AMO publication path is decided (see ROADMAP.md) and the
@@ -50,10 +49,9 @@ function verbose(...args: unknown[]) {
 }
 
 /**
- * Connect to the running browser instance — Firefox via WebDriver BiDi
- * (default), or Chrome for Testing via CDP when `NTT_E2E_BROWSER=chrome`
- * (CHROME.md D5b). The name stays `connectToFirefox` even though it's now
- * browser-generic: all 32 E2E test files already import it, and keeping the
+ * Connect to the running browser instance — gecko via WebDriver BiDi, or
+ * chromium via CDP (CHROME.md D5b). The name stays `connectToFirefox` even
+ * though it's browser-generic: every E2E test file already imports it, and keeping the
  * name means zero call-site churn (and zero risk of a paste-o) across a suite
  * this program's own gate proves must stay byte-identical on Firefox.
  *
@@ -69,15 +67,13 @@ export async function connectToFirefox(attempts = 5, delayMs = 1000): Promise<Br
 	let lastErr: unknown;
 	for (let attempt = 1; attempt <= attempts; attempt++) {
 		try {
-			return IS_CHROME
-				? await puppeteer.connect({
-					browserURL: CDP_ENDPOINT,
-					defaultViewport: null,
-				})
-				: await puppeteer.connect({
-					browserWSEndpoint: BIDI_ENDPOINT,
-					protocol: 'webDriverBiDi',
-				});
+			if (ENGINE === 'chromium') {
+				return await puppeteer.connect({ browserURL: CDP_ENDPOINT, defaultViewport: null });
+			}
+			if (ENGINE === 'gecko') {
+				return await puppeteer.connect({ browserWSEndpoint: BIDI_ENDPOINT, protocol: 'webDriverBiDi' });
+			}
+			throw new Error(`no E2E connect route for engine "${ENGINE}"`);
 		} catch (err) {
 			lastErr = err;
 			verbose(`[connect] attempt ${attempt}/${attempts} failed: ${(err as Error).message}`);
@@ -145,31 +141,18 @@ export async function getExtensionUUID(): Promise<string> {
 }
 
 /**
- * Build the full extension-origin URL to the new tab page for a given id
- * (audit 2026-07-09-modernization-h-code-review.md #7b — the sibling of
- * tests/uat/_tools/urls.mjs's `newTabURL`, kept local here since this file
- * already anchors the E2E harness's own path constants). `browser` selects
- * the origin scheme: Firefox's per-profile `moz-extension://<uuid>/`, or
- * Chrome's deterministic `chrome-extension://<id>/` (CHROME.md D5b) — same
- * two-scheme shape as the UAT tooling's `newTabURL`.
- */
-export function newTabURL(id: string, browser: 'firefox' | 'chrome' = 'firefox'): string {
-	return browser === 'chrome' ? `chrome-extension://${id}/newTab.html` : `moz-extension://${id}/newTab.html`;
-}
-
-/**
  * Get the full URL to the extension's new tab page for whichever browser
- * this run targets. Chrome's id is the committed dev-key id (deterministic,
- * no profile scrape needed — `stageDevBuild()` injects the same key on every
- * run); Firefox's UUID is per-profile and must be discovered via
- * `getExtensionUUID()`'s prefs.js scrape.
+ * this run targets (scheme from the registry, `newTabURL`). On chromium the
+ * id is the committed dev-key id (deterministic, no profile scrape needed —
+ * `stageDevBuild()` injects the same key on every run); Firefox's UUID is
+ * per-profile and must be discovered via `getExtensionUUID()`'s prefs.js scrape.
  */
 export async function getNewTabURL(): Promise<string> {
-	if (IS_CHROME) {
-		return newTabURL(CHROME_DEV_EXTENSION_ID, 'chrome');
+	if (ENGINE === 'chromium') {
+		return newTabURL(CHROME_DEV_EXTENSION_ID, BROWSER.browser);
 	}
 	const uuid = await getExtensionUUID();
-	return newTabURL(uuid, 'firefox');
+	return newTabURL(uuid, BROWSER.browser);
 }
 
 export interface WaitForConditionOpts {
@@ -600,7 +583,7 @@ export async function waitForGridReady(page: Page, timeout = 15_000): Promise<vo
  * regime (CHROME.md D5b, event-page-lifecycle.test.ts): there is no pref that
  * ages out an MV3 service worker on a bounded schedule, so the test forces
  * the same "the background just came back from nothing" condition with a
- * real CDP-level kill — the exact technique `tests/e2e-chrome/_tools/smoke.mjs`
+ * real CDP-level kill — the exact technique `tests/_browsers/chrome/smoke.mjs`
  * proved out for D3's SW kill/respawn check.
  *
  * Two empirically-required steps beyond the kill itself (both findings from
@@ -617,7 +600,7 @@ export async function waitForGridReady(page: Page, timeout = 15_000): Promise<vo
  * Chrome-only: puppeteer's Target API needs a real CDP `service_worker`
  * target type, which Firefox's BiDi-connected `Browser` never produces (its
  * event page isn't modeled as a Target at all) — callers must gate this
- * behind `IS_CHROME`.
+ * behind `ENGINE === 'chromium'`.
  */
 export async function restartChromeServiceWorker(browser: Browser, opts: { timeout?: number } = {}): Promise<void> {
 	const { timeout = 20_000 } = opts;

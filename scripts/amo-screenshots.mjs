@@ -29,7 +29,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ZipWriter, TextReader, BlobWriter } from '@zip.js/zip.js';
 import { SITES, VISIT_URLS, DEFAULT_PINS } from '../tests/uat/_tools/browser-daemon.mjs';
-import { newTabURL } from '../tests/uat/_tools/urls.mjs';
+import { newTabURL } from '../tests/_browsers/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');

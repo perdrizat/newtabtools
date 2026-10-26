@@ -9,7 +9,7 @@ import {
 	waitForGridReady,
 	resetTestState,
 	navigateAndConfirm,
-	IS_CHROME,
+	ENGINE,
 	restartChromeServiceWorker,
 } from './_helpers.ts';
 
@@ -26,7 +26,7 @@ import {
 // through the `api` seam, so that IS the real respawn-hygiene coverage.
 // Restoring a genuine Chrome respawn check is tracked in GH #23.
 //
-// MV3_MIGRATION.md Slice D: `run_esr_tests.sh` sets
+// MV3_MIGRATION.md Slice D: the Firefox E2E hook (tests/_browsers/firefox/e2e.sh) sets
 // `extensions.background.idle.timeout=10000` for the whole suite, so the
 // event page genuinely suspends after ~10s of no extension activity and
 // respawns on the next event. This file deliberately lets that happen (a
@@ -46,9 +46,9 @@ import {
 // and never-capture.test.ts navigate to.
 const TEST_URL = 'https://example.com/';
 
-// Skipped on Chrome — see the block comment above (audit M2, GH #23). Runs for
-// real on Firefox.
-describe.skipIf(IS_CHROME)('E2E: event-page suspension recovery (MV3_MIGRATION.md Slice D)', () => {
+// Skipped on chromium — see the block comment above (audit M2, GH #23). Runs
+// for real on Firefox.
+describe.skipIf(ENGINE === 'chromium')('E2E: event-page suspension recovery (MV3_MIGRATION.md Slice D)', () => {
 	let browser: Browser;
 
 	beforeAll(async () => {
@@ -63,7 +63,7 @@ describe.skipIf(IS_CHROME)('E2E: event-page suspension recovery (MV3_MIGRATION.m
 	});
 
 	it('event page respawns after idle suspension — Tiles.getAllTiles succeeds (IDB reconnected)', async () => {
-		if (IS_CHROME) {
+		if (ENGINE === 'chromium') {
 			// Force the kill/respawn directly (see the CHROME.md D5b header note)
 			// rather than waiting out a Firefox-only pref.
 			await restartChromeServiceWorker(browser);

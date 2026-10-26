@@ -2,7 +2,7 @@
 
 A new tab page for Firefox, built around the sites you actually visit and laid out the way you want — **PowerTools for your browser**, extending the new tab experience much like Microsoft PowerToys does for Windows.
 
-**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. Firefox is the primary target; a Chrome build is functionally complete (same source tree, [`CHROME.md`](CHROME.md)) with a Chrome Web Store release pending. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests run against both Firefox ESR (Puppeteer + WebDriver BiDi) and Chrome for Testing (Puppeteer + CDP), plus an LLM-driven UAT tier for both browsers — run on every change.
+**Available on [Mozilla Add-ons](https://addons.mozilla.org/firefox/addon/newtab-powertools/).** NewTab PowerTools is the actively-maintained continuation of Geoff Lankow's *New Tab Tools* (MPL-2.0, see the maintainer's note below). The **v2 release** reworks the UI to sit closer to today's Firefox new tab page while keeping the power-user controls: a single titlebar row (recently-closed cards · an awesome bar that searches your tiles, bookmarks, and history · controls), a slide-in **configuration drawer** (Tile / Page / Advanced), a **theme system** (system / light / dark / high-contrast), and **real favicons** on tiles. Firefox is the primary target; a Chrome build is functionally complete (same source tree, [`CHROME.md`](CHROME.md)) with a Chrome Web Store release pending. It's backed by a deep, mandatory test suite — 1000+ unit/integration tests (Vitest + jsdom) and 100+ E2E tests run against both Firefox ESR (Puppeteer + WebDriver BiDi) and branded stable Chrome (Puppeteer + CDP), plus an LLM-driven UAT tier for both browsers — run on every change.
 
 ## Main features
 
@@ -49,7 +49,7 @@ widgets. Users who want these stay on the native page.
 - [`TESTING.md`](TESTING.md) — the canonical testing guide. Test tiers (Unit, Integration, E2E, plus a pre-release LLM-driven UAT tier) using Vitest + jsdom for the first two and Puppeteer against Firefox ESR (>= 153, via WebDriver BiDi) and branded stable Chrome (via CDP; Chrome for Testing as fallback and for UAT — see TESTING.md "Browser binary strategy") for E2E, with `jest-webextension-mock` mocking the WebExtension API surface at the Integration tier. Includes the TDD-cycle rules for new vs. legacy code. Required reading before touching the code.
 - [`CHANGELOG.md`](CHANGELOG.md) — Keep a Changelog format.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — developer guide, TDD workflow, decisions of record, AI-assisted contribution guardrails. Completed-arc working documents (the MV3 migration, background-modules + HTML5 modernization, the page-modules arc, the chrome-prep program) live in git history and their reviews in [`audit/`](audit/).
-- [`CHROME.md`](CHROME.md) — the Chrome-port program plan and live status board (stage 3): the full suite is validated on **branded stable Chrome** (E2E parity, UAT 12/12, smoke — the D8 remediation arc closed the CfT-only blind spot). Chrome is ready for testers via "Load unpacked"; the Chrome Web Store submission (D7) is deliberately deferred while the port matures in the field.
+- [`CHROME.md`](CHROME.md) — the Chrome-port program plan and live status board (stage 3): the full suite is validated on **branded stable Chrome** (E2E parity, UAT, smoke — the D8 remediation arc closed the CfT-only blind spot). Chrome is ready for testers via "Load unpacked"; the Chrome Web Store submission (D7) is deliberately deferred while the port matures in the field.
 
 ## For developers
  
@@ -97,8 +97,9 @@ Hit a failing `pnpm test:uat:preflight` or a broken E2E setup? Search this table
 | You see | Cause | Fix |
 |---|---|---|
 | `Firefox (release)` ... `not found` | No `firefox` binary on PATH | Install release Firefox — Mozilla APT repo, see `TESTING.md` — or set `$FIREFOX_BIN`. |
-| `is below the minimum required version (152)` | Firefox on PATH is older than 152 | MV3's `tabs.captureVisibleTab` needs Firefox >= 152; upgrade Firefox or point `$FIREFOX_BIN`/`$FIREFOX_ESR_BIN` at a newer build. |
-| `'firefox-esr' not found on PATH` (from `run_esr_tests.sh`) | E2E targets Firefox ESR and it isn't installed | `sudo apt install firefox-esr` (Mozilla APT repo, see `TESTING.md`) or set `$FIREFOX_ESR_BIN`. |
+| `is below the minimum required version (152)` | Firefox on PATH is older than 152 | MV3's `tabs.captureVisibleTab` needs Firefox >= 152; upgrade Firefox or point `$FIREFOX_BIN` at a newer build. |
+| `[firefox-env] x 'firefox-esr' (PATH) not found` (from `pnpm test:e2e:firefox`) | E2E targets Firefox ESR and it isn't installed | `sudo apt install firefox-esr` (Mozilla APT repo, see `TESTING.md`) or set `$FIREFOX_BIN`. |
+| `$FIREFOX_ESR_BIN was renamed to $FIREFOX_BIN` (or `$UAT_BROWSER` / `$NTT_E2E_BROWSER` → `$NTT_BROWSER`) | A renamed variable is still set in your shell | Unset it and use the new name (`tests/_browsers/registry.mjs`). |
 | `claude CLI` ... `not found on PATH` | Claude Code CLI isn't installed | Install per <https://docs.claude.com/claude-code>, then `claude /login`. |
 | A UAT scenario fails with an auth error even though `claude --version` works | CLI installed but not logged in, or the session expired | Run `claude /login` again. |
 | `Built .xpi` ... `not found in dist/` | `pnpm build` hasn't been run (or is stale) | `pnpm build`. |
@@ -106,7 +107,7 @@ Hit a failing `pnpm test:uat:preflight` or a broken E2E setup? Search this table
 | `UAT daemon port` ... `already in use` | Something else is already bound to port 9876 | Stop the other process, or set `$UAT_DAEMON_PORT`. |
 | `Firefox launch (geckodriver)` ... `Selenium could not start Firefox via geckodriver` | geckodriver missing, mismatched, or a snap-confined build shadowing it on PATH | Remove a snap-confined `geckodriver` from PATH so Selenium Manager can fetch a clean one, or run `pnpm install`. |
 | `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm wants to reinstall/prune `node_modules` but has no interactive TTY to confirm it | Run `pnpm install` yourself in an interactive shell. |
-| `[chrome-smoke] x no Chrome binary found` | The Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `tests/e2e-chrome/`) can't find a Chrome/Chromium binary to provision Chrome for Testing from | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`, then `pnpm chrome:provision`. |
+| `[chrome-smoke] x no Chrome binary found` | The Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `tests/_browsers/chrome/`) can't find a Chrome/Chromium binary to provision Chrome for Testing from | Install Chrome (the Google `.deb`) or set `$CHROME_BIN`, then `pnpm chrome:provision`. |
 
 ## License
 

@@ -10,11 +10,11 @@
 //
 // Run (after `pnpm build`):
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/mcp-smoke.mjs
-//   UAT_BROWSER=chrome node tests/uat/_tools/mcp-smoke.mjs
+//   NTT_BROWSER=chrome node tests/uat/_tools/mcp-smoke.mjs
 //
 // Browser-agnostic: it only talks HTTP to the daemon and stdio to the MCP
 // server, so it declares no `supported` list. The browser and port are
-// resolved once here and pinned on BOTH children via uatChildEnv — the daemon
+// resolved once here and pinned on BOTH children via browserChildEnv — the daemon
 // and the MCP server must agree on the port, and before the registry this
 // file passed neither, so in Chrome mode it polled Firefox's port forever.
 
@@ -23,12 +23,12 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { resolveUatEnv, uatChildEnv } from './uat-browsers.mjs';
+import { resolveBrowserEnv, browserChildEnv } from '../../_browsers/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SERVER = path.join(__dirname, 'mcp-server.mjs');
 const DAEMON = path.join(__dirname, 'browser-daemon.mjs');
-const UAT = resolveUatEnv({ tool: 'mcp-smoke.mjs' });
+const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'mcp-smoke.mjs' });
 const PORT = UAT.port;
 const BASE = `http://127.0.0.1:${PORT}`;
 const size = o => Buffer.byteLength(JSON.stringify(o));
@@ -47,7 +47,7 @@ async function waitHealthy(timeoutMs) {
 }
 
 console.log(`[mcp-smoke] spawning ${UAT.browser} daemon on port ${PORT}`);
-const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit'], env: uatChildEnv(UAT) });
+const daemon = spawn('node', [DAEMON], { stdio: ['ignore', 'inherit', 'inherit'], env: browserChildEnv(UAT) });
 
 let exitCode = 0;
 let client;
@@ -55,7 +55,7 @@ try {
 	await waitHealthy(UAT.healthTimeoutMs);
 	console.log('[mcp-smoke] daemon healthy; connecting MCP server');
 
-	const transport = new StdioClientTransport({ command: 'node', args: [SERVER], env: uatChildEnv(UAT) });
+	const transport = new StdioClientTransport({ command: 'node', args: [SERVER], env: browserChildEnv(UAT) });
 	client = new Client({ name: 'uat-smoke', version: '0.2.0' }, { capabilities: {} });
 	await client.connect(transport);
 

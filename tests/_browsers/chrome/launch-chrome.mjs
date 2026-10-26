@@ -8,21 +8,20 @@
  * recorded 2026-07-18: Puppeteer's CDP `installExtension` over the PIPE
  * transport, plus `--enable-unsafe-extension-debugging`, runs the extension
  * fine on branded stable Chrome — only the legacy `--load-extension` flag is
- * dead there). `run_chrome_tests.sh` spawns this script as a long-lived
- * background process instead of launching Chrome directly:
+ * dead there). The `e2e.sh` hook (sourced by tests/e2e/run.sh) spawns this
+ * script as a long-lived background process instead of launching Chrome
+ * directly:
  *
- *   1. Resolve a Chrome binary, BRANDED-first (Decision 12: the E2E tier runs
- *      the production binary users actually have) via
- *      `resolveChromeBinary({ prefer: 'branded' })` — $CHROME_BIN →
- *      google-chrome-stable/google-chrome → the Puppeteer CfT cache (the
- *      fallback lane, same binaries `chrome:provision` populates) →
- *      chromium as a last resort. This does NOT change the default
- *      (CfT-first) order `resolveChromeBinary()` returns for every other
- *      caller (UAT daemon, preflight, the smokes, rasterize-icons).
+ *   1. Resolve a Chrome binary for the registry's E2E channel (`stable`:
+ *      BRANDED-first — Decision 12: the E2E tier runs the production binary
+ *      users actually have) via `resolveChromeBinary({ channel })` —
+ *      $CHROME_BIN → google-chrome-stable/google-chrome → the Puppeteer CfT
+ *      cache (the fallback lane, same binaries `chrome:provision` populates)
+ *      → chromium as a last resort.
  *   2. Stage the unpacked dev build (`stageDevBuild()`, unchanged).
  *   3. `puppeteer.launch()` with a DUAL transport: `pipe: true` (the CDP
  *      `Extensions` domain is pipe-only on branded) AND
- *      `--remote-debugging-port=9223` — so the vitest suite's OWN
+ *      `--remote-debugging-port=<registry E2E port>` — so the vitest suite's OWN
  *      `puppeteer.connect({ browserURL: ... })` (tests/e2e/_helpers.ts,
  *      unchanged) keeps working exactly as it does against CfT today.
  *      Probe-proven 2026-07-18 (`.tmp/dual-transport-probe.mjs`): both
@@ -38,8 +37,8 @@
  *      the E2E suite's own later connection — polls for it via
  *      `waitForTarget`, then disconnects (NOT close — the browser stays up).
  *   6. Only once that wait passes: write the ready-file
- *      (`tests/e2e-chrome/.launcher-ready`, content: extension id then
- *      binary path, one per line) that `run_chrome_tests.sh` polls for. Any
+ *      (`tests/_browsers/chrome/.launcher-ready`, content: extension id then
+ *      binary path, one per line) that `e2e.sh` polls for. Any
  *      stale ready-file from a previous crashed run is removed at startup so
  *      it can never fool the shell script's wait loop into proceeding before
  *      THIS run is actually ready.
@@ -55,9 +54,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { resolveChromeBinary, stageDevBuild } from './chrome-env.mjs';
+import { resolveBrowserEnv } from '../registry.mjs';
 
-const PORT = 9223;
-const READY_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.launcher-ready');
+const E2E = resolveBrowserEnv({ tier: 'e2e', tool: 'launch-chrome.mjs', supported: ['chrome'] });
+const PORT = E2E.port;
+const READY_FILE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.launcher-ready');
 
 function log(...args) { console.log('[launch-chrome]', ...args); }
 function logErr(...args) { console.error('[launch-chrome]', ...args); }
@@ -71,7 +72,7 @@ async function main() {
 	// script's wait loop into proceeding before THIS run is actually ready.
 	await removeReadyFile();
 
-	const found = resolveChromeBinary({ prefer: 'branded' });
+	const found = resolveChromeBinary({ channel: E2E.channel });
 	if (!found) {
 		logErr('x no Chrome binary found ($CHROME_BIN, google-chrome(-stable), the Puppeteer CfT cache, or chromium).');
 		logErr('  Run `pnpm chrome:provision` (Chrome for Testing), install branded Chrome, or set CHROME_BIN.');
@@ -79,8 +80,8 @@ async function main() {
 		return;
 	}
 	log(found.branded
-		? `production-binary lane (branded): ${found.version} (${found.bin})`
-		: `fallback lane (no branded binary found; using CfT/chromium): ${found.version} (${found.bin})`);
+		? `channel ${E2E.channel}, production-binary lane (branded): ${found.version} (${found.bin})`
+		: `channel ${E2E.channel}, fallback lane (no branded binary found; using CfT/chromium): ${found.version} (${found.bin})`);
 
 	const { dir, extensionId } = stageDevBuild();
 	log(`staged: ${dir}`);

@@ -12,11 +12,10 @@
  * `action.default_icon` stay on the SVG originals untouched.
  *
  * Zero new dependencies: uses `puppeteer-core` (already a devDependency for
- * the Chrome runtime tier, tests/e2e-chrome/) driving the Chrome for Testing
+ * the Chrome runtime tier, tests/_browsers/chrome/) driving the Chrome for Testing
  * binary already provisioned by `pnpm chrome:provision`. This script
  * resolves that binary itself (a small inline copy of the logic in
- * tests/e2e-chrome/_tools/chrome-env.mjs — deliberately not imported from
- * there, since tests/e2e-chrome/** is owned by a parallel task).
+ * tests/_browsers/chrome/chrome-env.mjs).
  *
  * Method: each SVG is embedded inline in a page sized to the exact target
  * pixel dimensions (the SVG's own viewBox handles the scaling), then
@@ -50,8 +49,7 @@ const outDir = path.join(root, 'assets', 'chrome-icons');
 
 /**
  * Chrome-for-Testing binaries in the standard Puppeteer cache, newest first.
- * Small inline copy of tests/e2e-chrome/_tools/chrome-env.mjs's resolver —
- * deliberately not imported (that directory is owned by a parallel task).
+ * Small inline copy of tests/_browsers/chrome/chrome-env.mjs's resolver.
  * @return {string[]}
  */
 function cftCandidates() {

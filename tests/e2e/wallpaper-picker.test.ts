@@ -10,7 +10,7 @@ import {
 	waitForCondition,
 	waitForGridReady,
 	resetTestState,
-	IS_CHROME,
+	ENGINE,
 } from './_helpers.ts';
 
 describe('E2E: Wallpaper picker', () => {
@@ -65,7 +65,7 @@ describe('E2E: Wallpaper picker', () => {
 			);
 			expect(gridText).not.toContain('Unable to load');
 
-			if (IS_CHROME) {
+			if (ENGINE === 'chromium') {
 				// CHROME.md D8 finding 2: the attachment CDN 406s Chrome UAs, so
 				// the picker shows the degrade — exactly the 15-record hardcoded
 				// solid palette, rendered as DIV swatches, never <img> (there is
@@ -148,7 +148,7 @@ describe('E2E: Wallpaper picker', () => {
 				{ timeout: 15_000, message: 'No wallpaper thumbnails rendered' }
 			);
 
-			if (IS_CHROME) {
+			if (ENGINE === 'chromium') {
 				// Click the first solid-colour swatch (a DIV, not an <img> —
 				// there is no CDN image to reference on Chrome).
 				const testColor = await page.evaluate(() => {

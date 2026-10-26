@@ -6,27 +6,30 @@ E2E tests run against **real Firefox** with the unpacked extension installed. Th
 - **`puppeteer-core`** connects to the running Firefox over **WebDriver BiDi** — a W3C standard that mainline Firefox supports out of the box.
 - **Vitest** is the test runner, same as for Unit and Integration tests, with a separate `e2e` project (see [`vitest.config.js`](../../vitest.config.js)).
 
-**Firefox channel:** this tier runs on **Firefox ESR (>= 153)** by default (`firefox-esr`; `$FIREFOX_ESR_BIN` overrides the binary). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from 152.0, so the tier ran on release until the 153 ESR shipped. Since Firefox 153 the launch needs `--remote-allow-system-access` to navigate to `moz-extension://` pages. Per-version BiDi quirks, error strings and the ESR-bump checklist live in [`../BROWSER-COMPAT.md`](../BROWSER-COMPAT.md).
+**Firefox channel:** this tier runs on **Firefox ESR (>= 153)** by default — the `e2e` channel in [`../_browsers/registry.mjs`](../_browsers/registry.mjs) (`firefox-esr`; `$FIREFOX_BIN` overrides the binary). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from 152.0, so the tier ran on release until the 153 ESR shipped. Since Firefox 153 the launch needs `--remote-allow-system-access` to navigate to `moz-extension://` pages. Per-version BiDi quirks, error strings and the ESR-bump checklist live in [`../BROWSER-COMPAT.md`](../BROWSER-COMPAT.md).
 
-**Chrome parity (CHROME.md D5b):** this SAME `tests/e2e/**/*.test.ts` suite also runs against Chrome for Testing via `pnpm test:e2e:chrome` (`tests/e2e-chrome/run_chrome_tests.sh`) — no separate test files, just an `NTT_E2E_BROWSER=chrome` switch in [`_helpers.ts`](_helpers.ts) that swaps BiDi@9222 for CDP@9223 and the `moz-extension://` origin for `chrome-extension://`. See [`tests/e2e-chrome/README.md`](../e2e-chrome/README.md) for that runner's lifecycle and the per-file triage table. Everything below describes the Firefox path specifically; it is unaffected by the Chrome tier's existence (byte-identical default behavior).
+**Chrome parity (CHROME.md D5b):** this SAME `tests/e2e/**/*.test.ts` suite also runs against branded stable Chrome via `pnpm test:e2e:chrome` (`tests/e2e/run.sh chrome`) — no separate test files. `$NTT_BROWSER` (set by the runner) makes [`_helpers.ts`](_helpers.ts) resolve the browser from the registry: BiDi@9222 vs CDP@9223, the `moz-extension://` vs `chrome-extension://` origin, and `ENGINE` (`gecko`/`chromium`) for the few tests that branch. See [`../_browsers/chrome/README.md`](../_browsers/chrome/README.md) for the Chrome launcher and the per-file triage table. Everything below describes the Firefox path specifically.
 
 ## Lifecycle
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ run_esr_tests.sh (name unchanged from the ESR era)              │
-│   1. pkill stray processes on this run's test profile           │
-│   2. web-ext run --firefox=firefox-esr \                        │
+│ run.sh <browser>  (pnpm test:e2e:<browser>)                     │
+│   0. registry lookup (tests/_browsers/registry.mjs):            │
+│      channel, port, artifacts dir; per-browser runner lock      │
+│   1. hook: tests/_browsers/<browser>/e2e.sh — for firefox:      │
+│      pkill stray processes on this run's test profile, then     │
+│      web-ext run --firefox=<esr binary> \                       │
 │        --pref=extensions.background.idle.timeout=10000          │
 │        --args="--remote-debugging-port=9222"                    │
 │        --args="-headless"                                       │
 │        --args="--remote-allow-system-access"                    │
 │      → Firefox ESR (>= 153) launches with the                   │
 │        extension loaded and BiDi listening on 9222              │
-│   3. wait until port 9222 is reachable                          │
-│   4. vitest run --project e2e                                   │
+│   2. hook: wait until port 9222 is reachable                    │
+│   3. vitest run --project e2e                                   │
 │      → tests connect via puppeteer.connect(...)                 │
-│   5. EXIT trap → cleanup                                        │
+│   4. EXIT trap → hook teardown, lock release                    │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -34,7 +37,7 @@ The `extensions.background.idle.timeout=10000` pref is deliberate lifecycle stre
 
 ## Test pattern
 
-Use the helper in [`_helpers.js`](_helpers.js) to keep boilerplate to one line:
+Use the helper in [`_helpers.ts`](_helpers.ts) to keep boilerplate to one line:
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -63,10 +66,10 @@ describe('my smoke', () => {
 
 ## Running
 
-Standard run via npm (handles the full lifecycle):
+Standard run (handles the full lifecycle; `pnpm test:e2e` runs every registered browser):
 
 ```bash
-npm run test:e2e
+pnpm test:e2e:firefox
 ```
 
 To debug a single test interactively without restarting Firefox between iterations:
@@ -92,8 +95,8 @@ npx vitest --project e2e tests/e2e/your_test.test.js
 
 1. **Firefox build channel.** `xpinstall.signatures.required: false` is only honored on Firefox **ESR / Developer Edition / Nightly**, not Release — this tier's own launches (via `web-ext run`) don't rely on that pref, but be aware of it if you're diagnosing a manual/unsigned install issue on release Firefox.
 2. **Headless mode.** Extensions usually load fine in headless release Firefox via `web-ext run --args="-headless"`. If a test fails specifically in headless, drop the flag locally to see the browser.
-3. **Port collision.** Port 9222 is hardcoded in [`run_esr_tests.sh`](run_esr_tests.sh) and [`_helpers.js`](_helpers.js). If something else binds it, the script fails. Sufficient for one-developer use; revisit if CI runs multiple jobs in parallel.
-4. **Stale Firefox processes.** The script `pkill`s on entry and via an EXIT trap, scoped to this run's test profile (not a blanket process-name kill — that would hit a developer's daily-driver Firefox, and `pkill -f firefox-esr` even killed the invoking shell when `FIREFOX_ESR_BIN=firefox-esr` was on its command line). If a manual run crashes uncleanly and leaves a process behind, `pkill -f <profile-dir-path>` to clear it, or as a last resort `pkill -f firefox`.
+3. **Port collision.** Each browser's E2E port is fixed in [`../_browsers/registry.mjs`](../_browsers/registry.mjs) (Firefox 9222). If something else binds it, the run fails. Sufficient for one-developer use; revisit if CI runs multiple jobs in parallel.
+4. **Stale Firefox processes.** The Firefox hook `pkill`s on entry and on teardown, scoped to this run's test profile (not a blanket process-name kill — that would hit a developer's daily-driver Firefox, and the former `pkill -f firefox-esr` even killed the invoking shell when `firefox-esr` was on its command line). If a manual run crashes uncleanly and leaves a process behind, `pkill -f <profile-dir-path>` to clear it, or as a last resort `pkill -f firefox`.
 5. **`captureVisibleTab`/`captureTab` require Firefox >= 152.** Both are `undefined` on any older build (MV2 or MV3) — a test that exercises capture will fail opaquely on an out-of-date binary, not with a clear "unsupported version" error. Check `firefox --version` first if capture tests fail unexpectedly.
 
 ## Manual debugging tools (not part of the test run)
@@ -105,4 +108,4 @@ These scripts live alongside the tests but Vitest's `include: ['tests/e2e/**/*.t
 
 ## File naming
 
-New test files **must** use `.test.ts` (TypeScript is the mandated standard for all new E2E tests). Existing `.test.js` files are being migrated incrementally. The shared connection helper lives in `_helpers.js` (the leading underscore signals "not a test").
+New test files **must** use `.test.ts` (TypeScript is the mandated standard for all new E2E tests). Existing `.test.js` files are being migrated incrementally. The shared connection helper lives in `_helpers.ts` (the leading underscore signals "not a test"). Per-run output goes to `_artifacts/<browser>/` (gitignored).

@@ -1,4 +1,4 @@
-// CHROME.md D5b: no IS_CHROME variant needed. This suite only exercises the
+// CHROME.md D5b: no per-engine variant needed. This suite only exercises the
 // Appearance-tab theme cards + `prefers-color-scheme` base (CHROME.md
 // Decision 2's shared foundation on both platforms) — it never touches the
 // Firefox-only `browser.theme` bonus API, so it runs unmodified on Chrome

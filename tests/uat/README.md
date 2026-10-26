@@ -4,7 +4,8 @@ LLM-driven user-acceptance testing. Design + rationale: [`../../TESTING.md`](../
 
 **Browser:** a long-lived daemon (`_tools/browser-daemon.mjs`) holds one Selenium
 session for the whole run — **release-channel Firefox** by default, or **Chrome
-for Testing** when `$UAT_BROWSER=chrome` (chrome-prep D6) — one parameterized
+for Testing** when `$NTT_BROWSER=chrome` (chrome-prep D6; these UAT channels
+are the `uat` tier fields in [`../_browsers/registry.mjs`](../_browsers/registry.mjs)) — one parameterized
 implementation, not a fork (the manifest-overlay philosophy: single source
 tree). At startup it **seeds the environment** by real navigation — two passes
 over a merged US/global + Swiss URL set (frecency needs ~2 visits before a site
@@ -38,7 +39,7 @@ Selenium's browser-agnostic API, so none of it is browser-specific code.
 The daemon exposes a localhost HTTP API on port **9876** for Firefox / **9877**
 for Chrome by default (`$UAT_DAEMON_PORT` overrides either; ≠ E2E's 9222) — the
 two ports let both daemons run in parallel. (E2E is unrelated — it stays on
-Firefox ESR + Puppeteer-BiDi / Chrome for Testing + Puppeteer, its own tier.)
+Firefox ESR + Puppeteer-BiDi / branded Chrome stable + Puppeteer, its own tier.)
 
 **Agent bridge:** a thin MCP server (`_tools/mcp-server.mjs`) Claude spawns per
 scenario that forwards each `browser_*` tool call to the daemon — it holds no
@@ -51,16 +52,15 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 
 | File | Purpose | Needs SDK? |
 |---|---|---|
-| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox or Chrome, `$UAT_BROWSER` + environment seed + HTTP API) | no |
-| `_tools/uat-browsers.mjs` | the single browser registry: per-browser daemon port, health timeout, artifact suffix and URL scheme, plus `resolveUatEnv()`/`uatChildEnv()`. Every tool resolves its browser here; adding a browser means adding a row (see the module header) | no |
-| `_tools/urls.mjs` | shared extension-origin URL builder (`moz-extension://`/`chrome-extension://`, scheme from the registry) | no |
+| `_tools/browser-daemon.mjs` | long-lived browser host (Firefox or Chrome, `$NTT_BROWSER` + environment seed + HTTP API) | no |
+| `../_browsers/registry.mjs` | the single browser registry shared with E2E: per-browser engine and URL scheme (`newTabURL()`), per-tier channel, port and health timeout, plus `resolveBrowserEnv({ tier: 'uat' })`/`browserChildEnv()`. Every tool resolves its browser here; adding a browser means adding a row (see the module header) | no |
 | `_tools/mcp-server.mjs` | thin MCP→HTTP client to the daemon | yes |
 | `_tools/mcp-config.json` | config Claude reads to spawn the MCP server | — |
 | `_tools/daemon-smoke.mjs` | daemon HTTP-API contract smoke | no |
 | `_tools/mcp-smoke.mjs` | full MCP path; prints payload sizes | yes |
 | `_tools/browser-smoke.mjs` | standalone browser-path check (no MCP, Firefox only) | no |
 | `_tools/fallback-cli.mjs` | reference fallback (CLI-over-Bash); not used by the harness | no |
-| `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox or Chrome per `$UAT_BROWSER`, fixture sha, claude CLI, SDK, daemon port) | no |
+| `_tools/preflight.mjs` | env validator (Node, pnpm, Firefox or Chrome per `$NTT_BROWSER` on the registry's UAT channel, fixture sha, claude CLI, SDK, daemon port) | no |
 | `_tools/runner.mjs` | orchestrator: ensure skill symlink → preflight → start daemon → per-scenario `claude -p` → reset-to-default between → aggregated report | yes |
 | `scenarios/*.md` | the scenarios the runner walks | — |
 | `uat-scenario.md` | the agent skill prompt (see "Skill" below) | — |
@@ -68,13 +68,14 @@ only when the agent must judge it, so image-token cost tracks what's judged.
 The `newtabtools_knowngood.zip` fixture is checked in (see fixtureVersion below).
 
 Run the whole suite with `pnpm test:uat` (runs both Firefox and Chrome
-sequentially), single-browser with `pnpm test:uat:ff` (Firefox) or
-`pnpm test:uat:chrome` (Chrome), or a subset by slug: `pnpm test:uat:ff 21-restore` /
+sequentially), single-browser with `pnpm test:uat:firefox` or
+`pnpm test:uat:chrome`, or a subset by slug: `pnpm test:uat:firefox 21-restore` /
 `pnpm test:uat:chrome 00-uat-init`. All scripts share one runner and one daemon
 implementation — `pnpm test:uat:chrome` is exactly
-`UAT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two browsers can run
-concurrently when executed individually (separate ports, and per-browser `-ff` / `-cft`-suffixed
-artifacts dirs matching the E2E `_artifacts-ff` / `_artifacts-cft` convention).
+`NTT_BROWSER=chrome node tests/uat/_tools/runner.mjs`, so the two browsers can run
+concurrently when executed individually (separate ports, and per-browser
+`artifacts/<stamp>-firefox` / `<stamp>-chrome` run dirs matching the E2E
+`_artifacts/<browser>/` convention).
 
 Scenario agents run on **Sonnet** by default (`$UAT_MODEL` overrides) —
 visual judgment doesn't need the most expensive model, and a full run spawns
@@ -122,7 +123,7 @@ node tests/uat/_tools/mcp-smoke.mjs
 
 ## Troubleshooting (preflight failures)
 
-`pnpm test:uat:preflight` (or `pnpm test:uat:preflight:ff` / `:preflight:chrome`; also the first step of `pnpm test:uat`) prints `[ok]`/`[warn]`/`[fail]` per check. Fixes for the `[fail]`s:
+`pnpm test:uat:preflight` (or `pnpm test:uat:preflight:firefox` / `:preflight:chrome`; also the first step of `pnpm test:uat`) prints `[ok]`/`[warn]`/`[fail]` per check. Fixes for the `[fail]`s:
 
 | Preflight failure | Fix |
 |---|---|

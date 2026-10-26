@@ -286,14 +286,16 @@ self-healing by design, `pendingCaptures` already round-trips
 
 12. **Tier/binary version strategy — production binaries on E2E, current
    binaries on UAT** (maintainer-decided 2026-07-18; the Firefox-ESR-era
-   pattern generalized, cf. `run_esr_tests.sh`'s name). **Principle: every
+   pattern generalized). The per-tier default channel is a field in
+   `tests/_browsers/registry.mjs` (since 2026-10-26), so this table and the
+   runners can't drift apart. **Principle: every
    browser gets two lanes — the frequent tier (E2E) runs the PRODUCTION
    binary users have; the pre-release tier (UAT) runs the CURRENT/dev
    binary — so binary divergence surfaces as tier disagreement instead of
    hiding behind a single binary's quirks.**
    | Tier | Firefox | Chrome |
    |---|---|---|
-   | E2E (frequent) | **ESR** (flipped 2026-10-26 when 153 ESR shipped; `$FIREFOX_ESR_BIN` overrides) | **branded stable** `google-chrome` via the dual-transport launcher; CfT fallback when no branded binary is present |
+   | E2E (frequent) | **ESR** (flipped 2026-10-26 when 153 ESR shipped; `$FIREFOX_BIN` overrides) | **branded stable** `google-chrome` via the dual-transport launcher; CfT fallback when no branded binary is present |
    | UAT (pre-release) | **current release** | **CfT** (Selenium daemon unchanged) |
    | Smoke | — | CfT locally (fast gate); **branded in CI** (runners preinstall it — free) |
    | Manual pass (D-gates) | release, real profile | branded stable, real profile |
@@ -352,10 +354,10 @@ there. Everything after D1 gets a red/green target on real Chrome.*
       automation — `--load-extension` is ignored AND the CDP install path
       leaves the extension inert (verified against a minimal hello-world
       MV3 extension, so it's the platform, not this codebase). Provisioning
-      is `pnpm chrome:provision` (`tests/e2e-chrome/_tools/provision-cft.mjs`,
+      is `pnpm chrome:provision` (`tests/_browsers/chrome/provision-cft.mjs`,
       via puppeteer-core's own `@puppeteer/browsers`, ~/.cache/puppeteer —
       the Selenium-Manager binary-fetch precedent). Full harness record:
-      `tests/e2e-chrome/README.md`.
+      `tests/_browsers/chrome/README.md`.
       **Amended 2026-07-18 (probe of record):** the "CDP install path
       leaves the extension inert" half no longer reproduces on branded
       stable **150**: Puppeteer `installExtension` over the **pipe**
@@ -536,7 +538,7 @@ failing smoke checks live, and closed the arc.)*
       be runnable concurrently with Firefox E2E (9222) and the UAT daemon
       (9876) — keep the pipe/ephemeral transports (no fixed port); if one
       ever becomes necessary, 9223 is reserved (see
-      `tests/e2e-chrome/README.md` "Port allocation"). Known limit: two
+      `tests/_browsers/chrome/README.md` "Port allocation"). Known limit: two
       CONCURRENT Chrome-smoke invocations collide on the `dist/chrome-dev`
       staging dir (no runner lock yet) — acceptable while the tier is one
       script; add a lock when the suite splits into files.
@@ -567,6 +569,8 @@ adaptation.)*
 > shared-code Firefox suite. The rest of the D5b result (30 other files running
 > identically, Firefox unchanged-proof 126/126) is unaffected.
 - [x] Chrome E2E lifecycle runner `tests/e2e-chrome/run_chrome_tests.sh`
+      (2026-10-26: folded into `tests/e2e/run.sh chrome` + the
+      `tests/_browsers/chrome/e2e.sh` hook)
       (mirrors `run_esr_tests.sh`: own mkdir lock, stages the dev build,
       launches CfT with `--load-extension` + port **9223**, waits, runs
       `NTT_E2E_BROWSER=chrome vitest --project e2e`, trap cleanup).
@@ -745,7 +749,7 @@ every page screenshot — findings 2/4).*
       (wire codec in the `api`-seam bullet, D8-gated status);
       `docs/cws-submission-notes.md` (148-floor justification without the
       key); `manifest/README.md` (key removed); TESTING.md strategy
-      section; `tests/e2e-chrome/README.md` (launcher lifecycle, amended
+      section; `tests/_browsers/chrome/README.md` (launcher lifecycle, amended
       fact 1, Decision-12 lanes).
 - [ ] **Exit proof**: repeat the manual pass on the maintainer's branded
       stable Chrome — all four 2026-07-17 findings gone.

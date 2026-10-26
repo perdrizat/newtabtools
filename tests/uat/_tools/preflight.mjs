@@ -20,20 +20,22 @@ import { execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { resolveChromeBinary, cftStalenessWarning } from '../../e2e-chrome/_tools/chrome-env.mjs';
-import { resolveUatEnv, RESERVED_E2E_PORTS } from './uat-browsers.mjs';
+import { resolveChromeBinary, cftStalenessWarning } from '../../_browsers/chrome/chrome-env.mjs';
+import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
+import { resolveBrowserEnv, tierPorts } from '../../_browsers/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
 
-// chrome-prep D6: the same preflight covers both UAT targets. $UAT_BROWSER
+// chrome-prep D6: the same preflight covers both UAT targets. $NTT_BROWSER
 // selects which browser-specific checks run (Firefox binary/geckodriver/.xpi
 // vs. Chrome for Testing) — everything else (node/pnpm/claude CLI/fixture/SDK)
 // is shared, since the runner + daemon are one parameterized implementation,
-// not a fork.
-const UAT = resolveUatEnv({ tool: 'preflight.mjs', supported: ['firefox', 'chrome'] });
+// not a fork. The channel checked is the registry's UAT channel.
+const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'preflight.mjs', supported: ['firefox', 'chrome'] });
 const UAT_BROWSER = UAT.browser;
+const E2E_PORTS = tierPorts('e2e');
 
 // SHA-256 of tests/uat/newtabtools_knowngood.zip — bump when fixtureVersion
 // changes. Source of truth: tests/uat/README.md "fixtureVersion" section.
@@ -45,11 +47,6 @@ let warned = false;
 const ok = (name, detail) => console.log(`  [ok]   ${name}${detail ? ': ' + detail : ''}`);
 const fail = (name, detail) => { console.log(`  [fail] ${name}${detail ? ': ' + detail : ''}`); failed = true; };
 const warn = (name, detail) => { console.log(`  [warn] ${name}${detail ? ': ' + detail : ''}`); warned = true; };
-
-function which(cmd) {
-	const r = spawnSync('which', [cmd], { encoding: 'utf8' });
-	return r.status === 0 ? r.stdout.trim() : null;
-}
 
 console.log('=== UAT preflight ===');
 console.log();
@@ -90,33 +87,27 @@ console.log();
 // or a pre-built .xpi, since stageDevBuild() stages the unpacked dev build
 // fresh at daemon start (chrome-prep D6).
 if (UAT_BROWSER === 'firefox') {
-	const envBin = process.env.FIREFOX_BIN;
-	let bin = null;
-	if (envBin) {
-		if (fs.existsSync(envBin)) {
-			bin = envBin;
-		} else {
-			fail('Firefox (release)', `$FIREFOX_BIN points to ${envBin} but file does not exist`);
-		}
-	} else {
-		bin = which('firefox');
-		if (!bin) {
-			fail('Firefox (release)', 'not found — set $FIREFOX_BIN or install via the Mozilla APT repo');
-		}
+	const label = `Firefox (${UAT.channel})`;
+	const fx = resolveFirefoxBinary({ channel: UAT.channel });
+	const bin = fx.bin;
+	if (!bin) {
+		fail(label, fx.source === '$FIREFOX_BIN'
+			? `$FIREFOX_BIN points to ${fx.name} but it does not exist`
+			: `'${fx.name}' not found — set $FIREFOX_BIN or install via the Mozilla APT repo`);
 	}
 	if (bin) {
 		const r = spawnSync(bin, ['--version'], { encoding: 'utf8' });
 		const combined = `${r.stdout || ''}${r.stderr || ''}`;
 		const versionLine = (r.stdout || '').match(/Mozilla Firefox \d+\.\S+/);
 		const wrapperNoise = /xdg-settings|requires the firefox snap|: not found/i.test(combined);
-		const where = envBin ? 'via $FIREFOX_BIN' : 'PATH';
+		const where = fx.source === '$FIREFOX_BIN' ? 'via $FIREFOX_BIN' : 'PATH';
 		if (r.status !== 0 || !versionLine) {
-			fail('Firefox (release)', `${bin} did not report a Firefox version via \`--version\` ` +
+			fail(label, `${bin} did not report a Firefox version via \`--version\` ` +
 				`(got: ${combined.trim().slice(0, 120) || 'no output'}). The binary may be a broken wrapper — ` +
 				'use the Mozilla APT build or point $FIREFOX_BIN at a real Firefox binary.');
 		} else if (wrapperNoise) {
 			const noise = combined.trim().split('\n').filter(l => l && !/Mozilla Firefox/.test(l)).join(' | ');
-			fail('Firefox (release)', `${bin} runs, but \`--version\` emits wrapper noise that makes ` +
+			fail(label, `${bin} runs, but \`--version\` emits wrapper noise that makes ` +
 				`geckodriver reject it ("binary is not a Firefox executable"):\n         ${noise}\n         ` +
 				'Likely the Ubuntu snap shim with xdg-utils missing — install xdg-utils, use the Mozilla APT build, or set $FIREFOX_BIN.');
 		} else {
@@ -128,11 +119,11 @@ if (UAT_BROWSER === 'firefox') {
 			const versionMatch = versionLine[0].match(/Mozilla Firefox (\d+)\.(\d+)/);
 			const majorVersion = versionMatch ? parseInt(versionMatch[1], 10) : NaN;
 			if (Number.isNaN(majorVersion) || majorVersion < 152) {
-				fail('Firefox (release)', `${versionLine[0]} is below the minimum required version (152) — ` +
+				fail(label, `${versionLine[0]} is below the minimum required version (152) — ` +
 					'MV3 tabs.captureVisibleTab does not exist below Firefox 152 (see MV3_MIGRATION.md spike). ' +
-					'Install a newer release build or point $FIREFOX_BIN at one.');
+					'Install a newer build or point $FIREFOX_BIN at one.');
 			} else {
-				ok('Firefox (release)', `${versionLine[0]} (${bin}, ${where})`);
+				ok(label, `${versionLine[0]} (${bin}, ${where})`);
 			}
 		}
 	}
@@ -151,7 +142,7 @@ if (UAT_BROWSER === 'firefox') {
 		const { Builder } = await import('selenium-webdriver');
 		const firefox = (await import('selenium-webdriver/firefox.js')).default;
 		const opts = new firefox.Options();
-		if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
+		if (bin) { opts.setBinary(bin); }
 		opts.addArguments('-headless');
 		// Mirror the daemon's launch path exactly (this check exists to validate
 		// it): FF 153+ needs geckodriver's --allow-system-access opt-in for
@@ -201,7 +192,7 @@ if (UAT_BROWSER === 'firefox') {
 	// is a misconfiguration warning (not a hard fail) pointing at the
 	// provisioning command; the daemon itself fails fast and loudly if launch
 	// is attempted with nothing usable.
-	const found = resolveChromeBinary();
+	const found = resolveChromeBinary({ channel: UAT.channel });
 	if (found) {
 		ok('Chrome for Testing', `${found.version} (${found.bin})${found.branded ? ' — WARNING: Selenium cannot drive branded Chrome (UAT needs CfT)' : ''}`);
 		if (found.branded) {
@@ -260,8 +251,8 @@ if (UAT_BROWSER === 'firefox') {
 // 8. browser-daemon port is free (and not colliding with either E2E tier)
 {
 	const port = UAT.port;
-	if (RESERVED_E2E_PORTS.includes(port)) {
-		fail('UAT daemon port', `${port} collides with an E2E tier's port (${RESERVED_E2E_PORTS.join(', ')}) — pick another via $UAT_DAEMON_PORT`);
+	if (E2E_PORTS.includes(port)) {
+		fail('UAT daemon port', `${port} collides with an E2E tier's port (${E2E_PORTS.join(', ')}) — pick another via $UAT_DAEMON_PORT`);
 	} else {
 		const free = await new Promise((resolve) => {
 			const probe = net.createServer();

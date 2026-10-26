@@ -3,9 +3,10 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /**
- * Shared plumbing for the Chrome runtime tier (CHROME.md D1/D5).
+ * Shared Chrome plumbing for the E2E and UAT tiers (CHROME.md D1/D5).
  *
- * - `resolveChromeBinary()` — $CHROME_BIN, then the usual binary names.
+ * - `resolveChromeBinary({ channel })` — $CHROME_BIN, then the channel's
+ *   search order (the tier's channel comes from tests/_browsers/registry.mjs).
  * - `stageDevBuild()` — stages an UNPACKED dev build under dist/chrome-dev/:
  *   a copy of webextension/ with the merged Chrome-overlay manifest
  *   (scripts/build-manifest.mjs) plus an injected dev-only `key`, so the
@@ -50,12 +51,11 @@ export const CHROME_DEV_EXTENSION_ID = DEV_KEY.id;
  * 12):** the CDP-install half doesn't reproduce on branded stable 150 —
  * `browser.installExtension()` over the PIPE transport plus
  * `--enable-unsafe-extension-debugging` installs and runs the extension fine
- * on branded (`--load-extension` alone is still dead there). CfT-first
- * remains the DEFAULT order below for UAT/smoke/rasterize-icons callers
- * (Selenium, which those tiers use, still can't drive branded — the CDP
- * `Extensions` domain is pipe-only); the new Chrome E2E launcher
- * (`launch-chrome.mjs`) opts into branded-first via
- * `resolveChromeBinary({ prefer: 'branded' })` below.
+ * on branded (`--load-extension` alone is still dead there). The `cft`
+ * channel (CfT-first) remains the default for UAT/smoke callers (Selenium,
+ * which those use, still can't drive branded — the CDP `Extensions` domain is
+ * pipe-only); the Chrome E2E launcher (`launch-chrome.mjs`) runs the
+ * registry's `stable` channel (branded-first).
  * @return {string[]}
  */
 function cftCandidates() {
@@ -72,28 +72,31 @@ function cftCandidates() {
 	}
 }
 
+/** The Chrome channels `resolveChromeBinary` knows (registry tiers name one each). */
+export const CHROME_CHANNELS = Object.freeze(['stable', 'cft']);
+
 /**
  * Locate a runnable Chrome binary.
  *
- * `opts.prefer` selects the search order (CHROME.md Decision 12):
- *   - `'cft'` (default, UNCHANGED from before the D8 launcher existed):
- *     $CHROME_BIN → Chrome for Testing (newest cached) → branded/chromium as
- *     a last resort. Every caller except the new Chrome E2E launcher uses
- *     this default — the UAT daemon and Selenium-based smoke still can't
- *     drive branded Chrome (the CDP `Extensions` domain is pipe-only), so
- *     they need CfT preferred.
- *   - `'branded'`: $CHROME_BIN → google-chrome-stable/google-chrome (branded)
+ * `opts.channel` selects the search order (CHROME.md Decision 12):
+ *   - `'cft'` (default): $CHROME_BIN → Chrome for Testing (newest cached) →
+ *     branded/chromium as a last resort. The UAT tier and the Selenium-based
+ *     smoke can't drive branded Chrome (the CDP `Extensions` domain is
+ *     pipe-only), so they need CfT preferred.
+ *   - `'stable'`: $CHROME_BIN → google-chrome-stable/google-chrome (branded)
  *     → Chrome for Testing (fallback lane, when no branded binary exists) →
- *     chromium as a last resort. Used only by `launch-chrome.mjs` (the
- *     Chrome E2E tier's production-binary lane).
- * @param {{prefer?: 'cft'|'branded'}} [opts]
+ *     chromium as a last resort. The E2E tier's production-binary lane.
+ * @param {{channel?: string}} [opts]
  * @return {{bin: string, version: string, branded: boolean} | null}
  */
-export function resolveChromeBinary({ prefer = 'cft' } = {}) {
+export function resolveChromeBinary({ channel = 'cft' } = {}) {
+	if (!CHROME_CHANNELS.includes(channel)) {
+		throw new Error(`unknown Chrome channel "${channel}" — expected one of: ${CHROME_CHANNELS.join(', ')}`);
+	}
 	const cft = cftCandidates();
 	const branded = ['google-chrome-stable', 'google-chrome'];
 	const chromium = ['chromium', 'chromium-browser'];
-	const ordered = prefer === 'branded'
+	const ordered = channel === 'stable'
 		? [process.env.CHROME_BIN, ...branded, ...cft, ...chromium]
 		: [process.env.CHROME_BIN, ...cft, ...branded, ...chromium];
 	// Filtering with a type-guard (not bare `Boolean`) so tsc narrows

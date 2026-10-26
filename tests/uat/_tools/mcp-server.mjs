@@ -19,10 +19,10 @@
 //                               demand (~2.8k image tokens per shot viewed).
 //
 // Env:
-//   UAT_BROWSER        browser under test — selects the daemon's default port
+//   NTT_BROWSER        browser under test — selects the daemon's default port
 //   UAT_DAEMON_PORT    daemon port; overrides that default. Both are pinned by
 //                      whoever spawns this server (runner.mjs / mcp-smoke.mjs,
-//                      via uatChildEnv), so it attaches to the right daemon.
+//                      via browserChildEnv), so it attaches to the right daemon.
 //   ARTIFACTS_DIR      where screenshots are written/read for THIS scenario
 //   UAT_SCENARIO_LABEL scenario slug, embedded in screenshot filenames
 
@@ -32,10 +32,10 @@ import { fileURLToPath } from 'node:url';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { resolveUatEnv } from './uat-browsers.mjs';
+import { resolveBrowserEnv } from '../../_browsers/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = resolveUatEnv({ tool: 'mcp-server.mjs' }).port;
+const PORT = resolveBrowserEnv({ tier: 'uat', tool: 'mcp-server.mjs' }).port;
 const BASE = `http://127.0.0.1:${PORT}`;
 const ARTIFACTS_DIR = process.env.ARTIFACTS_DIR || path.resolve(__dirname, '../artifacts');
 const SCENARIO_LABEL = process.env.UAT_SCENARIO_LABEL || '';

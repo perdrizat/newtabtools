@@ -14,12 +14,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Builder, By, until } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
-import { newTabURL } from './urls.mjs';
-import { resolveUatEnv } from './uat-browsers.mjs';
+import { newTabURL, resolveBrowserEnv } from '../../_browsers/registry.mjs';
+import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
 
-// Firefox-only by design; refuse any other UAT_BROWSER rather than silently
+// Firefox-only by design; refuse any other NTT_BROWSER rather than silently
 // running Firefox under a Chrome request.
-resolveUatEnv({ tool: 'browser-smoke.mjs', supported: ['firefox'] });
+const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'browser-smoke.mjs', supported: ['firefox'] });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // XPI_DIR holds the canonical build output (.xpi) — same artifact UAT and AMO
@@ -46,7 +46,8 @@ const xpi = resolveXpi();
 console.log(`[smoke] extension: ${xpi}`);
 
 const options = new firefox.Options();
-if (process.env.FIREFOX_BIN) { options.setBinary(process.env.FIREFOX_BIN); }
+const fx = resolveFirefoxBinary({ channel: UAT.channel });
+if (fx.bin) { options.setBinary(fx.bin); }
 options.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 options.addArguments('-headless'); // drop to watch it run
 

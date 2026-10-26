@@ -20,7 +20,7 @@
 //   - Established split (browserless / Playwright launch-server / Selenium Grid):
 //     browser runtime is separate from the agent's MCP context.
 //
-// Browser: $UAT_BROWSER selects `firefox` (default) or `chrome` (chrome-prep
+// Browser: $NTT_BROWSER selects `firefox` (default) or `chrome` (chrome-prep
 // D6) — one parameterized daemon, not a forked implementation, per the
 // manifest-overlay philosophy (single source tree, not parallel branches).
 // The two browsers diverge in exactly one structural way — WHEN the extension
@@ -42,11 +42,12 @@
 //     also answers to the `chrome.*` alias) and Selenium's browser-agnostic
 //     API, so it needs no per-browser branching.
 //
-// PORT: each browser has its own default daemon port, defined once in the
-// browser registry (uat-browsers.mjs), so both daemons can run in parallel —
-// see tests/e2e-chrome/README.md "Port allocation". $UAT_DAEMON_PORT
-// overrides it. The registry keeps every default clear of the E2E tiers'
-// ports, and preflight.mjs enforces the port is free before the runner starts.
+// PORT and CHANNEL: each browser has its own default daemon port and UAT
+// channel (Firefox release, Chrome for Testing), defined once in the browser
+// registry (tests/_browsers/registry.mjs), so both daemons can run in
+// parallel. $UAT_DAEMON_PORT overrides the port, $FIREFOX_BIN / $CHROME_BIN
+// the binary. The registry keeps every port unique across tiers, and
+// preflight.mjs enforces the port is free before the runner starts.
 //
 // Endpoints (all JSON):
 //   GET  /health          -> { status, ready, port }
@@ -62,14 +63,14 @@
 //   POST /close_other_tabs                      -> { ok, closed }   (→ recently-closed)
 //   POST /dismiss_consent                       -> { ok, clicked }  (accept cookies)
 //
-// Env: UAT_BROWSER=firefox|chrome, FIREFOX_BIN, CHROME_BIN, XPI_DIR/EXTENSION_XPI
+// Env: NTT_BROWSER=firefox|chrome, FIREFOX_BIN, CHROME_BIN, XPI_DIR/EXTENSION_XPI
 //      (Firefox only), ARTIFACTS_DIR, UAT_DAEMON_PORT, UAT_WINDOW=WxH (viewport),
 //      UAT_VIEWPORT=WxH (exact inner size), UAT_SHOT_SCALE (0<s≤1), UAT_SEED_URLS
 //      + UAT_NEWS_URLS (environment seed).
 //
 // Run standalone (after `pnpm build`):
 //   FIREFOX_BIN=/opt/firefox/firefox node tests/uat/_tools/browser-daemon.mjs
-//   UAT_BROWSER=chrome node tests/uat/_tools/browser-daemon.mjs
+//   NTT_BROWSER=chrome node tests/uat/_tools/browser-daemon.mjs
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -78,18 +79,18 @@ import { fileURLToPath } from 'node:url';
 import { Builder, By } from 'selenium-webdriver';
 import firefox from 'selenium-webdriver/firefox.js';
 import chromeWebdriver from 'selenium-webdriver/chrome.js';
-import { newTabURL } from './urls.mjs';
-import { resolveUatEnv } from './uat-browsers.mjs';
-import { resolveChromeBinary, stageDevBuild, chromeArgs } from '../../e2e-chrome/_tools/chrome-env.mjs';
+import { newTabURL, resolveBrowserEnv } from '../../_browsers/registry.mjs';
+import { resolveChromeBinary, stageDevBuild, chromeArgs } from '../../_browsers/chrome/chrome-env.mjs';
+import { resolveFirefoxBinary } from '../../_browsers/firefox/firefox-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
 
 // `supported` lists the browsers this file has code paths for (makeDriver,
-// installExtension, withSeedTimeout). Registering a new browser in
-// uat-browsers.mjs makes the daemon refuse it here, by name, until those
-// branches exist — rather than falling through to the Firefox path.
-const UAT = resolveUatEnv({ tool: 'browser-daemon.mjs', supported: ['firefox', 'chrome'] });
+// installExtension, withSeedTimeout). Registering a new browser in the
+// registry makes the daemon refuse it here, by name, until those branches
+// exist — rather than falling through to the Firefox path.
+const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'browser-daemon.mjs', supported: ['firefox', 'chrome'] });
 const UAT_BROWSER = UAT.browser;
 const PORT = UAT.port;
 const XPI_DIR = process.env.XPI_DIR || path.resolve(ROOT, 'dist');
@@ -223,13 +224,13 @@ async function applyWindowSize(driver) {
 
 async function makeDriver() {
 	if (UAT_BROWSER === 'chrome') {
-		const found = resolveChromeBinary();
+		const found = resolveChromeBinary({ channel: UAT.channel });
 		if (!found) {
 			throw new Error('no Chrome binary found ($CHROME_BIN or the Puppeteer cache) — run `pnpm chrome:provision`.');
 		}
 		// Stage the unpacked dev build (merged Chrome manifest + committed dev
 		// key) so `--load-extension` gets a deterministic extension id — see
-		// tests/e2e-chrome/_tools/chrome-env.mjs. Unlike Firefox's installAddon,
+		// tests/_browsers/chrome/chrome-env.mjs. Unlike Firefox's installAddon,
 		// this MUST happen at launch (see the module header divergence note), so
 		// NEWTAB_URL is resolved here rather than at module scope.
 		chromeStage = stageDevBuild();
@@ -254,7 +255,10 @@ async function makeDriver() {
 
 	NEWTAB_URL = newTabURL(UUID, 'firefox');
 	const opts = new firefox.Options();
-	if (process.env.FIREFOX_BIN) { opts.setBinary(process.env.FIREFOX_BIN); }
+	const fx = resolveFirefoxBinary({ channel: UAT.channel });
+	if (!fx.bin) { throw new Error(`Firefox ${UAT.channel} not found ('${fx.name}' via ${fx.source}) — run the UAT preflight.`); }
+	opts.setBinary(fx.bin);
+	log(`firefox binary: ${fx.bin} (channel ${UAT.channel}, via ${fx.source})`);
 	opts.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: UUID }));
 	opts.addArguments('-headless');
 	// 'eager' returns each `driver.get()` at DOMContentLoaded instead of waiting

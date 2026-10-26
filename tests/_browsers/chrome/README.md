@@ -1,39 +1,46 @@
-# Chrome runtime tier (CHROME.md D1+)
+# Chrome test plumbing (CHROME.md D1+)
 
-Tooling for running the extension on real Chrome. Established in D1; grew
-into a smoke suite in D5 (11 checks, later reduced to 10 — GH #23); D5b adds a
-full SUITE-PARITY runner that runs the same 32 Firefox E2E test files against
+Everything Chrome-specific that the E2E and UAT tiers share, under the
+browser registry's `chrome` key ([`../registry.mjs`](../registry.mjs)).
+Established in D1; grew into a smoke suite in D5; D5b added SUITE PARITY: the same E2E test files run against
 Chrome.
+
+| File | Role |
+|---|---|
+| `chrome-env.mjs` | `resolveChromeBinary({ channel })` (`stable` = branded-first, `cft` = CfT-first), `stageDevBuild()`, the dev-key id |
+| `e2e.sh` | E2E launcher hook sourced by `tests/e2e/run.sh chrome` |
+| `launch-chrome.mjs` | the long-lived dual-transport launcher the hook spawns |
+| `provision-cft.mjs`, `stage-dev.mjs`, `smoke.mjs`, `selenium-smoke.mjs` | the `chrome:*` pnpm scripts |
+| `dev-key.json` | committed public key → deterministic extension id |
 
 ```bash
 pnpm chrome:provision        # one-time: fetch Chrome for Testing (~200 MB, ~/.cache/puppeteer)
-pnpm chrome:smoke            # Puppeteer/CDP first-boot smoke (10 checks)
+pnpm chrome:smoke            # Puppeteer/CDP first-boot smoke
 pnpm chrome:smoke:selenium   # Selenium path (chromedriver via Selenium Manager) — de-risks UAT-on-Chrome (D6)
-pnpm test:e2e:chrome         # D5b: the full 32-file Firefox E2E suite, run against Chrome
+pnpm test:e2e:chrome         # D5b: the full E2E suite, run against Chrome
 ```
 
 ## The parity suite (D5b)
 
-`pnpm test:e2e:chrome` (`run_chrome_tests.sh`, rewritten for D8/Decision 12)
-is the Chrome sibling of `tests/e2e/run_esr_tests.sh`. It spawns
-`_tools/launch-chrome.mjs` as a long-lived background process: the launcher
-resolves a binary **branded-first** (`resolveChromeBinary({prefer:
-'branded'})` — the E2E tier runs the PRODUCTION binary users actually have;
+`pnpm test:e2e:chrome` is `tests/e2e/run.sh chrome`: the shared runner
+resolves the registry's Chrome E2E channel (`stable`) and port, takes the
+per-browser lock (`tests/e2e/.runner-lock-chrome`), and sources `e2e.sh`,
+which spawns `launch-chrome.mjs` as a long-lived background process. The
+launcher resolves a binary **branded-first** (`resolveChromeBinary({ channel:
+'stable' })` — the E2E tier runs the PRODUCTION binary users actually have;
 the cached CfT is only the fallback lane when no branded binary exists),
-stages the unpacked dev build (`chrome-env.mjs`'s `stageDevBuild()`), and
-launches Chrome with a **dual transport**: Puppeteer `pipe: true` (the CDP
-`Extensions` install domain is pipe-only on branded — `installExtension`
-loads the staged build over it) plus `--remote-debugging-port=9223` for the
-vitest suite's own `puppeteer.connect`. The launcher writes a ready-file
-(`tests/e2e-chrome/.launcher-ready`) only after the extension's
+stages the unpacked dev build (`stageDevBuild()`), and launches Chrome with a
+**dual transport**: Puppeteer `pipe: true` (the CDP `Extensions` install
+domain is pipe-only on branded — `installExtension` loads the staged build
+over it) plus `--remote-debugging-port=<registry port, 9223>` for the vitest
+suite's own `puppeteer.connect`. The launcher writes a ready-file
+(`tests/_browsers/chrome/.launcher-ready`) only after the extension's
 service-worker target is confirmed visible **over the port** (41 ms in the
-first branded run — the dual-transport probe's one open caveat, closed);
-the shell script waits on that file, runs `NTT_E2E_BROWSER=chrome npx
-vitest run --project e2e` (the exact same `tests/e2e/**/*.test.ts` files the
-Firefox tier runs), then SIGTERMs the launcher, which closes Chrome and its
-Puppeteer-managed temp profile. Its own `mkdir`-based concurrency lock
-(`tests/e2e-chrome/.runner-lock`) mirrors the Firefox runner's, so the two
-tiers never collide even though they now both hold a fixed port.
+first branded run — the dual-transport probe's one open caveat, closed); the
+hook waits on that file, the runner runs `vitest run --project e2e` with
+`NTT_BROWSER=chrome` (the exact same `tests/e2e/**/*.test.ts` files the
+Firefox run uses), then the hook SIGTERMs the launcher, which closes Chrome
+and its Puppeteer-managed temp profile.
 
 (Historical: through D5b this runner launched CfT directly with
 `--load-extension`, which branded Chrome ignores — the canary-gate incident
@@ -50,9 +57,12 @@ pnpm test:e2e:chrome tests/e2e/loads-cleanly.test.ts
 
 ### Helpers seam
 
-`tests/e2e/_helpers.ts` gained an `NTT_E2E_BROWSER` switch (`IS_CHROME`,
-`CDP_ENDPOINT`) rather than a parallel helpers file: `connectToFirefox` (name
-kept — every one of the 32 test files already imports it, so keeping it
+`tests/e2e/_helpers.ts` resolves the browser from the registry (`BROWSER`,
+`ENGINE`, `CDP_ENDPOINT`) rather than having a parallel helpers file — tests
+branch on `ENGINE === 'chromium'`, so a Chromium-based third browser inherits
+Chrome's handling. (Originally, D5b: an `NTT_E2E_BROWSER` switch and
+`IS_CHROME`; harmonized 2026-10-26.) `connectToFirefox` (name
+kept — every test file already imports it, so keeping it
 avoids call-site churn on a suite this arc's own gate requires stay
 byte-identical for Firefox) branches BiDi@9222 vs CDP@9223;
 `getNewTabURL`/`newTabURL` branch `moz-extension://<uuid>/` (a per-profile
@@ -75,16 +85,16 @@ First full run: **125/126 green with zero test-file changes.** After triage:
 
 | File | Outcome |
 |---|---|
-| `event-page-lifecycle.test.ts` | **Skipped on Chrome (`describe.skipIf(IS_CHROME)`, GH #23).** The 2026-07-16 adaptation swapped in `restartChromeServiceWorker` for a CDP kill/respawn, but re-probing (2026-07-17, audit M2) found `Target.closeTarget` is terminal under CfT headless CDP automation — the worker never respawns on any wake, so the "respawn" assertion was vacuous. Runs for real on Firefox (idle-timeout pref); the background code is shared through the `api` seam, so that IS the real respawn-hygiene coverage. |
+| `event-page-lifecycle.test.ts` | **Skipped on Chrome (`describe.skipIf(ENGINE === 'chromium')`, GH #23).** The 2026-07-16 adaptation swapped in `restartChromeServiceWorker` for a CDP kill/respawn, but re-probing (2026-07-17, audit M2) found `Target.closeTarget` is terminal under CfT headless CDP automation — the worker never respawns on any wake, so the "respawn" assertion was vacuous. Runs for real on Firefox (idle-timeout pref); the background code is shared through the `api` seam, so that IS the real respawn-hygiene coverage. |
 | `favicon-real-sites.test.ts` | Failed once under full-suite load, passed clean on a solo re-run — public-internet timing flakiness, not Chrome-specific. *(File removed 2026-10-26: live-site favicon coverage moved to UAT.)* |
 | `drag-layout.test.ts` / `drag-reorder.test.ts` | Ran unmodified, green. Header comments extended to note the existing known-flaky-DnD quarantine policy applies identically on Chrome. |
 | `theme.test.ts` | Ran unmodified, green — never touches the Firefox-only `browser.theme` bonus API (Decision 2's `prefers-color-scheme` base is what's under test). |
 | `boot-timing.test.ts` | Ran unmodified, green under the existing generous shared bound (Chrome medians were faster, not slower, than Firefox's on CfT 151) — header notes a per-browser re-baseline is still future work if the instrument ever tightens. |
 | All 27 other files | Ran unmodified, green — no divergence found. |
 
-**Parity: 123/125 run + 2 skipped (GH #23)** of Firefox E2E test cases on
-Chrome (124/126 before `favicon-real-sites` was removed 2026-10-26) — comfortably above the ≥90% acceptance target. (The 2 skips are
-`event-page-lifecycle`'s SW-respawn tests; see the triage row above.)
+**Parity:** every Firefox E2E test runs on Chrome except
+`event-page-lifecycle`'s SW-respawn tests, which skip (GH #23; see the triage
+row above) — comfortably above the ≥90% acceptance target.
 
 ## Three hard-won harness facts (2026-07-15, D1)
 
@@ -100,9 +110,9 @@ and every `chrome-extension://` URL answers `net::ERR_BLOCKED_BY_CLIENT`:
    branded via `installExtension` over the pipe; **Selenium/chromedriver
    still cannot drive branded at all** (its port transport can't reach the
    pipe-only `Extensions` domain), so the UAT tier stays on **Chrome for
-   Testing** (`pnpm chrome:provision`). `resolveChromeBinary()` defaults to
-   CfT-first for those callers; `{prefer: 'branded'}` is the E2E launcher's
-   opt-in. A CfT/branded major-version drift warning
+   Testing** (`pnpm chrome:provision`) — the registry's `cft` UAT channel.
+   `resolveChromeBinary()` defaults to CfT-first for those callers; the E2E
+   launcher runs the registry's `stable` channel (branded-first). A CfT/branded major-version drift warning
    (`cftStalenessWarning`) fires in provision and the UAT preflight.
 2. **Puppeteer path: install over CDP, not flags.** `browser.
    installExtension(dir)` with `pipe: true` +
@@ -118,25 +128,27 @@ for Testing — that's what makes a D6 UAT-on-Chrome daemon feasible.
 
 ## Port allocation (parallel-run safety)
 
-The Chrome tier is designed to run CONCURRENTLY with the Firefox tiers:
+The Chrome tier is designed to run CONCURRENTLY with the Firefox tiers. Every
+fixed port is a field in [`../registry.mjs`](../registry.mjs), and
+`tests/integration/browser-registry.test.ts` asserts they are unique across
+browsers and tiers and that no tool hardcodes one:
 
 | Consumer | Port |
 |---|---|
-| Firefox E2E (`run_esr_tests.sh`, BiDi) | 9222 |
-| Firefox UAT daemon (`browser-daemon.mjs`, `$UAT_BROWSER=firefox` — default) | 9876 (`$UAT_DAEMON_PORT`) |
-| Chrome UAT daemon (`browser-daemon.mjs`, `$UAT_BROWSER=chrome` — D6) | 9877 (`$UAT_DAEMON_PORT`) |
+| Firefox E2E (`test:e2e:firefox`, BiDi) | 9222 |
+| Chrome E2E (`test:e2e:chrome`, CDP — D5b) | 9223 |
+| Firefox UAT daemon (`browser-daemon.mjs`, `$NTT_BROWSER=firefox` — default) | 9876 (`$UAT_DAEMON_PORT`) |
+| Chrome UAT daemon (`browser-daemon.mjs`, `$NTT_BROWSER=chrome` — D6) | 9877 (`$UAT_DAEMON_PORT`) |
 | Chrome Puppeteer smoke path (`chrome:smoke`) | **none** — pipe transport, no debugging port |
 | Chrome Selenium path (smokes, D6 UAT daemon) | chromedriver: ephemeral per session |
-| **Chrome E2E parity runner (`run_chrome_tests.sh`, `test:e2e:chrome` — D5b)** | **9223 — ACTIVE** (was reserved; now the CDP debugging port `puppeteer.connect({ browserURL: ... })` targets) |
 
-The parity runner's own `tests/e2e-chrome/.runner-lock` (mirroring the
-Firefox tier's lock) is what lets it share the machine with the Firefox E2E
-tier even though both now hold a fixed port — they're different ports, so
-no collision, just don't run two `test:e2e:chrome` invocations at once.
+Each browser's E2E run holds its own lock (`tests/e2e/.runner-lock-<browser>`),
+so Firefox and Chrome E2E share the machine freely; just don't run two
+`test:e2e:chrome` invocations at once.
 
 ## Deterministic extension ID
 
-`_tools/dev-key.json` is a committed PUBLIC key: Chrome derives the
+`dev-key.json` is a committed PUBLIC key: Chrome derives the
 extension ID (`lncefjbclhbbikhanecleanbbohpiclk`) from the manifest `key`
 field, so every profile/machine gets the same ID. No private key exists —
 none is needed to load unpacked. The key is injected only by the dev staging

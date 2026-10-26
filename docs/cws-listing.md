@@ -103,7 +103,7 @@ and rejects blank ones.
 1–5 images (AMO used 2400×1800, up to 10). So the AMO shots must be
 **re-captured at 1280×800** for CWS — the `scripts/amo-screenshots.mjs`
 generator drives the UAT browser daemon at a fixed viewport; point it at Chrome
-(the daemon is already `$UAT_BROWSER`-parameterized) and set the capture size to
+(the daemon is already `$NTT_BROWSER`-parameterized) and set the capture size to
 1280×800, or crop/downscale the existing 2400×1800 masters.
 
 Pick the five strongest from the AMO set (CWS shows the first as primary):

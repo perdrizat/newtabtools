@@ -35,10 +35,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newTabURL } from './urls.mjs';
-import { resolveUatEnv, uatChildEnv } from './uat-browsers.mjs';
+import { newTabURL, resolveBrowserEnv, browserChildEnv } from '../../_browsers/registry.mjs';
 import { parseReport, deriveVerdict, checkName } from './report-verdict.mjs';
-import { CHROME_DEV_EXTENSION_ID } from '../../e2e-chrome/_tools/chrome-env.mjs';
+import { CHROME_DEV_EXTENSION_ID } from '../../_browsers/chrome/chrome-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../../..');
@@ -47,11 +46,11 @@ const ARTIFACTS_ROOT = path.join(ROOT, 'tests/uat/artifacts');
 const FIXTURE = path.join(ROOT, 'tests/uat/newtabtools_knowngood.zip');
 
 // chrome-prep D6: one parameterized runner drives either browser daemon.
-// $UAT_BROWSER selects the browser; everything below (preflight, daemon
+// $NTT_BROWSER selects the browser; everything below (preflight, daemon
 // spawn, scenario loop, MCP env) is shared. The per-browser values — port,
-// health budget, artifacts-dir suffix — come from the registry
-// (uat-browsers.mjs); only the extension id below is runner-specific.
-const UAT = resolveUatEnv({ tool: 'runner.mjs', supported: ['firefox', 'chrome'] });
+// health budget, channel — come from the registry
+// (tests/_browsers/registry.mjs); only the extension id below is runner-specific.
+const UAT = resolveBrowserEnv({ tier: 'uat', tool: 'runner.mjs', supported: ['firefox', 'chrome'] });
 const UAT_BROWSER = UAT.browser;
 const FIREFOX_UUID = process.env.NTT_UAT_UUID || 'e1a2b3c4-d5e6-4789-9abc-def012345678';
 const EXTENSION_ID = { firefox: FIREFOX_UUID, chrome: CHROME_DEV_EXTENSION_ID }[UAT_BROWSER];
@@ -61,11 +60,11 @@ const NEWTAB_URL = newTabURL(EXTENSION_ID, UAT_BROWSER);
 // never overwrite each other's screenshots/reports. Screenshots are prefixed
 // with the same stamp + scenario label so opening the first and paging through
 // browses them in capture order (e.g. 20260603-071342-restore-dogfood-01-grid.png).
-// Each run's directory carries an explicit `-ff` / `-cft` browser token
-// (matching the E2E `_artifacts-ff` / `_artifacts-cft` dirs) so the two tiers'
+// Each run's directory carries the registry browser name (`-firefox` /
+// `-chrome`, matching the E2E `_artifacts/<browser>/` dirs) so the browsers'
 // runs are immediately distinguishable when browsing tests/uat/artifacts/.
 const RUN_STAMP = runStamp();
-const RUN_DIR = path.join(ARTIFACTS_ROOT, `${RUN_STAMP}-${UAT.artifactSuffix}`);
+const RUN_DIR = path.join(ARTIFACTS_ROOT, `${RUN_STAMP}-${UAT.browser}`);
 const MCP_CONFIG = path.join(__dirname, 'mcp-config.json');
 
 function runStamp(d = new Date()) {
@@ -216,7 +215,7 @@ function ensureSkillSymlink() {
 	console.log(`runner: linked .claude/skills/uat-scenario.md -> ${target}`);
 }
 
-console.log(`runner: browser=${UAT_BROWSER}, newtab origin=${NEWTAB_URL}`);
+console.log(`runner: browser=${UAT_BROWSER}, channel=${UAT.channel}, newtab origin=${NEWTAB_URL}`);
 
 // ─── 1. preflight ─────────────────────────────────────────────────────────────
 
@@ -263,10 +262,10 @@ console.log(`runner: artifacts for this run -> ${RUN_DIR}/`);
 
 // ─── 3. start the browser daemon ──────────────────────────────────────────────
 
-console.log(`\n=== UAT runner: starting ${UAT_BROWSER} browser daemon (port ${PORT}) ===\n`);
+console.log(`\n=== UAT runner: starting ${UAT_BROWSER} (${UAT.channel}) browser daemon (port ${PORT}) ===\n`);
 const daemon = spawn('node', [DAEMON], {
 	stdio: ['ignore', 'inherit', 'inherit'],
-	env: uatChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR }),
+	env: browserChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR }),
 });
 
 // Record an early exit so waitHealthy can fail fast instead of polling a corpse.
@@ -339,7 +338,7 @@ try {
 			{
 				input: prompt,
 				stdio: ['pipe', 'pipe', 'inherit'],
-				env: uatChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR, UAT_SCENARIO_LABEL: slug }),
+				env: browserChildEnv(UAT, process.env, { ARTIFACTS_DIR: RUN_DIR, UAT_SCENARIO_LABEL: slug }),
 				encoding: 'utf8',
 			},
 		);

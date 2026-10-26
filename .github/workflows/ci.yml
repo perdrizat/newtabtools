@@ -30,7 +30,8 @@ jobs:
           cache: 'pnpm'
 
       - name: Install Firefox ESR
-        # E2E runs on the production binary (CHROME.md Decision 12): ESR,
+        # E2E runs on the production binary (CHROME.md Decision 12): the
+        # registry's E2E channel for Firefox is ESR (tests/_browsers/registry.mjs),
         # >= 153 (MV3 capture needs >= 152). Driver quirks per version:
         # tests/BROWSER-COMPAT.md.
         run: |
@@ -69,7 +70,7 @@ jobs:
         run: pnpm test:fast
 
       - name: E2E tests (Puppeteer + BiDi)
-        run: pnpm test:e2e:ff
+        run: pnpm test:e2e:firefox
         env:
           E2E_VERBOSE: 1
 
@@ -78,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-failure-screenshots
-          path: tests/e2e/_artifacts-*/
+          path: tests/e2e/_artifacts/
           if-no-files-found: ignore
 
   # Chrome tier (CHROME.md D5). A separate job so it runs in PARALLEL with

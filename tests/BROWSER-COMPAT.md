@@ -13,11 +13,11 @@ current-state document plus an append-only log.
 
 | Tier | Browser | Driver route | Status |
 |---|---|---|---|
-| E2E Firefox | `firefox-esr` 153.5.1esr | web-ext + Puppeteer over WebDriver BiDi, `--remote-allow-system-access` | 125/125 |
-| E2E Firefox (not the target) | `firefox` 158.0.1 | same | 118/126, 7 privileged-scope failures + favicon |
-| UAT Firefox | `firefox` 158.0.1 | Selenium + geckodriver (Selenium Manager copy), `--allow-system-access` | 12/12 |
-| E2E Chrome | branded stable / CfT | Puppeteer pipe + `installExtension` + `--enable-unsafe-extension-debugging`, CDP port 9223 | 123/125 + 2 skip (GH #23) |
-| UAT Chrome | Chrome for Testing | Selenium + chromedriver, `--load-extension` | 12/12 |
+| E2E Firefox | `firefox-esr` 153.5.1esr | web-ext + Puppeteer over WebDriver BiDi, `--remote-allow-system-access` | all pass |
+| E2E Firefox (not the target) | `firefox` 158.0.1 | same | upload tests and their dependents fail (privileged-scope gate, §2) |
+| UAT Firefox | `firefox` 158.0.1 | Selenium + geckodriver (Selenium Manager copy), `--allow-system-access` | all pass |
+| E2E Chrome | branded stable / CfT | Puppeteer pipe + `installExtension` + `--enable-unsafe-extension-debugging`, CDP port 9223 | all pass; SW-lifecycle tests skip (GH #23) |
+| UAT Chrome | Chrome for Testing | Selenium + chromedriver, `--load-extension` | all pass |
 
 `favicon-real-sites.test.ts` (live third-party sites, network-flaky on every
 lane) was removed from E2E on 2026-10-26; live-site favicons are covered by
@@ -34,7 +34,7 @@ Planned successor tier for this notebook's probing work: [`compat/PLAN.md`](comp
 - **Symptom:** `Navigation ... is not allowed in this context`, then every test
   fails with "Extension runtime not available".
 - **Fix (in place):** opt into system access. Firefox flag
-  `--remote-allow-system-access` (E2E, `run_esr_tests.sh`); geckodriver flag
+  `--remote-allow-system-access` (E2E, `tests/_browsers/firefox/e2e.sh`); geckodriver flag
   `--allow-system-access` via `ServiceBuilder` (UAT; rejected as a capability
   by design). Mozilla (whimboo, geckodriver#2250) states this mode is the
   intended route for extension testing; it is not a workaround that will be
@@ -125,10 +125,12 @@ Do not re-research these unless the stated reason changes.
 ## Re-validation checklist (run on every ESR major bump or a red tier after an update)
 
 1. `firefox-esr --version`, `firefox --version`; record both below.
-2. Run `pnpm test:e2e:ff`. If it fails, grep `tests/e2e/_artifacts-ff/run.log`
+2. Run `pnpm test:e2e:firefox`. If it fails, grep `tests/e2e/_artifacts/firefox/run.log`
    for the error strings above to classify each failure.
 3. Run the same suite on release to see what is coming next:
-   `FIREFOX_ESR_BIN=firefox pnpm test:e2e:ff`.
+   `FIREFOX_BIN=firefox pnpm test:e2e:firefox`.
+   (Each tier's default channel is set in `tests/_browsers/registry.mjs`;
+   change it there, not in the scripts.)
 4. Check the upstream sources for new gates: MDN "Firefox NNN for developers"
    (WebDriver section), the fxdx.dev WebDriver newsletter, and the source of
    `remote/shared/webdriver/...` / `RootBiDiModule.sys.mjs` for

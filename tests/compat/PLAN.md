@@ -18,7 +18,9 @@ it. Three parts:
    *or* newly working) is the signal.
 2. **E2E on other channels.** The existing suite, unchanged, run against
    beta/nightly binaries through the runners' existing overrides
-   (`$FIREFOX_ESR_BIN`, `$CHROME_BIN`).
+   (`$FIREFOX_BIN`, `$CHROME_BIN`). Channels are named the same way as in
+   `tests/_browsers/registry.mjs`, whose per-tier `channel` fields the
+   compat tier reads as its baseline.
 3. **Experiments.** Dated, throwaway-by-design scripts that try a workaround
    against a specific version. Each ends in a notebook log entry; an adopted
    workaround moves into `tests/e2e/_helpers.ts`, and the experiment stays as
@@ -93,6 +95,9 @@ read and dismissed defeats the tier.
    CONTRIBUTING.md, `tests/e2e/README.md`, `ci.yml`, the audit note).
 2. Probe harness + `run.mjs` for Firefox, ESR and release, using the system
    binaries; port the hand-run probes. Commit expected matrices for both.
+   Retire `tests/e2e/_debug/probe_bidi.sh` and `_debug/bidi_proof.mjs` (and
+   their `tests/e2e/README.md` entries): the "endpoint up / session opens"
+   probe supersedes them.
 3. First experiment: `devtools.console.stdout.content` (Firefox prints console
    output to stdout) for extension pages. Outcome decides the fix for
    `loads-cleanly.test.ts`, whose console assertion is vacuous on Firefox today.
