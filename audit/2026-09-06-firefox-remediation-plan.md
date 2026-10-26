@@ -4,6 +4,8 @@
 **Status:** root cause proven by probe; fix strategies partly verified, partly open.
 **Supersedes rev 1**, whose diagnosis was wrong on both tiers (see "What rev 1 got wrong").
 
+> **Superseded 2026-10-26** by [`tests/BROWSER-COMPAT.md`](../tests/BROWSER-COMPAT.md): the system-access flag does lift the navigation restriction (verified on 153.5.1esr and 154+); the remaining release-only failures are the `input.setFiles` privileged-scope gate.
+
 ---
 
 ## Root cause (one cause, both tiers)

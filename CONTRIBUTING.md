@@ -58,7 +58,7 @@ All development on this project is test-driven. Before writing any code, please 
 
 ### Development Workflow
 
-1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js and Firefox (release-channel, >= 152).
+1.  **Setup:** Follow the guide in [`TESTING.md`](TESTING.md) to install Node.js, Firefox ESR (>= 153, the E2E target) and release-channel Firefox (the UAT target).
 2.  **TDD:** We follow a strict red/green TDD workflow. Unit and Integration tests run on every save; E2E tests run at feature completion.
 3.  **CLI:** See the **[CLI Reference](TESTING.md#cli-reference)** for the list of available commands (`pnpm dev`, `pnpm test:fast`, etc.). This project uses **pnpm** as the package manager (enforced by a `preinstall` guard so the `minimumReleaseAge` supply-chain rule in `pnpm-workspace.yaml` actually applies).
 
@@ -90,7 +90,7 @@ pnpm build
 `pnpm build` takes an optional target (`pnpm build firefox`, the default —
 byte-identical to a plain `web-ext build --source-dir webextension/`; or
 `pnpm build chrome` — the Chrome manifest overlay build, now fully validated:
-Chrome E2E parity (124/126 run + 2 SW-lifecycle tests skipped on Chrome, GH #23),
+Chrome E2E parity (123/125 run + 2 SW-lifecycle tests skipped on Chrome, GH #23),
 Chrome UAT 11/11, and the 10-check smoke all pass against it — see
 [`CHROME.md`](CHROME.md)). For manual "Load unpacked"
 testing in any Chrome, `pnpm chrome:stage` produces an unpacked
@@ -123,7 +123,7 @@ AMO-only release. Notes for whoever runs the 3.0.0 resubmission:
 
 ### Architecture
 
-- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete on the automated tiers — Chrome E2E suite parity (124/126 run; 2 SW-lifecycle tests skip on Chrome, GH #23), Chrome UAT (11/11), and the smoke are green (`minimum_chrome_version` 148) — but a 2026-07-17 manual pass on **branded stable** Chrome exposed the canary-gate incident (CfT honored a canary-gated manifest key that stable rejects), opening the D8 remediation arc: the JSON-safe **wire codec** (CHROME.md Decision 11) now carries binary payloads over plain JSON messaging, and the tiers split across production/current binaries (Decision 12). Store release prep (D7) is gated on D8; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
+- **Target:** Firefox-first (Manifest V3, `strict_min_version` 152.0). The Chrome port (stage 3) is functionally complete on the automated tiers — Chrome E2E suite parity (123/125 run; 2 SW-lifecycle tests skip on Chrome, GH #23), Chrome UAT (11/11), and the smoke are green (`minimum_chrome_version` 148) — but a 2026-07-17 manual pass on **branded stable** Chrome exposed the canary-gate incident (CfT honored a canary-gated manifest key that stable rejects), opening the D8 remediation arc: the JSON-safe **wire codec** (CHROME.md Decision 11) now carries binary payloads over plain JSON messaging, and the tiers split across production/current binaries (Decision 12). Store release prep (D7) is gated on D8; [`CHROME.md`](CHROME.md) is the program plan and live status board; ships as 3.0.0 to both stores.
 - **Core:** The New Tab page is an HTML5 document (`webextension/newTab.html`) registered via `chrome_url_overrides.newtab` (converted from XHTML in the 2026-07 modernization arc; records in git history and `audit/`), loaded through a single `<script type="module" src="page-main.js">` entry. Post-chrome-prep, the page is ~20 feature modules with no `globalThis` bridges anywhere — every cross-reference is a real `import`/`export`, including the E2E/UAT test harness (chrome-prep C3d):
   - **Boot/controller:** `newTab.js` (the residual controller: startup, event-listener wiring, `updateUI` dispatch, tile-tab editing, drawer/context-menu chrome) + `page-main.js` (the single orchestrator: side-effect imports in load order, then boot calls plus the `Prefs.onChange` page listener).
   - **Grid/site/cell/page:** `grid.js`/`site.js`/`cell.js`/`page.js` — the former `fx-newTab.js` monolith, split in chrome-prep C4c. `newTab.js` and `grid.js`/`page.js` form a legal call-time-only ESM cycle (no top-level cross-module calls — enforced by `tests/integration/page-module-scope.test.ts`).
@@ -153,7 +153,7 @@ MV3 has landed on both targets; **Chrome** (stage 3) is in the D8 stable-Chrome 
 
 ### After Finishing Feature Work
 
-- **Always run E2E tests** with `pnpm test:e2e` (runs both Firefox and Chrome sequentially) or `pnpm test:e2e:ff` (Firefox) / `pnpm test:e2e:chrome` (Chrome). This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script (`run_esr_tests.sh`, name unchanged) handles the full Firefox lifecycle (launch, port wait, test run, cleanup) automatically — release-channel Firefox by default (no Firefox ESR ≥152 exists yet; `$FIREFOX_ESR_BIN` still overrides the binary).
+- **Always run E2E tests** with `pnpm test:e2e` (runs both Firefox and Chrome sequentially) or `pnpm test:e2e:ff` (Firefox) / `pnpm test:e2e:chrome` (Chrome). This is mandatory after any feature work, bug fix, or refactor that touches the extension's runtime code or UI. The script (`run_esr_tests.sh`, name unchanged) handles the full Firefox lifecycle (launch, port wait, test run, cleanup) automatically — `firefox-esr` by default (`$FIREFOX_ESR_BIN` overrides the binary). Driver/browser-version quirks and the re-validation checklist for an ESR bump live in [`tests/BROWSER-COMPAT.md`](tests/BROWSER-COMPAT.md).
 - **Never run `npx vitest run --project e2e` directly** — `run_esr_tests.sh` is responsible for launching Firefox with the BiDi debugging port. Without it, all E2E tests will time out. See [`TESTING.md`](TESTING.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for the full lifecycle and architecture.
 - **Chrome-affecting changes** (the `api` seam, `manifest/chrome.json`, anything reachable from a service worker) also run `pnpm chrome:smoke` (fast, 10 checks) or `pnpm test:e2e:chrome` (full parity suite) — see [`TESTING.md`](TESTING.md#e2e-tests-testse2e).
 
@@ -224,7 +224,7 @@ The load-bearing "why" behind rules that constrain new code, kept terse so nobod
 
 - **The 20 `runtime.onMessage` wire names are frozen.** Internals may rename; the wire strings never do — enforced by `tests/integration/message-contract.test.ts`. The frozen-names decision forbids renames/drops, not deliberate additions: `Theme.colorScheme` was added 2026-07-16 (CHROME.md D4) to relay the page's `prefers-color-scheme` reading to the background for the Chrome action-icon sync (a Chrome MV3 service worker has no `window`/`matchMedia` to read it itself).
 - **Zero runtime dependencies; `idb` rejected, IndexedDB wrapper stays hand-rolled.** The shipped extension has no `dependencies` key at all (it vendors its own `zip.js`); `lib/db.js`'s `withStore` is ~50 lines and the reconnect semantics are ours either way.
-- **Minimum Firefox 152.0.** Empirically bisected: Firefox exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions only from 152.0. Consequence: the E2E/UAT tiers run on release-channel Firefox, not ESR, until a 152-based ESR ships.
+- **Minimum Firefox 152.0.** Empirically bisected: Firefox exposes `tabs.captureVisibleTab`/`captureTab` to MV3 extensions only from 152.0. Consequence: E2E ran on release-channel Firefox until a ≥152 ESR shipped; since 2026-10-26 it runs on ESR (153) and UAT on release (CHROME.md Decision 12).
 - **No build step.** JS + JSDoc, checked by `tsc --noEmit`, gets most of TypeScript's safety at zero compiler cost — see "Language" above.
 - **Event-page state placement.** `captureSessions`/`networkIdleWatchers` stay in-memory (short-lived, event-anchored, self-healing on loss); `pendingCaptures` lives in `storage.session` (must survive an event-page respawn while waiting on tab activation).
 - **Chrome via single-source / dual-build, not parallel branches.** A long-lived Chrome branch carries permanent merge cost; the manifest-overlay approach (see Architecture above) keeps one source tree.

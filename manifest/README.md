@@ -20,7 +20,7 @@ just run `pnpm build`, which does it as a prebuild step).
   `permissions` including `menus` (Firefox's dynamic per-tile context menu —
   the menus decision of record, same place).
 - **`chrome.json`** — the Chrome MV3 overlay, **validated** by the
-  [`CHROME.md`](../CHROME.md) program: Chrome E2E parity (124/126 run + 2
+  [`CHROME.md`](../CHROME.md) program: Chrome E2E parity (123/125 run + 2
   SW-lifecycle tests skipped on Chrome, GH #23), Chrome UAT (11/11), and the
   10-check smoke all run against the manifest this file builds. It diverges from
   `firefox.json` in exactly the ways

@@ -76,14 +76,14 @@ First full run: **125/126 green with zero test-file changes.** After triage:
 | File | Outcome |
 |---|---|
 | `event-page-lifecycle.test.ts` | **Skipped on Chrome (`describe.skipIf(IS_CHROME)`, GH #23).** The 2026-07-16 adaptation swapped in `restartChromeServiceWorker` for a CDP kill/respawn, but re-probing (2026-07-17, audit M2) found `Target.closeTarget` is terminal under CfT headless CDP automation — the worker never respawns on any wake, so the "respawn" assertion was vacuous. Runs for real on Firefox (idle-timeout pref); the background code is shared through the `api` seam, so that IS the real respawn-hygiene coverage. |
-| `favicon-real-sites.test.ts` | Failed once under full-suite load, passed clean on a solo re-run — the same public-internet timing flakiness this file already documents for Firefox, not a Chrome-specific misbehavior. No `IS_CHROME` skip added (per this project's "re-run solo before treating it as a regression" practice). |
+| `favicon-real-sites.test.ts` | Failed once under full-suite load, passed clean on a solo re-run — public-internet timing flakiness, not Chrome-specific. *(File removed 2026-10-26: live-site favicon coverage moved to UAT.)* |
 | `drag-layout.test.ts` / `drag-reorder.test.ts` | Ran unmodified, green. Header comments extended to note the existing known-flaky-DnD quarantine policy applies identically on Chrome. |
 | `theme.test.ts` | Ran unmodified, green — never touches the Firefox-only `browser.theme` bonus API (Decision 2's `prefers-color-scheme` base is what's under test). |
 | `boot-timing.test.ts` | Ran unmodified, green under the existing generous shared bound (Chrome medians were faster, not slower, than Firefox's on CfT 151) — header notes a per-browser re-baseline is still future work if the instrument ever tightens. |
 | All 27 other files | Ran unmodified, green — no divergence found. |
 
-**Parity: 124/126 run + 2 skipped (GH #23)** of Firefox E2E test cases on
-Chrome — comfortably above the ≥90% acceptance target. (The 2 skips are
+**Parity: 123/125 run + 2 skipped (GH #23)** of Firefox E2E test cases on
+Chrome (124/126 before `favicon-real-sites` was removed 2026-10-26) — comfortably above the ≥90% acceptance target. (The 2 skips are
 `event-page-lifecycle`'s SW-respawn tests; see the triage row above.)
 
 ## Three hard-won harness facts (2026-07-15, D1)

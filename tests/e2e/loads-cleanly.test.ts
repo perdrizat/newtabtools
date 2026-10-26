@@ -35,6 +35,10 @@ describe('E2E Smoke: Extension loads cleanly', () => {
 		}
 	});
 
+	// KNOWN GAP (2026-10-26, tests/BROWSER-COMPAT.md §3): Firefox's BiDi never
+	// delivers console events for moz-extension:// pages, so on Firefox this
+	// assertion passes vacuously; it is only real on Chrome. Fix pending the
+	// compat-tier console-capture experiment (tests/compat/PLAN.md step 3).
 	it('opens the new tab page with zero console errors', () => {
 		expect(consoleErrors).toEqual([]);
 	});

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.6.8] — 2026-10-26
+
+### Added
+
+- `tests/BROWSER-COMPAT.md`: living notebook of browser/driver gates, error strings, rejected alternatives, ESR-bump checklist and investigation log.
+- `tests/compat/PLAN.md`: plan for a compat tier (driver capability probes + E2E on beta/nightly channels + experiments).
+
+### Changed
+
+- Firefox E2E defaults to `firefox-esr` (153 ESR) locally and in CI; UAT stays on release Firefox (Decision 12 trigger met).
+- docs: E2E suite counts updated to 31 files/125 tests; `loads-cleanly.test.ts` flags its console assertion as vacuous on Firefox (BiDi sends no console events for extension pages).
+
+### Fixed
+
+- `run_esr_tests.sh` no longer kills its invoking shell: dropped the `pkill -f firefox-esr` name match, profile-dir match only.
+
+### Removed
+
+- E2E: removed network-dependent `tests/e2e/favicon-real-sites.test.ts` (live web coverage is handled by UAT; hermetic IDB fixture seeding tracked in ACK-52).
+
 ## [2026-10-25]
 
 ### Changed

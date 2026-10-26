@@ -293,7 +293,7 @@ self-healing by design, `pendingCaptures` already round-trips
    hiding behind a single binary's quirks.**
    | Tier | Firefox | Chrome |
    |---|---|---|
-   | E2E (frequent) | **ESR** the day a ≥152 ESR ships (`$FIREFOX_ESR_BIN`; trigger recorded below); release-channel until then | **branded stable** `google-chrome` via the dual-transport launcher; CfT fallback when no branded binary is present |
+   | E2E (frequent) | **ESR** (flipped 2026-10-26 when 153 ESR shipped; `$FIREFOX_ESR_BIN` overrides) | **branded stable** `google-chrome` via the dual-transport launcher; CfT fallback when no branded binary is present |
    | UAT (pre-release) | **current release** | **CfT** (Selenium daemon unchanged) |
    | Smoke | — | CfT locally (fast gate); **branded in CI** (runners preinstall it — free) |
    | Manual pass (D-gates) | release, real profile | branded stable, real profile |

@@ -35,14 +35,15 @@ These tools must be present on your host machine to develop and test this extens
 |---|---|---|---|
 | **Node.js** | >= 24 (see `.node-version` / `engines.node`) | Runs Vitest, Puppeteer, web-ext | `node --version` |
 | **pnpm** | 11.x (auto-installed by corepack from `packageManager` in `package.json`) | Package manager — required (npm/yarn are blocked by `scripts/check-pnpm.js`) | `pnpm --version` |
-| **Firefox (release), >= 152** | latest | Canonical **E2E** target (`$FIREFOX_ESR_BIN` overrides the binary) | `firefox --version` |
+| **Firefox ESR, >= 153** | current ESR | Canonical **E2E** target (`$FIREFOX_ESR_BIN` overrides the binary) | `firefox-esr --version` |
+| **Firefox (release)** | latest | **UAT** target | `firefox --version` |
 | **`web-ext` CLI** | latest | Mozilla's dev tool | `web-ext --version` |
 | **geckodriver** | latest | **UAT tier** Selenium driver (auto-fetched by Selenium Manager on first run) | `geckodriver --version` |
 | **Claude Code CLI** | latest | **UAT tier** agent driver (`claude -p`) | `claude --version` |
 | **Branded Google Chrome (stable)** | current stable | Chrome **E2E parity** target (Decision 12, [`CHROME.md`](CHROME.md) — the production binary users run; landing with D8) + the branded smoke lane. Automated via Puppeteer's **pipe transport + CDP `Extensions.loadUnpacked`** — the one route that works on branded ≥ 137 (`--load-extension` is ignored there, and Selenium's port transport can't reach the `Extensions` CDP domain). | `google-chrome --version` |
 | **Chrome for Testing (CfT), >= 148** | auto-provisioned | Chrome **UAT** target + local smoke + E2E fallback when no branded binary is present. **Fidelity caveat (the 2026-07-17 canary-gate incident):** CfT is an *unbranded* build whose channel detection passes canary-gated feature flags that branded stable rejects — it is faithful for engine/API behavior but NOT for channel gates; anything channel-sensitive must be proven on branded (see "Browser binary strategy" below). Provisioned via `pnpm chrome:provision`. See [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md). | `pnpm chrome:provision` |
 
-> Release-channel Firefox now serves **both** the E2E and UAT tiers — MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0, and no ESR build that new exists yet in Mozilla's APT repo (see [`CONTRIBUTING.md`](CONTRIBUTING.md) "Decisions of record"). When a 152-based ESR reaches the APT repo, E2E can move back to it; `$FIREFOX_ESR_BIN` still works as a binary override in the meantime. The bottom two (geckodriver, Claude Code CLI) are **only** needed to run `pnpm test:uat` (pre-release tier); Chrome for Testing is **only** needed to run the Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `pnpm test:uat:chrome`). The Unit/Integration tiers don't require any browser binary at all. CI installs release Firefox always and provisions Chrome for Testing for its parallel `chrome-smoke` job, but doesn't install the UAT-only tools. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing the E2E & UAT (Firefox) and verify tooling" below.
+> **E2E runs on Firefox ESR, UAT on release** (Decision 12 below). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0, so E2E ran on release until the 153 ESR shipped. Known driver/version quirks per Firefox and Chrome version are recorded in [`tests/BROWSER-COMPAT.md`](tests/BROWSER-COMPAT.md). The bottom two (geckodriver, Claude Code CLI) are **only** needed to run `pnpm test:uat` (pre-release tier); Chrome for Testing is **only** needed to run the Chrome tier (`pnpm chrome:smoke`, `pnpm test:e2e:chrome`, `pnpm test:uat:chrome`). The Unit/Integration tiers don't require any browser binary at all. CI installs Firefox ESR for E2E and provisions Chrome for Testing for its parallel `chrome-smoke` job, but doesn't install the UAT-only tools. The packages `selenium-webdriver` and `@modelcontextprotocol/sdk` arrive via `pnpm install`. Setup details under "Installing the E2E & UAT (Firefox) and verify tooling" below.
 
 ### Installing Node.js and dependencies
 
@@ -76,13 +77,12 @@ pnpm install
 
 ### Installing the E2E & UAT (Firefox) and verify tooling
 
-Both the **E2E** and **UAT** tiers now target **release-channel Firefox (>= 152)** — MV3's `tabs.captureVisibleTab`/`captureTab` don't exist on any Firefox build before 152.0, and Mozilla's APT repo has no ESR that new yet (see [`CONTRIBUTING.md`](CONTRIBUTING.md) "Decisions of record"). They're still deliberately different stacks under the hood — E2E drives it via `web-ext` + WebDriver BiDi, UAT drives it via Selenium + geckodriver (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)) — but only one Firefox install is needed now. `$FIREFOX_ESR_BIN` still works as an E2E binary override (e.g. once a 152-based ESR ships) — the env var name is unchanged for backwards compatibility. The UAT-only pieces (geckodriver, the Claude Code CLI) are needed **only** for `pnpm test:uat` — the Unit/Integration/E2E tiers and CI don't use them.
+The **E2E** tier targets **Firefox ESR (>= 153)** and the **UAT** tier targets **release-channel Firefox** (Decision 12: production binary on the frequent tier, current binary on the pre-release tier). They're also deliberately different stacks — E2E drives Firefox via `web-ext` + WebDriver BiDi, UAT via Selenium + geckodriver (rationale in the "UAT tests" section below and [`tests/uat/README.md`](tests/uat/README.md)). `$FIREFOX_ESR_BIN` overrides the E2E binary. The UAT-only pieces (geckodriver, the Claude Code CLI) are needed **only** for `pnpm test:uat` — the Unit/Integration/E2E tiers and CI don't use them.
 
 On Ubuntu/WSL, install from the official Mozilla APT repository (avoids Snap-related issues and pins everyone to the same builds):
 
 ```bash
-# 1. Add the Mozilla APT repository (provides release firefox; also firefox-esr,
-#    kept for when a 152-based ESR ships)
+# 1. Add the Mozilla APT repository (provides both firefox and firefox-esr)
 sudo install -d -m 0755 /etc/apt/keyrings
 wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | sudo tee /etc/apt/keyrings/packages.mozilla.org.asc > /dev/null
 echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | sudo tee -a /etc/apt/sources.list.d/mozilla.list > /dev/null
@@ -94,11 +94,12 @@ Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 ' | sudo tee /etc/apt/preferences.d/mozilla
 
-# 3. Install release Firefox (E2E + UAT target, >= 152)
-sudo apt update && sudo apt install -y firefox
+# 3. Install Firefox ESR (E2E target) and release Firefox (UAT target)
+sudo apt update && sudo apt install -y firefox-esr firefox
 
 # 4. Verify E2E & UAT tooling**
-firefox --version        # E2E + UAT target present (release-channel Firefox, >= 152)
+firefox-esr --version    # E2E target present (Firefox ESR, >= 153)
+firefox --version        # UAT target present (release-channel Firefox)
 claude /login            # UAT agent — Claude Code CLI signed in (one-time; re-run to confirm the session)
 pnpm build               # build the extension .xpi
 node tests/uat/_tools/browser-smoke.mjs
@@ -114,7 +115,7 @@ The .xpi lives under `dist/`, UAT-specific evidence (screenshots, scenario repor
 The repository uses GitHub Actions to automatically run the full test suite on every push and pull request.
 
 - **Workflow:** Defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-- **Environment:** Ubuntu runners with release-channel Firefox (>= 152) installed via the Mozilla APT repository.
+- **Environment:** Ubuntu runners with Firefox ESR (>= 153) installed via the Mozilla APT repository.
 - **Chrome:** a parallel `chrome-smoke` job provisions Chrome for Testing (`pnpm chrome:provision`) and runs the Chrome smoke checks (`pnpm chrome:smoke` + the Selenium variant). A **branded-stable smoke job** on the runner's *preinstalled* Google Chrome (no provisioning; auto-tracks the version users have) lands with CHROME.md D8 — the earlier claim that branded Chrome "can't run extension automation at all" was disproven 2026-07-18 (the Puppeteer pipe + CDP-install route works; only `--load-extension` is dead there). Switching the CfT job to the full Chrome E2E parity suite is a deliberate follow-up (runtime cost on CI runners).
 - **Instrumentation:** The CI job runs with `E2E_VERBOSE: 1` enabled. If an E2E test fails, Puppeteer's logs and UUID discovery chatter will be visible in the job's terminal output.
 - **Artifacts:** If the E2E suite fails in CI, any failure screenshots captured by `captureFailure()` are automatically uploaded as a ZIP archive. To find them, go to the **Actions** tab, click on the failed run, and scroll down to the **Artifacts** section.
@@ -134,8 +135,8 @@ These commands are the primary interface for development. Run them from the proj
 | `pnpm typecheck` | Run `tsc --noEmit` (full type validation) | Quality |
 | `pnpm test:fast` | Run Unit + Integration tests | TDD Loop |
 | `pnpm test:e2e` | Run full E2E suite against Firefox and Chrome sequentially | Validation |
-| `pnpm test:e2e:ff` | Run full E2E suite against release-channel Firefox (>= 152; `$FIREFOX_ESR_BIN` overrides binary) | Validation (Firefox) |
-| `pnpm test:e2e:chrome` | Run the full E2E suite (same 32 files/126 tests) against Chrome (branded stable Chrome / CfT fallback) | Validation (Chrome) |
+| `pnpm test:e2e:ff` | Run full E2E suite against Firefox ESR (>= 153; `$FIREFOX_ESR_BIN` overrides binary) | Validation (Firefox) |
+| `pnpm test:e2e:chrome` | Run the full E2E suite (same 31 files/125 tests) against Chrome (branded stable Chrome / CfT fallback) | Validation (Chrome) |
 | `pnpm test` | Run all tests (Fast + E2E) | Pre-commit |
 | `pnpm test:uat` | Run LLM-driven user acceptance scenarios against Firefox and Chrome sequentially | UAT (pre-release) |
 | `pnpm test:uat:ff` | Run LLM-driven user acceptance scenarios against release-channel Firefox (append slugs to run a subset) | UAT (Firefox, pre-release) |
@@ -194,7 +195,7 @@ The files below make up the test scaffold. A new maintainer should not need to r
 | [`tests/setup.js`](tests/setup.js) | Sets `globalThis.jest = vi`, then `await import('jest-webextension-mock')`. The shim is required because the mock library was written for Jest and references a `jest` global at module load. |
 | [`eslint.config.js`](eslint.config.js) | Flat config (ESLint v10+). Top-level `ignores` excludes the vendored zip tree (`webextension/lib/zip/**`, the unbundled ESM `@zip.js/zip.js` core build — see `scripts/update-zip.mjs`). One file-glob block covers all of `webextension/**/*.js` as **module-mode** — page files, `lib/`, and `action.js` are all real ES modules now (the former script-mode block for classic `<script>`-loaded page files retired in the page-modules arc — see git history/`CHANGELOG.md`). `no-unused-vars` set to `caughtErrors: 'none'` so legacy `} catch (ex) {}` blocks don't flag. |
 | [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js) | Exports `connectToFirefox()` which calls `puppeteer.connect({ browserWSEndpoint: 'ws://127.0.0.1:9222/session', protocol: 'webDriverBiDi' })`. |
-| [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) | Lifecycle orchestrator (name unchanged from the ESR era): `pkill` stray processes on this run's profile → `web-ext run --firefox=firefox --pref=extensions.background.idle.timeout=10000 --args="--remote-debugging-port=9222 -headless"` (release channel by default; `$FIREFOX_ESR_BIN` overrides) → wait for port 9222 → `vitest run --project e2e` → cleanup via EXIT trap. Must be executable (`chmod +x`). Also holds a `mkdir`-based concurrency lock (`tests/e2e/.runner-lock`, PID-checked, stale locks reclaimed): a second concurrent invocation refuses to start rather than clobbering the first run's shared profile dir/port. |
+| [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) | Lifecycle orchestrator (name unchanged from the ESR era): `pkill` stray processes on this run's profile → `web-ext run --firefox=firefox-esr --pref=extensions.background.idle.timeout=10000 --args="--remote-debugging-port=9222 -headless --remote-allow-system-access"` (ESR by default; `$FIREFOX_ESR_BIN` overrides) → wait for port 9222 → `vitest run --project e2e` → cleanup via EXIT trap. Must be executable (`chmod +x`). Also holds a `mkdir`-based concurrency lock (`tests/e2e/.runner-lock`, PID-checked, stale locks reclaimed): a second concurrent invocation refuses to start rather than clobbering the first run's shared profile dir/port. |
 | [`tests/e2e/README.md`](tests/e2e/README.md) | E2E architecture, lifecycle diagram, manual-debug workflow, and the full "why not Playwright" diagnosis. |
 | [`.gitignore`](.gitignore) | Excludes `node_modules/`, `test-results/`, `.vitest-cache/`. Does **not** exclude `package-lock.json`. |
 
@@ -206,8 +207,8 @@ Testing has three deterministic tiers plus a fourth judgment-based tier (UAT), e
 |---|---|---|---|---|
 | **Unit** | `tests/unit/` | Vitest + jsdom | `pnpm test:unit` | On every save during TDD |
 | **Integration** | `tests/integration/` | Vitest + jsdom + `jest-webextension-mock` | `pnpm test:integration` | On every save during TDD |
-| **E2E** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) and Chrome | `pnpm test:e2e` (`:ff`, `:chrome`) | At feature completion and pre-commit |
-| **E2E (Firefox)** | `tests/e2e/` | Vitest + Puppeteer + release-channel Firefox (>= 152) via WebDriver BiDi | `pnpm test:e2e:ff` | At feature completion and pre-commit |
+| **E2E** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR (>= 153) and Chrome | `pnpm test:e2e` (`:ff`, `:chrome`) | At feature completion and pre-commit |
+| **E2E (Firefox)** | `tests/e2e/` | Vitest + Puppeteer + Firefox ESR (>= 153) via WebDriver BiDi | `pnpm test:e2e:ff` | At feature completion and pre-commit |
 | **E2E (Chrome parity)** | `tests/e2e/` (same files) + `tests/e2e-chrome/` (runner/helpers) | Vitest + Puppeteer + **branded stable Chrome** (Decision 12; CfT fallback) via CDP, port 9223 | `pnpm test:e2e:chrome` | Alongside the Firefox E2E tier for Chrome-affecting changes; see `tests/e2e-chrome/README.md` |
 | **UAT** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + Firefox and Chrome) | `pnpm test:uat` (`:ff`, `:chrome`) | Pre-release only; never on PR/CI |
 | **UAT (Firefox)** | `tests/uat/` | Claude Code (headless) + thin MCP client → browser daemon (Selenium + release-channel Firefox) | `pnpm test:uat:ff` | Pre-release only; never on PR/CI |
@@ -221,7 +222,7 @@ Testing has three deterministic tiers plus a fourth judgment-based tier (UAT), e
 
 | Lane | Firefox | Chrome |
 |---|---|---|
-| **E2E** (frequent — production binary) | **ESR** the day a ≥ 152 ESR ships; release-channel until then | **branded stable** `google-chrome` (pipe-transport launcher; CfT fallback) — landing with D8 |
+| **E2E** (frequent — production binary) | **ESR** (153 since 2026-10-26; release-channel before a ≥ 152 ESR existed) | **branded stable** `google-chrome` (pipe-transport launcher; CfT fallback) — landing with D8 |
 | **UAT** (pre-release — current binary) | current release | **CfT** (Selenium daemon) |
 | Smoke | — | CfT locally (fast); branded in CI (runners preinstall it) |
 | Manual pass (D-gates) | release, real profile | branded stable, real profile |
@@ -231,7 +232,7 @@ Why this exists — the **canary-gate incident (2026-07-17)**: all Chrome tiers 
 Standing rules that fall out of it:
 
 - **Load-bearing rule:** no capability ships as load-bearing unless proven on the production binary (branded stable Chrome / release-or-ESR Firefox). Official docs + CfT together are insufficient evidence — Decision 10 had both and was still wrong for users.
-- **Firefox ESR trigger:** both Firefox lanes can run any channel (temporary-install works everywhere); the only constraint is the 152 API floor. When a ≥ 152 ESR reaches Mozilla's APT repo, flip E2E to ESR (`$FIREFOX_ESR_BIN` / binary default — `run_esr_tests.sh` has carried the name since the ESR era); UAT stays on current release. Until then both run release — safe because `strict_min_version: 152` *excludes* pre-152 users at install time (exclusion, not silent divergence).
+- **Firefox ESR lane:** the trigger (a ≥ 152 ESR in Mozilla's APT repo) fired with 153 ESR; E2E flipped to `firefox-esr` on 2026-10-26, UAT stays on current release. When the ESR moves to a new major, re-run the checklist in [`tests/BROWSER-COMPAT.md`](tests/BROWSER-COMPAT.md) — release-channel gates (e.g. the `input.setFiles` privileged-scope gate seen on 158) arrive with it.
 - **Chrome lane mechanics:** branded ≥ 137 ignores `--load-extension`; the working automation route is Puppeteer **pipe** transport + CDP `Extensions.loadUnpacked` (+ `--remote-debugging-port` served simultaneously for the test suite — dual-transport probe-proven). Selenium/chromedriver speaks the port transport where the `Extensions` domain is unavailable — which is why the Selenium-based UAT daemon stays on CfT.
 - **CfT staleness guard:** the provisioned CfT is cached and drifts against auto-updating stable (in both directions); provision/preflight warns on major-version drift (D8).
 
@@ -260,11 +261,11 @@ For code that orchestrates WebExtension APIs. The browser surface is mocked, not
 
 E2E tests exercise the extension from the user's perspective in a real Firefox. Every main feature should have at least one E2E test. E2E also covers **visual and layout regression** — things a unit test or mock simply cannot verify.
 
-- **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox instance launched by `web-ext run`. The tier runs on **release-channel Firefox** (`firefox`, >= 152) rather than ESR, because MV3's `tabs.captureVisibleTab`/`captureTab` only exist from Firefox 152.0 and no ESR that new exists yet in Mozilla's APT repo (see [`CONTRIBUTING.md`](CONTRIBUTING.md) "Decisions of record"). `$FIREFOX_ESR_BIN` still overrides the binary — the runner will move back to ESR once a 152-based build reaches the APT repo. (Playwright was tried and rejected — its patched-Firefox design cannot drive a system Firefox. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
+- **Tool:** Vitest's `e2e` project drives `puppeteer-core` connected over **WebDriver BiDi** to a Firefox instance launched by `web-ext run`. The tier runs on **Firefox ESR** (`firefox-esr`, >= 153; `$FIREFOX_ESR_BIN` overrides the binary) with `--remote-allow-system-access`, Mozilla's sanctioned opt-in for driving `moz-extension://` pages since Firefox 153. See [`tests/BROWSER-COMPAT.md`](tests/BROWSER-COMPAT.md) for which BiDi commands work on extension pages per version. (Playwright was tried and rejected — its patched-Firefox design cannot drive a system Firefox. See [`tests/e2e/README.md`](tests/e2e/README.md) for the technical diagnosis.)
 - **Location:** `tests/e2e/*.test.js` (matching the Unit/Integration naming).
 - **Lifecycle:** [`tests/e2e/run_esr_tests.sh`](tests/e2e/run_esr_tests.sh) (name unchanged) launches Firefox with `--remote-debugging-port=9222` and `extensions.background.idle.timeout=10000` — a short idle timeout so the MV3 event page genuinely suspends and respawns during the suite (deliberate lifecycle stress; see `tests/e2e/event-page-lifecycle.test.ts`) — waits for the port, runs Vitest's e2e project, and cleans up via an EXIT trap. Tests connect using the `connectToFirefox()` helper in [`tests/e2e/_helpers.js`](tests/e2e/_helpers.js).
 - **How to run:** Use `pnpm test:e2e` to run both browsers (`pnpm test:e2e:ff && pnpm test:e2e:chrome`), or `pnpm test:e2e:ff` / `pnpm test:e2e:chrome` for single-browser runs. Do **not** run `npx vitest run --project e2e` directly — the shell scripts are responsible for launching the browser with the debugging port, waiting for it to be ready, and cleaning up afterwards. Without them, tests will hang trying to connect to a non-existent browser. To run a single test file against Firefox: `pnpm test:e2e:ff tests/e2e/my-test.test.js` (or against Chrome: `pnpm test:e2e:chrome tests/e2e/my-test.test.js`).
-- **Chrome parity:** the same suite (same `tests/e2e/*.test.js` files, zero call-site changes) runs against **branded stable Chrome** (Decision 12 — the production binary; CfT fallback when none is present) via `pnpm test:e2e:chrome`, which calls the sibling lifecycle script [`tests/e2e-chrome/run_chrome_tests.sh`](tests/e2e-chrome/run_chrome_tests.sh) (stages the dev build; branded launch = Puppeteer pipe + CDP `Extensions.loadUnpacked` with the suite connecting on CDP port 9223 — landing with CHROME.md D8; the CfT fallback keeps `--load-extension`). Full parity: 124/126 run + 2 SW-lifecycle tests skipped on Chrome (GH #23), 32/32 files, with per-file divergences documented as header notes rather than silent omissions — see [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md) and `CHROME.md` D5b. Run it alongside `pnpm test:e2e:ff` (or run `pnpm test:e2e` for both) for any change that touches a Chrome-relevant path (the `api` seam, manifest, service-worker-visible code).
+- **Chrome parity:** the same suite (same `tests/e2e/*.test.js` files, zero call-site changes) runs against **branded stable Chrome** (Decision 12 — the production binary; CfT fallback when none is present) via `pnpm test:e2e:chrome`, which calls the sibling lifecycle script [`tests/e2e-chrome/run_chrome_tests.sh`](tests/e2e-chrome/run_chrome_tests.sh) (stages the dev build; branded launch = Puppeteer pipe + CDP `Extensions.loadUnpacked` with the suite connecting on CDP port 9223 — landing with CHROME.md D8; the CfT fallback keeps `--load-extension`). Full parity: 123/125 run + 2 SW-lifecycle tests skipped on Chrome (GH #23), 31/31 files, with per-file divergences documented as header notes rather than silent omissions — see [`tests/e2e-chrome/README.md`](tests/e2e-chrome/README.md) and `CHROME.md` D5b. Run it alongside `pnpm test:e2e:ff` (or run `pnpm test:e2e` for both) for any change that touches a Chrome-relevant path (the `api` seam, manifest, service-worker-visible code).
 - **When to run:**
   1. Once at the end of every completed feature.
   2. Always as part of the "prepare for commit" workflow.

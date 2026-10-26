@@ -6,7 +6,7 @@ E2E tests run against **real Firefox** with the unpacked extension installed. Th
 - **`puppeteer-core`** connects to the running Firefox over **WebDriver BiDi** — a W3C standard that mainline Firefox supports out of the box.
 - **Vitest** is the test runner, same as for Unit and Integration tests, with a separate `e2e` project (see [`vitest.config.js`](../../vitest.config.js)).
 
-**Firefox channel:** this tier runs on **release-channel Firefox (>= 152)**, not ESR. MV3's `tabs.captureVisibleTab`/`captureTab` are `undefined` on every Firefox build through 151.0 and only become working functions from 152.0 (empirically bisected — see [`CONTRIBUTING.md`](../../CONTRIBUTING.md) "Decisions of record"). Mozilla's APT repo has no ESR that new yet, so the default binary moved to release `firefox`; `$FIREFOX_ESR_BIN` still overrides the binary (the env var name is unchanged for backwards compatibility) and the tier can move back to ESR once a 152-based ESR ships.
+**Firefox channel:** this tier runs on **Firefox ESR (>= 153)** by default (`firefox-esr`; `$FIREFOX_ESR_BIN` overrides the binary). MV3's `tabs.captureVisibleTab`/`captureTab` only exist from 152.0, so the tier ran on release until the 153 ESR shipped. Since Firefox 153 the launch needs `--remote-allow-system-access` to navigate to `moz-extension://` pages. Per-version BiDi quirks, error strings and the ESR-bump checklist live in [`../BROWSER-COMPAT.md`](../BROWSER-COMPAT.md).
 
 **Chrome parity (CHROME.md D5b):** this SAME `tests/e2e/**/*.test.ts` suite also runs against Chrome for Testing via `pnpm test:e2e:chrome` (`tests/e2e-chrome/run_chrome_tests.sh`) — no separate test files, just an `NTT_E2E_BROWSER=chrome` switch in [`_helpers.ts`](_helpers.ts) that swaps BiDi@9222 for CDP@9223 and the `moz-extension://` origin for `chrome-extension://`. See [`tests/e2e-chrome/README.md`](../e2e-chrome/README.md) for that runner's lifecycle and the per-file triage table. Everything below describes the Firefox path specifically; it is unaffected by the Chrome tier's existence (byte-identical default behavior).
 
@@ -16,11 +16,12 @@ E2E tests run against **real Firefox** with the unpacked extension installed. Th
 ┌────────────────────────────────────────────────────────────────┐
 │ run_esr_tests.sh (name unchanged from the ESR era)              │
 │   1. pkill stray processes on this run's test profile           │
-│   2. web-ext run --firefox=firefox \                            │
+│   2. web-ext run --firefox=firefox-esr \                        │
 │        --pref=extensions.background.idle.timeout=10000          │
 │        --args="--remote-debugging-port=9222"                    │
 │        --args="-headless"                                       │
-│      → Firefox (release channel, >= 152) launches with the      │
+│        --args="--remote-allow-system-access"                    │
+│      → Firefox ESR (>= 153) launches with the                   │
 │        extension loaded and BiDi listening on 9222              │
 │   3. wait until port 9222 is reachable                          │
 │   4. vitest run --project e2e                                   │
@@ -71,13 +72,14 @@ npm run test:e2e
 To debug a single test interactively without restarting Firefox between iterations:
 
 ```bash
-# Terminal 1 — launch Firefox (release channel, >= 152) with the extension and BiDi enabled
+# Terminal 1 — launch Firefox ESR with the extension and BiDi enabled
 npx web-ext run \
   --source-dir webextension/ \
-  --firefox=firefox \
-  --args="--remote-debugging-port=9222"
-# Or against an ESR/other override binary:
-#   --firefox="$FIREFOX_ESR_BIN"
+  --firefox=firefox-esr \
+  --args="--remote-debugging-port=9222" \
+  --args="--remote-allow-system-access"
+# Or against another binary (e.g. release, to reproduce a release-only gate):
+#   --firefox=firefox
 
 # Terminal 2 — run a specific test against the running browser
 npx vitest run --project e2e tests/e2e/your_test.test.js
@@ -91,7 +93,7 @@ npx vitest --project e2e tests/e2e/your_test.test.js
 1. **Firefox build channel.** `xpinstall.signatures.required: false` is only honored on Firefox **ESR / Developer Edition / Nightly**, not Release — this tier's own launches (via `web-ext run`) don't rely on that pref, but be aware of it if you're diagnosing a manual/unsigned install issue on release Firefox.
 2. **Headless mode.** Extensions usually load fine in headless release Firefox via `web-ext run --args="-headless"`. If a test fails specifically in headless, drop the flag locally to see the browser.
 3. **Port collision.** Port 9222 is hardcoded in [`run_esr_tests.sh`](run_esr_tests.sh) and [`_helpers.js`](_helpers.js). If something else binds it, the script fails. Sufficient for one-developer use; revisit if CI runs multiple jobs in parallel.
-4. **Stale Firefox processes.** The script `pkill`s on entry and via an EXIT trap, scoped to this run's test profile (not a blanket process-name kill — the default binary is now release Firefox, likely a developer's daily-driver browser too). If a manual run crashes uncleanly and leaves a process behind, `pkill -f <profile-dir-path>` to clear it, or as a last resort `pkill -f firefox`.
+4. **Stale Firefox processes.** The script `pkill`s on entry and via an EXIT trap, scoped to this run's test profile (not a blanket process-name kill — that would hit a developer's daily-driver Firefox, and `pkill -f firefox-esr` even killed the invoking shell when `FIREFOX_ESR_BIN=firefox-esr` was on its command line). If a manual run crashes uncleanly and leaves a process behind, `pkill -f <profile-dir-path>` to clear it, or as a last resort `pkill -f firefox`.
 5. **`captureVisibleTab`/`captureTab` require Firefox >= 152.** Both are `undefined` on any older build (MV2 or MV3) — a test that exercises capture will fail opaquely on an out-of-date binary, not with a clear "unsupported version" error. Check `firefox --version` first if capture tests fail unexpectedly.
 
 ## Manual debugging tools (not part of the test run)
