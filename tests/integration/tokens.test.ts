@@ -70,6 +70,42 @@ describe('Design tokens — tokens.css', () => {
 		});
 	});
 
+	describe('high-contrast theme overrides (newTab.css :root[theme="contrast"])', () => {
+		// The light defaults of these are black-alpha inks/fills: inherited into
+		// high contrast they render dark-on-black and vanish (issue #24: the
+		// search placeholder uses --ntt-sub). Every token the dark theme re-inks
+		// must be re-inked for contrast too, except the ones listed here, which
+		// read on black as-is or are overridden by dedicated HC rules.
+		const inheritedOnPurpose = new Set([
+			'--ntt-page-bg', // HC paints the page with --page-background: #000
+			'--ntt-accent', // copper, reserved for focus/selection rings; legible on black
+			'--ntt-accent-tint', // HC replaces tint fills with solid rings (newTab.css)
+			'--ntt-success', // mid green, legible on black
+			'--ntt-shadow-tile-rest', // built from --ntt-line, which HC overrides
+			'--ntt-shadow-tile-hover',
+			'--ntt-shadow-tile-selected',
+		]);
+
+		function tokenNames(block: string): string[] {
+			return [...block.matchAll(/(--ntt-[\w-]+)\s*:/g)].map((m) => m[1]);
+		}
+
+		function blockAfter(source: string, selector: string): string {
+			const start = source.indexOf(selector);
+			expect(start, `${selector} block`).toBeGreaterThanOrEqual(0);
+			return source.slice(start, source.indexOf('}', start));
+		}
+
+		it('re-inks every token the dark theme overrides', () => {
+			// eslint-disable-next-line ntt/no-source-grep -- wiring check: CSS tokens; the computed colour is covered by UAT 32-high-contrast
+			const newTabCss = fs.readFileSync(path.resolve(__dirname, '../../webextension/newTab.css'), 'utf8');
+			const contrast = new Set(tokenNames(blockAfter(newTabCss, ':root[theme="contrast"]')));
+			const missing = tokenNames(blockAfter(css, ':root[theme="dark"]'))
+				.filter((t) => !contrast.has(t) && !inheritedOnPurpose.has(t));
+			expect(missing).toEqual([]);
+		});
+	});
+
 	describe('spacing tokens', () => {
 		it('defines --ntt-gap', () => {
 			expect(css).toMatch(/--ntt-gap\s*:/);

@@ -4,10 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.6.9] — 2026-11-14
+## [2.6.9] — 2026-11-15
 
 ### Fixed
 
+- High-contrast theme re-inks `--ntt-sub`, `--ntt-surface-soft` and the kbd tokens, so the search placeholder is readable (#24).
 - Toolbar-popup capture looks the tab up in the browser, never captures a private-window tab, and ignores the message's url.
 - Wire codec answers `null` when encoding a background response fails, instead of leaving the request pending forever.
 - UAT verdict: an explicit `passed: false` beside an unrecognised verdict string fails, as does an undecided report from a crashed agent.

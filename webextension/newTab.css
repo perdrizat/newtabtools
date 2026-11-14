@@ -41,6 +41,13 @@
 	--ntt-line: rgba(255, 255, 255, 0.32);
 	--ntt-line-soft: rgba(255, 255, 255, 0.18);
 	--ntt-ink: #ffffff;
+	/* Every token the dark theme re-inks needs a contrast value too, or the light
+	   default (black-alpha) renders dark-on-black (issue #24: the search
+	   placeholder; enforced by tests/integration/tokens.test.ts). */
+	--ntt-sub: rgba(255, 255, 255, 0.85);
+	--ntt-surface-soft: rgba(255, 255, 255, 0.08);
+	--ntt-kbd-bg: rgba(255, 255, 255, 0.14);
+	--ntt-kbd-ink: #ffffff;
 	--ntt-mute: rgba(255, 255, 255, 0.72);
 	/* Same cooler alarm red as light/dark (#cc1633), kept distinct from the copper
 	   accent. The destructive ✕ button uses it as a fill with a white icon + white
