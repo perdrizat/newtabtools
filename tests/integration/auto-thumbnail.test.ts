@@ -826,6 +826,10 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 	});
 
 	it('Thumbnails.capture starts a capture session for popup sender (no sender.tab)', async () => {
+		// The popup path resolves the target tab from the browser (audit 2026-11-14).
+		(globalThis as any).chrome.tabs.get.mockImplementationOnce(
+			() => Promise.resolve({ id: 43, active: true, windowId: 2, incognito: false, url: 'https://example.org' })
+		);
 		const sender = { id: EXTENSION_ID }; // no sender.tab
 		onMessageListener({ 
 			name: 'Thumbnails.capture',
@@ -836,6 +840,25 @@ describe('lib/background-main.js — multi-stage capture (behavioral)', () => {
 		await vi.advanceTimersByTimeAsync(0);
 		expect(captureCallCount()).toBe(1);
 		expect(getCaptureSessions().has(43)).toBe(true);
+	});
+
+	it('Thumbnails.capture from the popup never captures a private-window tab', async () => {
+		(globalThis as any).chrome.tabs.get.mockImplementationOnce(
+			() => Promise.resolve({ id: 44, active: true, windowId: 3, incognito: true, url: 'https://private.example/' })
+		);
+		onMessageListener({ name: 'Thumbnails.capture', tabId: 44, windowId: 3, url: 'https://private.example/' }, { id: EXTENSION_ID }, vi.fn());
+		await vi.advanceTimersByTimeAsync(0);
+		expect(captureCallCount()).toBe(0);
+		expect(getCaptureSessions().has(44)).toBe(false);
+	});
+
+	it('Thumbnails.capture from the popup keys the session on the tab\'s real URL, not the message\'s', async () => {
+		(globalThis as any).chrome.tabs.get.mockImplementationOnce(
+			() => Promise.resolve({ id: 45, active: true, windowId: 2, incognito: false, url: 'https://real.example/' })
+		);
+		onMessageListener({ name: 'Thumbnails.capture', tabId: 45, windowId: 2, url: 'https://spoofed.example/' }, { id: EXTENSION_ID }, vi.fn());
+		await vi.advanceTimersByTimeAsync(0);
+		expect(getCaptureSessions().get(45)?.url).toBe('https://real.example/');
 	});
 
 	// --- pickAndStore writes to IDB ---

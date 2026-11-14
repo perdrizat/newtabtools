@@ -40,10 +40,12 @@ export function parseReport(report) {
 		const v = report.verdict.trim();
 		if (/^pass$/i.test(v)) { reportPassed = true; }
 		else if (/^fail$/i.test(v)) { reportPassed = false; }
-	} else if (typeof report.passed === 'boolean') {
-		reportPassed = report.passed;
-	} else if (typeof report.pass === 'boolean') {
-		reportPassed = report.pass;
+	}
+	// An unrecognised verdict string ("PARTIAL", …) must not mask an explicit
+	// boolean verdict next to it.
+	if (reportPassed === null) {
+		if (typeof report.passed === 'boolean') { reportPassed = report.passed; }
+		else if (typeof report.pass === 'boolean') { reportPassed = report.pass; }
 	}
 
 	return {
@@ -58,15 +60,17 @@ export function parseReport(report) {
  * present: gate on its verdict + per-check failures and IGNORE a non-zero
  * process exit (the agent can finish the assessment, write a PASS report, then
  * have the process die on an API 529 or the --max-turns cap during wind-down).
- * Only when no usable report exists do we fall back to the process exit code —
- * a crash before reporting is an unverifiable scenario, so the exit is the best
- * signal we have.
+ * Only a DECISIVE report outranks the exit code: an undecided one (no verdict,
+ * no failed checks: a skeleton or `{}` written before a crash) proves nothing,
+ * so it still needs a clean exit. With no usable report we fall back to the
+ * process exit code — a crash before reporting is an unverifiable scenario, so
+ * the exit is the best signal we have.
  * @param {{ hasReport: boolean, reportPassed: boolean | null, failedAssertions: unknown[], processOk: boolean }} args
  * @returns {boolean}
  */
 export function deriveVerdict({ hasReport, reportPassed, failedAssertions, processOk }) {
 	if (hasReport) {
-		return reportPassed !== false && failedAssertions.length === 0;
+		return reportPassed !== false && failedAssertions.length === 0 && (reportPassed === true || processOk);
 	}
 	return processOk;
 }

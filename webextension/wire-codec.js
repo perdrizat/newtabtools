@@ -282,7 +282,13 @@ export function wrapHandlerForWire(handler) {
 				// Defers one microtask+ — safe because every binary wire in
 				// lib/messages.js returns `true` (the async channel stays
 				// open for a later sendResponse call).
-				encodeForWire(value).then(sendResponse);
+				// A failed encode (an unreadable IndexedDB Blob, a string past
+				// the engine's length limit) answers null — every handler's own
+				// error reply — instead of leaving the caller pending forever.
+				encodeForWire(value).then(sendResponse, function (/** @type {unknown} */ err) {
+					console.error('wire-codec: response encode failed:', err);
+					sendResponse(null);
+				});
 				return;
 			}
 			// JSON-safe responses go out synchronously: some dispatch cases

@@ -231,9 +231,20 @@ export function handleMessage(message, sender, sendResponse) {
 
 	case 'Thumbnails.capture':
 		if (sender.tab) {
-			startCaptureSession(sender.tab.id, sender.tab.windowId, sender.tab.url);
-		} else if (message.tabId !== undefined && message.windowId !== undefined && message.url) {
-			startCaptureSession(message.tabId, message.windowId, message.url);
+			if (!sender.tab.incognito) {
+				startCaptureSession(sender.tab.id, sender.tab.windowId, sender.tab.url);
+			}
+		} else if (typeof message.tabId === 'number') {
+			// The toolbar popup has no sender.tab. Resolve the tab from the
+			// browser instead of trusting the message's url/windowId (a stale
+			// or forged url would dodge the never-capture list and key the
+			// capture wrongly), and never capture a private-window tab — the
+			// same guard webNavigation's auto-capture applies (PRIVACY.md).
+			api.tabs.get(message.tabId).then(function(/** @type {browser.tabs.Tab} */ tab) {
+				if (!tab.incognito && tab.url) {
+					return startCaptureSession(message.tabId, /** @type {number} */ (tab.windowId), tab.url);
+				}
+			}).catch(console.error);
 		}
 		return false;
 

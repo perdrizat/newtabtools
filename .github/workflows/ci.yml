@@ -5,6 +5,11 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  # Weekly, so an advisory disclosed against unchanged dependencies fails the
+  # audit gate without waiting for the next push.
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 env:
   # Opt-in to the new GitHub Actions runtime to silence deprecation warnings
@@ -54,6 +59,11 @@ jobs:
 
       - name: Unit & Integration tests
         run: pnpm test:fast
+
+      - name: Build packages
+        # web-ext build of every staged browser package plus the UAT zip, so a
+        # staging, manifest or web-ext regression fails CI rather than a release.
+        run: pnpm build
 
   # Firefox E2E on the registry's E2E channel, ESR (CHROME.md Decision 12),
   # >= 153 (MV3 capture needs >= 152). Driver quirks per version:

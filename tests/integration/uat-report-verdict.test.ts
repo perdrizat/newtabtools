@@ -34,6 +34,13 @@ describe('UAT report verdict', () => {
 			expect(parseReport({ verdict: 'unknown' }).reportPassed).toBeNull();
 		});
 
+		it('honours an explicit `passed`/`pass: false` when the verdict string is unrecognised', () => {
+			expect(parseReport({ verdict: 'PARTIAL', passed: false }).reportPassed).toBe(false);
+			expect(parseReport({ verdict: 'INCONCLUSIVE', pass: false }).reportPassed).toBe(false);
+			// A recognised verdict string still wins over the booleans.
+			expect(parseReport({ verdict: 'PASS', passed: false }).reportPassed).toBe(true);
+		});
+
 		it('collects failed checks across structural_checks and visual_checks', () => {
 			const report = {
 				verdict: 'PASS',
@@ -79,6 +86,10 @@ describe('UAT report verdict', () => {
 
 		it('PASSES a report-PASS scenario with an undecided (null) top verdict and no failed checks', () => {
 			expect(deriveVerdict({ hasReport: true, reportPassed: null, failedAssertions: [], processOk: true })).toBe(true);
+		});
+
+		it('FAILS an undecided (null) report when the process crashed: only a decisive PASS outranks the exit code', () => {
+			expect(deriveVerdict({ hasReport: true, reportPassed: null, failedAssertions: [], processOk: false })).toBe(false);
 		});
 
 		it('with NO report, falls back to the process exit code', () => {

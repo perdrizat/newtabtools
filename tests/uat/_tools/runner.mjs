@@ -278,7 +278,9 @@ async function stopDaemon() {
 	daemonStopped = true;
 	daemon.kill('SIGTERM');
 	await sleep(3000);
-	if (!daemon.killed) { daemon.kill('SIGKILL'); }
+	// Not `daemon.killed`: that is true as soon as SIGTERM is delivered, not once
+	// the daemon has exited, so a wedged daemon was never SIGKILLed.
+	if (daemonExit === null) { daemon.kill('SIGKILL'); }
 }
 // Belt-and-braces: if the runner itself is interrupted, take the browser down.
 process.on('SIGINT', () => { void stopDaemon().then(() => process.exit(130)); });
@@ -416,7 +418,10 @@ try {
 				const r = await daemonCall('/reset_extension', {});
 				console.log(`  reset_extension ok (default grid: ${r.resetCells} cells)`);
 			} catch (e) {
-				console.error(`  runner: reset_extension failed: ${e.message}`);
+				// The next scenario would start from unknown state, so its verdict
+				// can't be trusted: fail the run rather than only logging.
+				anyFailed = true;
+				console.error(`  runner: reset_extension failed (run marked failed): ${e.message}`);
 			}
 		}
 	}

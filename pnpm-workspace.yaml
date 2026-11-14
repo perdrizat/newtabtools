@@ -40,8 +40,8 @@ autoInstallPeers: true
 # Trap worth remembering: an advisory's "Patched versions" floor is NOT proof a
 # release exists — three cases so far. shell-quote's read ">=1.8.5" (never
 # published; 1.10.0 was the first fix), image-size's read ">=2.0.3" while 2.0.2
-# was still the newest, and node-forge's reads ">=1.4.1" while 1.4.0 remains
-# latest (see the accepted-risk block below). A phantom pin fails the whole
+# was still the newest, and node-forge's read ">=1.4.1" for months while 1.4.0
+# was the newest (1.4.1 shipped 2026-10-27). A phantom pin fails the whole
 # install with ERR_PNPM_NO_MATCHING_VERSION, so always confirm first.
 overrides:
   'hono@<4.12.25': '4.12.25'
@@ -57,6 +57,13 @@ overrides:
   'zod@<4.6.6': '4.6.6'
   'source-map-js@<1.2.2': '1.2.2'
   'vite@<8.1.6': '8.1.6'
+  # node-forge: floor >=1.4.1 across 8 high advisories (GHSA-86w9-cpqp-85rv plus
+  # seven filed since); 1.4.3 is the newest release past minimumReleaseAge
+  # (published 2026-11-04). Replaces the 2026-10-24 accepted-risk exception.
+  'node-forge@<1.4.3': '1.4.3'
+  # body-parser: 2.4.0 fixes GHSA-mrhx-c7xc-m3w5 / GHSA-27r3-jxmh-p828 and cleared
+  # the 7-day guard on 2026-10-29; replaces the expired temporary ignore.
+  'body-parser@<2.4.0': '2.4.0'
 # image-size needs NO entry and NO exception any more: addons-linter now
 # declares image-size 2.0.4, which web-ext 10.8.0 → addons-linter 10.14.0 pulls
 # in. The 2026-09-12 accepted-risk block recorded here is deleted rather than
@@ -66,49 +73,7 @@ overrides:
 # "upstream is dead, this will never be fixed" conclusion is a snapshot, so a
 # no-fix exception needs an expiry and a re-check, which is what surfaced this.
 
-# ---------------------------------------------------------------------------
-# Accepted risk: node-forge (1 high advisory) — reviewed 2026-10-24
-# ---------------------------------------------------------------------------
-# GHSA-86w9-cpqp-85rv — RSA PKCS#1 v1.5 signature verification accepts extra
-# nested DigestAlgorithm elements (a signature-forgery weakness).
-#
-# Why an exception and not a pin: NO FIX IS PUBLISHED. The advisory's floor
-# reads ">=1.4.1", but `pnpm view node-forge version` returns 1.4.0 — the
-# newest release is itself the vulnerable one, so a pin fails the install.
-#
-# Why the vulnerable code is unreachable here:
-#   Reach is `web-ext → @devicefarmer/adbkit → node-forge`. adbkit is web-ext's
-#   Android Debug Bridge client, used only by `web-ext run --target=
-#   firefox-android`. This project never targets Android: no script, run
-#   script or build path passes that target (grep for "firefox-android"/"adb"
-#   returns nothing), and both test tiers drive desktop Firefox and Chrome. The
-#   signature-verification path only executes while authenticating to an
-#   Android device over ADB, which never happens. Dev-only either way — the
-#   shipped extension has no runtime dependencies.
-#
-# Revisit trigger, with an expiry (the image-size block deleted above had none
-# and its "will never be fixed" reasoning expired within six weeks):
-#   - Re-check `pnpm view node-forge version` at EVERY dependency sweep; drop
-#     this entry and add a normal override the moment >=1.4.1 exists.
-#   - Revisit immediately if Android testing is ever added — that would make
-#     the path reachable and this acceptance invalid.
-auditConfig:
-  # Must be ignoreGhsas, NOT ignoreCves: pnpm audit keys advisories by the GHSA
-  # id it prints in the "More info" row, and an ignoreCves entry naming the
-  # equivalent CVE silently matches nothing (verified 2026-09-12 — the
-  # advisories still failed the gate with exit 1).
-  ignoreGhsas:
-    - GHSA-86w9-cpqp-85rv # node-forge RSA PKCS#1 v1.5 signature verification
-    # TEMPORARY — EXPIRES 2026-10-29. body-parser DoS via trailing bytes after
-    # a compressed request body. The only fix, 2.4.0, was published 2026-10-22
-    # and is blocked by minimumReleaseAge until 2026-10-29. Deliberately NOT
-    # bypassed via minimumReleaseAgeExclude: a days-old release of a widely
-    # used package is exactly what the 7-day guard exists to catch, and this
-    # advisory cannot fire here — express arrives with @modelcontextprotocol/sdk
-    # and addons-linter's scanner utils, but the UAT MCP server uses
-    # StdioServerTransport (tests/uat/_tools/mcp-server.mjs) and nothing in the
-    # project starts an HTTP server. ON/AFTER 2026-10-29: delete this line and
-    # add `'body-parser@<2.4.0': '2.4.0'` to `overrides`. The advisory is
-    # published under TWO GHSA ids (same title, range and fix); both go.
-    - GHSA-mrhx-c7xc-m3w5
-    - GHSA-27r3-jxmh-p828
+# No audit exceptions remain (2026-11-14): the node-forge accepted risk and the
+# temporary body-parser ignore are both pins above now. A future exception goes
+# in auditConfig.ignoreGhsas (NOT ignoreCves, which pnpm silently never matches)
+# with a reachability argument and a dated expiry (CONTRIBUTING.md).

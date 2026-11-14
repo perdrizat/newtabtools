@@ -346,6 +346,22 @@ describe('wrapHandlerForWire', () => {
 		expect(responseArg).toHaveProperty('__ntt_map');
 	});
 
+	it('answers null instead of leaving the request pending when encoding the response rejects', async () => {
+		const broken = new Blob(['x']);
+		vi.spyOn(broken, 'arrayBuffer').mockRejectedValue(new Error('NotReadableError'));
+		const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const handler = vi.fn((_msg: unknown, _sender: unknown, sendResponse: (v: unknown) => void) => {
+			sendResponse({ data: broken });
+			return true;
+		});
+		const sendResponse = vi.fn();
+
+		expect(wrapHandlerForWire(handler)({ name: 'Export:backup' }, {}, sendResponse)).toBe(true);
+
+		await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith(null));
+		errorSpy.mockRestore();
+	});
+
 	it('propagates the handler\'s boolean return value', () => {
 		const trueHandler = vi.fn(() => true);
 		const falseHandler = vi.fn(() => false);

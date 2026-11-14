@@ -105,7 +105,10 @@ echo "$NTT_BROWSER ready. Running Vitest $VITEST_PROJECT project..."
 # readable results.json, and `tee` mirrors the full human-readable run to
 # run.log — so "did last night's E2E pass?" is answerable from disk the next
 # morning without re-running. ${PIPESTATUS[0]} keeps vitest's exit code.
-npx vitest run --project "$VITEST_PROJECT" \
+# Bare `vitest`, like `web-ext` in the hooks: pnpm puts the pinned local binary
+# on PATH, while npx could fetch an unpinned one if node_modules is partial
+# (the audit m10 fix applied to the build scripts).
+vitest run --project "$VITEST_PROJECT" \
   --reporter=default --reporter=json --outputFile="$NTT_E2E_ARTIFACTS_DIR/results.json" \
   "$@" 2>&1 | tee "$NTT_E2E_ARTIFACTS_DIR/run.log"
 EXIT_CODE=${PIPESTATUS[0]}

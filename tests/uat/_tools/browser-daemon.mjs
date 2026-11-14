@@ -689,6 +689,14 @@ async function resetToDefault() {
 let driver;
 const isMain = process.argv[1] && fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1]);
 
+// Registered BEFORE the startup awaits below: the runner sends SIGTERM when
+// /health times out mid-seed, and with no handler yet Node's default action
+// exits at once, orphaning the driver and its browser. `shutdown` (hoisted,
+// bottom of file) tolerates `server`/`driver` not existing yet.
+let shuttingDown = false;
+process.on('SIGTERM', () => { void shutdown(0); });
+process.on('SIGINT', () => { void shutdown(0); });
+
 if (isMain) {
 	driver = await makeDriver();
 	await seedEnvironment(driver);
@@ -845,7 +853,6 @@ if (isMain) {
 
 // ─── lifecycle ────────────────────────────────────────────────────────────
 
-let shuttingDown = false;
 async function shutdown(code) {
 	if (shuttingDown) { return; }
 	shuttingDown = true;
@@ -854,6 +861,3 @@ async function shutdown(code) {
 	try { await driver.quit(); } catch { /* already gone */ }
 	process.exit(code);
 }
-
-process.on('SIGTERM', () => { void shutdown(0); });
-process.on('SIGINT', () => { void shutdown(0); });

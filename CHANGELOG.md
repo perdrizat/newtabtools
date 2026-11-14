@@ -4,7 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [2.6.9] — 2026-11-14
+
+### Fixed
+
+- Toolbar-popup capture looks the tab up in the browser, never captures a private-window tab, and ignores the message's url.
+- Wire codec answers `null` when encoding a background response fails, instead of leaving the request pending forever.
+- UAT verdict: an explicit `passed: false` beside an unrecognised verdict string fails, as does an undecided report from a crashed agent.
+- UAT runner SIGKILLs a daemon that ignores SIGTERM (it tested `child.killed`, which is set on signal delivery, not exit).
+- UAT runner marks the run failed when `reset_extension` fails between scenarios.
+- UAT daemon registers its SIGTERM/SIGINT handlers before startup, so a stop mid-seed no longer orphans the browser.
+
+### Security
+
+- Pin `node-forge` 1.4.3 (8 high advisories) and `body-parser` 2.4.0; both audit exceptions removed, `pnpm audit --audit-level=high` green again.
+
+### Changed
+
+- CI also runs weekly (audit gate catches advisories on unchanged deps) and builds every package with `pnpm build`.
+- E2E runner calls the pinned local `vitest` instead of `npx vitest`.
 
 ## [2.6.8] — 2026-10-26
 
